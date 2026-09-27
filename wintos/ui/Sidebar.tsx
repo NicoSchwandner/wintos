@@ -9,6 +9,8 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Row } from "../daemon/ranking/rank";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
+import { setLatestSessions } from "./focus";
+import { liveSessions } from "./sessions";
 import { setProjectTitle, useWintos } from "./useWintos";
 import { rowView, RowView, sidebarModel } from "./view";
 
@@ -18,19 +20,21 @@ const BAND_STYLE = {
     quiet: { label: "Quiet", color: T.muted },
 } as const;
 
-function useTabNames(tabIds: string[]): Record<string, string | undefined> {
-    const namesAtom = useMemo(
-        () => atom((get) => Object.fromEntries(tabIds.map((id) => [id, get(getWaveObjectAtom<Tab>(makeORef("tab", id)))?.name]))),
+function useTabs(tabIds: string[]): Record<string, Tab | undefined> {
+    const tabsAtom = useMemo(
+        () => atom((get) => Object.fromEntries(tabIds.map((id) => [id, get(getWaveObjectAtom<Tab>(makeORef("tab", id)))]))),
         [tabIds.join(",")]
     );
-    return useAtomValue(namesAtom);
+    return useAtomValue(tabsAtom);
 }
 
 export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const tabIds = workspace?.tabids ?? [];
     const activeTabId = useAtomValue(atoms.staticTabId);
-    const names = useTabNames(tabIds);
-    const { state, offline } = useWintos();
+    const tabs = useTabs(tabIds);
+    const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
+    const { state: raw, offline } = useWintos();
+    const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
     const now = useNow();
     const [showAll, setShowAll] = useState(false);
     const [cursor, setCursor] = useState(0);
@@ -39,8 +43,15 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
 
     const model = state ? sidebarModel(tabIds, state) : null;
     const project = (tabId: string) => state?.projects.find((p) => p.id === tabId);
-    const quiet = model ? (showAll ? [...model.quiet, ...model.quietMore] : model.quiet) : [];
+    // Until ⌘K exists, "Show all" is the only way to reach a stale tab, and the open tab is
+    // always visible even when it is stale.
+    const activeStale = model?.quietStale.filter((r) => r.tabId === activeTabId && !showAll) ?? [];
+    const quiet = model ? (showAll ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
     const order = model ? [...model.needs, ...model.running, ...quiet] : [];
+
+    useEffect(() => {
+        if (state) setLatestSessions(state.sessions, tabIds);
+    }, [state, tabIds.join(",")]);
 
     // The project title is the source of truth; the tab name follows it.
     useEffect(() => {
@@ -125,9 +136,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                                     onClick={() => setShowAll((s) => !s)}
                                     style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", borderTop: `1px solid #201C1A`, textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}
                                 >
-                                    {showAll ? "Show fewer" : `Show all ${model.quiet.length + model.quietMore.length}`}
-                                    {model.quietStale.length > 0 && (
-                                        <span style={{ color: T.faint }}> · {model.quietStale.length} untouched over two weeks are only in ⌘K</span>
+                                    {showAll ? "Show fewer" : `Show all ${model.quiet.length + model.quietMore.length + model.quietStale.length}`}
+                                    {!showAll && model.quietStale.length > 0 && (
+                                        <span style={{ color: T.faint }}> · includes {model.quietStale.length} untouched over two weeks</span>
                                     )}
                                 </button>
                             )}

@@ -43,12 +43,37 @@ describe("ProjectStore", () => {
         expect(readFileSync(join(p.dir, "project.md"), "utf8")).toContain("keep me");
     });
 
-    test("an unreadable project.md is listed with its error", () => {
+    test("an unreadable project.md is listed with its error and keeps its tab", () => {
         const s = new ProjectStore(root);
         const p = s.setTitle("t", "X", { manual: false });
-        writeFileSync(join(p.dir, "project.md"), "garbage");
+        writeFileSync(join(p.dir, "project.md"), "garbage without a header");
         s.reload();
-        expect(s.list()).toEqual([expect.objectContaining({ dir: p.dir, error: "no front matter" })]);
+        expect(s.byTab("t")).toMatchObject({ dir: p.dir, error: "no front matter" });
+    });
+
+    test("a broken file still yields its id when the id line survived", () => {
+        const s = new ProjectStore(root);
+        const p = s.setTitle("t", "X", { manual: false });
+        writeFileSync(join(p.dir, "project.md"), "id: t\n(front matter fences deleted)");
+        const fresh = new ProjectStore(root);
+        expect(fresh.byTab("t")).toMatchObject({ dir: p.dir, error: "no front matter" });
+    });
+
+    test("setTitle never overwrites an unreadable note", () => {
+        const s = new ProjectStore(root);
+        const p = s.setTitle("t", "X", { manual: false });
+        writeFileSync(join(p.dir, "project.md"), "id: t\nClaude's half-written notes");
+        s.reload();
+        s.setTitle("t", "New", { manual: true });
+        expect(readFileSync(join(p.dir, "project.md"), "utf8")).toBe("id: t\nClaude's half-written notes");
+    });
+
+    test("CRLF line endings parse", () => {
+        const s = new ProjectStore(root);
+        const p = s.setTitle("t", "X", { manual: false });
+        writeFileSync(join(p.dir, "project.md"), "---\r\nid: t\r\ntitle: Windows\r\n---\r\nbody\r\n");
+        s.reload();
+        expect(s.byTab("t")).toMatchObject({ title: "Windows" });
     });
 
     test("a missing root is created, not a crash", () => {
@@ -63,20 +88,31 @@ describe("mineDiff", () => {
     test("missing or empty mine.md says so", () => {
         const s = new ProjectStore(root);
         s.setTitle("t", "X", { manual: false });
-        expect(s.mineDiff("t")).toEqual({ text: "mine.md is empty" });
+        expect(s.mineDiff("t", "s1")).toEqual({ text: "mine.md is empty" });
     });
 
     test("a diff appears only after a change, once", () => {
         const s = new ProjectStore(root);
         const p = s.setTitle("t", "X", { manual: false });
         writeFileSync(join(p.dir, "mine.md"), "a\nb\n");
-        expect(s.mineDiff("t").diff).toBeUndefined();
+        expect(s.mineDiff("t", "s1").diff).toBeUndefined();
         writeFileSync(join(p.dir, "mine.md"), "a\nc\n");
-        expect(s.mineDiff("t")).toEqual({ text: "a\nc\n", diff: "- b\n+ c" });
-        expect(s.mineDiff("t").diff).toBeUndefined();
+        expect(s.mineDiff("t", "s1")).toEqual({ text: "a\nc\n", diff: "- b\n+ c" });
+        expect(s.mineDiff("t", "s1").diff).toBeUndefined();
+    });
+
+    test("every session in the project sees the change once", () => {
+        const s = new ProjectStore(root);
+        const p = s.setTitle("t", "X", { manual: false });
+        writeFileSync(join(p.dir, "mine.md"), "a\n");
+        s.mineDiff("t", "s1");
+        s.mineDiff("t", "s2");
+        writeFileSync(join(p.dir, "mine.md"), "b\n");
+        expect(s.mineDiff("t", "s1").diff).toBe("- a\n+ b");
+        expect(s.mineDiff("t", "s2").diff).toBe("- a\n+ b");
     });
 
     test("no project yet means no mine.md", () => {
-        expect(new ProjectStore(root).mineDiff("nope")).toEqual({ text: "mine.md is empty" });
+        expect(new ProjectStore(root).mineDiff("nope", "s1")).toEqual({ text: "mine.md is empty" });
     });
 });

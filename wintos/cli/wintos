@@ -11,31 +11,44 @@ EVENTS="SessionStart UserPromptSubmit Stop SubagentStop Notification SessionEnd"
 
 die() { echo "wintos: $*" >&2; exit 1; }
 
+# Writes jq's output over settings.json only when jq succeeded, and writes through the file
+# (cat >) rather than replacing it, so a symlinked settings.json (chezmoi) stays a symlink.
+rewrite_settings() {
+    tmp="$(mktemp)"
+    if jq "$@" "$SETTINGS" > "$tmp"; then
+        cat "$tmp" > "$SETTINGS"
+        rm -f "$tmp"
+    else
+        rm -f "$tmp"
+        die "could not update $SETTINGS; left unchanged"
+    fi
+}
+
 case "${1:-}" in
 title)
     shift
     [ $# -gt 0 ] || die "usage: wintos title <words>"
     [ -n "${WAVETERM_TABID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_TABID)"
-    jq -n --arg t "$*" '{title: $t, manual: false}' |
-        curl -sf -m 2 --data-binary @- "http://127.0.0.1:$PORT/projects/$WAVETERM_TABID/title" |
-        jq -r '"titled: \(.title)" + (if .titleLocked then " (locked: the developer named it)" else "" end)' ||
-        die "wintosd not reachable on port $PORT"
+    out="$(jq -n --arg t "$*" '{title: $t, manual: false}' |
+        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/projects/$WAVETERM_TABID/title")" ||
+        die "wintosd not reachable on port $PORT, or it refused the title"
+    printf '%s' "$out" | jq -r '"titled: \(.title)" + (if .titleLocked then " (locked: the developer named it)" else "" end)'
     ;;
 hooks)
     [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
-    cp "$SETTINGS" "$SETTINGS.wintos-bak"
+    [ -f "$SETTINGS.wintos-bak" ] || cp "$SETTINGS" "$SETTINGS.wintos-bak"
     # Ours are recognised by the hook path, so the user's own hooks are never touched.
-    strip='.hooks //= {} | .hooks |= with_entries(.value |= map(select(any(.hooks[]?; .command | contains("wintos-hook.sh")) | not)))'
+    # Prompt and agent hooks have no .command, hence the default.
+    strip='.hooks //= {} | .hooks |= with_entries(.value |= map(select(any(.hooks[]?; (.command // "") | contains("wintos-hook.sh")) | not)))'
     case "${2:-}" in
     install)
         # shellcheck disable=SC2016
-        jq --arg hook "$HOOK" --arg events "$EVENTS" "$strip"' | reduce ($events | split(" "))[] as $e (.;
-            .hooks[$e] = ((.hooks[$e] // []) + [{hooks: [{type: "command", command: $hook}]}]))' \
-            "$SETTINGS.wintos-bak" > "$SETTINGS"
+        rewrite_settings --arg hook "$HOOK" --arg events "$EVENTS" "$strip"' | reduce ($events | split(" "))[] as $e (.;
+            .hooks[$e] = ((.hooks[$e] // []) + [{hooks: [{type: "command", command: $hook}]}]))'
         echo "wintos: hooks installed in $SETTINGS ($EVENTS)"
         ;;
     uninstall)
-        jq "$strip"' | .hooks |= with_entries(select(.value | length > 0))' "$SETTINGS.wintos-bak" > "$SETTINGS"
+        rewrite_settings "$strip"' | .hooks |= with_entries(select(.value | length > 0))'
         echo "wintos: hooks removed from $SETTINGS"
         ;;
     *) die "usage: wintos hooks install|uninstall" ;;

@@ -160,7 +160,7 @@ const WorkspaceElem = memo(() => {
                             ) : (
                                 <div className="flex flex-row h-full">
                                     <div className="flex flex-col flex-grow min-w-0">
-                                        <SessionStrip tabId={tabId} tabIds={ws.tabids ?? []} />
+                                        <SessionStrip tabId={tabId} />
                                         <TabContent key={tabId} tabId={tabId} noTopPadding={showLeftTabBar && isMacOS()} />
                                     </div>
                                     {widgetsSidebarVisible && <Widgets />}

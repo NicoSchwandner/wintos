@@ -10,7 +10,10 @@ const EMPTY_MINE = "mine.md is empty";
 
 export class ProjectStore {
     private projects: Project[] = [];
+    // Keyed by session: each Claude session in a project must see a mine.md change once.
     private lastMine = new Map<string, string>();
+    // The last id seen per folder, so a note Claude broke still belongs to its tab.
+    private idByDir = new Map<string, string>();
 
     constructor(readonly root: string) {
         mkdirSync(root, { recursive: true });
@@ -33,7 +36,7 @@ export class ProjectStore {
 
     setTitle(tabId: string, title: string, opts: { manual: boolean }): Project {
         const existing = this.byTab(tabId);
-        if (existing?.titleLocked && !opts.manual) return existing;
+        if (existing?.error || (existing?.titleLocked && !opts.manual)) return existing!;
         const dir = existing?.dir ?? join(this.root, slugify(title, new Set(readdirSync(this.root))));
         mkdirSync(dir, { recursive: true });
         const meta: ProjectMeta = {
@@ -48,21 +51,28 @@ export class ProjectStore {
         return this.byTab(tabId)!;
     }
 
-    mineDiff(tabId: string): { text: string; diff?: string } {
+    mineDiff(tabId: string, sessionId: string): { text: string; diff?: string } {
         const dir = this.byTab(tabId)?.dir;
         const file = dir && join(dir, "mine.md");
         const text = file && existsSync(file) ? readFileSync(file, "utf8") : "";
         if (!text.trim()) return { text: EMPTY_MINE };
-        const before = this.lastMine.get(tabId);
-        this.lastMine.set(tabId, text);
+        const key = `${tabId}\u0000${sessionId}`;
+        const before = this.lastMine.get(key);
+        this.lastMine.set(key, text);
         return before === undefined || before === text ? { text } : { text, diff: lineDiff(before, text) };
     }
 
     private read(dir: string): Project {
         const file = join(dir, "project.md");
         if (!existsSync(file)) return { dir, mtime: 0, error: "no project.md" };
-        const parsed = parseProjectMd(readFileSync(file, "utf8"));
+        const raw = readFileSync(file, "utf8");
+        const parsed = parseProjectMd(raw);
         const mtime = statSync(file).mtimeMs;
-        return "error" in parsed ? { dir, mtime, error: parsed.error } : { ...parsed.meta, body: parsed.body, dir, mtime };
+        if (!("error" in parsed)) {
+            this.idByDir.set(dir, parsed.meta.id);
+            return { ...parsed.meta, body: parsed.body, dir, mtime };
+        }
+        const id = /^id:[ \t]*(\S+)/m.exec(raw)?.[1] ?? this.idByDir.get(dir);
+        return { ...(id ? { id } : {}), dir, mtime, error: parsed.error };
     }
 }

@@ -2,6 +2,13 @@ import type { Session } from "../daemon/sessions/reduce";
 
 export type Target = { tabId: string; blockId: string };
 
+// The daemon only hears about a session ending if Claude says so; a closed block or a killed
+// Claude sends nothing. The UI knows which blocks still exist, so it drops the rest.
+// An interrupted turn (Esc) sends no Stop either and stays "working" until the next prompt.
+export function liveSessions(sessions: Session[], blocksByTab: Record<string, string[] | undefined>): Session[] {
+    return sessions.filter((s) => blocksByTab[s.tabId]?.includes(s.blockId));
+}
+
 export function stripSessions(sessions: Session[], tabId: string): Session[] {
     return sessions.filter((s) => s.tabId === tabId && s.state !== "ended");
 }
@@ -11,11 +18,13 @@ export function stripSessions(sessions: Session[], tabId: string): Session[] {
 export function nextWaiting(sessions: Session[], tabIds: string[], activeTabId: string, currentBlockId?: string): Target | null {
     const waiting = sessions.filter((s) => s.state === "waiting" && tabIds.includes(s.tabId));
     const here = waiting.filter((s) => s.tabId === activeTabId);
-    if (here.length) {
+    const elsewhere = waiting.filter((s) => s.tabId !== activeTabId);
+    const onlyCurrentHere = here.length === 1 && here[0].blockId === currentBlockId;
+    if (here.length && !(onlyCurrentHere && elsewhere.length)) {
         const i = here.findIndex((s) => s.blockId === currentBlockId);
         const next = here[(i + 1) % here.length];
         return { tabId: next.tabId, blockId: next.blockId };
     }
-    const oldest = [...waiting].sort((a, b) => a.since - b.since)[0];
+    const oldest = [...elsewhere].sort((a, b) => a.since - b.since)[0];
     return oldest ? { tabId: oldest.tabId, blockId: oldest.blockId } : null;
 }

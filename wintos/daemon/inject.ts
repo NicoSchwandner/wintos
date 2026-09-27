@@ -6,6 +6,12 @@ import type { Project } from "./projects/store";
 export function injection(project: Project | undefined, mine: { text: string; diff?: string }): string {
     const parts: string[] = [];
     if (mine.diff) parts.push(`mine.md changed since your last prompt:\n${mine.diff}`);
+    if (project?.error) {
+        parts.push(
+            `[WintOS] ${join(project.dir, "project.md")} is unreadable (${project.error}). Restore its front matter (a \`---\` fenced block starting with \`id: ${project.id ?? "<tab id>"}\`) before anything else; keep the body.`
+        );
+        return parts.join("\n\n");
+    }
     if (!project || !project.title) {
         parts.push(
             'This WintOS project has no title yet. Run `wintos title "<3-6 words naming the work>"` now. It creates the project folder and names the tab.'

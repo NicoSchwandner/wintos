@@ -37,7 +37,7 @@ describe("rank", () => {
         const r = rank(tabs, sessions, NOW);
         expect(r.quiet).toHaveLength(QUIET_CAP);
         expect(r.quietMore).toHaveLength(1);
-        expect(r.quietStale.sort()).toEqual(["q0", "q1"]);
+        expect(r.quietStale.map((x) => x.tabId).sort()).toEqual(["q0", "q1"]);
     });
 
     test("stale means older than 14 days, not equal", () => {

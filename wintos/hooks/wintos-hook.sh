@@ -4,5 +4,5 @@
 # Never fails and never waits long: a missing daemon must not slow Claude down.
 [ -n "$WAVETERM_TABID" ] || exit 0
 jq -c --arg t "$WAVETERM_TABID" --arg b "${WAVETERM_BLOCKID:-}" '{tabId: $t, blockId: $b, payload: .}' 2>/dev/null |
-    curl -s -m 0.2 --data-binary @- "http://127.0.0.1:${WINTOS_PORT:-7730}/events" 2>/dev/null
+    curl -sf -m 0.2 -H "Content-Type: application/json" --data-binary @- "http://127.0.0.1:${WINTOS_PORT:-7730}/events" 2>/dev/null
 exit 0

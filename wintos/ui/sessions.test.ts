@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { nextWaiting, stripSessions } from "./sessions";
+import { liveSessions, nextWaiting, stripSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
 
@@ -25,6 +25,11 @@ describe("nextWaiting", () => {
         expect(nextWaiting(all, tabs, "t", "b-1")).toEqual({ tabId: "v", blockId: "b-3" });
     });
 
+    test("when the only waiting session here is the current one, move on to another tab", () => {
+        const all = [s("1", "t", "waiting", 5), s("2", "u", "waiting", 50)];
+        expect(nextWaiting(all, tabs, "t", "b-1")).toEqual({ tabId: "u", blockId: "b-2" });
+    });
+
     test("the only waiting session is the current one: stay", () => {
         expect(nextWaiting([s("1", "t", "waiting")], tabs, "t", "b-1")).toEqual({ tabId: "t", blockId: "b-1" });
     });
@@ -35,5 +40,16 @@ describe("nextWaiting", () => {
 
     test("nothing waiting anywhere", () => {
         expect(nextWaiting([s("1", "t", "working")], tabs, "t", "b-1")).toBeNull();
+    });
+});
+
+describe("liveSessions", () => {
+    test("a session whose block was closed no longer counts", () => {
+        const all = [s("1", "t", "waiting"), s("2", "t", "working")];
+        expect(liveSessions(all, { t: ["b-2"] }).map((x) => x.id)).toEqual(["2"]);
+    });
+
+    test("tabs the UI knows nothing about keep nothing", () => {
+        expect(liveSessions([s("1", "gone", "waiting")], { t: ["b-1"] })).toEqual([]);
     });
 });

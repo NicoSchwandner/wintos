@@ -3,7 +3,8 @@ export type Parsed = { meta: ProjectMeta; body: string } | { error: string };
 
 // ponytail: a line-based reader, not YAML. The front matter is ours and flat; a real
 // YAML parser buys nothing until a value needs nesting.
-export function parseProjectMd(text: string): Parsed {
+export function parseProjectMd(raw: string): Parsed {
+    const text = raw.replace(/\r\n/g, "\n");
     const m = /^---\n([\s\S]*?)\n?---\n?([\s\S]*)$/.exec(text);
     if (!m) return { error: "no front matter" };
     const kv: Record<string, string> = {};

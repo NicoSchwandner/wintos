@@ -39,7 +39,7 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
         since: next && next !== prev?.state ? now : (prev?.since ?? now),
         lastAt: now,
         cwd: cwd ?? prev?.cwd,
-        label: prev?.label ?? labelOf(prompt),
+        label: prev?.label ?? labelOf(typeof prompt === "string" ? prompt : undefined),
     };
     return new Map(sessions).set(id, session);
 }

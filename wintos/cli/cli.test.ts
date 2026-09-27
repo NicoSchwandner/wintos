@@ -49,6 +49,14 @@ describe("wintos-hook.sh", () => {
         expect(d.seen[0]).toEqual({ url: "/events", body: { tabId: "tab-1", blockId: "blk-1", payload: { hook_event_name: "Stop", session_id: "s" } } });
     });
 
+    test("a daemon error body never reaches Claude's context", async () => {
+        const d = await fakeDaemon("need tabId, blockId");
+        server!.removeAllListeners("request");
+        server!.on("request", (_q, res) => { res.statusCode = 400; res.end("need tabId, blockId"); });
+        const out = await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) });
+        expect(out).toBe("");
+    });
+
     test("with the daemon down it exits 0 within a second", () => {
         const t = Date.now();
         const r = runHook({ WAVETERM_TABID: "t", WINTOS_PORT: "1" });
@@ -78,6 +86,30 @@ describe("wintos hooks", () => {
             expect(s.hooks[e].filter((h: any) => h.hooks[0].command.endsWith("wintos-hook.sh"))).toHaveLength(1);
     });
 
+    test("hooks without a command (prompt/agent types) survive install and uninstall", () => {
+        const { settings, run, read } = setup();
+        writeFileSync(settings, JSON.stringify({ model: "x", hooks: { Stop: [{ hooks: [{ type: "prompt", prompt: "check" }] }] } }));
+        run("install");
+        expect(read().hooks.Stop[0]).toEqual({ hooks: [{ type: "prompt", prompt: "check" }] });
+        run("uninstall");
+        expect(read()).toEqual({ model: "x", hooks: { Stop: [{ hooks: [{ type: "prompt", prompt: "check" }] }] } });
+    });
+
+    test("when jq cannot process the file, settings.json is left exactly as it was", () => {
+        const { settings, run } = setup();
+        writeFileSync(settings, "{ not json");
+        expect(() => run("install")).toThrow();
+        expect(readFileSync(settings, "utf8")).toBe("{ not json");
+    });
+
+    test("the first backup is never overwritten by later runs", () => {
+        const { settings, run } = setup();
+        const original = readFileSync(settings, "utf8");
+        run("install");
+        run("install");
+        expect(readFileSync(settings + ".wintos-bak", "utf8")).toBe(original);
+    });
+
     test("uninstall removes only ours", () => {
         const { run, read } = setup();
         run("install");
@@ -94,6 +126,12 @@ describe("wintos title", () => {
         );
         expect(out.trim()).toBe("titled: Invoice OCR");
         expect(d.seen[0]).toEqual({ url: "/projects/tab-1/title", body: { title: "Invoice OCR", manual: false } });
+    });
+
+    test("with the daemon down it fails loudly instead of claiming success", () => {
+        const r = spawnSync(CLI, ["title", "x"], { env: { PATH: process.env.PATH!, WAVETERM_TABID: "t", WINTOS_PORT: "1" }, encoding: "utf8" });
+        expect(r.status).toBe(1);
+        expect(r.stderr).toContain("not reachable");
     });
 
     test("outside WintOS it explains instead of guessing", () => {

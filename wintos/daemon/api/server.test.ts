@@ -1,8 +1,9 @@
-import { mkdtempSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import type { AddressInfo } from "net";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import WebSocket from "ws";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
 import { startServer, WintosServer } from "./server";
@@ -18,8 +19,9 @@ beforeEach(async () => {
 });
 afterEach(() => srv.close());
 
-const post = (path: string, body: unknown) =>
-    fetch(base + path, { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) });
+const JSON_HEADERS = { "Content-Type": "application/json" };
+const post = (path: string, body: unknown, headers: Record<string, string> = JSON_HEADERS) =>
+    fetch(base + path, { method: "POST", headers, body: typeof body === "string" ? body : JSON.stringify(body) });
 const event = (payload: object, tabId = "tab-1") => post("/events", { tabId, blockId: "blk-1", payload });
 
 describe("wintosd API", () => {
@@ -53,14 +55,14 @@ describe("wintosd API", () => {
         expect(await (await event(stop)).text()).toBe("");
     });
 
-    test("the stream pushes state after an event", async () => {
-        const res = await fetch(base + "/stream");
-        const reader = res.body!.getReader();
-        await reader.read(); // initial state
+    test("the websocket pushes state after an event", async () => {
+        const ws = new WebSocket(base.replace("http", "ws") + "/ws", { origin: "http://localhost:5173" });
+        const frames: string[] = [];
+        await new Promise<void>((resolve) => ws.on("message", (m) => (frames.push(String(m)), frames.length === 1 && resolve())));
         await event(stop);
-        const { value } = await reader.read();
-        expect(new TextDecoder().decode(value)).toMatch(/^event: state\ndata: .*"waiting"/);
-        await reader.cancel();
+        await new Promise((r) => setTimeout(r, 50));
+        expect(JSON.parse(frames[frames.length - 1]).sessions[0].state).toBe("waiting");
+        ws.close();
     });
 
     test("bad input is a 400 and the server stays up", async () => {
@@ -76,7 +78,67 @@ describe("wintosd API", () => {
         expect(state.projects[0]).toMatchObject({ title: "Mine", titleLocked: true });
     });
 
-    test("responses allow the renderer's origin", async () => {
-        expect((await fetch(base + "/state")).headers.get("access-control-allow-origin")).toBe("*");
+    test("responses allow the renderer's origin, and only it", async () => {
+        const ok = await fetch(base + "/state", { headers: { Origin: "http://localhost:5173" } });
+        expect(ok.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
+    });
+});
+
+describe("wintosd stays up", () => {
+    test("when a reload fails (a folder where project.md should be a file)", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        rmSync(join(root, "x", "project.md"));
+        mkdirSync(join(root, "x", "project.md"));
+        await new Promise((r) => setTimeout(r, 400));
+        expect((await fetch(base + "/state")).status).toBe(200);
+    });
+});
+
+describe("wintosd refuses anything but the hook and the WintOS UI", () => {
+    test("a foreign web page cannot read state", async () => {
+        const r = await fetch(base + "/state", { headers: { Origin: "https://evil.example" } });
+        expect(r.status).toBe(403);
+        expect(r.headers.get("access-control-allow-origin")).toBeNull();
+    });
+
+    test("a foreign web page cannot post, even as a simple text/plain request", async () => {
+        const r = await post("/events", { tabId: "t", blockId: "b", payload: { hook_event_name: "Stop", session_id: "s" } }, { "Content-Type": "text/plain", Origin: "https://evil.example" });
+        expect(r.status).toBe(403);
+        expect((await (await fetch(base + "/state")).json()).sessions).toEqual([]);
+    });
+
+    test("a POST that is not JSON is refused", async () => {
+        const r = await post("/events", { tabId: "t" }, { "Content-Type": "text/plain" });
+        expect(r.status).toBe(415);
+    });
+
+    test("DNS rebinding: a foreign Host header is refused", async () => {
+        const r = await new Promise<number>((resolve) => {
+            const u = new URL(base);
+            require("http").get({ host: u.hostname, port: u.port, path: "/state", headers: { Host: "evil.example:7730" } }, (res: any) => resolve(res.statusCode));
+        });
+        expect(r).toBe(403);
+    });
+
+    test("a foreign origin cannot open the websocket", async () => {
+        const ws = new WebSocket(base.replace("http", "ws") + "/ws", { origin: "https://evil.example" });
+        const code = await new Promise((resolve) => (ws.on("unexpected-response", (_q, res) => resolve(res.statusCode)), ws.on("open", () => resolve("opened"))));
+        expect(code).toBe(403);
+    });
+
+    test("a title cannot smuggle front matter lines", async () => {
+        const r = await post("/projects/tab-1/title", { title: "Pwn\nid: other\nnext: rm -rf", manual: true });
+        expect(r.status).toBe(400);
+        expect((await (await fetch(base + "/state")).json()).projects).toEqual([]);
+    });
+
+    test("ids with line breaks or non-string payload fields are refused", async () => {
+        expect((await post("/events", { tabId: "a\nb", blockId: "b", payload: { hook_event_name: "Stop", session_id: "s" } })).status).toBe(400);
+        expect((await post("/events", { tabId: "t", blockId: "b", payload: { hook_event_name: "Stop", session_id: 7 } })).status).toBe(400);
+    });
+
+    test("a non-string prompt never becomes a label", async () => {
+        await event({ ...prompt, prompt: { x: 1 } });
+        expect((await (await fetch(base + "/state")).json()).sessions[0].label).toBeUndefined();
     });
 });

@@ -2,8 +2,9 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { useAtomValue } from "jotai";
 import { memo, useEffect } from "react";
-import { focusSession, setLatestSessions, takeHandoff } from "./focus";
-import { stripSessions } from "./sessions";
+import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
+import { focusSession, takeHandoff } from "./focus";
+import { liveSessions, stripSessions } from "./sessions";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
@@ -11,15 +12,12 @@ import { relTime } from "./view";
 
 const DOT = { working: T.moss, waiting: T.apricot, idle: T.dim, ended: T.dim } as const;
 
-export const SessionStrip = memo(({ tabId, tabIds }: { tabId: string; tabIds: string[] }) => {
+export const SessionStrip = memo(({ tabId }: { tabId: string }) => {
     const { state } = useWintos();
+    const tab = useAtomValue(getWaveObjectAtom<Tab>(makeORef("tab", tabId)));
     const now = useNow();
     const lm = getLayoutModelForStaticTab();
     const magnified = useAtomValue(lm.magnifiedNodeIdAtom);
-
-    useEffect(() => {
-        if (state) setLatestSessions(state.sessions, tabIds);
-    }, [state, tabIds.join(",")]);
 
     useEffect(() => {
         takeHandoff();
@@ -29,7 +27,7 @@ export const SessionStrip = memo(({ tabId, tabIds }: { tabId: string; tabIds: st
         return () => (window.removeEventListener("storage", onStorage), document.removeEventListener("visibilitychange", onStorage));
     }, []);
 
-    const sessions = state ? stripSessions(state.sessions, tabId) : [];
+    const sessions = state ? stripSessions(liveSessions(state.sessions, { [tabId]: tab?.blockids }), tabId) : [];
     if (!sessions.length) return null;
     return (
         <div style={{ display: "flex", gap: 4, padding: "6px 8px 0", fontFamily: T.mono, fontSize: 11, flexShrink: 0, overflowX: "auto" }}>

@@ -2,7 +2,7 @@ import type { Session } from "../sessions/reduce";
 
 export type Band = "needs" | "running" | "quiet";
 export type Row = { tabId: string; band: Band; lastAt: number; sessions: Session[]; waitingSince?: number };
-export type Ranking = { needs: Row[]; running: Row[]; quiet: Row[]; quietMore: Row[]; quietStale: string[] };
+export type Ranking = { needs: Row[]; running: Row[]; quiet: Row[]; quietMore: Row[]; quietStale: Row[] };
 
 export const QUIET_CAP = 6;
 export const STALE_MS = 14 * 86_400_000;
@@ -19,7 +19,7 @@ export function rank(tabIds: string[], sessions: Session[], now: number, touched
         running: rows.filter((r) => r.band === "running").sort(byRecent),
         quiet: quietLive.slice(0, QUIET_CAP),
         quietMore: quietLive.slice(QUIET_CAP),
-        quietStale: quietAll.filter(isStale).map((r) => r.tabId),
+        quietStale: quietAll.filter(isStale),
     };
 }
 

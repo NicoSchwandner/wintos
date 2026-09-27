@@ -81,15 +81,18 @@ export function ageLabel(pr: PR, now: number): { text: string; late: boolean } {
     return { text: pr.isDraft ? `${wd} of ${DRAFT_SLA_WORKING_DAYS}` : `${wd} wd`, late: wd >= sla(pr) };
 }
 
-// A project's PRs: the refs Claude recorded in project.md (api#101, owner/repo#n, or a
-// URL), plus any PR whose title or branch carries the project title's DEV id.
+// A project's PRs: the refs Claude recorded in project.md (repo#n, owner/repo#n, or a URL),
+// plus any PR whose title or branch carries the ticket id (ABC-123) from the project title.
 export function prsForProject(refs: string[], title: string, prs: PR[]): PR[] {
     const wanted = refs.map(parseRef).filter((r): r is { repo: string; number: number } => !!r);
-    const devId = /DEV-\d+/.exec(title)?.[0];
+    const ticket = /\b[A-Z][A-Z0-9]+-\d+\b/.exec(title)?.[0];
+    // Whole-id match: ABC-12 must not pick up ABC-123; branches are often lowercase.
+    const hasTicket = ticket ? (s: string) => new RegExp(`\\b${ticket}(?!\\d)`, "i").test(s) : () => false;
     return prs.filter(
         (p) =>
             wanted.some((w) => w.number === p.number && (w.repo === p.repo || w.repo === p.repo.split("/")[1])) ||
-            (!!devId && (p.title.includes(devId) || p.branch.includes(devId)))
+            hasTicket(p.title) ||
+            hasTicket(p.branch)
     );
 }
 

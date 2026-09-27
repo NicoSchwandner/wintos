@@ -78,6 +78,10 @@ describe("prsForProject", () => {
     test("a DEV id in the project title finds PRs by title or branch", () =>
         expect(prsForProject([], "ABC-42 export rejections", prs).map((p) => p.number).sort((a, b) => a - b)).toEqual([7, 101]));
     test("no refs, no id: nothing", () => expect(prsForProject([], "vemsa", prs)).toEqual([]));
+    test("any Jira-style ticket id works, matched whole and case-insensitively", () => {
+        const t = [pr({ number: 1, title: "PAY-12 retry" }), pr({ number: 2, branch: "pay-12-retry" }), pr({ number: 3, title: "PAY-123 other" })];
+        expect(prsForProject([], "PAY-12 Retry payouts", t).map((p) => p.number)).toEqual([1, 2]);
+    });
 });
 
 describe("projectPrs", () => {

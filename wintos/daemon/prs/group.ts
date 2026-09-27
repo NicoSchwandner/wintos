@@ -48,13 +48,17 @@ export function workingDaysBetween(from: string, now: number): number {
 
 export function groupOf(pr: PR, me: string, now: number): Group {
     const mine = pr.author === me;
-    // A conflict is yours to resolve, so it keeps an approved PR out of Merge.
-    // BLOCKED is GitHub saying no: an approval alone does not satisfy code owners.
-    if (mine && pr.reviewDecision === "APPROVED" && pr.checks === "SUCCESS" && !pr.isDraft && !pr.conflict && pr.mergeState !== "BLOCKED") return "merge";
+    const approved = pr.reviewDecision === "APPROVED";
+    // No CI at all is green: a repo without checks must still reach Merge. BLOCKED is GitHub
+    // saying no: an approval alone does not satisfy code owners.
+    const green = pr.checks === undefined || pr.checks === "SUCCESS";
+    if (mine && approved && green && !pr.isDraft && !pr.conflict && pr.mergeState !== "BLOCKED") return "merge";
     // Red CI on a draft is work in progress; the draft keeps its own, longer clock.
     if (mine && (pr.reviewDecision === "CHANGES_REQUESTED" || (redChecks(pr) && !pr.isDraft) || pr.conflict)) return "fix";
-    if (!mine && pr.requestedMe && !pr.reviewedByMe) return "review";
-    if (mine && workingDaysBetween(lastMovement(pr), now) >= sla(pr)) return "chase";
+    // GitHub drops a request when you review, so being asked means a review is owed, re-requests included.
+    if (!mine && pr.requestedMe) return "review";
+    // An approved PR that can't merge yet is waiting on checks or code owners, not on attention.
+    if (mine && !approved && workingDaysBetween(lastMovement(pr), now) >= sla(pr)) return "chase";
     return "team";
 }
 
@@ -65,6 +69,8 @@ export function qualifier(pr: PR, group: Group): { text: string; brick?: boolean
         if (redChecks(pr)) return { text: "CI red", brick: true };
         if (pr.conflict) return { text: "merge conflict", brick: true };
     }
+    if (pr.reviewDecision === "APPROVED" && pr.mergeState === "BLOCKED") return { text: "approved · blocked by required reviews" };
+    if (pr.reviewDecision === "APPROVED" && (pr.checks === "PENDING" || pr.checks === "EXPECTED")) return { text: "approved · checks pending" };
     if (group === "chase" && !pr.isDraft && pr.reviewers.length === 0) return { text: "no reviewer assigned" };
     if (pr.reviewers.length) return { text: `waiting on ${pr.reviewers.join(", ")}` };
     return undefined;

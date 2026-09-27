@@ -15,10 +15,10 @@ const search = (q: string): Node[] =>
     JSON.parse(gh(["api", "graphql", "-f", `query=${QUERY}`, "-f", `q=is:pr is:open archived:false ${q}`])).data.search.nodes.filter(Boolean);
 
 const me = gh(["api", "user", "--jq", ".login"]).trim();
-const since = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
 const direct = search("user-review-requested:@me");
 const teams = search("review-requested:@me");
-const mine = search(`author:@me updated:>=${since}`);
+// No age bound: your oldest open PRs are exactly the ones Chase is for.
+const mine = search("author:@me");
 
 const byUrl = new Map<string, ReturnType<typeof normalize>>();
 const directUrls = new Set(direct.map((n) => n.url));

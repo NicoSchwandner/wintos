@@ -30,8 +30,12 @@ describe("groupOf (spec §4, first match wins)", () => {
         expect(groupOf(pr({ checks: "FAILURE", createdAt: "2026-09-01T00:00:00Z" }), "me", MON)).toBe("fix"));
     test("review: someone asked me and I haven't reviewed", () =>
         expect(groupOf(pr({ author: "ana", requestedMe: true }), "me", MON)).toBe("review"));
-    test("once I've reviewed it, it's the team's", () =>
-        expect(groupOf(pr({ author: "ana", requestedMe: true, reviewedByMe: true }), "me", MON)).toBe("team"));
+    test("a re-requested review is back in Review even though I reviewed before", () =>
+        expect(groupOf(pr({ author: "ana", requestedMe: true, reviewedByMe: true }), "me", MON)).toBe("review"));
+    test("approved but blocked is not chased as if nobody looked", () =>
+        expect(groupOf(pr({ reviewDecision: "APPROVED", checks: "SUCCESS", mergeState: "BLOCKED", createdAt: "2026-09-01T09:00:00Z" }), "me", MON)).toBe("team"));
+    test("no CI at all counts as green", () =>
+        expect(groupOf(pr({ reviewDecision: "APPROVED" }), "me", MON)).toBe("merge"));
     test("chase: mine, quiet for two working days", () =>
         expect(groupOf(pr({ createdAt: "2026-09-24T09:00:00Z" }), "me", MON)).toBe("chase"));
     test("review activity resets the clock", () =>
@@ -50,6 +54,10 @@ describe("qualifier", () => {
     test("a chased PR with nobody on it says so", () => expect(qualifier(pr(), "chase")).toEqual({ text: "no reviewer assigned" }));
     test("otherwise it names who it waits on", () => expect(qualifier(pr({ reviewers: ["ana.b"] }), "team")).toEqual({ text: "waiting on ana.b" }));
     test("merge needs no qualifier", () => expect(qualifier(pr(), "merge")).toBeUndefined());
+    test("approved but blocked says why it can't merge", () =>
+        expect(qualifier(pr({ reviewDecision: "APPROVED", mergeState: "BLOCKED" }), "team")).toEqual({ text: "approved · blocked by required reviews" }));
+    test("approved with pending checks says so", () =>
+        expect(qualifier(pr({ reviewDecision: "APPROVED", checks: "PENDING" }), "team")).toEqual({ text: "approved · checks pending" }));
 });
 
 describe("ageLabel", () => {

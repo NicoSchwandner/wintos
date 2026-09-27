@@ -41,6 +41,16 @@ describe("reduceSession", () => {
         expect(only(m)).toMatchObject({ tabId: "tab-2", blockId: "blk-9" });
     });
 
+    test("the first prompt becomes the session's label and stays", () => {
+        const m = run([ev(start), ev({ ...prompt, prompt: "Refactor the ranking into pure functions please" }), ev({ ...prompt, prompt: "second" })]);
+        expect(only(m).label).toBe("Refactor the ranking in…");
+    });
+
+    test("a short first prompt is kept whole; no prompt means no label", () => {
+        expect(only(run([ev({ ...prompt, prompt: "fix it" })])).label).toBe("fix it");
+        expect(only(run([ev(start)])).label).toBeUndefined();
+    });
+
     test("does not mutate its input", () => {
         const before = run([ev(prompt)]);
         const snapshot = JSON.stringify([...before]);

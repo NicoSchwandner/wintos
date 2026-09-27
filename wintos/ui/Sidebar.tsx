@@ -8,6 +8,7 @@ import { atom, useAtomValue } from "jotai";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Row } from "../daemon/ranking/rank";
 import { T } from "./tokens";
+import { useNow } from "./useNow";
 import { setProjectTitle, useWintos } from "./useWintos";
 import { rowView, RowView, sidebarModel } from "./view";
 
@@ -30,6 +31,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const activeTabId = useAtomValue(atoms.staticTabId);
     const names = useTabNames(tabIds);
     const { state, offline } = useWintos();
+    const now = useNow();
     const [showAll, setShowAll] = useState(false);
     const [cursor, setCursor] = useState(0);
     const [renaming, setRenaming] = useState<string | null>(null);
@@ -71,7 +73,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     };
 
     const renderRow = (row: Row) => {
-        const v = rowView(row, project(row.tabId), names[row.tabId], state!.now);
+        const v = rowView(row, project(row.tabId), names[row.tabId], now);
         const props = {
             key: row.tabId,
             tabId: row.tabId,

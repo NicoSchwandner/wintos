@@ -7,6 +7,7 @@ import { CenteredDiv } from "@/app/element/quickelems";
 import { ModalsRenderer } from "@/app/modals/modalsrenderer";
 import { TabBar } from "@/app/tab/tabbar";
 import { TabContent } from "@/app/tab/tabcontent";
+import { SessionStrip } from "@/wintos/ui/SessionStrip";
 import { WintOSSidebar } from "@/wintos/ui/Sidebar";
 import { Widgets } from "@/app/workspace/widgets";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
@@ -158,7 +159,10 @@ const WorkspaceElem = memo(() => {
                                 <CenteredDiv>No Active Tab</CenteredDiv>
                             ) : (
                                 <div className="flex flex-row h-full">
-                                    <TabContent key={tabId} tabId={tabId} noTopPadding={showLeftTabBar && isMacOS()} />
+                                    <div className="flex flex-col flex-grow min-w-0">
+                                        <SessionStrip tabId={tabId} tabIds={ws.tabids ?? []} />
+                                        <TabContent key={tabId} tabId={tabId} noTopPadding={showLeftTabBar && isMacOS()} />
+                                    </div>
                                     {widgetsSidebarVisible && <Widgets />}
                                 </div>
                             )}

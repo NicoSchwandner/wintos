@@ -34,7 +34,7 @@
     "term:bellindicator": true,
     "term:osc52": "always",
     "term:theme": "wintos",
-    "term:fontfamily": "JetBrains Mono",
+    "term:fontfamily": "JetBrains Mono, Hack",
     "term:cursor": "block",
     "term:cursorblink": false,
     "term:copyonselect": true,

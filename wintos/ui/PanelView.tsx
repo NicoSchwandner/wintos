@@ -1,3 +1,4 @@
+import { useFocusOnMount } from "./useFocusOnMount";
 import { useAtomValue, useSetAtom } from "jotai";
 import { memo, useRef } from "react";
 import { Key } from "./notes/NotesRail";
@@ -10,6 +11,7 @@ import { relTime } from "./view";
 
 // A plugin's panel full width (OnCallC): its counts, then each url live side by side.
 export const PanelView = memo(() => {
+    const focusRef = useFocusOnMount<HTMLDivElement>();
     const { state } = useWintos();
     const now = useNow();
     const name = useAtomValue(panelNameAtom);
@@ -23,7 +25,7 @@ export const PanelView = memo(() => {
         <div
             data-wintos="panel-view"
             tabIndex={0}
-            ref={(el) => el?.focus()}
+            ref={focusRef}
             onKeyDown={(e) => {
                 const n = Number(e.key);
                 if (n >= 1 && n <= withUrl.length) panes.current[n - 1]?.focus();

@@ -1,3 +1,4 @@
+import { useFocusOnMount } from "./useFocusOnMount";
 import { useSetAtom } from "jotai";
 import { memo } from "react";
 import { overlayAtom } from "./notes/state";
@@ -13,13 +14,14 @@ const SECTIONS: [string, [string, string][]][] = [
 ];
 
 export const Keymap = memo(() => {
+    const focusRef = useFocusOnMount<HTMLDivElement>();
     const setOverlay = useSetAtom(overlayAtom);
     return (
         <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(10,8,7,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setOverlay("")}>
             <div
                 data-wintos="keymap"
                 tabIndex={0}
-                ref={(el) => el?.focus()}
+                ref={focusRef}
                 onKeyDown={(e) => (e.key === "Escape" || e.key === "?") && (e.preventDefault(), setOverlay(""))}
                 onClick={(e) => e.stopPropagation()}
                 style={{ width: 640, padding: "22px 26px", background: "#171413", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px 32px" }}

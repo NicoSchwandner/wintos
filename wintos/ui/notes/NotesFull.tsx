@@ -1,3 +1,4 @@
+import { useFocusOnMount } from "../useFocusOnMount";
 import { useAtom } from "jotai";
 import { memo } from "react";
 import { T } from "../tokens";
@@ -9,6 +10,7 @@ import { useNotes } from "./useNotes";
 
 // ⌘J: both files full width, side by side (NotesC).
 export const NotesFull = memo(({ tabId }: { tabId: string }) => {
+    const focusRef = useFocusOnMount<HTMLDivElement>();
     const { notes, project, save } = useNotes(tabId);
     const [editing, setEditing] = useAtom(editingMineAtom);
     const [, setView] = useAtom(mainViewAtom);
@@ -16,7 +18,7 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
         <div
             data-wintos="notes-full"
             tabIndex={0}
-            ref={(el) => el?.focus()}
+            ref={focusRef}
             onKeyDown={(e) => {
                 if (e.key === "e" && !editing && notes) (e.preventDefault(), setEditing(true));
                 if (e.key === "Escape" && !editing) setView("terminal");

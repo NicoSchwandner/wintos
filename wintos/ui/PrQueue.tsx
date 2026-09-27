@@ -1,3 +1,4 @@
+import { useFocusOnMount } from "./useFocusOnMount";
 import { globalStore } from "@/app/store/jotaiStore";
 import { atoms, createBlock, getApi } from "@/store/global";
 import { useSetAtom } from "jotai";
@@ -21,6 +22,7 @@ const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
 
 // ⇧⌘P: every PR that concerns you, grouped by the action it asks of you (spec §4, PRQueueC).
 export const PrQueue = memo(() => {
+    const focusRef = useFocusOnMount<HTMLDivElement>();
     const { state } = useWintos();
     const now = useNow();
     const setView = useSetAtom(mainViewAtom);
@@ -50,7 +52,7 @@ export const PrQueue = memo(() => {
         <div
             data-wintos="pr-queue"
             tabIndex={0}
-            ref={(el) => el?.focus()}
+            ref={focusRef}
             onKeyDown={(e) => {
                 const r = flat[Math.min(cursor, flat.length - 1)];
                 if (e.key === "j") setCursor((c) => Math.min(c + 1, flat.length - 1));

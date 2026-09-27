@@ -117,7 +117,9 @@ const BlockFrame_Default_Component = (props: BlockFrameProps) => {
     const connBtnRef = React.useRef<HTMLDivElement>(null);
     const connName = jotai.useAtomValue(waveEnv.getBlockMetaKeyAtom(nodeModel.blockId, "connection"));
     const iconColor = jotai.useAtomValue(waveEnv.getBlockMetaKeyAtom(nodeModel.blockId, "icon:color"));
-    const noHeader = util.useAtomValueSafe(viewModel?.noHeader);
+    // WintOS: terminals have no header; the session strip names them, and close/magnify/settings
+    // are on ⌘W, ⌘M and the terminal's right-click menu.
+    const noHeader = util.useAtomValueSafe(viewModel?.noHeader) || viewModel?.viewType === "term";
 
     React.useEffect(() => {
         if (!manageConnection) {

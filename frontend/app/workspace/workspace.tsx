@@ -9,7 +9,6 @@ import { TabBar } from "@/app/tab/tabbar";
 import { TabContent } from "@/app/tab/tabcontent";
 import { SessionStrip } from "@/wintos/ui/SessionStrip";
 import { WintOSSidebar } from "@/wintos/ui/Sidebar";
-import { Widgets } from "@/app/workspace/widgets";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { atoms, getApi, getSettingsKeyAtom } from "@/store/global";
 import { isMacOS } from "@/util/platformutil";
@@ -47,7 +46,6 @@ const WorkspaceElem = memo(() => {
     const tabBarPosition = useAtomValue(getSettingsKeyAtom("app:tabbar")) ?? "top";
     const showLeftTabBar = tabBarPosition === "left";
     const aiPanelVisible = useAtomValue(workspaceLayoutModel.panelVisibleAtom);
-    const widgetsSidebarVisible = useAtomValue(workspaceLayoutModel.widgetsSidebarVisibleAtom);
     const windowWidth = window.innerWidth;
     const leftGroupInitialPct = workspaceLayoutModel.getLeftGroupInitialPercentage(windowWidth, showLeftTabBar);
     const innerVTabInitialPct = workspaceLayoutModel.getInnerVTabInitialPercentage(windowWidth, showLeftTabBar);
@@ -163,7 +161,7 @@ const WorkspaceElem = memo(() => {
                                         <SessionStrip tabId={tabId} />
                                         <TabContent key={tabId} tabId={tabId} noTopPadding={showLeftTabBar && isMacOS()} />
                                     </div>
-                                    {widgetsSidebarVisible && <Widgets />}
+                                    {/* WintOS: no widget bar; its actions live in the Blocks menu. */}
                                 </div>
                             )}
                         </Panel>

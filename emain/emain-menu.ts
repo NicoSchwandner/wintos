@@ -4,6 +4,7 @@
 import { waveEventSubscribeSingle } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
 import * as electron from "electron";
+import { makeBlocksMenu, makeSettingsItem } from "./emain-wintos-menu";
 import { fireAndForget } from "../frontend/util/util";
 import { focusedBuilderWindow, getBuilderWindowById } from "./emain-builder";
 import { openBuilderWindow } from "./emain-ipc";
@@ -179,6 +180,7 @@ function makeAppMenuItems(webContents: electron.WebContents): Electron.MenuItemC
                 (getWindowWebContents(window) ?? webContents)?.send("menu-item-about");
             },
         },
+        makeSettingsItem((window, action) => (getWindowWebContents(window) ?? webContents)?.send("wintos-menu", action)),
         {
             label: "Check for Updates",
             click: () => {
@@ -362,6 +364,7 @@ async function makeFullAppMenu(callbacks: AppMenuCallbacks, workspaceOrBuilderId
         { role: "fileMenu", submenu: fileMenu },
         { role: "editMenu", submenu: editMenu },
         { role: "viewMenu", submenu: viewMenu },
+        { label: "Blocks", submenu: makeBlocksMenu((window, action) => (getWindowWebContents(window) ?? webContents)?.send("wintos-menu", action)) },
     ];
     if (workspaceMenu != null && !isBuilderWindowFocused) {
         menuTemplate.push({

@@ -10,6 +10,7 @@ import type { Row } from "../daemon/ranking/rank";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { setLatestSessions } from "./focus";
+import { registerWintosMenu } from "./menu";
 import { liveSessions } from "./sessions";
 import { setProjectTitle, useWintos } from "./useWintos";
 import { rowView, RowView, sidebarModel } from "./view";
@@ -48,6 +49,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const activeStale = model?.quietStale.filter((r) => r.tabId === activeTabId && !showAll) ?? [];
     const quiet = model ? (showAll ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
     const order = model ? [...model.needs, ...model.running, ...quiet] : [];
+
+    useEffect(registerWintosMenu, []);
 
     useEffect(() => {
         if (state) setLatestSessions(state.sessions, tabIds);

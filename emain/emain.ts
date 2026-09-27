@@ -41,6 +41,7 @@ import {
 } from "./emain-platform";
 import { ensureHotSpareTab, setMaxTabCacheSize } from "./emain-tabview";
 import { getIsWaveSrvDead, getWaveSrvProc, getWaveSrvReady, runWaveSrv } from "./emain-wavesrv";
+import { runWintosd, stopWintosd } from "./emain-wintosd";
 import {
     createBrowserWindow,
     createNewWaveWindow,
@@ -263,6 +264,7 @@ electronApp.on("window-all-closed", () => {
         electronApp.quit();
     }
 });
+electronApp.on("will-quit", () => stopWintosd());
 electronApp.on("before-quit", (e) => {
     const allWindows = getAllWaveWindows();
     const allBuilders = getAllBuilderWindows();
@@ -390,6 +392,7 @@ async function appMain() {
         console.log("second-instance event, argv:", argv, "workingDirectory:", workingDirectory);
         fireAndForget(createNewWaveWindow);
     });
+    runWintosd();
     try {
         await runWaveSrv(handleWSEvent);
     } catch (e) {

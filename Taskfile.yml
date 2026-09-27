@@ -24,12 +24,17 @@ tasks:
             - npm:install
             - build:backend
             - build:tsunamiscaffold
+            - build:wintos
         env:
             WAVETERM_ENVFILE: "{{.ROOT_DIR}}/.env"
             WCLOUD_PING_ENDPOINT: "https://ping-dev.waveterm.dev/central"
             WCLOUD_ENDPOINT: "https://api-dev.waveterm.dev/central"
             WCLOUD_WS_ENDPOINT: "wss://wsapi-dev.waveterm.dev"
             WAVETERM_NOCONFIRMQUIT: "1"
+
+    build:wintos:
+        desc: Bundle the WintOS daemon (wintos/daemon) into dist/wintos.
+        cmd: node wintos/build.mjs
 
     electron:start:
         desc: Run the Electron application directly.

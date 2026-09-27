@@ -1,4 +1,4 @@
-// Bundles the daemon into self-contained CommonJS file that Electron's
+// Bundles the daemon into a self-contained CommonJS file that Electron's
 // own Node (ELECTRON_RUN_AS_NODE) can run, so WintOS needs no separate Node install.
 import { build } from "esbuild";
 

@@ -40,6 +40,12 @@ export function takeHandoff(): void {
     if (Date.now() - t.at < HANDOFF_TTL_MS) magnifyBlock(t.blockId);
 }
 
+export function focusedSession(): Session | undefined {
+    const lm = getLayoutModelForStaticTab();
+    const blockId = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
+    return latest.sessions.find((s) => s.blockId === blockId) ?? latest.sessions.find((s) => s.tabId === globalStore.get(atoms.staticTabId));
+}
+
 export function jumpToNextWaiting(): boolean {
     const lm = getLayoutModelForStaticTab();
     const current = lm && globalStore.get(lm.focusedNode)?.data?.blockId;

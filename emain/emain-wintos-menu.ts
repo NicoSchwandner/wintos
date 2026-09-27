@@ -11,6 +11,7 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         click: (_, window) => send(window, action),
     });
     return [
+        item("New Session", "session", "Shift+Cmd+N"),
         item("New Terminal", "terminal"),
         item("New Browser", "browser", "Shift+Cmd+B"),
         item("Files", "files", "Shift+Cmd+E"),

@@ -65,6 +65,52 @@ describe("wintos-hook.sh", () => {
     });
 });
 
+describe("wintos-hook.sh keeps the block's resume command", () => {
+    // A fake wsh that records its arguments, one call per line.
+    const fakeWsh = () => {
+        const dir = tmp();
+        writeFileSync(join(dir, "wsh"), `#!/bin/sh\nprintf '%s\\n' "$*" >> "${dir}/calls"\n`, { mode: 0o755 });
+        return { dir, calls: () => (require("fs").existsSync(join(dir, "calls")) ? readFileSync(join(dir, "calls"), "utf8") : "") };
+    };
+    const env = (dir: string, extra: Record<string, string> = {}) => ({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "blk", WAVETERM_WSHBINDIR: dir, WINTOS_PORT: "1", ...extra });
+
+    test("a prompt sets cmd:initscript to resume this session in its directory", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/tmp/it's here", prompt: "hi" }));
+        expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/tmp/it'\\''s here' && claude --resume 's-1'\n`);
+    });
+
+    test("quitting WintOS (SessionEnd reason other) keeps the resume command", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionEnd", session_id: "s-1", reason: "other" }));
+        expect(w.calls()).toBe("");
+    });
+
+    test.each(["prompt_input_exit", "logout"])("a deliberate exit (%s) clears it", (reason) => {
+        const w = fakeWsh();
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionEnd", session_id: "s-1", reason }));
+        expect(w.calls()).toBe("setmeta -b blk cmd:initscript=\n");
+    });
+
+    test("SessionStart does not, since Claude saves nothing to resume before the first prompt", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", session_id: "s-1", cwd: "/x" }));
+        expect(w.calls()).toBe("");
+    });
+
+    test("other events leave the block alone", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "Stop", session_id: "s-1" }));
+        expect(w.calls()).toBe("");
+    });
+
+    test("without a block id nothing is written", () => {
+        const w = fakeWsh();
+        runHook({ WAVETERM_TABID: "t", WAVETERM_WSHBINDIR: w.dir, WINTOS_PORT: "1" }, JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s", cwd: "/x" }));
+        expect(w.calls()).toBe("");
+    });
+});
+
 describe("wintos hooks", () => {
     const setup = () => {
         const dir = tmp();

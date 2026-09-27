@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -60,14 +61,23 @@ func GetStarterLayout() PortableLayout {
 	}
 }
 
+// WintOS: a new tab is a new project, so its first terminal starts a Claude session.
+// WINTOS_NEW_PROJECT_CMD overrides the command; "none" gives a plain shell. The Claude
+// hook later replaces the init script with a resume of that exact session.
 func GetNewTabLayout() PortableLayout {
+	meta := waveobj.MetaMapType{
+		waveobj.MetaKey_View:       "term",
+		waveobj.MetaKey_Controller: "shell",
+	}
+	cmd := os.Getenv("WINTOS_NEW_PROJECT_CMD")
+	if cmd == "" {
+		cmd = "claude"
+	}
+	if cmd != "none" {
+		meta[waveobj.MetaKey_CmdInitScript] = cmd
+	}
 	return PortableLayout{
-		{IndexArr: []int{0}, BlockDef: &waveobj.BlockDef{
-			Meta: waveobj.MetaMapType{
-				waveobj.MetaKey_View:       "term",
-				waveobj.MetaKey_Controller: "shell",
-			},
-		}, Focused: true},
+		{IndexArr: []int{0}, BlockDef: &waveobj.BlockDef{Meta: meta}, Focused: true},
 	}
 }
 

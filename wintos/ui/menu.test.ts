@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { blockDefFor } from "./menu";
+import { blockDefFor, newSessionScript } from "./menu";
 
 const widgets = {
     "defwidget@terminal": { blockdef: { meta: { view: "term", controller: "shell" } } },
@@ -23,5 +23,15 @@ describe("blockDefFor", () => {
 
     test("an unknown action opens nothing", () => {
         expect(blockDefFor("bogus", widgets)).toBeNull();
+    });
+});
+
+describe("newSessionScript", () => {
+    test("starts Claude in the focused session's directory, safely quoted", () => {
+        expect(newSessionScript("/Users/n/it's here")).toBe("cd '/Users/n/it'\\''s here' && claude");
+    });
+
+    test("with no session to copy from it just starts Claude", () => {
+        expect(newSessionScript(undefined)).toBe("claude");
     });
 });

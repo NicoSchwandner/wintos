@@ -4,6 +4,7 @@ import { NotesFull } from "./notes/NotesFull";
 import { NotesRail } from "./notes/NotesRail";
 import { mainViewAtom } from "./notes/state";
 import { PrQueue } from "./PrQueue";
+import { PanelView } from "./PanelView";
 import { SessionStrip } from "./SessionStrip";
 
 // The project area: session strip over the terminals, the notes rail beside them, and ⌘J
@@ -15,6 +16,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
             <div className="flex flex-col flex-grow min-w-0">
                 {view === "notes" && <NotesFull tabId={tabId} />}
                 {view === "prs" && <PrQueue />}
+                {view === "panel" && <PanelView />}
                 <div className="flex flex-col flex-grow min-w-0" style={{ display: view === "terminal" ? "flex" : "none" }}>
                     <SessionStrip tabId={tabId} />
                     {children}

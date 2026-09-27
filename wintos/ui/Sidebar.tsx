@@ -17,7 +17,8 @@ import { liveSessions } from "./sessions";
 import { setProjectTitle, useWintos } from "./useWintos";
 import { ghPrs, prsByTab, rowView, RowView, sidebarModel } from "./view";
 import { queueModel } from "./prs";
-import { toggleView } from "./menu";
+import { openPanel, toggleView } from "./menu";
+import { cardValue, pluginPanels } from "./panels";
 
 const BAND_STYLE = {
     needs: { label: "Needs you", color: T.apricot },
@@ -50,6 +51,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const prsTab = state ? prsByTab(tabIds, state) : {};
     const gh = state ? ghPrs(state) : undefined;
     const queue = gh ? queueModel(gh.prs, gh.me, now) : null;
+    const panels = state ? pluginPanels(state) : [];
     const project = (tabId: string) => state?.projects.find((p) => p.id === tabId);
     // Until ⌘K exists, "Show all" is the only way to reach a stale tab, and the open tab is
     // always visible even when it is stale.
@@ -135,9 +137,13 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 onKeyDown={onKey}
                 style={{ flexGrow: 1, overflowY: "auto", padding: "4px 12px 12px", display: "flex", flexDirection: "column", gap: 18, outline: "none" }}
             >
-                {queue && (
+                {(queue || panels.length > 0) && (
                     <div style={{ display: "flex", gap: 8 }}>
-                        <SummaryCard label="PRs" value={String(queue.yours)} note={queue.pastSla ? `${queue.pastSla} past SLA` : "nothing late"} noteColor={queue.pastSla ? T.brick : T.muted} onClick={() => toggleView("prs")} />
+                        {queue && <SummaryCard label="PRs" value={String(queue.yours)} note={queue.pastSla ? `${queue.pastSla} past SLA` : "nothing late"} noteColor={queue.pastSla ? T.brick : T.muted} onClick={() => toggleView("prs")} />}
+                        {panels.map((p) => {
+                            const c = cardValue(p.counts);
+                            return <SummaryCard key={p.name} label={p.title} value={c.value} note={c.note} noteColor={p.error || p.counts.some((x) => x.count == null) ? T.brick : T.muted} onClick={() => openPanel(p.name)} />;
+                        })}
                     </div>
                 )}
                 {offline || !model ? (

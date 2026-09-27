@@ -5,9 +5,9 @@
 cd "$(dirname "$0")/.."
 for v in $(env | grep -oE '^(CLAUDE[A-Z_]*|CMUX[A-Z_]*)='); do unset "${v%=}"; done
 # Personal settings (WINTOS_ROOT, WINTOS_NEW_PROJECT_CMD) live outside the repo.
-[ -r "$HOME/.config/wintos/env" ] && . "$HOME/.config/wintos/env"
+# Exported, so plugins see their own settings too.
+[ -r "$HOME/.config/wintos/env" ] && { set -a; . "$HOME/.config/wintos/env"; set +a; }
 export WINTOS_ROOT="${WINTOS_ROOT:-$HOME/.local/share/wintos/projects}"
-export WINTOS_NEW_PROJECT_CMD
 export WAVETERM_ENVFILE=$PWD/.env WAVETERM_NOCONFIRMQUIT=1 \
     WCLOUD_PING_ENDPOINT=https://ping-dev.waveterm.dev/central \
     WCLOUD_ENDPOINT=https://api-dev.waveterm.dev/central \

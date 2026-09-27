@@ -32,6 +32,8 @@ function connect() {
     };
 }
 
+export const currentState = () => snapshot.state;
+
 export function useWintos(): Snapshot {
     const [s, setS] = useState(snapshot);
     useEffect(() => {

@@ -16,6 +16,7 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         item("New Browser", "browser", "Shift+Cmd+B"),
         item("Files", "files", "Shift+Cmd+E"),
         item("Notes", "notes", "Cmd+J"),
+        item("PRs Need Attention", "prs", "Shift+Cmd+P"),
         { type: "separator" },
         item("System Info", "sysinfo"),
         item("Processes", "processes"),

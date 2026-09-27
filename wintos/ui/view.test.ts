@@ -50,6 +50,16 @@ describe("rowView", () => {
     });
 });
 
+describe("rowView with PRs", () => {
+    const blocked = { items: [{ pr: { number: 4803, branch: "fix/bank-retry" } as never, group: "chase" as const }], blocked: { since: NOW, text: "Nobody has looked at #4803 in 4 working days", tone: "brick" as const } };
+    test("a rotting PR speaks in brick when no session is waiting", () =>
+        expect(rowView(row("needs", { waitingSince: NOW }), { dir: "/p", mtime: 0 }, "T", NOW, blocked)).toMatchObject({ next: "Nobody has looked at #4803 in 4 working days", tone: "brick", meta: "#4803 · fix/bank-retry" }));
+    test("a waiting session still wins the next-action line", () =>
+        expect(rowView(row("needs", { waitingSince: NOW, sessions: [{ state: "waiting" } as never] }), undefined, "T", NOW, blocked)).toMatchObject({ next: "Your turn", tone: "apricot" }));
+    test("quiet rows take the PR's reason", () =>
+        expect(rowView(row("quiet"), undefined, "T", NOW, { items: [], reason: "#4812 with ana.b" }).reason).toBe("#4812 with ana.b"));
+});
+
 describe("sidebarModel", () => {
     test("only tabs of this workspace appear, ranked by the daemon's rules", () => {
         const m = sidebarModel(["a", "b"], {
@@ -62,6 +72,12 @@ describe("sidebarModel", () => {
         });
         expect(m.needs.map((r) => r.tabId)).toEqual(["b"]);
         expect(m.quiet.map((r) => r.tabId)).toEqual(["a"]);
+    });
+
+    test("a project whose PR needs you is ranked into needs", () => {
+        const prs = { ok: true, at: NOW, data: { me: "me", prs: [{ repo: "o/r", number: 9, url: "u", title: "DEV-1", author: "me", isDraft: false, createdAt: "1970-01-01T00:00:00Z", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b" }] } };
+        const m = sidebarModel(["a"], { now: NOW, sessions: [], projects: [{ id: "a", dir: "/p", mtime: 0, title: "DEV-1 thing", pr: [] }], plugins: { "gh-prs": prs } });
+        expect(m.needs.map((r) => r.tabId)).toEqual(["a"]);
     });
 
     test("the project file's mtime counts as activity", () => {

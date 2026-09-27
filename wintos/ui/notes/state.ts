@@ -1,5 +1,6 @@
 import { atom } from "jotai";
 
-// Per renderer: whether the full-width notes view (⌘J) is open, and whether mine.md is being edited.
-export const notesOpenAtom = atom(false);
+// Per renderer: what fills the project area, and whether mine.md is being edited.
+export type MainView = "terminal" | "notes" | "prs" | "oncall";
+export const mainViewAtom = atom<MainView>("terminal");
 export const editingMineAtom = atom(false);

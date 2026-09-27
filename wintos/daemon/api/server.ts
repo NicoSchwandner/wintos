@@ -3,6 +3,7 @@ import http from "http";
 import type { AddressInfo } from "net";
 import { WebSocketServer, type WebSocket } from "ws";
 import { injection } from "../inject";
+import { Plugin, PluginRunner } from "../plugins/runner";
 import { ProjectStore } from "../projects/store";
 import { HookEvent, reduceSession, Session } from "../sessions/reduce";
 
@@ -15,7 +16,7 @@ const MAX_TITLE = 120;
 // Ids and titles end up as front matter lines; a line break would let a value forge keys.
 const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[] }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[] }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     const uiOrigins = new Set(opts.uiOrigins ?? [...DEFAULT_UI_ORIGINS, ...(process.env.WINTOS_UI_ORIGINS?.split(",") ?? [])]);
     let sessions = new Map<string, Session>();
@@ -26,11 +27,14 @@ export async function startServer(opts: { root: string; port: number; host?: str
         now: Date.now(),
         sessions: [...sessions.values()],
         projects: store.list().map(({ body: _body, ...p }) => p),
+        plugins: runner.results,
     });
     const broadcast = () => {
         const frame = JSON.stringify(state());
         for (const s of sockets) s.send(frame);
     };
+
+    const runner = new PluginRunner(opts.plugins ?? [], () => broadcast());
 
     let watcher: FSWatcher | undefined;
     let pending: NodeJS.Timeout | undefined;
@@ -90,6 +94,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, text);
             }
+            const plugin = /^\/plugins\/([^/]+)\/run$/.exec(url.pathname);
+            if (req.method === "POST" && plugin) {
+                return (await runner.run(decodeURIComponent(plugin[1]))) ? send(res, 200, "") : send(res, 404, "no such plugin");
+            }
             const notes = /^\/projects\/([^/]+)\/notes$/.exec(url.pathname);
             if (req.method === "GET" && notes) {
                 const n = store.notes(decodeURIComponent(notes[1]));
@@ -135,10 +143,12 @@ export async function startServer(opts: { root: string; port: number; host?: str
 
     await new Promise<void>((resolve) => server.listen(opts.port, opts.host ?? "127.0.0.1", resolve));
     port = (server.address() as AddressInfo).port;
+    runner.start();
     return {
         http: server,
         close: () => {
             watcher?.close();
+            runner.stop();
             clearTimeout(pending);
             for (const s of sockets) s.terminate();
             wss.close();

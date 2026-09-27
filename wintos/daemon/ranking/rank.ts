@@ -7,8 +7,9 @@ export type Ranking = { needs: Row[]; running: Row[]; quiet: Row[]; quietMore: R
 export const QUIET_CAP = 6;
 export const STALE_MS = 14 * 86_400_000;
 
-export function rank(tabIds: string[], sessions: Session[], now: number, touched: Record<string, number> = {}): Ranking {
-    const rows = tabIds.map((tabId) => rowOf(tabId, sessions.filter((s) => s.tabId === tabId), touched[tabId] ?? 0));
+// prBlocked: tabs whose project has a PR in Fix or Chase, with when that started (spec §3.3).
+export function rank(tabIds: string[], sessions: Session[], now: number, touched: Record<string, number> = {}, prBlocked: Record<string, number> = {}): Ranking {
+    const rows = tabIds.map((tabId) => rowOf(tabId, sessions.filter((s) => s.tabId === tabId), touched[tabId] ?? 0, prBlocked[tabId]));
     const byRecent = (a: Row, b: Row) => b.lastAt - a.lastAt;
     const quietAll = rows.filter((r) => r.band === "quiet").sort(byRecent);
     // lastAt 0 means nothing is known yet (a fresh tab), which is not the same as untouched.
@@ -23,10 +24,10 @@ export function rank(tabIds: string[], sessions: Session[], now: number, touched
     };
 }
 
-function rowOf(tabId: string, sessions: Session[], touchedAt: number): Row {
+function rowOf(tabId: string, sessions: Session[], touchedAt: number, prBlockedSince?: number): Row {
     const lastAt = Math.max(touchedAt, ...sessions.map((s) => s.lastAt), 0);
-    const waiting = sessions.filter((s) => s.state === "waiting");
-    if (waiting.length) return { tabId, band: "needs", lastAt, sessions, waitingSince: Math.min(...waiting.map((s) => s.since)) };
+    const since = [...sessions.filter((s) => s.state === "waiting").map((s) => s.since), ...(prBlockedSince !== undefined ? [prBlockedSince] : [])];
+    if (since.length) return { tabId, band: "needs", lastAt, sessions, waitingSince: Math.min(...since) };
     if (sessions.some((s) => s.state === "working")) return { tabId, band: "running", lastAt, sessions };
     return { tabId, band: "quiet", lastAt, sessions };
 }

@@ -109,6 +109,23 @@ describe("notes", () => {
     });
 });
 
+describe("plugins", () => {
+    test("results appear in state and r re-runs a plugin", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-p-"));
+        const f = join(dir, "count");
+        writeFileSync(f, `#!/bin/sh\nn=$(cat "$0.n" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$0.n"; echo "{\\"n\\":$n}"\n`, { mode: 0o755 });
+        srv = await startServer({ root, port: 0, plugins: [{ name: "count", cmd: [f], everyMs: 0 }] });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        let first;
+        for (let i = 0; i < 50 && !first; i++) (first = (await (await fetch(base + "/state")).json()).plugins.count) || (await new Promise((r) => setTimeout(r, 50)));
+        expect(first).toMatchObject({ ok: true, data: { n: 1 } });
+        expect((await post("/plugins/count/run", {})).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).plugins.count.data).toEqual({ n: 2 });
+        expect((await post("/plugins/nope/run", {})).status).toBe(404);
+    });
+});
+
 describe("wintosd stays up", () => {
     test("when a reload fails (a folder where project.md should be a file)", async () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });

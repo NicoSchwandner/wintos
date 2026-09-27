@@ -4,14 +4,14 @@ import { T } from "../tokens";
 import { Mine } from "./Mine";
 import { Key } from "./NotesRail";
 import { ProjectNotes } from "./ProjectNotes";
-import { editingMineAtom, notesOpenAtom } from "./state";
+import { editingMineAtom, mainViewAtom } from "./state";
 import { useNotes } from "./useNotes";
 
 // ⌘J: both files full width, side by side (NotesC).
 export const NotesFull = memo(({ tabId }: { tabId: string }) => {
     const { notes, project, save } = useNotes(tabId);
     const [editing, setEditing] = useAtom(editingMineAtom);
-    const [, setOpen] = useAtom(notesOpenAtom);
+    const [, setView] = useAtom(mainViewAtom);
     return (
         <div
             data-wintos="notes-full"
@@ -19,7 +19,7 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
             ref={(el) => el?.focus()}
             onKeyDown={(e) => {
                 if (e.key === "e" && !editing && notes) (e.preventDefault(), setEditing(true));
-                if (e.key === "Escape" && !editing) setOpen(false);
+                if (e.key === "Escape" && !editing) setView("terminal");
             }}
             style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#171413", outline: "none", fontFamily: T.ui, minWidth: 0 }}
         >

@@ -1,7 +1,7 @@
 import { globalStore } from "@/app/store/jotaiStore";
 import { atoms, createBlock, getApi, isDev } from "@/store/global";
 import { focusedSession } from "./focus";
-import { notesOpenAtom } from "./notes/state";
+import { mainViewAtom, type MainView } from "./notes/state";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
 // defines, so a user's widgets.json overrides still apply.
@@ -33,9 +33,14 @@ function newSession(): void {
 
 function runAction(action: string): void {
     if (action === "session") return newSession();
-    if (action === "notes") return globalStore.set(notesOpenAtom, (o) => !o);
+    if (action === "notes" || action === "prs") return toggleView(action);
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);
     if (b) createBlock(b.def, false, b.ephemeral);
+}
+
+// ⌘J / ⇧⌘P open a view, and the same key again goes back to the terminals.
+export function toggleView(view: MainView): void {
+    globalStore.set(mainViewAtom, (v) => (v === view ? "terminal" : view));
 }
 
 let registered = false;

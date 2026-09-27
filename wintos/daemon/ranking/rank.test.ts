@@ -56,6 +56,16 @@ describe("rank", () => {
         expect(r.quiet[0].lastAt).toBe(NOW - DAY);
     });
 
+    test("a PR that needs you lifts a quiet project into needs you", () => {
+        const r = rank(["t"], [s("t", "idle", NOW - 5)], NOW, {}, { t: NOW - 3 * DAY });
+        expect(r.needs.map((x) => [x.tabId, x.waitingSince])).toEqual([["t", NOW - 3 * DAY]]);
+    });
+
+    test("the older of a waiting session and a rotting PR sets the wait", () => {
+        const r = rank(["t"], [s("t", "waiting", NOW - 10)], NOW, {}, { t: NOW - DAY });
+        expect(r.needs[0].waitingSince).toBe(NOW - DAY);
+    });
+
     test("sessions of tabs outside the workspace are ignored", () => {
         const r = rank(["t"], [s("gone", "waiting", NOW)], NOW);
         expect(r.needs).toEqual([]);

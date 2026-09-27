@@ -11,11 +11,13 @@ import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { setLatestSessions } from "./focus";
 import { registerWintosMenu } from "./menu";
-import { editingMineAtom, notesOpenAtom } from "./notes/state";
+import { editingMineAtom, mainViewAtom } from "./notes/state";
 import { globalStore } from "@/app/store/jotaiStore";
 import { liveSessions } from "./sessions";
 import { setProjectTitle, useWintos } from "./useWintos";
-import { rowView, RowView, sidebarModel } from "./view";
+import { ghPrs, prsByTab, rowView, RowView, sidebarModel } from "./view";
+import { queueModel } from "./prs";
+import { toggleView } from "./menu";
 
 const BAND_STYLE = {
     needs: { label: "Needs you", color: T.apricot },
@@ -45,6 +47,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const listRef = useRef<HTMLDivElement>(null);
 
     const model = state ? sidebarModel(tabIds, state) : null;
+    const prsTab = state ? prsByTab(tabIds, state) : {};
+    const gh = state ? ghPrs(state) : undefined;
+    const queue = gh ? queueModel(gh.prs, gh.me, now) : null;
     const project = (tabId: string) => state?.projects.find((p) => p.id === tabId);
     // Until ⌘K exists, "Show all" is the only way to reach a stale tab, and the open tab is
     // always visible even when it is stale.
@@ -76,7 +81,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 {
                     label: "Edit mine.md",
                     enabled: tabId === activeTabId,
-                    click: () => (globalStore.set(notesOpenAtom, true), globalStore.set(editingMineAtom, true)),
+                    click: () => (globalStore.set(mainViewAtom, "notes"), globalStore.set(editingMineAtom, true)),
                 },
                 { type: "separator" },
                 { label: "Close tab", click: () => fireAndForget(() => getApi().closeTab(workspace.oid, tabId, true)) },
@@ -94,7 +99,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     };
 
     const renderRow = (row: Row) => {
-        const v = rowView(row, project(row.tabId), names[row.tabId], now);
+        const v = rowView(row, project(row.tabId), names[row.tabId], now, prsTab[row.tabId]);
         const props = {
             key: row.tabId,
             tabId: row.tabId,
@@ -130,6 +135,11 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 onKeyDown={onKey}
                 style={{ flexGrow: 1, overflowY: "auto", padding: "4px 12px 12px", display: "flex", flexDirection: "column", gap: 18, outline: "none" }}
             >
+                {queue && (
+                    <div style={{ display: "flex", gap: 8 }}>
+                        <SummaryCard label="PRs" value={String(queue.yours)} note={queue.pastSla ? `${queue.pastSla} past SLA` : "nothing late"} noteColor={queue.pastSla ? T.brick : T.muted} onClick={() => toggleView("prs")} />
+                    </div>
+                )}
                 {offline || !model ? (
                     <div style={{ fontFamily: T.mono, fontSize: 11, color: offline ? T.brick : T.muted, padding: "0 4px" }}>
                         {offline ? "daemon offline: bands hidden until wintosd is back" : "connecting to wintosd…"}
@@ -276,5 +286,17 @@ function Key({ k, label }: { k: string; label: string }) {
             <span style={{ fontFamily: T.mono, fontSize: 9.5, color: T.keycapText, background: T.keycapBg, border: `1px solid ${T.keycapBorder}`, borderBottomWidth: 2, borderRadius: 5, padding: "2px 6px" }}>{k}</span>
             {label}
         </span>
+    );
+}
+
+function SummaryCard({ label, value, note, noteColor, onClick }: { label: string; value: string; note: string; noteColor: string; onClick: () => void }) {
+    return (
+        <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#1E1A18", border: "1px solid #2E2825", borderRadius: 10, display: "flex", flexDirection: "column", gap: 5, cursor: "pointer" }}>
+            <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 11.5, fontWeight: 600, color: T.secondary }}>{label}</span>
+                <span style={{ fontFamily: T.display, fontSize: 22, lineHeight: 1, color: T.text }}>{value}</span>
+            </span>
+            <span style={{ fontFamily: T.mono, fontSize: 9.5, color: noteColor }}>{note}</span>
+        </div>
     );
 }

@@ -1,0 +1,15 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "transcript_path": "/Users/dev/.claude/projects/-tmp/11111111-2222-4333-8444-555555555555.jsonl",
+  "cwd": "/tmp",
+  "prompt_id": "aaaaaaaa-0000-4000-8000-000000000001",
+  "permission_mode": "auto",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "gate",
+  "background_tasks": [],
+  "session_crons": []
+}

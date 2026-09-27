@@ -1,5 +1,5 @@
 {
-    "include": ["frontend/**/*", "emain/**/*"],
+    "include": ["frontend/**/*", "emain/**/*", "wintos/**/*"],
     "exclude": ["node_modules"],
     "compilerOptions": {
         "target": "es6",
@@ -16,6 +16,7 @@
         "baseUrl": "./",
         "paths": {
             "@/app/*": ["frontend/app/*"],
+            "@/wintos/*": ["wintos/*"],
             "@/builder/*": ["frontend/builder/*"],
             "@/util/*": ["frontend/util/*"],
             "@/layout/*": ["frontend/layout/*"],

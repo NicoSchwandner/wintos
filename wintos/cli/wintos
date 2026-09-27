@@ -1,0 +1,45 @@
+#!/bin/sh
+# wintos: small CLI around wintosd.
+#   wintos title <words…>              name this tab's project (used by Claude)
+#   wintos hooks install|uninstall     wire the hook into Claude Code settings
+set -eu
+PORT="${WINTOS_PORT:-7730}"
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+HOOK="$HERE/../hooks/wintos-hook.sh"
+SETTINGS="${WINTOS_CLAUDE_SETTINGS:-${HOME:-~}/.claude/settings.json}"
+EVENTS="SessionStart UserPromptSubmit Stop SubagentStop Notification SessionEnd"
+
+die() { echo "wintos: $*" >&2; exit 1; }
+
+case "${1:-}" in
+title)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos title <words>"
+    [ -n "${WAVETERM_TABID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_TABID)"
+    jq -n --arg t "$*" '{title: $t, manual: false}' |
+        curl -sf -m 2 --data-binary @- "http://127.0.0.1:$PORT/projects/$WAVETERM_TABID/title" |
+        jq -r '"titled: \(.title)" + (if .titleLocked then " (locked: the developer named it)" else "" end)' ||
+        die "wintosd not reachable on port $PORT"
+    ;;
+hooks)
+    [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
+    cp "$SETTINGS" "$SETTINGS.wintos-bak"
+    # Ours are recognised by the hook path, so the user's own hooks are never touched.
+    strip='.hooks //= {} | .hooks |= with_entries(.value |= map(select(any(.hooks[]?; .command | contains("wintos-hook.sh")) | not)))'
+    case "${2:-}" in
+    install)
+        # shellcheck disable=SC2016
+        jq --arg hook "$HOOK" --arg events "$EVENTS" "$strip"' | reduce ($events | split(" "))[] as $e (.;
+            .hooks[$e] = ((.hooks[$e] // []) + [{hooks: [{type: "command", command: $hook}]}]))' \
+            "$SETTINGS.wintos-bak" > "$SETTINGS"
+        echo "wintos: hooks installed in $SETTINGS ($EVENTS)"
+        ;;
+    uninstall)
+        jq "$strip"' | .hooks |= with_entries(select(.value | length > 0))' "$SETTINGS.wintos-bak" > "$SETTINGS"
+        echo "wintos: hooks removed from $SETTINGS"
+        ;;
+    *) die "usage: wintos hooks install|uninstall" ;;
+    esac
+    ;;
+*) die "usage: wintos title <words> | wintos hooks install|uninstall" ;;
+esac

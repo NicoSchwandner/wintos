@@ -33,6 +33,8 @@
     "term:bellsound": false,
     "term:bellindicator": true,
     "term:osc52": "always",
+    "term:theme": "wintos",
+    "term:fontfamily": "JetBrains Mono",
     "term:cursor": "block",
     "term:cursorblink": false,
     "term:copyonselect": true,

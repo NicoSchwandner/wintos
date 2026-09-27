@@ -10,4 +10,6 @@ export WAVETERM_ENVFILE=$PWD/.env WAVETERM_NOCONFIRMQUIT=1 \
     WCLOUD_ENDPOINT=https://api-dev.waveterm.dev/central \
     WCLOUD_WS_ENDPOINT=wss://wsapi-dev.waveterm.dev
 node wintos/build.mjs || exit 1
-exec npx electron-vite dev --remoteDebuggingPort 9223
+# Not via npx: npm exports npm_config_* into the child, every Wave shell inherits them, and
+# nvm then prints a warning into each new terminal.
+exec ./node_modules/.bin/electron-vite dev --remoteDebuggingPort 9223

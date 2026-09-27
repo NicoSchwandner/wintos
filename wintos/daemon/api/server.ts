@@ -90,6 +90,18 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, text);
             }
+            const notes = /^\/projects\/([^/]+)\/notes$/.exec(url.pathname);
+            if (req.method === "GET" && notes) {
+                const n = store.notes(decodeURIComponent(notes[1]));
+                return n ? json(res, n) : send(res, 404, "no project for this tab");
+            }
+            const mine = /^\/projects\/([^/]+)\/mine$/.exec(url.pathname);
+            if (req.method === "POST" && mine) {
+                const b = (await body(req)) as { text?: unknown };
+                if (typeof b?.text !== "string") return send(res, 400, "need text");
+                if (!store.saveMine(decodeURIComponent(mine[1]), b.text)) return send(res, 404, "no project for this tab");
+                return send(res, 200, "");
+            }
             const title = /^\/projects\/([^/]+)\/title$/.exec(url.pathname);
             if (req.method === "POST" && title) {
                 const tabId = decodeURIComponent(title[1]);

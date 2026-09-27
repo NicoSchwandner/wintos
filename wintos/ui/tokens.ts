@@ -2,6 +2,7 @@
 // the blocker, brick means something is rotting, moss means a machine is working.
 export const T = {
     ground: "#121010",
+    terminal: "#0F0D0C",
     sidebar: "#151211",
     card: "#1C1918",
     cardActive: "#262120",

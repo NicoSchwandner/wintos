@@ -84,6 +84,31 @@ describe("wintosd API", () => {
     });
 });
 
+describe("notes", () => {
+    test("GET notes returns project.md's body and mine.md", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        writeFileSync(join(root, "x", "mine.md"), "## Ceiling\ntwo vendors\n");
+        const n = await (await fetch(base + "/projects/tab-1/notes")).json();
+        expect(n).toEqual({ dir: join(root, "x"), projectMd: "", mine: "## Ceiling\ntwo vendors\n" });
+    });
+
+    test("saving mine.md writes the file in the project folder", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        expect((await post("/projects/tab-1/mine", { text: "## Promised\nmetric\n" })).status).toBe(200);
+        expect(require("fs").readFileSync(join(root, "x", "mine.md"), "utf8")).toBe("## Promised\nmetric\n");
+    });
+
+    test("a tab without a project has no notes to read or write", async () => {
+        expect((await fetch(base + "/projects/nope/notes")).status).toBe(404);
+        expect((await post("/projects/nope/mine", { text: "x" })).status).toBe(404);
+    });
+
+    test("mine.md must be a string", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        expect((await post("/projects/tab-1/mine", { text: 5 })).status).toBe(400);
+    });
+});
+
 describe("wintosd stays up", () => {
     test("when a reload fails (a folder where project.md should be a file)", async () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });

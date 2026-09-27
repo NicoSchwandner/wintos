@@ -26,8 +26,12 @@ Do not rewrite it when nothing changed.
 - Front matter: keep \`id\` and \`title\` as they are (rename with \`wintos title\`). \`next:\` is
   the single concrete action that moves this forward now. \`pr:\` lists this project's pull
   requests, comma-separated, added the moment you open or learn of one.
-- Body sections, in order: ## Goal (two sentences) · ## Decisions (dated bullets) · ## Built ·
-  ## Open questions (mark the blocking one). Under ~40 lines; replace, don't append.
+- Body sections, in order, in these exact formats (the WintOS notes view renders them):
+  ## Goal: two sentences on what this work is for.
+  ## Decisions: dated bullets, newest last, e.g. \`- 19 sep — Confidence is scored per page.\`
+  ## Built: \`- [x]\` done, \`- [~]\` partial, \`- [ ]\` todo.
+  ## Open questions: one bullet each; end the one blocking progress with \`(blocking)\`.
+  Use \`backticks\` for code. Under ~40 lines; replace, don't append.
 - mine.md is the developer's. Read it, never write it. It outranks your own conclusions.`);
     parts.push(`mine.md:\n${mine.text}`);
     parts.push(`project.md:\n${project.error ? `(unreadable: ${project.error})` : project.body ?? ""}`);

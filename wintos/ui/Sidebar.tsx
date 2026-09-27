@@ -11,6 +11,8 @@ import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { setLatestSessions } from "./focus";
 import { registerWintosMenu } from "./menu";
+import { editingMineAtom, notesOpenAtom } from "./notes/state";
+import { globalStore } from "@/app/store/jotaiStore";
 import { liveSessions } from "./sessions";
 import { setProjectTitle, useWintos } from "./useWintos";
 import { rowView, RowView, sidebarModel } from "./view";
@@ -71,6 +73,11 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             [
                 { label: "Open project", click: () => open(tabId) },
                 { label: "Rename…", click: () => setRenaming(tabId) },
+                {
+                    label: "Edit mine.md",
+                    enabled: tabId === activeTabId,
+                    click: () => (globalStore.set(notesOpenAtom, true), globalStore.set(editingMineAtom, true)),
+                },
                 { type: "separator" },
                 { label: "Close tab", click: () => fireAndForget(() => getApi().closeTab(workspace.oid, tabId, true)) },
             ],

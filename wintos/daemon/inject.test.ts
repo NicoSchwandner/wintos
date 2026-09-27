@@ -8,6 +8,11 @@ describe("injection", () => {
         expect(text).toContain("/p/x/project.md is unreadable (no front matter)");
     });
 
+    test("a titled project gets the section formats the notes view renders", () => {
+        const text = injection({ id: "t", title: "X", dir: "/p/x", mtime: 0, pr: [], titleLocked: false, body: "" }, { text: "m" });
+        for (const marker of ["- 19 sep — ", "- [x]", "- [~]", "- [ ]", "(blocking)"]) expect(text).toContain(marker);
+    });
+
     test("no project at all asks for a title", () => {
         expect(injection(undefined, { text: "mine.md is empty" })).toContain('wintos title "');
     });

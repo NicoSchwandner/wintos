@@ -62,6 +62,21 @@ export class ProjectStore {
         return before === undefined || before === text ? { text } : { text, diff: lineDiff(before, text) };
     }
 
+    notes(tabId: string): { dir: string; projectMd: string | null; mine: string } | undefined {
+        const p = this.byTab(tabId);
+        if (!p) return undefined;
+        const mineFile = join(p.dir, "mine.md");
+        return { dir: p.dir, projectMd: p.error ? null : (p.body ?? ""), mine: existsSync(mineFile) ? readFileSync(mineFile, "utf8") : "" };
+    }
+
+    // The only file WintOS writes on the developer's behalf; always inside the project folder.
+    saveMine(tabId: string, text: string): boolean {
+        const p = this.byTab(tabId);
+        if (!p) return false;
+        writeFileSync(join(p.dir, "mine.md"), text);
+        return true;
+    }
+
     private read(dir: string): Project {
         const file = join(dir, "project.md");
         if (!existsSync(file)) return { dir, mtime: 0, error: "no project.md" };

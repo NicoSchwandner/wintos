@@ -1,7 +1,7 @@
 import { globalStore } from "@/app/store/jotaiStore";
 import { atoms, createBlock, getApi, isDev } from "@/store/global";
-import { focusedSession } from "./focus";
-import { mainViewAtom, panelNameAtom, type MainView } from "./notes/state";
+import { focusArea, focusedSession } from "./focus";
+import { mainViewAtom, overlayAtom, panelNameAtom, type MainView } from "./notes/state";
 import { pluginPanels } from "./panels";
 import { currentState } from "./useWintos";
 
@@ -33,8 +33,12 @@ function newSession(): void {
     createBlock({ meta: { view: "term", controller: "shell", "cmd:initscript": newSessionScript(cwd) } });
 }
 
-function runAction(action: string): void {
+export function runAction(action: string): void {
     if (action === "session") return newSession();
+    if (action === "palette" || action === "keymap") return globalStore.set(overlayAtom, (o) => (o === action ? "" : action));
+    if (action.startsWith("focus-")) return focusArea(action.slice(6) as "sidebar" | "terminal" | "notes");
+    if (action.startsWith("open-url:")) return void createBlock({ meta: { view: "web", url: action.slice(9) } });
+    if (action.startsWith("panel:")) return openPanel(action.slice(6));
     if (action === "notes" || action === "prs") return toggleView(action);
     if (action === "panel") {
         const first = currentState() && pluginPanels(currentState()!)[0];

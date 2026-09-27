@@ -3,6 +3,7 @@ import { atoms, getApi } from "@/store/global";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import type { Session } from "../daemon/sessions/reduce";
 import { nextWaiting, Target } from "./sessions";
+import { mainViewAtom } from "./notes/state";
 
 // Every Wave tab runs in its own renderer, so a renderer can only magnify blocks of its own
 // tab. To reach a block elsewhere we leave the target in localStorage, which all renderers
@@ -44,6 +45,17 @@ export function focusedSession(): Session | undefined {
     const lm = getLayoutModelForStaticTab();
     const blockId = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
     return latest.sessions.find((s) => s.blockId === blockId) ?? latest.sessions.find((s) => s.tabId === globalStore.get(atoms.staticTabId));
+}
+
+// ⌘1 ⌘2 ⌘3: sidebar, the focused terminal, the notes rail.
+export function focusArea(area: "sidebar" | "terminal" | "notes"): void {
+    globalStore.set(mainViewAtom, "terminal");
+    if (area === "sidebar") return void document.querySelector<HTMLElement>("[data-wintos=sidebar-list]")?.focus();
+    if (area === "notes") return void document.querySelector<HTMLElement>("[data-wintos=notes-rail]")?.focus();
+    const lm = getLayoutModelForStaticTab();
+    const node = lm && globalStore.get(lm.focusedNode);
+    if (node) lm.focusNode(node.id);
+    document.querySelector<HTMLElement>(`[data-blockid="${node?.data?.blockId}"] .xterm-helper-textarea`)?.focus();
 }
 
 export function jumpToNextWaiting(): boolean {

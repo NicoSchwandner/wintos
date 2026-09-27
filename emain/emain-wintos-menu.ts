@@ -11,6 +11,13 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         click: (_, window) => send(window, action),
     });
     return [
+        item("Everything…", "palette", "Cmd+K"),
+        item("Keyboard Shortcuts", "keymap", "Cmd+/"),
+        { type: "separator" },
+        item("Focus Sidebar", "focus-sidebar", "Cmd+1"),
+        item("Focus Terminal", "focus-terminal", "Cmd+2"),
+        item("Focus Notes", "focus-notes", "Cmd+3"),
+        { type: "separator" },
         item("New Session", "session", "Shift+Cmd+N"),
         item("New Terminal", "terminal"),
         item("New Browser", "browser", "Shift+Cmd+B"),

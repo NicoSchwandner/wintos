@@ -11,7 +11,7 @@ import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { setLatestSessions } from "./focus";
 import { registerWintosMenu } from "./menu";
-import { editingMineAtom, mainViewAtom } from "./notes/state";
+import { editingMineAtom, mainViewAtom, overlayAtom } from "./notes/state";
 import { globalStore } from "@/app/store/jotaiStore";
 import { liveSessions } from "./sessions";
 import { setProjectTitle, useWintos } from "./useWintos";
@@ -93,6 +93,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     };
     const onKey = (e: React.KeyboardEvent) => {
         if (renaming || !order.length) return;
+        if (e.key === "?") return void (e.preventDefault(), globalStore.set(overlayAtom, "keymap"));
         if (e.key === "j") setCursor((c) => Math.min(c + 1, order.length - 1));
         else if (e.key === "k") setCursor((c) => Math.max(c - 1, 0));
         else if (e.key === "Enter") open(order[Math.min(cursor, order.length - 1)].tabId);
@@ -133,6 +134,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             </div>
             <div
                 ref={listRef}
+                data-wintos="sidebar-list"
                 tabIndex={0}
                 onKeyDown={onKey}
                 style={{ flexGrow: 1, overflowY: "auto", padding: "4px 12px 12px", display: "flex", flexDirection: "column", gap: 18, outline: "none" }}

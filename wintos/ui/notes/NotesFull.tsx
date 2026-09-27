@@ -3,7 +3,7 @@ import { useAtom } from "jotai";
 import { memo } from "react";
 import { T } from "../tokens";
 import { Mine } from "./Mine";
-import { Key } from "./NotesRail";
+import { Key } from "../Key";
 import { ProjectNotes } from "./ProjectNotes";
 import { editingMineAtom, mainViewAtom } from "./state";
 import { useNotes } from "./useNotes";

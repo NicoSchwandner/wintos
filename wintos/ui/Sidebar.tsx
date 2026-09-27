@@ -7,6 +7,7 @@ import { fireAndForget } from "@/util/util";
 import { atom, useAtomValue } from "jotai";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Row } from "../daemon/ranking/rank";
+import { Key } from "./Key";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { setLatestSessions } from "./focus";
@@ -288,14 +289,6 @@ function QuietRow(p: RowProps) {
     );
 }
 
-function Key({ k, label }: { k: string; label: string }) {
-    return (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-            <span style={{ fontFamily: T.mono, fontSize: 9.5, color: T.keycapText, background: T.keycapBg, border: `1px solid ${T.keycapBorder}`, borderBottomWidth: 2, borderRadius: 5, padding: "2px 6px" }}>{k}</span>
-            {label}
-        </span>
-    );
-}
 
 function SummaryCard({ label, value, note, noteColor, onClick }: { label: string; value: string; note: string; noteColor: string; onClick: () => void }) {
     return (

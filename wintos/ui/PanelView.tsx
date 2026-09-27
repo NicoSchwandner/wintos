@@ -1,7 +1,7 @@
 import { useFocusOnMount } from "./useFocusOnMount";
 import { useAtomValue, useSetAtom } from "jotai";
 import { memo, useRef } from "react";
-import { Key } from "./notes/NotesRail";
+import { Key } from "./Key";
 import { mainViewAtom, panelNameAtom } from "./notes/state";
 import { pluginPanels } from "./panels";
 import { T } from "./tokens";

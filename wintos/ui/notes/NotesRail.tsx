@@ -1,5 +1,6 @@
 import { useAtom, useSetAtom } from "jotai";
 import { memo } from "react";
+import { Key } from "../Key";
 import { T } from "../tokens";
 import { Mine } from "./Mine";
 import { ProjectNotes } from "./ProjectNotes";
@@ -50,12 +51,3 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
     );
 });
 NotesRail.displayName = "NotesRail";
-
-export function Key({ k, label }: { k: string; label: string }) {
-    return (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10.5, color: T.muted, whiteSpace: "nowrap" }}>
-            <span style={{ fontFamily: T.mono, fontSize: 9.5, color: T.keycapText, background: T.keycapBg, border: `1px solid ${T.keycapBorder}`, borderBottomWidth: 2, borderRadius: 5, padding: "2px 6px" }}>{k}</span>
-            {label}
-        </span>
-    );
-}

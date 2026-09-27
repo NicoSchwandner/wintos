@@ -1,6 +1,6 @@
 import { useAtomValue } from "jotai";
 import { memo } from "react";
-import { Key } from "./notes/NotesRail";
+import { Key } from "./Key";
 import { mainViewAtom } from "./notes/state";
 import { T } from "./tokens";
 

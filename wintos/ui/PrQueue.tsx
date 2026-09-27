@@ -5,7 +5,7 @@ import { useSetAtom } from "jotai";
 import { memo, useState } from "react";
 import type { Group } from "../daemon/prs/group";
 import { mainViewAtom } from "./notes/state";
-import { Key } from "./notes/NotesRail";
+import { Key } from "./Key";
 import { initials, queueModel, type QueueRow } from "./prs";
 import { T } from "./tokens";
 import { useNow } from "./useNow";

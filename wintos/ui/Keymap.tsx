@@ -2,6 +2,7 @@ import { useFocusOnMount } from "./useFocusOnMount";
 import { useSetAtom } from "jotai";
 import { memo } from "react";
 import { overlayAtom } from "./notes/state";
+import { KEYCAP_FONT } from "./Key";
 import { T } from "./tokens";
 
 // Only keys that exist. KeymapC lists a few more from the spec that are not built yet.
@@ -35,7 +36,7 @@ export const Keymap = memo(() => {
                         <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>{name}</span>
                         {keys.map(([k, what]) => (
                             <span key={k} style={{ display: "flex", gap: 10, fontSize: 12.5, color: T.secondary }}>
-                                <span style={{ width: 88, flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: T.keycapText }}>{k}</span>
+                                <span style={{ width: 96, flexShrink: 0, fontFamily: KEYCAP_FONT, fontSize: 12, color: T.keycapText }}>{k}</span>
                                 {what}
                             </span>
                         ))}

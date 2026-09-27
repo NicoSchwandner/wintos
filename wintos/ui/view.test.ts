@@ -1,0 +1,71 @@
+import { describe, expect, test } from "vitest";
+import type { Row } from "../daemon/ranking/rank";
+import { relTime, rowView, sidebarModel } from "./view";
+
+const NOW = 1_000_000_000;
+const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
+
+describe("relTime", () => {
+    test.each([
+        [40_000, "40s"],
+        [6 * 60_000, "6m"],
+        [19 * 3_600_000, "19h"],
+        [4 * 86_400_000, "4d"],
+        [-5, "0s"],
+    ])("%i ms → %s", (ms, out) => expect(relTime(ms)).toBe(out));
+});
+
+describe("rowView", () => {
+    test("needs: apricot next action, age since the wait began", () => {
+        const v = rowView(row("needs", { waitingSince: NOW - 3 * 60_000 }), { dir: "/p", mtime: 0, title: "Invoice OCR", next: "Approve the plan", pr: ["Core#1"] }, "T1", NOW);
+        expect(v).toMatchObject({ title: "Invoice OCR", next: "Approve the plan", tone: "apricot", meta: "Core#1", age: "3m" });
+    });
+
+    test("needs without a next action still says whose turn it is", () => {
+        expect(rowView(row("needs", { waitingSince: NOW }), undefined, "T1", NOW)).toMatchObject({ title: "T1", next: "Your turn", tone: "apricot" });
+    });
+
+    test("running: neutral line, Claude named as the one working", () => {
+        expect(rowView(row("running"), undefined, "T2", NOW)).toMatchObject({ next: "Claude is working", tone: "secondary", age: "1m" });
+    });
+
+    test("quiet: no next line, the reason column carries a PR or a bare age", () => {
+        const v = rowView(row("quiet"), { dir: "/p", mtime: 0, pr: ["Core#9"] }, "T", NOW);
+        expect(v.next).toBeUndefined();
+        expect(v.reason).toBe("Core#9");
+        expect(rowView(row("quiet"), undefined, "T", NOW)).toMatchObject({ reason: "1m" });
+    });
+
+    test("an unreadable note is shown in brick with its path, never hidden", () => {
+        expect(rowView(row("quiet"), { dir: "/p/x", mtime: 0, error: "no front matter" }, "T", NOW)).toMatchObject({ next: "note unreadable: /p/x/project.md", tone: "brick" });
+    });
+
+    test("nothing known about a tab shows no age, not one counted from 1970", () => {
+        const v = rowView(row("quiet", { lastAt: 0 }), undefined, "T", NOW);
+        expect([v.age, v.reason]).toEqual(["", ""]);
+    });
+
+    test("with no project and no tab name it is Untitled", () => {
+        expect(rowView(row("quiet"), undefined, undefined, NOW).title).toBe("Untitled");
+    });
+});
+
+describe("sidebarModel", () => {
+    test("only tabs of this workspace appear, ranked by the daemon's rules", () => {
+        const m = sidebarModel(["a", "b"], {
+            now: NOW,
+            projects: [],
+            sessions: [
+                { id: "1", tabId: "b", blockId: "x", state: "waiting", since: NOW - 1, lastAt: NOW - 1 },
+                { id: "2", tabId: "gone", blockId: "y", state: "waiting", since: NOW, lastAt: NOW },
+            ],
+        });
+        expect(m.needs.map((r) => r.tabId)).toEqual(["b"]);
+        expect(m.quiet.map((r) => r.tabId)).toEqual(["a"]);
+    });
+
+    test("the project file's mtime counts as activity", () => {
+        const m = sidebarModel(["a"], { now: NOW, sessions: [], projects: [{ id: "a", dir: "/p", mtime: NOW - 5 }] });
+        expect(m.quiet[0].lastAt).toBe(NOW - 5);
+    });
+});

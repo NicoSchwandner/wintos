@@ -1,0 +1,28 @@
+// Design tokens from the WintOS panel spec §8. Colour is a vocabulary: apricot means you are
+// the blocker, brick means something is rotting, moss means a machine is working.
+export const T = {
+    ground: "#121010",
+    sidebar: "#151211",
+    card: "#1C1918",
+    cardActive: "#262120",
+    border: "#2A2421",
+    borderActive: "#453D38",
+    hairline: "#241F1D",
+    text: "#F2EDE8",
+    emphasis: "#F8F4F0",
+    title: "#EDE7E1",
+    secondary: "#C3B9B1",
+    muted: "#91867E",
+    faint: "#6B615B",
+    quietTitle: "#A79C94",
+    dim: "#4A423D",
+    apricot: "#EFA06A",
+    brick: "#E0736E",
+    moss: "#A3C08E",
+    keycapText: "#D7CFC8",
+    keycapBg: "#2A2422",
+    keycapBorder: "#3A3330",
+    display: "'Instrument Serif', Georgia, serif",
+    ui: "'Schibsted Grotesk', ui-sans-serif, system-ui, sans-serif",
+    mono: "'JetBrains Mono', ui-monospace, monospace",
+} as const;

@@ -4,7 +4,7 @@ import { lineDiff } from "./diff";
 import { parseProjectMd, ProjectMeta, serializeProjectMd } from "./parse";
 import { slugify } from "./slug";
 
-export type Project = Partial<ProjectMeta> & { dir: string; mtime: number; error?: string; body?: string };
+export type Project = Partial<ProjectMeta> & { dir: string; mtime: number; mineMtime?: number; error?: string; body?: string };
 
 const EMPTY_MINE = "mine.md is empty";
 
@@ -62,32 +62,39 @@ export class ProjectStore {
         return before === undefined || before === text ? { text } : { text, diff: lineDiff(before, text) };
     }
 
-    notes(tabId: string): { dir: string; projectMd: string | null; mine: string } | undefined {
+    notes(tabId: string): { dir: string; projectMd: string | null; mine: string; mineMtime: number } | undefined {
         const p = this.byTab(tabId);
         if (!p) return undefined;
         const mineFile = join(p.dir, "mine.md");
-        return { dir: p.dir, projectMd: p.error ? null : (p.body ?? ""), mine: existsSync(mineFile) ? readFileSync(mineFile, "utf8") : "" };
+        return { dir: p.dir, projectMd: p.error ? null : (p.body ?? ""), mine: existsSync(mineFile) ? readFileSync(mineFile, "utf8") : "", mineMtime: mtimeOf(mineFile) };
     }
 
     // The only file WintOS writes on the developer's behalf; always inside the project folder.
-    saveMine(tabId: string, text: string): boolean {
+    // baseMtime is the version the edit started from: if the file changed since (the developer's
+    // own editor), the save is refused rather than overwriting that edit.
+    saveMine(tabId: string, text: string, baseMtime?: number): "ok" | "no project" | "conflict" {
         const p = this.byTab(tabId);
-        if (!p) return false;
-        writeFileSync(join(p.dir, "mine.md"), text);
-        return true;
+        if (!p) return "no project";
+        const file = join(p.dir, "mine.md");
+        if (baseMtime !== undefined && mtimeOf(file) !== baseMtime) return "conflict";
+        writeFileSync(file, text);
+        return "ok";
     }
 
     private read(dir: string): Project {
         const file = join(dir, "project.md");
         if (!existsSync(file)) return { dir, mtime: 0, error: "no project.md" };
+        const mineMtime = mtimeOf(join(dir, "mine.md"));
         const raw = readFileSync(file, "utf8");
         const parsed = parseProjectMd(raw);
         const mtime = statSync(file).mtimeMs;
         if (!("error" in parsed)) {
             this.idByDir.set(dir, parsed.meta.id);
-            return { ...parsed.meta, body: parsed.body, dir, mtime };
+            return { ...parsed.meta, body: parsed.body, dir, mtime, mineMtime };
         }
         const id = /^id:[ \t]*(\S+)/m.exec(raw)?.[1] ?? this.idByDir.get(dir);
-        return { ...(id ? { id } : {}), dir, mtime, error: parsed.error };
+        return { ...(id ? { id } : {}), dir, mtime, mineMtime, error: parsed.error };
     }
 }
+
+const mtimeOf = (file: string) => (existsSync(file) ? statSync(file).mtimeMs : 0);

@@ -9,7 +9,7 @@ import { Key } from "./notes/NotesRail";
 import { initials, queueModel, type QueueRow } from "./prs";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
-import { useWintos } from "./useWintos";
+import { daemonFetch, useWintos } from "./useWintos";
 import { ghPrs, prsByTab, relTime } from "./view";
 
 const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
@@ -44,7 +44,7 @@ export const PrQueue = memo(() => {
     };
     const refresh = async () => {
         setRefreshing(true);
-        await fetch("http://127.0.0.1:7730/plugins/gh-prs/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
+        await daemonFetch("/plugins/gh-prs/run", { method: "POST", body: {} }).catch(() => {});
         setRefreshing(false);
     };
 

@@ -46,7 +46,7 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
                 <div style={{ width: 382, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
                     <Header name="mine.md" note={editing ? "yours · editing" : "yours"} />
                     <div style={{ flexGrow: 1, marginTop: 18, display: "flex", flexDirection: "column", overflowY: "auto", ...(editing ? {} : { padding: "16px 18px", background: T.terminal, border: `1px solid ${T.border}`, borderRadius: 10 }) }}>
-                        <Mine text={notes?.mine ?? ""} canEdit={!!notes} save={save} size="full" />
+                        <Mine text={notes?.mine ?? ""} mtime={notes?.mineMtime ?? 0} canEdit={!!notes} save={save} size="full" />
                     </div>
                     <div style={{ paddingTop: 10, display: "flex", gap: 12 }}>
                         {editing ? (

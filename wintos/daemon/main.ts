@@ -14,7 +14,7 @@ const plugins = [...core, ...discoverPlugins(join(homedir(), ".config/wintos/plu
 
 if (process.env.ELECTRON_RUN_AS_NODE) process.stdin.on("end", () => process.exit(0)).resume();
 
-startServer({ root, port, plugins })
+startServer({ root, port, plugins, token: process.env.WINTOS_TOKEN })
     .then(() => console.log(`[wintosd] listening on 127.0.0.1:${port}, projects in ${root}`))
     .catch((e) => {
         console.error(`[wintosd] failed to start: ${e}`);

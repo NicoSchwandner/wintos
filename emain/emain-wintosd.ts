@@ -2,16 +2,21 @@
 // ELECTRON_RUN_AS_NODE, so WintOS needs no separate Node install. Unlike wavesrv, wintosd
 // dying does not quit the app: the sidebar shows "daemon offline" instead.
 import * as child_process from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { ipcMain } from "electron";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { getElectronAppUnpackedBasePath } from "./emain-platform";
 
 let proc: child_process.ChildProcess | null = null;
+// A fresh secret per launch, shared with the renderer: web pages can reach 127.0.0.1 too.
+const token = randomBytes(24).toString("hex");
+ipcMain.on("wintos-token", (e) => (e.returnValue = token));
 
 export function runWintosd(): void {
     const script = path.join(getElectronAppUnpackedBasePath(), "wintos", "wintosd.cjs");
     proc = child_process.spawn(process.execPath, [script], {
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", WINTOS_TOKEN: token },
         // stdin stays open as a lifeline: when Electron dies, even by crash, the pipe closes
         // and wintosd exits instead of holding the port for the next launch.
         stdio: ["pipe", "pipe", "pipe"],

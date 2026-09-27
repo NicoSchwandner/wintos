@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getApi } from "@/store/global";
 import type { WintosState } from "./view";
 
 const BASE = "127.0.0.1:7730";
@@ -19,8 +20,19 @@ function publish(next: Partial<Snapshot>) {
     for (const l of listeners) l(snapshot);
 }
 
+const token = () => getApi().getWintosToken();
+
+// Every UI request to wintosd goes through here, so none forgets the launch token.
+export function daemonFetch(path: string, init: { method?: string; body?: unknown } = {}): Promise<Response> {
+    return fetch(`http://${BASE}${path}`, {
+        method: init.method ?? "GET",
+        headers: { "X-Wintos-Token": token(), ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}) },
+        ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
+    });
+}
+
 function connect() {
-    const ws = new WebSocket(`ws://${BASE}/ws`);
+    const ws = new WebSocket(`ws://${BASE}/ws?token=${token()}`);
     ws.onmessage = (m) => {
         clearTimeout(offlineTimer);
         offlineTimer = undefined;
@@ -46,9 +58,5 @@ export function useWintos(): Snapshot {
 }
 
 export function setProjectTitle(tabId: string, title: string, manual: boolean): Promise<Response> {
-    return fetch(`http://${BASE}/projects/${encodeURIComponent(tabId)}/title`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, manual }),
-    });
+    return daemonFetch(`/projects/${encodeURIComponent(tabId)}/title`, { method: "POST", body: { title, manual } });
 }

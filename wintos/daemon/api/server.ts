@@ -16,7 +16,10 @@ const MAX_TITLE = 120;
 // Ids and titles end up as front matter lines; a line break would let a value forge keys.
 const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[] }): Promise<WintosServer> {
+// token: a per-launch secret Electron hands to both wintosd and the UI. Any request that comes
+// from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
+// dev server is http://localhost:5173 too.
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     const uiOrigins = new Set(opts.uiOrigins ?? [...DEFAULT_UI_ORIGINS, ...(process.env.WINTOS_UI_ORIGINS?.split(",") ?? [])]);
     let sessions = new Map<string, Session>();
@@ -62,7 +65,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const host = req.headers.host ?? "";
         if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return "bad host";
         const origin = req.headers.origin;
-        if (origin && !uiOrigins.has(origin)) return "origin not allowed";
+        if (!origin) return null; // the hook and the CLI: local processes, not web pages
+        if (!uiOrigins.has(origin)) return "origin not allowed";
+        if (req.method === "OPTIONS") return null; // preflights never carry custom headers
+        const given = req.headers["x-wintos-token"] ?? new URL(req.url ?? "/", "http://x").searchParams.get("token");
+        if (!opts.token || given !== opts.token) return "missing or wrong launch token";
         return null;
     };
 
@@ -76,7 +83,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         try {
             const url = new URL(req.url ?? "/", "http://x");
             if (req.method === "OPTIONS") {
-                res.setHeader("Access-Control-Allow-Headers", "content-type");
+                res.setHeader("Access-Control-Allow-Headers", "content-type, x-wintos-token");
                 res.setHeader("Access-Control-Allow-Methods", "GET, POST");
                 return send(res, 204, "");
             }
@@ -105,9 +112,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
             }
             const mine = /^\/projects\/([^/]+)\/mine$/.exec(url.pathname);
             if (req.method === "POST" && mine) {
-                const b = (await body(req)) as { text?: unknown };
+                const b = (await body(req)) as { text?: unknown; baseMtime?: unknown };
                 if (typeof b?.text !== "string") return send(res, 400, "need text");
-                if (!store.saveMine(decodeURIComponent(mine[1]), b.text)) return send(res, 404, "no project for this tab");
+                const r = store.saveMine(decodeURIComponent(mine[1]), b.text, typeof b.baseMtime === "number" ? b.baseMtime : undefined);
+                if (r === "no project") return send(res, 404, "no project for this tab");
+                if (r === "conflict") return send(res, 409, "mine.md changed on disk since you started editing");
                 return send(res, 200, "");
             }
             const title = /^\/projects\/([^/]+)\/title$/.exec(url.pathname);

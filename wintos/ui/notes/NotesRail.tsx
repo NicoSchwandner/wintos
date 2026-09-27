@@ -44,7 +44,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>mine.md</span>
                     <Key k={editing ? "⌘⏎" : "e"} label={editing ? "save · esc discard" : "edit"} />
                 </div>
-                <Mine text={notes?.mine ?? ""} canEdit={!!notes} save={save} size="rail" />
+                <Mine text={notes?.mine ?? ""} mtime={notes?.mineMtime ?? 0} canEdit={!!notes} save={save} size="rail" />
             </div>
         </div>
     );

@@ -14,7 +14,7 @@ let root: string;
 
 beforeEach(async () => {
     root = mkdtempSync(join(tmpdir(), "wintos-api-"));
-    srv = await startServer({ root, port: 0 });
+    srv = await startServer({ root, port: 0, token: "t0ken" });
     base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
 });
 afterEach(() => srv.close());
@@ -56,7 +56,7 @@ describe("wintosd API", () => {
     });
 
     test("the websocket pushes state after an event", async () => {
-        const ws = new WebSocket(base.replace("http", "ws") + "/ws", { origin: "http://localhost:5173" });
+        const ws = new WebSocket(base.replace("http", "ws") + "/ws?token=t0ken", { origin: "http://localhost:5173" });
         const frames: string[] = [];
         await new Promise<void>((resolve) => ws.on("message", (m) => (frames.push(String(m)), frames.length === 1 && resolve())));
         await event(stop);
@@ -79,7 +79,7 @@ describe("wintosd API", () => {
     });
 
     test("responses allow the renderer's origin, and only it", async () => {
-        const ok = await fetch(base + "/state", { headers: { Origin: "http://localhost:5173" } });
+        const ok = await fetch(base + "/state", { headers: { Origin: "http://localhost:5173", "X-Wintos-Token": "t0ken" } });
         expect(ok.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
     });
 });
@@ -89,13 +89,38 @@ describe("notes", () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });
         writeFileSync(join(root, "x", "mine.md"), "## Ceiling\ntwo vendors\n");
         const n = await (await fetch(base + "/projects/tab-1/notes")).json();
-        expect(n).toEqual({ dir: join(root, "x"), projectMd: "", mine: "## Ceiling\ntwo vendors\n" });
+        expect(n).toMatchObject({ dir: join(root, "x"), projectMd: "", mine: "## Ceiling\ntwo vendors\n" });
     });
 
     test("saving mine.md writes the file in the project folder", async () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });
         expect((await post("/projects/tab-1/mine", { text: "## Promised\nmetric\n" })).status).toBe(200);
         expect(require("fs").readFileSync(join(root, "x", "mine.md"), "utf8")).toBe("## Promised\nmetric\n");
+    });
+
+    test("a save based on an older mine.md is refused, never overwriting an outside edit", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        writeFileSync(join(root, "x", "mine.md"), "v1\n");
+        const n = await (await fetch(base + "/projects/tab-1/notes")).json();
+        await new Promise((r) => setTimeout(r, 20));
+        writeFileSync(join(root, "x", "mine.md"), "edited in my editor\n");
+        expect((await post("/projects/tab-1/mine", { text: "from WintOS\n", baseMtime: n.mineMtime })).status).toBe(409);
+        expect(require("fs").readFileSync(join(root, "x", "mine.md"), "utf8")).toBe("edited in my editor\n");
+    });
+
+    test("a save based on the current mine.md goes through", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        writeFileSync(join(root, "x", "mine.md"), "v1\n");
+        const n = await (await fetch(base + "/projects/tab-1/notes")).json();
+        expect((await post("/projects/tab-1/mine", { text: "v2\n", baseMtime: n.mineMtime })).status).toBe(200);
+    });
+
+    test("mine.md's mtime is in state, so the UI refetches after an outside edit", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        writeFileSync(join(root, "x", "mine.md"), "v1\n");
+        let m;
+        for (let i = 0; i < 40 && !m; i++) (m = (await (await fetch(base + "/state")).json()).projects[0].mineMtime) || (await new Promise((r) => setTimeout(r, 50)));
+        expect(m).toBeGreaterThan(0);
     });
 
     test("a tab without a project has no notes to read or write", async () => {
@@ -115,7 +140,7 @@ describe("plugins", () => {
         const dir = mkdtempSync(join(tmpdir(), "wintos-p-"));
         const f = join(dir, "count");
         writeFileSync(f, `#!/bin/sh\nn=$(cat "$0.n" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$0.n"; echo "{\\"n\\":$n}"\n`, { mode: 0o755 });
-        srv = await startServer({ root, port: 0, plugins: [{ name: "count", cmd: [f], everyMs: 0 }] });
+        srv = await startServer({ root, port: 0, token: "t0ken", plugins: [{ name: "count", cmd: [f], everyMs: 0 }] });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         let first;
         for (let i = 0; i < 50 && !first; i++) (first = (await (await fetch(base + "/state")).json()).plugins.count) || (await new Promise((r) => setTimeout(r, 50)));
@@ -137,6 +162,22 @@ describe("wintosd stays up", () => {
 });
 
 describe("wintosd refuses anything but the hook and the WintOS UI", () => {
+    test("a page on the UI's own origin without the launch token is refused (any Vite dev server is localhost:5173)", async () => {
+        const r = await fetch(base + "/state", { headers: { Origin: "http://localhost:5173" } });
+        expect(r.status).toBe(403);
+    });
+
+    test("the UI with the launch token gets in", async () => {
+        const r = await fetch(base + "/state", { headers: { Origin: "http://localhost:5173", "X-Wintos-Token": "t0ken" } });
+        expect(r.status).toBe(200);
+    });
+
+    test("the websocket needs the token too", async () => {
+        const open = (q: string) => new Promise((resolve) => { const ws = new WebSocket(base.replace("http", "ws") + "/ws" + q, { origin: "http://localhost:5173" }); ws.on("unexpected-response", (_q, res) => resolve(res.statusCode)); ws.on("open", () => (ws.close(), resolve("opened"))); });
+        expect(await open("")).toBe(403);
+        expect(await open("?token=t0ken")).toBe("opened");
+    });
+
     test("a foreign web page cannot read state", async () => {
         const r = await fetch(base + "/state", { headers: { Origin: "https://evil.example" } });
         expect(r.status).toBe(403);

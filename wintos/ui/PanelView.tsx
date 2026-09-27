@@ -6,7 +6,7 @@ import { mainViewAtom, panelNameAtom } from "./notes/state";
 import { pluginPanels } from "./panels";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
-import { useWintos } from "./useWintos";
+import { daemonFetch, useWintos } from "./useWintos";
 import { relTime } from "./view";
 
 // A plugin's panel full width (OnCallC): its counts, then each url live side by side.
@@ -20,7 +20,7 @@ export const PanelView = memo(() => {
     const panel = state ? pluginPanels(state).find((p) => p.name === name) : undefined;
     if (!panel) return <div style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, background: "#171413" }}>This panel is not available right now.</div>;
     const withUrl = panel.counts.filter((c) => c.url);
-    const resync = () => fetch(`http://127.0.0.1:7730/plugins/${encodeURIComponent(panel.name)}/run`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
+    const resync = () => daemonFetch(`/plugins/${encodeURIComponent(panel.name)}/run`, { method: "POST", body: {} }).catch(() => {});
     return (
         <div
             data-wintos="panel-view"

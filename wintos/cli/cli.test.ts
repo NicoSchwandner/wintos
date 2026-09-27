@@ -92,6 +92,21 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         expect(w.calls()).toBe("setmeta -b blk cmd:initscript=\n");
     });
 
+    test("the resume starts in the launch directory, not wherever the session moved to", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir, { CLAUDE_PROJECT_DIR: "/Users/n/work" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/Users/n/work/Core/src" }));
+        expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/Users/n/work' && claude --resume 's-1'\n`);
+    });
+
+    test.each([["CLAUDE_CODE_ENTRYPOINT", "sdk-cli"], ["CLAUDE_CODE_CHILD_SESSION", "1"]])(
+        "a headless or nested Claude (%s=%s) never takes over the block's resume command",
+        (k, v) => {
+            const w = fakeWsh();
+            runHook(env(w.dir, { [k]: v }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "throwaway", cwd: "/x" }));
+            expect(w.calls()).toBe("");
+        }
+    );
+
     test("SessionStart does not, since Claude saves nothing to resume before the first prompt", () => {
         const w = fakeWsh();
         runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", session_id: "s-1", cwd: "/x" }));

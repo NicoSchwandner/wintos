@@ -9,11 +9,15 @@ payload="$(cat)"
 # session makes a quit-and-relaunch resume it. It is set on a prompt, not on SessionStart:
 # Claude saves nothing to resume until the first prompt. Quitting WintOS ends sessions with
 # reason "other"; only a deliberate exit clears the command.
-if [ -n "$WAVETERM_BLOCKID" ]; then
+# Only an interactive session you started owns its block: a `claude -p` run from inside it
+# (CLAUDE_CODE_ENTRYPOINT=sdk-cli, CLAUDE_CODE_CHILD_SESSION=1) inherits the block id and would
+# otherwise make the next launch resume a throwaway session.
+if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" != "sdk-cli" ] && [ -z "${CLAUDE_CODE_CHILD_SESSION:-}" ]; then
     wsh="${WAVETERM_WSHBINDIR:+$WAVETERM_WSHBINDIR/}wsh"
     case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.reason // "")' 2>/dev/null)" in
     UserPromptSubmit:*)
-        resume="$(printf '%s' "$payload" | jq -r '@sh "cd \(.cwd) && claude --resume \(.session_id)"' 2>/dev/null)"
+        # Transcripts are keyed by the launch directory; the payload's cwd follows the session.
+        resume="$(printf '%s' "$payload" | jq -r --arg dir "${CLAUDE_PROJECT_DIR:-}" '@sh "cd \(if $dir != "" then $dir else .cwd end) && claude --resume \(.session_id)"' 2>/dev/null)"
         [ -n "$resume" ] && "$wsh" setmeta -b "$WAVETERM_BLOCKID" "cmd:initscript=$resume" >/dev/null 2>&1
         ;;
     SessionEnd:prompt_input_exit | SessionEnd:logout)

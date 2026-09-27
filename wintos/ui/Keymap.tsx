@@ -7,7 +7,7 @@ import { T } from "./tokens";
 
 // Only keys that exist. KeymapC lists a few more from the spec that are not built yet.
 const SECTIONS: [string, [string, string][]][] = [
-    ["Anywhere", [["⌘K", "everything, including dropped projects"], ["⌘/", "this card"], ["⌘1 ⌘2 ⌘3", "sidebar · terminal · notes"], ["⇧⌘P", "PRs by action"], ["⇧⌘O", "plugin panel (on call)"]]],
+    ["Anywhere", [["⌘K", "everything, including dropped projects"], ["⇧⌘K  ?", "this card"], ["⌘1 ⌘2 ⌘3", "sidebar · terminal · notes"], ["⇧⌘P", "PRs by action"], ["⇧⌘O", "plugin panel (on call)"]]],
     ["Sidebar", [["j / k", "move, across bands"], ["⏎", "open project"], ["right-click", "open · rename · edit mine.md · close"]]],
     ["Sessions", [["⌃⇥", "next session waiting on you"], ["⇧⌘N", "new session in this project"], ["⌘W", "close the focused block"], ["⌘M", "magnify the focused block"]]],
     ["Notes", [["e", "edit mine.md, the only file you write"], ["⌘⏎ / esc", "save · discard"], ["⌘J", "both files, full width · again to close"]]],

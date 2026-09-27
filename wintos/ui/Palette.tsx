@@ -49,7 +49,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
         out.push({ id: "a:prs", kind: "action", title: "PRs need attention", hint: "⇧⌘P", run: () => runAction("prs") });
         for (const p of pluginPanels(state)) out.push({ id: `a:panel:${p.name}`, kind: "action", title: p.title, hint: "⇧⌘O", run: () => runAction(`panel:${p.name}`) });
         out.push({ id: "a:close", kind: "action", title: `Close ${here}`, hint: "⇧⌘W", run: () => void getApi().closeTab(ws!.oid, activeTab, true) });
-        out.push({ id: "a:keys", kind: "action", title: "Keyboard shortcuts", hint: "⌘/", run: () => runAction("keymap") });
+        out.push({ id: "a:keys", kind: "action", title: "Keyboard shortcuts", hint: "⇧⌘K", run: () => runAction("keymap") });
         return out;
     }, [state, names]);
 

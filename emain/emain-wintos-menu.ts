@@ -12,7 +12,7 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
     });
     return [
         item("Everything…", "palette", "Cmd+K"),
-        item("Keyboard Shortcuts", "keymap", "Cmd+/"),
+        item("Keyboard Shortcuts", "keymap", "Shift+Cmd+K"),
         { type: "separator" },
         item("Focus Sidebar", "focus-sidebar", "Cmd+1"),
         item("Focus Terminal", "focus-terminal", "Cmd+2"),

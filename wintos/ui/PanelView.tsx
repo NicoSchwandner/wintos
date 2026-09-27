@@ -29,7 +29,7 @@ export const PanelView = memo(() => {
             onKeyDown={(e) => {
                 const n = Number(e.key);
                 if (n >= 1 && n <= withUrl.length) panes.current[n - 1]?.focus();
-                else if (e.key === "r") void resync();
+                else if (e.key === "r" && !e.repeat) void resync();
                 else if (e.key === "Escape") setView("terminal");
                 else return;
                 e.preventDefault();

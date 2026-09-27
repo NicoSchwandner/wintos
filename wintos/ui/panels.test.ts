@@ -18,6 +18,20 @@ describe("pluginPanels", () => {
         expect(p[0]).toMatchObject({ name: "o", error: "boom" });
     });
 
+    test("bad count entries are dropped and only http(s) urls survive", () => {
+        const p = pluginPanels(state({ o: { ok: true, at: 1, data: { panel: { title: "T", counts: [
+            null, { label: 5 }, { label: "a", count: { x: 1 } },
+            { label: "ok", count: 3, note: 7, url: "javascript:alert(1)" },
+            { label: "web", count: null, note: "why", url: "https://e.example/x" },
+        ] } } } }));
+        expect(p[0].counts).toEqual([{ label: "ok", count: 3 }, { label: "web", count: null, note: "why", url: "https://e.example/x" }]);
+    });
+
+    test("a failed run shows unknown counts, never the old numbers", () => {
+        const p = pluginPanels(state({ o: { ok: false, at: 1, error: "vpn", data: { panel: { title: "T", counts: [{ label: "errors", count: 0 }] } } } }));
+        expect(p[0].counts).toEqual([{ label: "errors", count: null, note: "stale: last run failed (vpn)" }]);
+    });
+
     test("malformed panels are ignored, not rendered half", () =>
         expect(pluginPanels(state({ o: { ok: true, at: 1, data: { panel: { counts: "nope" } } } }))).toEqual([]));
 });

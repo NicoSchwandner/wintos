@@ -59,7 +59,7 @@ export const PrQueue = memo(() => {
                 else if (e.key === "k") setCursor((c) => Math.max(c - 1, 0));
                 else if (e.key === "Enter" && r) openPr(r);
                 else if (e.key === "o" && r) goToProject(r);
-                else if (e.key === "r") void refresh();
+                else if (e.key === "r" && !e.repeat) void refresh();
                 else if (e.key === "Escape") setView("terminal");
                 else return;
                 e.preventDefault();

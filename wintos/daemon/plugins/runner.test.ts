@@ -50,6 +50,22 @@ describe("PluginRunner", () => {
         expect(n).toBe(1);
     });
 
+    test("overlapping runs share one process, so a slow old run can't overwrite a newer result", async () => {
+        const f = script(`n=$(cat "$0.n" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$0.n"; sleep 0.3; echo "{\\"n\\":$n}"`);
+        const r = new PluginRunner([{ name: "x", cmd: [f], everyMs: 0 }], () => {});
+        await Promise.all([r.run("x"), r.run("x"), r.run("x")]);
+        expect(require("fs").readFileSync(f + ".n", "utf8").trim()).toBe("1");
+        expect(r.results.x.data).toEqual({ n: 1 });
+    });
+
+    test("a null env value removes the variable from the plugin's environment", async () => {
+        process.env.WINTOS_TEST_VAR = "set";
+        const r = new PluginRunner([{ name: "x", cmd: [script(`echo "{\\"v\\":\\"\${WINTOS_TEST_VAR-unset}\\"}"`)], env: { WINTOS_TEST_VAR: null }, everyMs: 0 }], () => {});
+        await r.run("x");
+        delete process.env.WINTOS_TEST_VAR;
+        expect(r.results.x.data).toEqual({ v: "unset" });
+    });
+
     test("an unknown plugin is refused", async () => {
         const r = new PluginRunner([], () => {});
         expect(await r.run("nope")).toBe(false);
@@ -62,6 +78,12 @@ describe("discoverPlugins", () => {
         writeFileSync(join(dir, "status-check"), "#!/bin/sh\necho {}\n", { mode: 0o755 });
         writeFileSync(join(dir, "README.md"), "not a plugin");
         expect(discoverPlugins(dir).map((p) => p.name)).toEqual(["status-check"]);
+    });
+
+    test("user plugins get a long timeout and none of WintOS's Electron-as-Node setting", () => {
+        const dir = mkdtempSync(join(tmpdir(), "wintos-plugdir-"));
+        writeFileSync(join(dir, "p"), "#!/bin/sh\necho {}\n", { mode: 0o755 });
+        expect(discoverPlugins(dir)[0]).toMatchObject({ timeoutMs: 90_000, env: { ELECTRON_RUN_AS_NODE: null } });
     });
 
     test("a missing folder means no user plugins", () => expect(discoverPlugins("/nonexistent/wintos")).toEqual([]));

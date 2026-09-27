@@ -4,15 +4,21 @@ import { join } from "path";
 
 // A plugin is any executable that prints one JSON document on stdout (the Unix contract the
 // spec picked). Core plugins ship with WintOS; Wint's live in ~/.config/wintos/plugins/.
-export type Plugin = { name: string; cmd: string[]; env?: Record<string, string>; everyMs: number; timeoutMs?: number };
+// env: a null value removes the variable from what the plugin inherits.
+export type Plugin = { name: string; cmd: string[]; env?: Record<string, string | null>; everyMs: number; timeoutMs?: number };
 export type PluginResult = { ok: boolean; at: number; data?: unknown; error?: string };
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const USER_PLUGIN_EVERY_MS = 5 * 60_000;
+// User plugins talk to slow things (e.g. several HTTP calls and a slow database query).
+const USER_PLUGIN_TIMEOUT_MS = 90_000;
 
 export class PluginRunner {
     readonly results: Record<string, PluginResult> = {};
     private timers: NodeJS.Timeout[] = [];
+    // One run per plugin at a time: a scheduled run and a held `r` share it, so an older run
+    // finishing late can't overwrite a newer result.
+    private inFlight = new Map<string, Promise<boolean>>();
 
     constructor(private plugins: Plugin[], private onResult: () => void) {}
 
@@ -30,11 +36,20 @@ export class PluginRunner {
     run(name: string): Promise<boolean> {
         const p = this.plugins.find((x) => x.name === name);
         if (!p) return Promise.resolve(false);
+        const running = this.inFlight.get(name);
+        if (running) return running;
+        const run = this.spawn(p).finally(() => this.inFlight.delete(name));
+        this.inFlight.set(name, run);
+        return run;
+    }
+
+    private spawn(p: Plugin): Promise<boolean> {
+        const name = p.name;
         return new Promise((resolve) => {
             execFile(
                 p.cmd[0],
                 p.cmd.slice(1),
-                { env: { ...process.env, ...p.env }, timeout: p.timeoutMs ?? DEFAULT_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 },
+                { env: pluginEnv(p.env), timeout: p.timeoutMs ?? DEFAULT_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 },
                 (err, stdout, stderr) => {
                     const last = this.results[name]?.data;
                     let result: PluginResult;
@@ -72,5 +87,12 @@ export function discoverPlugins(dir: string): Plugin[] {
                 return false;
             }
         })
-        .map(({ name, path }) => ({ name, cmd: [path], everyMs: USER_PLUGIN_EVERY_MS }));
+        // ELECTRON_RUN_AS_NODE is wintosd's own setting; inherited, it breaks Electron-based CLIs.
+        .map(({ name, path }) => ({ name, cmd: [path], everyMs: USER_PLUGIN_EVERY_MS, timeoutMs: USER_PLUGIN_TIMEOUT_MS, env: { ELECTRON_RUN_AS_NODE: null } }));
+}
+
+function pluginEnv(overrides: Plugin["env"] = {}): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    for (const [k, v] of Object.entries(overrides)) v === null ? delete env[k] : (env[k] = v);
+    return env;
 }

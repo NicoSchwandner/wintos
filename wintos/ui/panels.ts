@@ -5,12 +5,29 @@ import type { WintosState } from "./view";
 export type PanelCount = { label: string; count: number | null; note?: string | null; url?: string };
 export type Panel = { name: string; title: string; subtitle?: string; counts: PanelCount[]; at: number; error?: string };
 
+const str = (v: unknown): v is string => typeof v === "string";
+
+// Plugin output is untrusted: a bad entry is dropped rather than allowed to break the render,
+// and only http(s) urls reach a <webview>.
+function validCount(c: unknown): PanelCount | null {
+    if (!c || typeof c !== "object") return null;
+    const o = c as Record<string, unknown>;
+    if (!str(o.label) || !(o.count === null || typeof o.count === "number")) return null;
+    const out: PanelCount = { label: o.label, count: o.count as number | null };
+    if (str(o.note)) out.note = o.note;
+    if (str(o.url) && /^https?:\/\//i.test(o.url)) out.url = o.url;
+    return out;
+}
+
 export function pluginPanels(state: WintosState): Panel[] {
     const out: Panel[] = [];
     for (const [name, r] of Object.entries(state.plugins ?? {})) {
         const p = (r.data as { panel?: Record<string, unknown> } | undefined)?.panel;
-        if (!p || p.hidden || typeof p.title !== "string" || !Array.isArray(p.counts)) continue;
-        out.push({ name, title: p.title, subtitle: typeof p.subtitle === "string" ? p.subtitle : undefined, counts: p.counts as PanelCount[], at: r.at, ...(r.ok ? {} : { error: r.error }) });
+        if (!p || p.hidden || !str(p.title) || !Array.isArray(p.counts)) continue;
+        let counts = p.counts.map(validCount).filter((c): c is PanelCount => !!c);
+        // Old numbers after a failed run would read as current; a false 0 is worse than none.
+        if (!r.ok) counts = counts.map((c) => ({ label: c.label, count: null, note: `stale: last run failed (${r.error ?? "unknown"})`, ...(c.url ? { url: c.url } : {}) }));
+        out.push({ name, title: p.title, subtitle: str(p.subtitle) ? p.subtitle : undefined, counts, at: r.at, ...(r.ok ? {} : { error: r.error }) });
     }
     return out;
 }

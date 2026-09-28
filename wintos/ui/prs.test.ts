@@ -108,3 +108,10 @@ describe("queueModel order", () => {
         expect(m.groups[0].rows.map((r) => r.pr.number)).toEqual([2, 3, 1]);
     });
 });
+
+describe("group order", () => {
+    test("the team's reviews (undone work) come before your PRs that are just waiting", () => {
+        const m = queueModel([pr({ number: 1, reviewers: ["ana"] }), pr({ number: 2, author: "bo", requestedTeam: true })], "me", MON);
+        expect(m.groups.map((g) => g.group)).toEqual(["team", "waiting"]);
+    });
+});

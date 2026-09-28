@@ -27,9 +27,9 @@ export type PR = {
 
 // On another branch than the repo's default: merging it would land on that branch, not ship.
 export const isStacked = (pr: PR) => !!pr.base && !!pr.defaultBranch && pr.base !== pr.defaultBranch;
-// waiting: yours, with someone else; nothing to do. team: others' PRs you are not asked on.
+// team: reviews asked of your team, undone work. waiting: yours, with someone else, fine for now.
 export type Group = "merge" | "fix" | "review" | "chase" | "waiting" | "team";
-export const GROUPS: Group[] = ["merge", "fix", "review", "chase", "waiting", "team"];
+export const GROUPS: Group[] = ["merge", "fix", "review", "chase", "team", "waiting"];
 
 // The team's rule: past two working days a PR comes back to its author. A draft is nobody
 // else's problem yet, so it only becomes a decision after a longer silence.

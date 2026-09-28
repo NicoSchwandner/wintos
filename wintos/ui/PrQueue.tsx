@@ -10,6 +10,7 @@ import { PrBrowser } from "./PrBrowser";
 import { closeTab, openTab } from "./prtabs";
 import { Key } from "./Key";
 import { initials, queueModel, type QueueRow } from "./prs";
+import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
@@ -33,10 +34,14 @@ export const PrQueue = memo(() => {
     const [refreshing, setRefreshing] = useState(false);
     const result = state?.plugins?.["gh-prs"];
     const gh = state && ghPrs(state);
-    const model = gh ? queueModel(gh.prs, gh.me, now) : null;
+    const model = gh ? queueModel(gh.prs, gh.me, now, state?.snoozes) : null;
     // A stacked PR's row follows its base, one indent per step; the cursor walks them in order.
     const withStack = (r: QueueRow, depth = 0): { r: QueueRow; depth: number }[] => [{ r, depth }, ...r.children.flatMap((c) => withStack(c, depth + 1))];
-    const flat = model?.groups.flatMap((g) => g.rows.flatMap((r) => withStack(r).map((x) => x.r))) ?? [];
+    const flat = [...(model?.groups.flatMap((g) => g.rows.flatMap((r) => withStack(r).map((x) => x.r))) ?? []), ...(model?.snoozed ?? [])];
+    const snoozedUrls = new Set(model?.snoozed.map((r) => r.pr.url));
+    // z: looked at, handed on. Back at the next working day, or as soon as the PR moves.
+    const toggleSnooze = (r: QueueRow) =>
+        daemonFetch("/prs/snooze", { method: "POST", body: snoozedUrls.has(r.pr.url) ? { url: r.pr.url, until: null } : { url: r.pr.url, until: nextWorkingDayStart(Date.now()), movedAt: lastMovement(r.pr) } }).catch(() => {});
 
     // The terminals are hidden behind this view, so a PR opens beside the list, not as a block.
     const [tabs, setTabs] = useAtom(prTabsAtom);
@@ -68,6 +73,7 @@ export const PrQueue = memo(() => {
                 else if (e.key === "Enter" && r) openPr(r);
                 else if (e.key === "o" && r) goToProject(r);
                 else if (e.key === "r" && !e.repeat) void refresh();
+                else if (e.key === "z" && r && !e.repeat) void toggleSnooze(r);
                 else if (e.key === "Escape") openUrl ? setTabs((t) => closeTab(t, t.active)) : focusArea("terminal");
                 else return;
                 e.preventDefault();
@@ -88,17 +94,20 @@ export const PrQueue = memo(() => {
             <div style={{ flexGrow: 1, overflowY: "auto", padding: "0 26px", display: "flex", flexDirection: "column", gap: 14 }}>
                 {model?.groups.map(({ group, rows }) => (
                     <div key={group} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "0 12px 4px" }}>
-                            <span style={{ fontFamily: T.display, fontSize: 18, color: HEADERS[group].color }}>{HEADERS[group].label}</span>
-                            <span style={{ fontSize: 11, color: T.faint }}>{HEADERS[group].note}</span>
-                            <span style={{ flexGrow: 1, height: 1, background: "#201C1A" }} />
-                            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{rows.length}</span>
-                        </div>
+                        <GroupHeader {...HEADERS[group]} count={rows.length} />
                         {rows.flatMap((row) => withStack(row)).map(({ r, depth }) => (
                             <PrRow key={r.pr.url} r={r} depth={depth} cursor={flat[cursor] === r || r.pr.url === openUrl} compact={!!openUrl} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 ))}
+                {model && model.snoozed.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2, opacity: 0.6 }}>
+                        <GroupHeader label="Snoozed" note="back next working day, or when it moves · z wakes" color={T.muted} count={model.snoozed.length} />
+                        {model.snoozed.map((r) => (
+                            <PrRow key={r.pr.url} r={r} depth={0} cursor={flat[cursor] === r || r.pr.url === openUrl} compact={!!openUrl} onOpen={() => openPr(r)} />
+                        ))}
+                    </div>
+                )}
                 {model && model.groups.length === 0 && <span style={{ color: T.muted, fontSize: 13, padding: "0 12px" }}>Nothing open that concerns you.</span>}
             </div>
             <div style={{ flexShrink: 0, height: 30, padding: "0 26px", display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
@@ -106,6 +115,7 @@ export const PrQueue = memo(() => {
                 <Key k="⏎" label="open beside" />
                 {openUrl && <Key k="⇥" label="into the PR" />}
                 <Key k="o" label="go to project" />
+                <Key k="z" label="snooze" />
                 <Key k={openUrl ? "esc ⌘W" : "esc"} label={openUrl ? "close the tab" : "back"} />
             </div>
             </div>
@@ -116,6 +126,17 @@ export const PrQueue = memo(() => {
 PrQueue.displayName = "PrQueue";
 
 // compact: with a PR open beside the list the row has ~400px, so the name and size columns go.
+function GroupHeader({ label, note, color, count }: { label: string; note: string; color: string; count: number }) {
+    return (
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "0 12px 4px" }}>
+            <span style={{ fontFamily: T.display, fontSize: 18, color }}>{label}</span>
+            <span style={{ fontSize: 11, color: T.faint }}>{note}</span>
+            <span style={{ flexGrow: 1, height: 1, background: "#201C1A" }} />
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{count}</span>
+        </div>
+    );
+}
+
 function PrRow({ r, depth, cursor, compact, onOpen }: { r: QueueRow; depth: number; cursor: boolean; compact: boolean; onOpen: () => void }) {
     const { pr } = r;
     return (

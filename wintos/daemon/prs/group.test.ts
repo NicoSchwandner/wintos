@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { ageLabel, groupOf, PR, projectPrs, prsForProject, qualifier, workingDaysBetween } from "./group";
+import { ageLabel, groupOf, isSnoozed, nextWorkingDayStart, PR, projectPrs, prsForProject, qualifier, workingDaysBetween } from "./group";
 
 // Monday 2026-09-28 09:00 UTC
 const MON = Date.parse("2026-09-28T09:00:00Z");
@@ -120,5 +120,23 @@ describe("groupOf a stacked PR", () => {
 
     test("stacked but needing a fix is still Fix", () => {
         expect(groupOf(pr({ checks: "FAILURE", base: "feature-a", defaultBranch: "development" }), "me", MON)).toBe("fix");
+    });
+});
+
+describe("snooze", () => {
+    test("until tomorrow means the start of the next working day, local time", () => {
+        const wed = new Date(2026, 8, 30, 15, 0).getTime();
+        const fri = new Date(2026, 9, 2, 15, 0).getTime();
+        expect(new Date(nextWorkingDayStart(wed))).toEqual(new Date(2026, 9, 1, 0, 0));
+        expect(new Date(nextWorkingDayStart(fri))).toEqual(new Date(2026, 9, 5, 0, 0)); // Monday
+    });
+
+    test("a snoozed PR stays snoozed until then, unless it moved since", () => {
+        const p = pr({ lastReviewAt: "2026-09-28T08:00:00Z" });
+        const s = { [p.url]: { until: MON + 1000, movedAt: "2026-09-28T08:00:00Z" } };
+        expect(isSnoozed(p, s, MON)).toBe(true);
+        expect(isSnoozed(p, s, MON + 1000)).toBe(false);
+        expect(isSnoozed({ ...p, lastReviewAt: "2026-09-28T09:30:00Z" }, s, MON)).toBe(false);
+        expect(isSnoozed(p, {}, MON)).toBe(false);
     });
 });

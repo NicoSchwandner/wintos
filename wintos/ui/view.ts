@@ -1,10 +1,10 @@
 import { rank, Ranking, Row } from "../daemon/ranking/rank";
 import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
-import { projectPrs, type PR, type ProjectPrs } from "../daemon/prs/group";
+import { isSnoozed, projectPrs, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
 import type { Session } from "../daemon/sessions/reduce";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[] };
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes };
 export type Tone = "apricot" | "brick" | "secondary";
 export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
 
@@ -24,9 +24,10 @@ export function prsByTab(tabIds: string[], state: WintosState): Record<string, P
     const gh = ghPrs(state);
     if (!gh) return {};
     const out: Record<string, ProjectPrs> = {};
+    const awake = gh.prs.filter((pr) => !isSnoozed(pr, state.snoozes ?? {}, state.now));
     for (const id of tabIds) {
         const p = state.projects.find((x) => x.id === id);
-        if (p) out[id] = projectPrs(p, gh.prs, gh.me, state.now);
+        if (p) out[id] = projectPrs(p, awake, gh.me, state.now);
     }
     return out;
 }

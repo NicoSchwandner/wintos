@@ -38,7 +38,7 @@ export const DRAFT_SLA_WORKING_DAYS = 5;
 const DAY = 86_400_000;
 const redChecks = (pr: PR) => pr.checks === "FAILURE" || pr.checks === "ERROR";
 const sla = (pr: PR) => (pr.isDraft ? DRAFT_SLA_WORKING_DAYS : SLA_WORKING_DAYS);
-const lastMovement = (pr: PR) => pr.lastReviewAt ?? pr.createdAt;
+export const lastMovement = (pr: PR) => pr.lastReviewAt ?? pr.createdAt;
 
 // Weekdays elapsed after `from` up to `now`. No holiday calendar (spec §4).
 export function workingDaysBetween(from: string, now: number): number {
@@ -50,6 +50,23 @@ export function workingDaysBetween(from: string, now: number): number {
         if (wd !== 0 && wd !== 6) n++;
     }
     return n;
+}
+
+// Snoozed: "I looked, it's with someone else now." Back at the next working day's start, or
+// as soon as the PR moves (a review or push), whichever comes first.
+export type Snoozes = Record<string, { until: number; movedAt: string }>;
+
+export function nextWorkingDayStart(now: number): number {
+    const d = new Date(now);
+    do d.setDate(d.getDate() + 1);
+    while (d.getDay() === 0 || d.getDay() === 6);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+}
+
+export function isSnoozed(pr: PR, snoozes: Snoozes, now: number): boolean {
+    const s = snoozes[pr.url];
+    return !!s && now < s.until && s.movedAt === lastMovement(pr);
 }
 
 export function groupOf(pr: PR, me: string, now: number): Group {

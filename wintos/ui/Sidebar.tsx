@@ -51,7 +51,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const model = state ? sidebarModel(tabIds, state) : null;
     const prsTab = state ? prsByTab(tabIds, state) : {};
     const gh = state ? ghPrs(state) : undefined;
-    const queue = gh ? queueModel(gh.prs, gh.me, now) : null;
+    const queue = gh ? queueModel(gh.prs, gh.me, now, state?.snoozes) : null;
     const panels = state ? pluginPanels(state) : [];
     const loading = state ? loadingPanels(state, lastPanelTitles(panels)) : [];
     const running = new Set(state?.pluginsRunning ?? []);

@@ -64,3 +64,20 @@ describe("queueModel with a stack (#101 on development ← #102 ← #103)", () =
         expect(m.groups[0].rows[0].qualifier?.text).toBe("stacked on someone-else");
     });
 });
+
+describe("queueModel with snoozes", () => {
+    const fix = pr({ number: 9, url: "u9", checks: "FAILURE", createdAt: "2026-09-28T08:00:00Z" });
+
+    test("a snoozed PR leaves its group and the counts, and waits at the bottom", () => {
+        const m = queueModel([fix], "me", MON, { u9: { until: MON + 1, movedAt: "2026-09-28T08:00:00Z" } });
+        expect(m.groups).toEqual([]);
+        expect(m.snoozed.map((r) => r.pr.number)).toEqual([9]);
+        expect(m.yours).toBe(0);
+    });
+
+    test("it is back once the PR moved", () => {
+        const m = queueModel([{ ...fix, lastReviewAt: "2026-09-28T08:30:00Z" }], "me", MON, { u9: { until: MON + 1, movedAt: "2026-09-28T08:00:00Z" } });
+        expect(m.groups.map((g) => g.group)).toEqual(["fix"]);
+        expect(m.snoozed).toEqual([]);
+    });
+});

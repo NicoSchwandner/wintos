@@ -1,9 +1,11 @@
-import { watch, type FSWatcher } from "fs";
+import { readFileSync, watch, writeFileSync, type FSWatcher } from "fs";
 import http from "http";
 import type { AddressInfo } from "net";
+import { join } from "path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { injection } from "../inject";
 import { Plugin, PluginRunner } from "../plugins/runner";
+import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
 import { HookEvent, parkSession, reduceSession, Session } from "../sessions/reduce";
 
@@ -33,12 +35,16 @@ export async function startServer(opts: { root: string; port: number; host?: str
         plugins: runner.results,
         pluginNames: runner.names,
         pluginsRunning: runner.running,
+        snoozes,
     });
     const broadcast = () => {
         const frame = JSON.stringify(state());
         for (const s of sockets) s.send(frame);
     };
 
+    // Kept next to the projects: a file there is not a project (those are folders).
+    const snoozeFile = join(opts.root, ".snoozes.json");
+    let snoozes: Snoozes = readSnoozes(snoozeFile);
     const runner = new PluginRunner(opts.plugins ?? [], () => broadcast());
 
     let watcher: FSWatcher | undefined;
@@ -119,6 +125,18 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const r = store.saveMine(decodeURIComponent(mine[1]), b.text, typeof b.baseMtime === "number" ? b.baseMtime : undefined);
                 if (r === "no project") return send(res, 404, "no project for this tab");
                 if (r === "conflict") return send(res, 409, "mine.md changed on disk since you started editing");
+                return send(res, 200, "");
+            }
+            if (req.method === "POST" && url.pathname === "/prs/snooze") {
+                const b = (await body(req)) as { url?: unknown; until?: unknown; movedAt?: unknown };
+                if (typeof b?.url !== "string" || !PR_URL.test(b.url)) return send(res, 400, "need a GitHub PR url");
+                if (b.until === null) delete snoozes[b.url];
+                else if (typeof b.until === "number" && typeof b.movedAt === "string") snoozes[b.url] = { until: b.until, movedAt: b.movedAt };
+                else return send(res, 400, "need until (a time, or null to wake) and movedAt");
+                const now = Date.now();
+                snoozes = Object.fromEntries(Object.entries(snoozes).filter(([, s]) => s.until > now));
+                writeFileSync(snoozeFile, JSON.stringify(snoozes));
+                broadcast();
                 return send(res, 200, "");
             }
             const wait = /^\/blocks\/([^/]+)\/wait$/.exec(url.pathname);
@@ -202,3 +220,13 @@ function body(req: http.IncomingMessage): Promise<unknown> {
 
 const send = (res: http.ServerResponse, code: number, text: string) => (res.writeHead(code), res.end(text));
 const json = (res: http.ServerResponse, v: unknown) => (res.writeHead(200, { "Content-Type": "application/json" }), res.end(JSON.stringify(v)));
+
+const PR_URL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/;
+
+function readSnoozes(file: string): Snoozes {
+    try {
+        return JSON.parse(readFileSync(file, "utf8"));
+    } catch {
+        return {};
+    }
+}

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { isPlaceholderTab, relTime, rowView, sidebarModel } from "./view";
+import { isPlaceholderTab, prsByTab, relTime, rowView, sidebarModel, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -105,5 +105,15 @@ describe("isPlaceholderTab", () => {
     test("an ordinary tab, or one not loaded yet, is a project", () => {
         expect(isPlaceholderTab(tab({}))).toBe(false);
         expect(isPlaceholderTab(undefined)).toBe(false);
+    });
+});
+
+describe("prsByTab with snoozes", () => {
+    test("a snoozed PR no longer puts its project in Needs you", () => {
+        const prs = [{ repo: "acme/api", number: 5, url: "https://github.com/acme/api/pull/5", title: "t", author: "me", isDraft: false, createdAt: "2026-09-28T08:00:00Z", conflict: false, checks: "FAILURE", requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b" }];
+        const state = { now: Date.parse("2026-09-28T09:00:00Z"), sessions: [], projects: [{ id: "t1", title: "x", titleLocked: false, pr: ["acme/api#5"], dir: "/d", mtime: 0 }], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs } } } } as unknown as WintosState;
+        expect(prsByTab(["t1"], state).t1.blocked).toBeDefined();
+        const snoozed = { ...state, snoozes: { [prs[0].url]: { until: state.now + 1, movedAt: prs[0].createdAt } } };
+        expect(prsByTab(["t1"], snoozed).t1.blocked).toBeUndefined();
     });
 });

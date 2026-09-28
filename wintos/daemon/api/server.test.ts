@@ -238,3 +238,27 @@ describe("wintosd refuses anything but the hook and the WintOS UI", () => {
         expect((await (await fetch(base + "/state")).json()).sessions[0].label).toBeUndefined();
     });
 });
+
+describe("PR snoozes", () => {
+    const U = "https://github.com/acme/api/pull/7";
+
+    test("a snooze is in state and survives a restart", async () => {
+        expect((await post("/prs/snooze", { url: U, until: 2e12, movedAt: "2026-09-28T08:00:00Z" })).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).snoozes).toEqual({ [U]: { until: 2e12, movedAt: "2026-09-28T08:00:00Z" } });
+        await srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect((await (await fetch(base + "/state")).json()).snoozes[U]).toBeDefined();
+    });
+
+    test("until null wakes it", async () => {
+        await post("/prs/snooze", { url: U, until: 2e12, movedAt: "x" });
+        await post("/prs/snooze", { url: U, until: null });
+        expect((await (await fetch(base + "/state")).json()).snoozes).toEqual({});
+    });
+
+    test("anything but a PR url and a time is refused", async () => {
+        expect((await post("/prs/snooze", { url: "javascript:alert(1)", until: 2e12, movedAt: "x" })).status).toBe(400);
+        expect((await post("/prs/snooze", { url: U, until: "tomorrow", movedAt: "x" })).status).toBe(400);
+    });
+});

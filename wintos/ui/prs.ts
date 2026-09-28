@@ -1,16 +1,19 @@
-import { ageLabel, Group, GROUPS, groupOf, isStacked, PR, qualifier } from "../daemon/prs/group";
+import { ageLabel, Group, GROUPS, groupOf, isSnoozed, isStacked, PR, qualifier, type Snoozes } from "../daemon/prs/group";
 
 // children: PRs stacked on this one that only wait for it (spec: stacked PRs sit under their base).
 export type QueueRow = { pr: PR; group: Group; mine: boolean; age: { text: string; late: boolean }; qualifier?: { text: string; brick?: boolean }; total: number; repoShort: string; children: QueueRow[] };
 
 const ACTS: Group[] = ["merge", "fix", "review", "chase"];
-export type QueueModel = { groups: { group: Group; rows: QueueRow[] }[]; yours: number; team: number; pastSla: number };
+// snoozed: looked at and handed on; out of the groups and the counts until it wakes.
+export type QueueModel = { groups: { group: Group; rows: QueueRow[] }[]; snoozed: QueueRow[]; yours: number; team: number; pastSla: number };
 
-export function queueModel(prs: PR[], me: string, now: number): QueueModel {
-    const all = prs.map((pr): QueueRow => {
+export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes = {}): QueueModel {
+    const toRow = (pr: PR): QueueRow => {
         const group = groupOf(pr, me, now);
         return { pr, group, mine: pr.author === me, age: ageLabel(pr, now), qualifier: qualifier(pr, group), total: pr.additions + pr.deletions, repoShort: pr.repo.split("/").pop()!, children: [] };
-    });
+    };
+    const snoozed = prs.filter((p) => isSnoozed(p, snoozes, now)).map(toRow);
+    const all = prs.filter((p) => !isSnoozed(p, snoozes, now)).map(toRow);
     const byUrl = new Map(all.map((r) => [r.pr.url, r]));
     // A stacked PR that asks nothing of you waits under its base; one that does keeps its own
     // row, where you act, and names its base.
@@ -30,6 +33,7 @@ export function queueModel(prs: PR[], me: string, now: number): QueueModel {
     const team = rows.filter((r) => r.group === "team").length;
     return {
         groups,
+        snoozed,
         yours: rows.length - team,
         team,
         pastSla: rows.filter((r) => r.group === "chase" || (r.group === "review" && r.age.late)).length,

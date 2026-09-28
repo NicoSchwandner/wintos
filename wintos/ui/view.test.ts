@@ -117,3 +117,11 @@ describe("prsByTab with snoozes", () => {
         expect(prsByTab(["t1"], snoozed).t1.blocked).toBeUndefined();
     });
 });
+
+describe("rowView after a restart", () => {
+    test("a project whose sessions haven't started again says so", () => {
+        const r: Row = { tabId: "t", band: "needs", lastAt: 1, waitingSince: 1, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "waiting", since: 1, lastAt: 1, restored: true }] };
+        expect(rowView(r, { dir: "/p", mtime: 0, title: "X", pr: ["Core#1"] }, "T", 10).meta).toBe("Core#1 · not started, opens with the project");
+        expect(rowView({ ...r, sessions: [{ ...r.sessions[0], restored: undefined }] }, { dir: "/p", mtime: 0, title: "X", pr: ["Core#1"] }, "T", 10).meta).toBe("Core#1");
+    });
+});

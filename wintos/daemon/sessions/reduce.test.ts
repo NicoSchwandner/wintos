@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { HookEvent, parkSession, reduceSession, Session } from "./reduce";
+import { HookEvent, parkSession, reduceSession, restoreSessions, Session } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -87,5 +87,29 @@ describe("parkSession (`wintos wait`)", () => {
         const m = run([ev(start)]);
         expect(only(park(m)).parkPending).toBe(true);
         expect(parkSession(m, "other-block", "x", 5000)).toBe(m);
+    });
+});
+
+describe("restoreSessions (after a WintOS restart)", () => {
+    const s = (id: string, state: Session["state"], blockId = "blk-1"): Session => ({ id, tabId: "tab-1", blockId, state, since: 1, lastAt: 1 });
+
+    test("keeps what was true at quit, marked not started; a cut-off turn is idle; ended ones go", () => {
+        const m = restoreSessions([s("a", "waiting"), s("b", "working", "blk-2"), s("c", "parked", "blk-3"), s("d", "ended", "blk-4")]);
+        expect([...m.values()].map((x) => [x.id, x.state, x.restored])).toEqual([
+            ["a", "waiting", true],
+            ["b", "idle", true],
+            ["c", "parked", true],
+        ]);
+    });
+
+    test("the resumed session's first event takes over its block, even under a new id", () => {
+        const m = reduceSession(restoreSessions([s("old", "waiting")]), ev({ hook_event_name: "SessionStart", session_id: "new" }), 5);
+        expect([...m.values()].map((x) => [x.id, x.restored])).toEqual([["new", undefined]]);
+    });
+
+    test("under the same id it keeps its state and loses the mark", () => {
+        const m = reduceSession(restoreSessions([s("a", "waiting")]), ev({ hook_event_name: "SessionStart", session_id: "a" }), 5);
+        expect(only(m)).toMatchObject({ id: "a", state: "waiting" });
+        expect(only(m).restored).toBeUndefined();
     });
 });

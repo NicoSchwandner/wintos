@@ -44,7 +44,10 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     const since = row.band === "needs" ? row.waitingSince! : row.lastAt;
     const age = since > 0 ? relTime(now - since) : "";
     const first = prs?.items[0]?.pr;
-    const meta = first ? `#${first.number} · ${first.branch}` : project?.pr?.[0];
+    const link = first ? `#${first.number} · ${first.branch}` : project?.pr?.[0];
+    // Restored at the last restart: shown as it was, but its Claude starts only when you open it.
+    const notStarted = row.sessions.length > 0 && row.sessions.every((s) => s.restored);
+    const meta = notStarted ? [link, "not started, opens with the project"].filter(Boolean).join(" · ") : link;
     if (project?.error) return { title, next: `note unreadable: ${project.dir}/project.md`, tone: "brick", age, meta };
     if (row.band === "needs") {
         const sessionWaiting = row.sessions.some((s) => s.state === "waiting");

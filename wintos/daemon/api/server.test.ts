@@ -262,3 +262,14 @@ describe("PR snoozes", () => {
         expect((await post("/prs/snooze", { url: U, until: "tomorrow", movedAt: "x" })).status).toBe(400);
     });
 });
+
+describe("sessions across a restart", () => {
+    test("a session waiting on you at quit is still shown waiting, marked not started", async () => {
+        await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { hook_event_name: "Stop", session_id: "s-1" } });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        const { sessions } = await (await fetch(base + "/state")).json();
+        expect(sessions).toMatchObject([{ id: "s-1", state: "waiting", restored: true }]);
+    });
+});

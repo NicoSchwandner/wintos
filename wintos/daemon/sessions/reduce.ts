@@ -13,6 +13,7 @@ export type Session = {
     label?: string;
     parkedOn?: string;
     parkPending?: boolean; // `wintos wait` ran this turn; the turn's Stop parks instead of waiting
+    restored?: boolean; // saved at the last quit, its Claude not started again yet
 };
 
 const LABEL_MAX = 24;
@@ -32,7 +33,8 @@ const TRANSITIONS: Record<string, SessionState> = {
 export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now: number): Map<string, Session> {
     const { session_id: id, hook_event_name: name, cwd, prompt } = ev.payload;
     const prev = sessions.get(id);
-    const next = TRANSITIONS[name];
+    // A resumed session starting up is still where it was at quit (a turn waiting on you).
+    const next = prev?.restored && name === "SessionStart" ? undefined : TRANSITIONS[name];
     const parks = name === "Stop" && prev?.parkPending;
     const state = parks ? "parked" : (next ?? prev?.state ?? "idle");
     const session: Session = {
@@ -48,7 +50,20 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
         parkedOn: parks ? prev.parkedOn : next ? undefined : prev?.parkedOn,
         parkPending: next ? undefined : prev?.parkPending,
     };
-    return new Map(sessions).set(id, session);
+    const out = new Map(sessions);
+    // The block's saved entry is replaced by whatever session now reports from it.
+    for (const s of sessions.values()) if (s.restored && s.blockId === ev.blockId && s.id !== id) out.delete(s.id);
+    return out.set(id, session);
+}
+
+// Sessions saved at the last quit. The restart cut off any turn in progress; ended ones are gone.
+export function restoreSessions(saved: Session[]): Map<string, Session> {
+    const out = new Map<string, Session>();
+    for (const s of saved) {
+        if (s.state === "ended") continue;
+        out.set(s.id, { ...s, state: s.state === "working" ? "idle" : s.state, restored: true });
+    }
+    return out;
 }
 
 // `wintos wait "<what>"` from inside a session: the block's live session ends this turn parked.

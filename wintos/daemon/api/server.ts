@@ -7,7 +7,7 @@ import { injection } from "../inject";
 import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
-import { HookEvent, parkSession, reduceSession, Session } from "../sessions/reduce";
+import { HookEvent, parkSession, reduceSession, restoreSessions, Session } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -24,7 +24,10 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     const uiOrigins = new Set(opts.uiOrigins ?? [...DEFAULT_UI_ORIGINS, ...(process.env.WINTOS_UI_ORIGINS?.split(",") ?? [])]);
-    let sessions = new Map<string, Session>();
+    // Saved on every change and restored at start, so a restart doesn't forget who waits on you.
+    const sessionFile = join(opts.root, ".sessions.json");
+    let sessions = restoreSessions(readJson<Session[]>(sessionFile, []));
+    const saveSessions = () => writeFileSync(sessionFile, JSON.stringify([...sessions.values()]));
     const sockets = new Set<WebSocket>();
     let port = opts.port;
 
@@ -44,7 +47,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
 
     // Kept next to the projects: a file there is not a project (those are folders).
     const snoozeFile = join(opts.root, ".snoozes.json");
-    let snoozes: Snoozes = readSnoozes(snoozeFile);
+    let snoozes = readJson<Snoozes>(snoozeFile, {});
     const runner = new PluginRunner(opts.plugins ?? [], () => broadcast());
 
     let watcher: FSWatcher | undefined;
@@ -58,7 +61,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
         }
     };
     try {
-        watcher = watch(opts.root, { recursive: true }, () => {
+        // The daemon's own files (.sessions.json, .snoozes.json, .bindings.json) are not notes.
+        watcher = watch(opts.root, { recursive: true }, (_e, file) => {
+            if (file && !file.includes("/") && file.startsWith(".")) return;
             clearTimeout(pending);
             pending = setTimeout(reload, 100);
         });
@@ -104,6 +109,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (![ev?.tabId, ev?.blockId, p?.session_id, p?.hook_event_name].every(isSafe))
                     return send(res, 400, "need string tabId, blockId, payload.session_id, payload.hook_event_name");
                 sessions = reduceSession(sessions, ev, Date.now());
+                saveSessions();
                 const text =
                     p.hook_event_name === "UserPromptSubmit" ? injection(store.byTab(ev.tabId), store.mineDiff(ev.tabId, p.session_id)) : "";
                 broadcast();
@@ -147,6 +153,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!isSafe(blockId) || !reason || !isSafe(reason) || reason.length > MAX_TITLE)
                     return send(res, 400, `need a one-line reason up to ${MAX_TITLE} characters`);
                 sessions = parkSession(sessions, blockId, reason, Date.now());
+                saveSessions();
                 broadcast();
                 return send(res, 200, "");
             }
@@ -223,10 +230,10 @@ const json = (res: http.ServerResponse, v: unknown) => (res.writeHead(200, { "Co
 
 const PR_URL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/;
 
-function readSnoozes(file: string): Snoozes {
+function readJson<T>(file: string, fallback: T): T {
     try {
         return JSON.parse(readFileSync(file, "utf8"));
     } catch {
-        return {};
+        return fallback;
     }
 }

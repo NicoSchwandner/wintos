@@ -41,8 +41,10 @@ export class ProjectStore {
             .map((d) => this.read(join(this.root, d.name)));
     }
 
+    // mine.md's time is read fresh: file-watch events arrive late or not at all right after a
+    // start, and a missed one would keep the UI on an old mine.md.
     list(): Project[] {
-        return this.projects;
+        return this.projects.map((p) => ({ ...p, mineMtime: mtimeOf(join(p.dir, "mine.md")) }));
     }
 
     byTab(tabId: string): Project | undefined {

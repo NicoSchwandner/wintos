@@ -4,7 +4,7 @@
 import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { FocusManager } from "@/app/store/focusManager";
 import { jumpToNextWaiting } from "@/wintos/ui/focus";
-import { runKey, WINTOS_KEYS } from "@/wintos/ui/menu";
+import { runKey, WINTOS_KEYS, wintosClose, wintosEscape } from "@/wintos/ui/menu";
 import {
     atoms,
     createBlock,
@@ -198,8 +198,9 @@ function genericClose() {
             }
         }
     }
-    // WintOS: ⌘W never closes a project, not even an empty one; that is ⇧⌘W.
-    if (getStaticTabBlockCount() === 0) return;
+    // WintOS: the last pane's ⌘W leaves the project open; ⌘W again, on the empty project,
+    // closes it (through ⇧⌘W's path, which asks while Claude sessions would stop).
+    if (getStaticTabBlockCount() === 0) return runKey("close-project");
 
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
@@ -737,6 +738,10 @@ function registerGlobalKeys() {
     // WintOS: the sidebar replaces the tab bar, so ⌘1–9 no longer mean "tab N".
     for (let idx = 1; idx <= 9; idx++) globalKeyMap.delete(`Cmd:${idx}`);
     for (const [key, action] of WINTOS_KEYS) globalKeyMap.set(key, () => runKey(action));
+    const waveClose = globalKeyMap.get("Cmd:w");
+    globalKeyMap.set("Cmd:w", (e) => wintosClose() || waveClose(e));
+    const waveEscape = globalKeyMap.get("Escape");
+    globalKeyMap.set("Escape", (e) => wintosEscape() || waveEscape(e));
     const allKeys = Array.from(globalKeyMap.keys());
     // special case keys, handled by web view
     allKeys.push("Cmd:l", "Cmd:r", "Cmd:ArrowRight", "Cmd:ArrowLeft", "Cmd:o");

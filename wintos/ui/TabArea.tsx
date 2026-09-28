@@ -27,7 +27,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
     return (
         <div className="flex flex-col flex-grow min-w-0" style={{ position: "relative" }}>
             <div className="flex flex-row flex-grow min-w-0" style={{ minHeight: 0 }}>
-                <div className="flex flex-col flex-grow min-w-0">
+                <div className="flex flex-col flex-grow min-w-0" style={{ minHeight: 0 }}>
                     {view === "notes" && <NotesFull tabId={tabId} />}
                     {view === "prs" && <PrQueue />}
                     {view === "panel" && <PanelView />}
@@ -55,7 +55,7 @@ WintosTabArea.displayName = "WintosTabArea";
 function EmptyProject({ noProject }: { noProject: boolean }) {
     const keys: [string, string][] = noProject
         ? [["⌘N", "new project"], ["⌘Q", "quit WintOS"]]
-        : [["⇧⌘T", "new Claude session"], ["⌘T", "new terminal"], ["⌘J ⌘K", "another project"], ["⇧⌘W", "close this project"]];
+        : [["⇧⌘T", "new Claude session"], ["⌘T", "new terminal"], ["⌘J ⌘K", "another project"], ["⌘W", "close this project"]];
     return (
         <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, fontFamily: T.ui, color: T.muted }}>
             <span style={{ fontFamily: T.display, fontSize: 24, color: T.secondary }}>{noProject ? "No project open" : "Nothing open in this project"}</span>

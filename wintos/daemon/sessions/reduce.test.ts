@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { HookEvent, reduceSession, Session } from "./reduce";
+import { HookEvent, parkSession, reduceSession, Session } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -56,5 +56,36 @@ describe("reduceSession", () => {
         const snapshot = JSON.stringify([...before]);
         reduceSession(before, ev(stop), 5000);
         expect(JSON.stringify([...before])).toBe(snapshot);
+    });
+});
+
+describe("parkSession (`wintos wait`)", () => {
+    const park = (m: Map<string, Session>, reason = "CI on #1479") => parkSession(m, "blk-1", reason, 5000);
+
+    test("a turn that ends after `wintos wait` is parked, not waiting on the developer", () => {
+        const m = run([ev(start), ev(prompt)]);
+        const s = only(reduceSession(park(m), ev(stop), 6000));
+        expect(s).toMatchObject({ state: "parked", parkedOn: "CI on #1479", since: 6000 });
+    });
+
+    test("the next turn that ends without it waits on the developer again", () => {
+        const m = run([ev(start), ev(prompt)]);
+        const parked = reduceSession(park(m), ev(stop), 6000);
+        const s = only(reduceSession(parked, ev(stop), 7000)); // resumed by a background notification
+        expect(s).toMatchObject({ state: "waiting" });
+        expect(s.parkedOn).toBeUndefined();
+    });
+
+    test("the developer's next prompt clears it", () => {
+        const m = reduceSession(park(run([ev(start), ev(prompt)])), ev(stop), 6000);
+        const s = only(reduceSession(m, ev(prompt), 7000));
+        expect(s.state).toBe("working");
+        expect(s.parkedOn).toBeUndefined();
+    });
+
+    test("parks the block's live session, and nothing when the block has none", () => {
+        const m = run([ev(start)]);
+        expect(only(park(m)).parkPending).toBe(true);
+        expect(parkSession(m, "other-block", "x", 5000)).toBe(m);
     });
 });

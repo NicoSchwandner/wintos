@@ -34,3 +34,12 @@ export function closeWarning(sessions: Session[], tabId: string): string | null 
     const n = sessions.filter((s) => s.tabId === tabId && s.state !== "ended").length;
     return n ? `${n} Claude session${n === 1 ? "" : "s"} will stop` : null;
 }
+
+// ⌃⇥ in full: a waiting session first; failing that, the next project in Needs you, which may
+// be there for a PR rather than a session.
+export function nextNeedsYou(sessions: Session[], tabIds: string[], activeTabId: string, currentBlockId: string | undefined, needsTabIds: string[]): Target | { tabId: string } | null {
+    const waiting = nextWaiting(sessions, tabIds, activeTabId, currentBlockId);
+    if (waiting) return waiting;
+    if (!needsTabIds.length) return null;
+    return { tabId: needsTabIds[(needsTabIds.indexOf(activeTabId) + 1) % needsTabIds.length] };
+}

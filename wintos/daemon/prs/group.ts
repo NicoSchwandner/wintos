@@ -20,7 +20,13 @@ export type PR = {
     additions: number;
     deletions: number;
     branch: string;
+    base?: string; // the branch it merges into
+    defaultBranch?: string; // the repo's
+    stackedOn?: string; // url of the open PR whose branch is `base`, when that PR is in the list
 };
+
+// On another branch than the repo's default: merging it would land on that branch, not ship.
+export const isStacked = (pr: PR) => !!pr.base && !!pr.defaultBranch && pr.base !== pr.defaultBranch;
 export type Group = "merge" | "fix" | "review" | "chase" | "team";
 export const GROUPS: Group[] = ["merge", "fix", "review", "chase", "team"];
 
@@ -52,7 +58,7 @@ export function groupOf(pr: PR, me: string, now: number): Group {
     // No CI at all is green: a repo without checks must still reach Merge. BLOCKED is GitHub
     // saying no: an approval alone does not satisfy code owners.
     const green = pr.checks === undefined || pr.checks === "SUCCESS";
-    if (mine && approved && green && !pr.isDraft && !pr.conflict && pr.mergeState !== "BLOCKED") return "merge";
+    if (mine && approved && green && !pr.isDraft && !pr.conflict && pr.mergeState !== "BLOCKED" && !isStacked(pr)) return "merge";
     // Red CI on a draft is work in progress; the draft keeps its own, longer clock.
     if (mine && (pr.reviewDecision === "CHANGES_REQUESTED" || (redChecks(pr) && !pr.isDraft) || pr.conflict)) return "fix";
     // GitHub drops a request when you review, so being asked means a review is owed, re-requests included.

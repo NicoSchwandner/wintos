@@ -10,9 +10,10 @@ payload="$(cat)"
 # Claude saves nothing to resume until the first prompt. Quitting WintOS ends sessions with
 # reason "other"; only a deliberate exit clears the command.
 # Only an interactive session you started owns its block: a `claude -p` run from inside it
-# (CLAUDE_CODE_ENTRYPOINT=sdk-cli, CLAUDE_CODE_CHILD_SESSION=1) inherits the block id and would
-# otherwise make the next launch resume a throwaway session.
-if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" != "sdk-cli" ] && [ -z "${CLAUDE_CODE_CHILD_SESSION:-}" ]; then
+# (CLAUDE_CODE_ENTRYPOINT=sdk-cli) inherits the block id and would otherwise make the next
+# launch resume a throwaway session. CLAUDE_CODE_CHILD_SESSION can't tell them apart: Claude
+# sets it for everything it spawns, the interactive session's own hooks included.
+if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" != "sdk-cli" ]; then
     wsh="${WAVETERM_WSHBINDIR:+$WAVETERM_WSHBINDIR/}wsh"
     case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.reason // "")' 2>/dev/null)" in
     UserPromptSubmit:*)

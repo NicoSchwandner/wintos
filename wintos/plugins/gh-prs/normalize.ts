@@ -8,8 +8,9 @@ export type Node = {
     isDraft: boolean;
     createdAt: string;
     author: { login: string } | null;
-    repository: { nameWithOwner: string };
+    repository: { nameWithOwner: string; defaultBranchRef?: { name: string } | null };
     headRefName: string;
+    baseRefName?: string;
     reviewDecision: PR["reviewDecision"] | null;
     mergeable: string;
     mergeStateStatus?: string;
@@ -49,6 +50,8 @@ export function normalize(n: Node, me: string, asked: { requestedMe: boolean; re
         deletions: n.deletions,
         branch: n.headRefName,
     };
+    if (n.baseRefName) pr.base = n.baseRefName;
+    if (n.repository.defaultBranchRef?.name) pr.defaultBranch = n.repository.defaultBranchRef.name;
     if (n.reviewDecision) pr.reviewDecision = n.reviewDecision;
     if (checks) pr.checks = checks;
     if (n.mergeStateStatus) pr.mergeState = n.mergeStateStatus;
@@ -56,4 +59,18 @@ export function normalize(n: Node, me: string, asked: { requestedMe: boolean; re
     const changes = reviews.filter((r) => r.state === "CHANGES_REQUESTED").pop();
     if (changes) pr.changesRequestedBy = changes.author!.login;
     return pr;
+}
+
+// WINTOS_GH_ORGS="acme,globex" limits every search to those orgs (GitHub ORs org: terms).
+export function orgQualifier(orgs: string | undefined): string {
+    return (orgs ?? "").split(",").map((o) => o.trim()).filter(Boolean).map((o) => `org:${o}`).join(" ");
+}
+
+// A PR whose base is another listed PR's branch (same repo) is stacked on that PR.
+export function linkStacks(prs: PR[]): PR[] {
+    const byHead = new Map(prs.map((p) => [`${p.repo}:${p.branch}`, p.url]));
+    return prs.map((p) => {
+        const on = p.base && byHead.get(`${p.repo}:${p.base}`);
+        return on && on !== p.url ? { ...p, stackedOn: on } : p;
+    });
 }

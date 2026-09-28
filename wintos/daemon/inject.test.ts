@@ -13,6 +13,13 @@ describe("injection", () => {
         for (const marker of ["- 19 sep — ", "- [x]", "- [~]", "- [ ]", "(blocking)"]) expect(text).toContain(marker);
     });
 
+    test.each([
+        ["a titled project", { id: "t", title: "X", dir: "/p/x", mtime: 0, pr: [], titleLocked: false, body: "" }],
+        ["an untitled one", undefined],
+    ])("%s is told to park a turn that ends waiting on something outside", (_n, project) => {
+        expect(injection(project as never, { text: "m" })).toContain('wintos wait "');
+    });
+
     test("no project at all asks for a title", () => {
         expect(injection(undefined, { text: "mine.md is empty" })).toContain('wintos title "');
     });

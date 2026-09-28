@@ -43,11 +43,11 @@ describe("PluginRunner", () => {
         expect(r.results.x).toMatchObject({ ok: false });
     });
 
-    test("every result is announced", async () => {
+    test("every run is announced when it starts and when its result is in", async () => {
         let n = 0;
         const r = new PluginRunner([{ name: "x", cmd: [script(`echo '{}'`)], everyMs: 0 }], () => n++);
         await r.run("x");
-        expect(n).toBe(1);
+        expect(n).toBe(2);
     });
 
     test("overlapping runs share one process, so a slow old run can't overwrite a newer result", async () => {
@@ -64,6 +64,16 @@ describe("PluginRunner", () => {
         await r.run("x");
         delete process.env.WINTOS_TEST_VAR;
         expect(r.results.x.data).toEqual({ v: "unset" });
+    });
+
+    test("says which plugins exist and which are running, so the UI can show them loading", async () => {
+        const seen: string[][] = [];
+        const r = new PluginRunner([{ name: "x", cmd: [script(`echo '{}'`)], everyMs: 0 }, { name: "y", cmd: [script(`echo '{}'`)], everyMs: 0 }], () => seen.push(r.running));
+        expect(r.names).toEqual(["x", "y"]);
+        expect(r.running).toEqual([]);
+        await r.run("x");
+        expect(seen[0]).toEqual(["x"]); // announced when it starts
+        expect(r.running).toEqual([]);
     });
 
     test("an unknown plugin is refused", async () => {

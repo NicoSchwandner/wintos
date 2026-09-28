@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { cardValue, pluginPanels } from "./panels";
+import { cardValue, loadingPanels, pluginPanels } from "./panels";
+import type { WintosState } from "./view";
 
 const state = (plugins: Record<string, unknown>) => ({ now: 0, sessions: [], projects: [], plugins: plugins as never });
 
@@ -39,4 +40,19 @@ describe("pluginPanels", () => {
 describe("cardValue", () => {
     test("counts joined with a dot, unknown ones as ?", () =>
         expect(cardValue([{ label: "errors", count: 12 }, { label: "errands", count: null }])).toEqual({ value: "12·?", note: "errors · errands" }));
+});
+
+describe("loadingPanels", () => {
+    const st = (p: Partial<WintosState>): WintosState => ({ now: 0, sessions: [], projects: [], ...p });
+
+    test("a plugin with no result yet shows as loading, under the title it had last time", () => {
+        expect(loadingPanels(st({ pluginNames: ["gh-prs", "oncall", "other"], plugins: {} }), { oncall: "On call" })).toEqual([
+            { name: "oncall", title: "On call" },
+            { name: "other", title: "other" },
+        ]);
+    });
+
+    test("once a result is in, it is a panel, not loading", () => {
+        expect(loadingPanels(st({ pluginNames: ["oncall"], plugins: { oncall: { ok: true, at: 1, data: {} } } }), {})).toEqual([]);
+    });
 });

@@ -10,7 +10,7 @@ import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
 import { relTime } from "./view";
 
-const DOT = { working: T.moss, waiting: T.apricot, idle: T.dim, ended: T.dim } as const;
+const DOT = { working: T.moss, waiting: T.apricot, parked: T.muted, idle: T.dim, ended: T.dim } as const;
 
 export const SessionStrip = memo(({ tabId }: { tabId: string }) => {
     const { state } = useWintos();

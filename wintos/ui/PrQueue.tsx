@@ -1,11 +1,13 @@
 import { useFocusOnMount } from "./useFocusOnMount";
 import { focusArea } from "./focus";
 import { globalStore } from "@/app/store/jotaiStore";
-import { atoms, createBlock, getApi } from "@/store/global";
-import { useSetAtom } from "jotai";
+import { atoms, getApi } from "@/store/global";
+import { useAtom, useSetAtom } from "jotai";
 import { memo, useState } from "react";
 import type { Group } from "../daemon/prs/group";
-import { mainViewAtom } from "./notes/state";
+import { mainViewAtom, prTabsAtom } from "./notes/state";
+import { PrBrowser } from "./PrBrowser";
+import { closeTab, openTab } from "./prtabs";
 import { Key } from "./Key";
 import { initials, queueModel, type QueueRow } from "./prs";
 import { T } from "./tokens";
@@ -32,9 +34,14 @@ export const PrQueue = memo(() => {
     const result = state?.plugins?.["gh-prs"];
     const gh = state && ghPrs(state);
     const model = gh ? queueModel(gh.prs, gh.me, now) : null;
-    const flat = model?.groups.flatMap((g) => g.rows) ?? [];
+    // A stacked PR's row follows its base, one indent per step; the cursor walks them in order.
+    const withStack = (r: QueueRow, depth = 0): { r: QueueRow; depth: number }[] => [{ r, depth }, ...r.children.flatMap((c) => withStack(c, depth + 1))];
+    const flat = model?.groups.flatMap((g) => g.rows.flatMap((r) => withStack(r).map((x) => x.r))) ?? [];
 
-    const openPr = (r: QueueRow) => createBlock({ meta: { view: "web", url: r.pr.url } });
+    // The terminals are hidden behind this view, so a PR opens beside the list, not as a block.
+    const [tabs, setTabs] = useAtom(prTabsAtom);
+    const openUrl = tabs.urls.length ? tabs.urls[tabs.active] : null;
+    const openPr = (r: QueueRow) => setTabs((t) => openTab(t, r.pr.url));
     const goToProject = (r: QueueRow) => {
         const ws = globalStore.get(atoms.workspace);
         const byTab = state ? prsByTab(ws?.tabids ?? [], state) : {};
@@ -61,12 +68,13 @@ export const PrQueue = memo(() => {
                 else if (e.key === "Enter" && r) openPr(r);
                 else if (e.key === "o" && r) goToProject(r);
                 else if (e.key === "r" && !e.repeat) void refresh();
-                else if (e.key === "Escape") focusArea("terminal");
+                else if (e.key === "Escape") openUrl ? setTabs((t) => closeTab(t, t.active)) : focusArea("terminal");
                 else return;
                 e.preventDefault();
             }}
-            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#171413", outline: "none", fontFamily: T.ui, minWidth: 0 }}
+            style={{ flexGrow: 1, display: "flex", background: "#171413", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
         >
+            <div style={{ flexGrow: openUrl ? 0 : 1, width: openUrl ? "44%" : undefined, minWidth: openUrl ? 440 : 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "18px 26px 16px", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 30, fontWeight: 400, lineHeight: 1, color: T.emphasis }}>PRs need attention</h1>
@@ -86,8 +94,8 @@ export const PrQueue = memo(() => {
                             <span style={{ flexGrow: 1, height: 1, background: "#201C1A" }} />
                             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{rows.length}</span>
                         </div>
-                        {rows.map((r) => (
-                            <PrRow key={r.pr.url} r={r} cursor={flat[cursor] === r} onOpen={() => openPr(r)} />
+                        {rows.flatMap((row) => withStack(row)).map(({ r, depth }) => (
+                            <PrRow key={r.pr.url} r={r} depth={depth} cursor={flat[cursor] === r || r.pr.url === openUrl} compact={!!openUrl} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 ))}
@@ -95,43 +103,48 @@ export const PrQueue = memo(() => {
             </div>
             <div style={{ flexShrink: 0, height: 30, padding: "0 26px", display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
                 <Key k="j k" label="row" />
-                <Key k="⏎" label="open in browser pane" />
+                <Key k="⏎" label="open beside" />
+                {openUrl && <Key k="⇥" label="into the PR" />}
                 <Key k="o" label="go to project" />
-                <Key k="esc" label="back" />
+                <Key k={openUrl ? "esc ⌘W" : "esc"} label={openUrl ? "close the tab" : "back"} />
             </div>
+            </div>
+            <PrBrowser />
         </div>
     );
 });
 PrQueue.displayName = "PrQueue";
 
-function PrRow({ r, cursor, onOpen }: { r: QueueRow; cursor: boolean; onOpen: () => void }) {
+// compact: with a PR open beside the list the row has ~400px, so the name and size columns go.
+function PrRow({ r, depth, cursor, compact, onOpen }: { r: QueueRow; depth: number; cursor: boolean; compact: boolean; onOpen: () => void }) {
     const { pr } = r;
     return (
         <div
             data-pr={`${pr.repo}#${pr.number}`}
             onClick={onOpen}
-            style={{ display: "flex", alignItems: "center", gap: 16, height: 44, padding: "0 12px", borderRadius: 10, cursor: "pointer", background: cursor ? T.cardActive : "transparent", border: `1px solid ${cursor ? T.borderActive : "transparent"}` }}
+            style={{ display: "flex", alignItems: "center", gap: 16, height: 44, padding: "0 12px", marginLeft: depth * 22, overflow: "hidden", borderRadius: 10, cursor: "pointer", background: cursor ? T.cardActive : "transparent", border: `1px solid ${cursor ? T.borderActive : "transparent"}` }}
         >
+            {depth > 0 && <span style={{ marginRight: -8, fontFamily: T.mono, color: T.faint }}>└</span>}
             <span style={{ width: 54, flexShrink: 0, fontFamily: T.mono, fontSize: 12.5, color: r.age.late ? T.brick : T.quietTitle }}>{r.age.text}</span>
-            <span style={{ width: 118, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: compact ? 22 : 118, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ width: 22, height: 22, borderRadius: "50%", background: r.mine ? "#4A3B2C" : "#332E2B", color: r.mine ? "#EFC9A5" : "#C9B9AC", fontFamily: T.mono, fontSize: 8.5, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {initials(pr.author)}
                 </span>
-                <span style={{ fontSize: 12, color: r.mine ? T.title : T.quietTitle, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.mine ? "you" : pr.author}</span>
+                {!compact && <span style={{ fontSize: 12, color: r.mine ? T.title : T.quietTitle, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.mine ? "you" : pr.author}</span>}
             </span>
-            <span style={{ width: 104, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            {!compact && <span style={{ width: 104, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ display: "flex", gap: 2, width: 44 }}>
                     <span style={{ height: 5, borderRadius: 3, background: T.moss, flexGrow: Math.max(pr.additions, 0.5) }} />
                     <span style={{ height: 5, borderRadius: 3, background: T.brick, flexGrow: Math.max(pr.deletions, 0.5) }} />
                 </span>
                 <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>{r.total}</span>
-            </span>
+            </span>}
             <span style={{ flexGrow: 1, minWidth: 0, fontSize: 13.5, color: T.title, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {pr.isDraft && <span style={{ fontSize: 10, border: `1px solid ${T.keycapBorder}`, borderRadius: 5, padding: "1px 5px", marginRight: 8, color: T.muted }}>draft</span>}
                 {pr.title}
                 {r.qualifier && <span style={{ fontSize: 11, color: r.qualifier.brick ? T.brick : T.muted }}> — {r.qualifier.text}</span>}
             </span>
-            <span style={{ width: 150, flexShrink: 0, textAlign: "right", fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>
+            <span style={{ width: compact ? 120 : 150, flexShrink: 0, textAlign: "right", fontFamily: T.mono, fontSize: 10.5, color: T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {r.repoShort} #{pr.number}
             </span>
         </div>

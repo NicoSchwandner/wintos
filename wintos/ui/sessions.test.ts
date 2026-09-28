@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { closeWarning, liveSessions, nextWaiting, stripSessions } from "./sessions";
+import { closeWarning, liveSessions, nextNeedsYou, nextWaiting, stripSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
 
@@ -63,5 +63,24 @@ describe("closeWarning", () => {
 
     test("nothing to lose means no question", () => {
         expect(closeWarning([s("d", "t1", "ended"), s("c", "t2", "working")], "t1")).toBeNull();
+    });
+});
+
+describe("nextNeedsYou", () => {
+    test("a waiting session comes first", () => {
+        expect(nextNeedsYou([s("a", "t2", "waiting")], ["t1", "t2"], "t1", undefined, ["t3"])).toEqual({ tabId: "t2", blockId: "b-a" });
+    });
+
+    test("with none waiting, the next project in Needs you (a PR that needs you), cycling", () => {
+        expect(nextNeedsYou([], ["t1", "t2", "t3"], "t1", undefined, ["t2", "t3"])).toEqual({ tabId: "t2" });
+        expect(nextNeedsYou([], ["t1", "t2", "t3"], "t3", undefined, ["t2", "t3"])).toEqual({ tabId: "t2" });
+    });
+
+    test("the open project as the only one in Needs you is still the answer (back to its terminals)", () => {
+        expect(nextNeedsYou([], ["t1"], "t1", undefined, ["t1"])).toEqual({ tabId: "t1" });
+    });
+
+    test("nothing needs you, nowhere to go", () => {
+        expect(nextNeedsYou([], ["t1"], "t1", undefined, [])).toBeNull();
     });
 });

@@ -1,6 +1,11 @@
 import { join } from "path";
 import type { Project } from "./projects/store";
 
+// WintOS shows a session whose turn ended as waiting on the developer; this is how Claude says
+// it is waiting on something else instead.
+const WAIT_RULE =
+    'If you end a turn waiting on something outside the conversation (CI, a review, a deploy, a background job), run `wintos wait "<what, e.g. CI on #123>"` just before you stop, so WintOS does not show the turn as waiting on the developer.';
+
 // The text a UserPromptSubmit hook adds to Claude's context. It is re-sent on every prompt so
 // the project survives /compact, and mine.md edits made mid-session are seen on the next one.
 export function injection(project: Project | undefined, mine: { text: string; diff?: string }): string {
@@ -14,7 +19,8 @@ export function injection(project: Project | undefined, mine: { text: string; di
     }
     if (!project || !project.title) {
         parts.push(
-            'This WintOS project has no title yet. Run `wintos title "<3-6 words naming the work>"` now. It creates the project folder and names the tab.'
+            'This WintOS project has no title yet. Run `wintos title "<3-6 words naming the work>"` now. It creates the project folder and names the tab.',
+            WAIT_RULE
         );
         return parts.join("\n\n");
     }
@@ -32,7 +38,8 @@ Do not rewrite it when nothing changed.
   ## Built: \`- [x]\` done, \`- [~]\` partial, \`- [ ]\` todo.
   ## Open questions: one bullet each; end the one blocking progress with \`(blocking)\`.
   Use \`backticks\` for code. Under ~40 lines; replace, don't append.
-- mine.md is the developer's. Read it, never write it. It outranks your own conclusions.`);
+- mine.md is the developer's. Read it, never write it. It outranks your own conclusions.
+- ${WAIT_RULE}`);
     parts.push(`mine.md:\n${mine.text}`);
     parts.push(`project.md:\n${project.error ? `(unreadable: ${project.error})` : project.body ?? ""}`);
     return parts.join("\n\n");

@@ -4,7 +4,8 @@ import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, isDev } from "@/store/global";
 import { editMine, focusArea, focusedSession, latestSessions, toggleOverlay } from "./focus";
 import { closeWarning } from "./sessions";
-import { mainViewAtom, overlayAtom, panelNameAtom, renamingAtom, type MainView } from "./notes/state";
+import { mainViewAtom, overlayAtom, panelNameAtom, prCopiedAtom, prTabsAtom, renamingAtom, type MainView } from "./notes/state";
+import { closeTab, stepTab } from "./prtabs";
 import { switchProject } from "./switcher";
 import { pluginPanels } from "./panels";
 import { currentState } from "./useWintos";
@@ -48,6 +49,11 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:t", "session"],
     ["Shift:Cmd:w", "close-project"],
     ["Cmd:e", "edit-mine"],
+    ["Cmd:ArrowLeft", "browser-back"],
+    ["Cmd:ArrowRight", "browser-forward"],
+    ["Option:Cmd:ArrowLeft", "tab-prev"],
+    ["Option:Cmd:ArrowRight", "tab-next"],
+    ["Shift:Cmd:c", "browser-copy-url"],
     ["Shift:Cmd:p", "palette"],
     ["Shift:Cmd:k", "keymap"],
     ["Shift:Cmd:j", "notes"],
@@ -64,7 +70,29 @@ function focusedBlockView(): string | undefined {
     return blockId ? globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId)))?.meta?.view : undefined;
 }
 
+// ⌘←/⌘→ and ⌥⌘←/⌥⌘→ act on the PR browser only while it is shown; elsewhere they stay line
+// start/end in terminals and back/forward in Wave's web blocks.
+function prBrowserKey(action: string): boolean {
+    if (globalStore.get(mainViewAtom) !== "prs" || !globalStore.get(prTabsAtom).urls.length) return false;
+    if (action === "tab-prev" || action === "tab-next") {
+        globalStore.set(prTabsAtom, (t) => stepTab(t, action === "tab-next" ? 1 : -1));
+        return true;
+    }
+    const wv = document.querySelector<Electron.WebviewTag>("[data-wintos=pr-browser] webview[data-active]");
+    if (action === "browser-copy-url") {
+        const url = wv?.getURL();
+        if (!url) return true;
+        // Through emain: navigator.clipboard refuses while the focus is inside the page.
+        getApi().writeClipboard(url);
+        globalStore.set(prCopiedAtom, true);
+        setTimeout(() => globalStore.set(prCopiedAtom, false), 1500);
+    } else if (action === "browser-back") wv?.goBack();
+    else wv?.goForward();
+    return true;
+}
+
 export function runKey(action: string): boolean {
+    if (action.startsWith("browser-") || action.startsWith("tab-")) return prBrowserKey(action);
     // ⌘R in a browser pane stays its reload.
     if (action === "rename" && document.activeElement?.tagName === "WEBVIEW") return false;
     // ⌘E in a file preview stays its edit toggle.
@@ -95,6 +123,30 @@ export function runAction(action: string): void {
     }
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);
     if (b) createBlock(b.def, false, b.ephemeral);
+}
+
+// ⌘W inside a WintOS view acts on the view: the terminals are hidden behind it, and Wave's
+// close would kill the focused one unseen.
+export function wintosClose(): boolean {
+    const view = globalStore.get(mainViewAtom);
+    if (view === "terminal") return false;
+    if (view === "prs" && globalStore.get(prTabsAtom).urls.length) {
+        globalStore.set(prTabsAtom, (t) => closeTab(t, t.active));
+        document.querySelector<HTMLElement>("[data-wintos=pr-queue]")?.focus();
+        return true;
+    }
+    focusArea("terminal");
+    return true;
+}
+
+// Esc forwarded out of a page inside a WintOS view hands focus back to that view (its list).
+export function wintosEscape(): boolean {
+    const el = document.activeElement;
+    if (el?.tagName !== "WEBVIEW") return false;
+    const view = el.closest<HTMLElement>("[data-wintos][tabindex]");
+    if (!view) return false;
+    view.focus();
+    return true;
 }
 
 // ⇧⌘W: asks first when Claude sessions would stop; ⇧⌘W again confirms.

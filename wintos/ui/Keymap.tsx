@@ -7,11 +7,11 @@ import { T } from "./tokens";
 // Only keys that exist. KeymapC lists a few more from the spec that are not built yet.
 const SECTIONS: [string, [string, string][]][] = [
     ["Projects", [["⌘J / ⌘K", "hold ⌘, tap to walk all projects, release to switch"], ["⌘N", "new project"], ["⌘R", "rename this project"], ["⇧⌘W", "close this project (asks first while Claude runs)"]]],
-    ["Sessions", [["⌃⇥", "next session waiting on you"], ["⌘T / ⇧⌘T", "new terminal · new Claude session"], ["⌃⇧H J K L", "move between panes"], ["⌘W / ⌘M", "close · magnify the focused pane"]]],
+    ["Sessions", [["⌃⇥", "next that needs you: a waiting session, else a project"], ["⌘T / ⇧⌘T", "new terminal · new Claude session"], ["⌃⇧H J K L", "move between panes"], ["⌘W / ⌘M", "close · magnify the focused pane"]]],
     ["Open", [["⇧⌘P", "everything, including dropped projects"], ["⇧⌘J", "notes, full width"], ["⇧⌘G", "PRs by action"], ["⇧⌘O", "plugin panel (on call)"], ["⇧⌘K", "this card"]]],
     ["Focus", [["⌘2 / ⌘3", "terminal · notes rail"], ["esc", "out of a view, back to the terminal"]]],
     ["Notes", [["⌘E", "edit mine.md, the only file you write"], ["⌘⏎ / esc", "save · discard"]]],
-    ["Queues", [["j / k", "row"], ["⏎ / o", "open the PR · go to its project"], ["1 / 2", "panel: focus a pane"], ["r", "resync now"]]],
+    ["Queues", [["j / k", "row"], ["⏎ / o", "open the PR in a tab · go to its project"], ["⌘← / ⌥⌘← →", "PR tab back · switch tabs"], ["⇧⌘C", "copy the PR tab's url"], ["1 / 2", "panel: focus a pane"], ["r", "resync now"]]],
 ];
 
 export const Keymap = memo(() => {

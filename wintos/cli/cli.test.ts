@@ -72,7 +72,10 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         writeFileSync(join(dir, "wsh"), `#!/bin/sh\nprintf '%s\\n' "$*" >> "${dir}/calls"\n`, { mode: 0o755 });
         return { dir, calls: () => (require("fs").existsSync(join(dir, "calls")) ? readFileSync(join(dir, "calls"), "utf8") : "") };
     };
-    const env = (dir: string, extra: Record<string, string> = {}) => ({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "blk", WAVETERM_WSHBINDIR: dir, WINTOS_PORT: "1", ...extra });
+    // What Claude Code gives the hooks of an interactive session: it marks everything it
+    // spawns as a child session, its own hooks included.
+    const CLAUDE_HOOK_ENV = { CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_CHILD_SESSION: "1" };
+    const env = (dir: string, extra: Record<string, string> = {}) => ({ ...CLAUDE_HOOK_ENV, WAVETERM_TABID: "t", WAVETERM_BLOCKID: "blk", WAVETERM_WSHBINDIR: dir, WINTOS_PORT: "1", ...extra });
 
     test("a prompt sets cmd:initscript to resume this session in its directory", () => {
         const w = fakeWsh();
@@ -98,14 +101,11 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/Users/n/work' && claude --resume 's-1'\n`);
     });
 
-    test.each([["CLAUDE_CODE_ENTRYPOINT", "sdk-cli"], ["CLAUDE_CODE_CHILD_SESSION", "1"]])(
-        "a headless or nested Claude (%s=%s) never takes over the block's resume command",
-        (k, v) => {
-            const w = fakeWsh();
-            runHook(env(w.dir, { [k]: v }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "throwaway", cwd: "/x" }));
-            expect(w.calls()).toBe("");
-        }
-    );
+    test("a headless `claude -p` run from inside the session never takes over the block's resume command", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir, { CLAUDE_CODE_ENTRYPOINT: "sdk-cli" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "throwaway", cwd: "/x" }));
+        expect(w.calls()).toBe("");
+    });
 
     test("SessionStart does not, since Claude saves nothing to resume before the first prompt", () => {
         const w = fakeWsh();
@@ -199,5 +199,22 @@ describe("wintos title", () => {
         const r = spawnSync(CLI, ["title", "x"], { env: { PATH: process.env.PATH! }, encoding: "utf8" });
         expect(r.status).toBe(1);
         expect(r.stderr).toContain("no WAVETERM_TABID");
+    });
+});
+
+describe("wintos wait", () => {
+    test("parks this block's session on what it waits for", async () => {
+        const d = await fakeDaemon("");
+        const out = await new Promise<string>((resolve) =>
+            require("child_process").execFile(CLI, ["wait", "CI", "on", "#1479"], { env: { ...process.env, WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+        );
+        expect(out.trim()).toBe("waiting on: CI on #1479");
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/wait", body: { reason: "CI on #1479" } });
+    });
+
+    test("outside WintOS it explains instead of guessing", () => {
+        const r = spawnSync(CLI, ["wait", "x"], { env: { PATH: process.env.PATH! }, encoding: "utf8" });
+        expect(r.status).toBe(1);
+        expect(r.stderr).toContain("no WAVETERM_BLOCKID");
     });
 });

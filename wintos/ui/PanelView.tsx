@@ -3,6 +3,7 @@ import { focusArea } from "./focus";
 import { useAtomValue } from "jotai";
 import { memo, useRef } from "react";
 import { Key } from "./Key";
+import { Webview } from "./Webview";
 import { panelNameAtom } from "./notes/state";
 import { pluginPanels } from "./panels";
 import { T } from "./tokens";
@@ -18,7 +19,8 @@ export const PanelView = memo(() => {
     const name = useAtomValue(panelNameAtom);
     const panes = useRef<(HTMLElement | null)[]>([]);
     const panel = state ? pluginPanels(state).find((p) => p.name === name) : undefined;
-    if (!panel) return <div style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, background: "#171413" }}>This panel is not available right now.</div>;
+    const loading = !panel && !!state?.pluginNames?.includes(name) && !state.plugins?.[name];
+    if (!panel) return <div style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, background: "#171413" }}>{loading ? "Loading… the plugin's first run is still going." : "This panel is not available right now."}</div>;
     const withUrl = panel.counts.filter((c) => c.url);
     const resync = () => daemonFetch(`/plugins/${encodeURIComponent(panel.name)}/run`, { method: "POST", body: {} }).catch(() => {});
     return (
@@ -62,8 +64,7 @@ export const PanelView = memo(() => {
                 {withUrl.map((c, i) => (
                     <div key={c.url} style={{ flexGrow: 1, flexBasis: 0, display: "flex", flexDirection: "column", border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden" }}>
                         <div style={{ padding: "7px 12px", fontFamily: T.mono, fontSize: 10.5, color: T.muted, background: T.sidebar, borderBottom: `1px solid ${T.border}`, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.url}</div>
-                        {/* The default session, like Wave's web blocks, so browser logins are shared. */}
-                        <webview ref={(el: HTMLElement | null) => void (panes.current[i] = el)} src={c.url} style={{ flexGrow: 1 }} />
+                        <Webview ref={(el) => void (panes.current[i] = el)} src={c.url} />
                     </div>
                 ))}
             </div>

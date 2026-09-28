@@ -35,3 +35,9 @@ export function pluginPanels(state: WintosState): Panel[] {
 export function cardValue(counts: Pick<PanelCount, "label" | "count">[]): { value: string; note: string } {
     return { value: counts.map((c) => (c.count == null ? "?" : String(c.count))).join("·"), note: counts.map((c) => c.label).join(" · ") };
 }
+
+// Plugins still on their first run: shown as loading cards instead of not at all. gh-prs has
+// its own card. The title comes from the last run the UI saw (kept by the caller).
+export function loadingPanels(state: WintosState, lastTitles: Record<string, string>): { name: string; title: string }[] {
+    return (state.pluginNames ?? []).filter((n) => n !== "gh-prs" && !state.plugins?.[n]).map((name) => ({ name, title: lastTitles[name] ?? name }));
+}

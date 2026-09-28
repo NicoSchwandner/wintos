@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { normalize, type Node } from "./normalize";
+import { linkStacks, normalize, orgQualifier, type Node } from "./normalize";
 
 const node = (n: Partial<Node> = {}): Node => ({
     number: 7, title: "Add flag", url: "https://github.com/o/r/pull/7", isDraft: false,
@@ -49,5 +49,30 @@ describe("normalize", () => {
             reviewRequests: { nodes: [{ requestedReviewer: { __typename: "Team", name: "team-core" } }] },
         }), "me", { requestedMe: false, requestedTeam: true });
         expect([p.reviewers, p.conflict, p.checks]).toEqual([["team-core"], true, undefined]);
+    });
+});
+
+describe("orgQualifier", () => {
+    test("limits the searches to the configured orgs", () => {
+        expect(orgQualifier("acme")).toBe("org:acme");
+        expect(orgQualifier(" acme, globex ")).toBe("org:acme org:globex");
+    });
+
+    test("unset or empty searches everywhere", () => {
+        expect(orgQualifier(undefined)).toBe("");
+        expect(orgQualifier(" , ")).toBe("");
+    });
+});
+
+describe("stacks", () => {
+    test("the base branch and the repo's default come through", () => {
+        const p = normalize(node({ baseRefName: "feature-a", repository: { nameWithOwner: "o/r", defaultBranchRef: { name: "development" } } }), "me", { requestedMe: false, requestedTeam: false });
+        expect([p.base, p.defaultBranch]).toEqual(["feature-a", "development"]);
+    });
+
+    test("a PR on another open PR's branch points at that PR", () => {
+        const pr = (url: string, branch: string, base: string, repo = "o/r") => normalize(node({ url, headRefName: branch, baseRefName: base, repository: { nameWithOwner: repo, defaultBranchRef: { name: "main" } } }), "me", { requestedMe: false, requestedTeam: false });
+        const out = linkStacks([pr("u1", "a", "main"), pr("u2", "b", "a"), pr("u3", "c", "a", "o/other")]);
+        expect(out.map((p) => p.stackedOn)).toEqual([undefined, "u1", undefined]);
     });
 });

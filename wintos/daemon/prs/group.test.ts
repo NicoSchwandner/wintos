@@ -106,3 +106,19 @@ describe("projectPrs", () => {
     test("an approved PR reads as approved", () =>
         expect(projectPrs({ pr: [], title: "DEV-9" }, [pr({ number: 4, title: "DEV-9", reviewDecision: "APPROVED", checks: "PENDING", createdAt: "2026-09-28T08:00:00Z" })], "me", MON).reason).toBe("#4 approved"));
 });
+
+describe("groupOf a stacked PR", () => {
+    const ready = { reviewDecision: "APPROVED" as const, checks: "SUCCESS", author: "me" };
+
+    test("approved and green on another PR's branch is not Merge: merging would land on that branch", () => {
+        expect(groupOf(pr({ ...ready, base: "feature-a", defaultBranch: "development" }), "me", MON)).not.toBe("merge");
+    });
+
+    test("on the default branch it is Merge as before", () => {
+        expect(groupOf(pr({ ...ready, base: "development", defaultBranch: "development" }), "me", MON)).toBe("merge");
+    });
+
+    test("stacked but needing a fix is still Fix", () => {
+        expect(groupOf(pr({ checks: "FAILURE", base: "feature-a", defaultBranch: "development" }), "me", MON)).toBe("fix");
+    });
+});

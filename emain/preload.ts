@@ -43,6 +43,9 @@ contextBridge.exposeInMainWorld("api", {
     onMenuItemAbout: (callback) => ipcRenderer.on("menu-item-about", callback),
     getWintosToken: () => ipcRenderer.sendSync("wintos-token"),
     onWintosMenu: (callback) => ipcRenderer.on("wintos-menu", (_e, action) => callback(action)),
+    writeClipboard: (text) => ipcRenderer.send("wintos-clipboard", text),
+    registerWintosWebview: (webContentsId) => ipcRenderer.send("wintos-register-webview", webContentsId),
+    onWintosOpenTab: (callback) => ipcRenderer.on("wintos-open-tab", (_e, url) => callback(url)),
     updateWindowControlsOverlay: (rect) => ipcRenderer.send("update-window-controls-overlay", rect),
     onReinjectKey: (callback) => ipcRenderer.on("reinject-key", (_event, waveEvent) => callback(waveEvent)),
     setWebviewFocus: (focused: number) => ipcRenderer.send("webview-focus", focused),
@@ -80,7 +83,9 @@ contextBridge.exposeInMainWorld("api", {
 // Custom event for "new-window"
 ipcRenderer.on("webview-new-window", (e, webContentsId, details) => {
     const event = new CustomEvent("new-window", { detail: details });
-    document.getElementById("webview").dispatchEvent(event);
+    // WintOS: to the webview that asked (several can live in one tab), else Wave's own.
+    const target = document.querySelector(`webview[data-webcontentsid='${webContentsId}']`) ?? document.getElementById("webview");
+    target?.dispatchEvent(event);
 });
 
 ipcRenderer.on("webcontentsid-from-blockid", (e, blockId, responseCh) => {

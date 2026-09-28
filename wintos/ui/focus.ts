@@ -2,7 +2,7 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { atoms, getApi } from "@/store/global";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import type { Session } from "../daemon/sessions/reduce";
-import { nextWaiting, Target } from "./sessions";
+import { nextNeedsYou, Target } from "./sessions";
 import { editingMineAtom, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
 
 // Every Wave tab runs in its own renderer, so a renderer can only magnify blocks of its own
@@ -11,8 +11,8 @@ import { editingMineAtom, mainViewAtom, overlayAtom, type Overlay } from "./note
 const HANDOFF = "wintos:focus";
 const HANDOFF_TTL_MS = 5000;
 
-let latest: { sessions: Session[]; tabIds: string[] } = { sessions: [], tabIds: [] };
-export const setLatestSessions = (sessions: Session[], tabIds: string[]) => (latest = { sessions, tabIds });
+let latest: { sessions: Session[]; tabIds: string[]; needs: string[] } = { sessions: [], tabIds: [], needs: [] };
+export const setLatestSessions = (sessions: Session[], tabIds: string[], needs: string[]) => (latest = { sessions, tabIds, needs });
 export const latestSessions = () => latest.sessions;
 
 export function magnifyBlock(blockId: string): boolean {
@@ -26,7 +26,9 @@ export function magnifyBlock(blockId: string): boolean {
 
 export function focusSession(t: Target): void {
     if (t.tabId === globalStore.get(atoms.staticTabId)) {
-        magnifyBlock(t.blockId);
+        globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
+        if (t.blockId) magnifyBlock(t.blockId);
+        else focusArea("terminal");
         return;
     }
     localStorage.setItem(HANDOFF, JSON.stringify({ ...t, at: Date.now() }));
@@ -39,7 +41,10 @@ export function takeHandoff(): void {
     const t = JSON.parse(raw) as Target & { at: number };
     if (t.tabId !== globalStore.get(atoms.staticTabId)) return;
     localStorage.removeItem(HANDOFF);
-    if (Date.now() - t.at < HANDOFF_TTL_MS) magnifyBlock(t.blockId);
+    if (Date.now() - t.at >= HANDOFF_TTL_MS) return;
+    globalStore.set(mainViewAtom, "terminal");
+    if (t.blockId) magnifyBlock(t.blockId);
+    else focusArea("terminal");
 }
 
 export function focusedSession(): Session | undefined {
@@ -96,7 +101,9 @@ export function closeOverlay(): void {
 export function jumpToNextWaiting(): boolean {
     const lm = getLayoutModelForStaticTab();
     const current = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
-    const t = nextWaiting(latest.sessions, latest.tabIds, globalStore.get(atoms.staticTabId), current);
-    if (t) focusSession(t);
+    const active = globalStore.get(atoms.staticTabId);
+    const t = nextNeedsYou(latest.sessions, latest.tabIds, active, current, latest.needs);
+    // A project in Needs you for its PR has no session to magnify: just its terminals.
+    if (t) focusSession("blockId" in t ? t : { tabId: t.tabId, blockId: "" });
     return true;
 }

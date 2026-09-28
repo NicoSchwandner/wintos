@@ -4,7 +4,7 @@ import type { Project } from "../daemon/projects/store";
 import { projectPrs, type PR, type ProjectPrs } from "../daemon/prs/group";
 import type { Session } from "../daemon/sessions/reduce";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult> };
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[] };
 export type Tone = "apricot" | "brick" | "secondary";
 export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
 
@@ -50,7 +50,11 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
         if (!sessionWaiting && prs?.blocked) return { title, next: prs.blocked.text, tone: prs.blocked.tone, age, meta };
         return { title, next: project?.next ?? "Your turn", tone: "apricot", age, meta };
     }
-    if (row.band === "running") return { title, next: project?.next ?? "Claude is working", tone: "secondary", age, meta };
+    if (row.band === "running") {
+        // Parked beats the next action: it is the live reason nobody needs to act.
+        const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
+        return { title, next: parkedOn ? `Waiting on ${parkedOn}` : (project?.next ?? "Claude is working"), tone: "secondary", age, meta };
+    }
     return { title, age, reason: prs?.reason ?? meta ?? age };
 }
 

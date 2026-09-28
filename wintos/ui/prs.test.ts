@@ -36,3 +36,31 @@ describe("queueModel", () => {
 describe("initials", () => {
     test.each([["ana.b", "AB"], ["JaneDoe", "JD"], ["p-ek", "PE"], ["x", "X"]])("%s → %s", (login, out) => expect(initials(login)).toBe(out));
 });
+
+describe("queueModel with a stack (#101 on development ← #102 ← #103)", () => {
+    const stack = (p101: Partial<PR>, p102: Partial<PR>, p103: Partial<PR>) => [
+        pr({ number: 101, url: "u101", branch: "a", base: "development", defaultBranch: "development", ...p101 }),
+        pr({ number: 102, url: "u102", branch: "b", base: "a", defaultBranch: "development", stackedOn: "u101", reviewDecision: "APPROVED", checks: "SUCCESS", ...p102 }),
+        pr({ number: 103, url: "u103", branch: "c", base: "b", defaultBranch: "development", stackedOn: "u102", reviewDecision: "APPROVED", checks: "SUCCESS", ...p103 }),
+    ];
+    const shape = (m: ReturnType<typeof queueModel>) =>
+        m.groups.map((g) => [g.group, g.rows.map(function tree(r): unknown { return r.children.length ? [r.pr.number, r.children.map(tree)] : r.pr.number; })]);
+
+    test("the base needs a fix: the waiting PRs sit under it, one level per step", () => {
+        const m = queueModel(stack({ checks: "FAILURE" }, {}, {}), "me", MON);
+        expect(shape(m)).toEqual([["fix", [[101, [[102, [103]]]]]]]);
+        expect(m.groups[0].rows[0].children[0].qualifier?.text).toBe("merges after #101");
+    });
+
+    test("the tail needs a fix: it gets its own row in Fix, noting its base", () => {
+        const m = queueModel(stack({ reviewDecision: "APPROVED", checks: "SUCCESS" }, {}, { reviewDecision: "CHANGES_REQUESTED" }), "me", MON);
+        expect(shape(m)).toEqual([["merge", [[101, [102]]]], ["fix", [103]]]);
+        expect(m.groups[1].rows[0].qualifier?.text).toBe("changes requested · stacked on #102");
+    });
+
+    test("a base PR outside the list: the stacked PR stays a row, never in Merge", () => {
+        const m = queueModel([pr({ number: 7, base: "someone-else", defaultBranch: "development", reviewDecision: "APPROVED", checks: "SUCCESS" })], "me", MON);
+        expect(m.groups.map((g) => g.group)).not.toContain("merge");
+        expect(m.groups[0].rows[0].qualifier?.text).toBe("stacked on someone-else");
+    });
+});

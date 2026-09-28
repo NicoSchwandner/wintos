@@ -20,6 +20,7 @@ import {
     shNavHandler,
 } from "./emain-util";
 import { ElectronWshClient } from "./emain-wsh";
+import { watchWintosNavigation, wintosOpenTab } from "./emain-wintos-webview";
 
 function handleWindowsMenuAccelerators(
     waveEvent: WaveKeyboardEvent,
@@ -319,9 +320,11 @@ export async function getOrCreateWebViewForTab(waveWindowId: string, tabId: stri
             if (wc == null || wc.isDestroyed() || tabView.webContents == null || tabView.webContents.isDestroyed()) {
                 return { action: "deny" };
             }
+            if (wintosOpenTab(wc, tabView.webContents, details.url)) return { action: "deny" };
             tabView.webContents.send("webview-new-window", wc.id, details);
             return { action: "deny" };
         });
+        watchWintosNavigation(wc, tabView.webContents);
     });
     tabView.webContents.on("before-input-event", (e, input) => {
         const waveEvent = adaptFromElectronKeyEvent(input);

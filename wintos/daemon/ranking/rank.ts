@@ -28,6 +28,6 @@ function rowOf(tabId: string, sessions: Session[], touchedAt: number, prBlockedS
     const lastAt = Math.max(touchedAt, ...sessions.map((s) => s.lastAt), 0);
     const since = [...sessions.filter((s) => s.state === "waiting").map((s) => s.since), ...(prBlockedSince !== undefined ? [prBlockedSince] : [])];
     if (since.length) return { tabId, band: "needs", lastAt, sessions, waitingSince: Math.min(...since) };
-    if (sessions.some((s) => s.state === "working")) return { tabId, band: "running", lastAt, sessions };
+    if (sessions.some((s) => s.state === "working" || s.state === "parked")) return { tabId, band: "running", lastAt, sessions };
     return { tabId, band: "quiet", lastAt, sessions };
 }

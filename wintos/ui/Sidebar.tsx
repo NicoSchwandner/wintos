@@ -19,7 +19,7 @@ import { setProjectTitle, useWintos } from "./useWintos";
 import { ghPrs, isPlaceholderTab, prsByTab, rowView, RowView, sidebarModel } from "./view";
 import { queueModel } from "./prs";
 import { openPanel, toggleView } from "./menu";
-import { cardValue, pluginPanels } from "./panels";
+import { cardValue, loadingPanels, pluginPanels } from "./panels";
 
 const BAND_STYLE = {
     needs: { label: "Needs you", color: T.apricot },
@@ -53,6 +53,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const gh = state ? ghPrs(state) : undefined;
     const queue = gh ? queueModel(gh.prs, gh.me, now) : null;
     const panels = state ? pluginPanels(state) : [];
+    const loading = state ? loadingPanels(state, lastPanelTitles(panels)) : [];
+    const running = new Set(state?.pluginsRunning ?? []);
     const project = (tabId: string) => state?.projects.find((p) => p.id === tabId);
     // The open tab is always visible even when it is stale; walking with ⌘J/⌘K or renaming
     // (the row must exist to hold the input) shows them all.
@@ -67,7 +69,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-tabid="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
 
     useEffect(() => {
-        if (state) setLatestSessions(state.sessions, tabIds);
+        if (state) setLatestSessions(state.sessions, tabIds, model?.needs.map((r) => r.tabId) ?? []);
     }, [state, tabIds.join(",")]);
 
     // The project title is the source of truth; the tab name follows it.
@@ -131,13 +133,18 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 data-wintos="sidebar-list"
                 style={{ flexGrow: 1, overflowY: "auto", padding: "4px 12px 12px", display: "flex", flexDirection: "column", gap: 18 }}
             >
-                {(queue || panels.length > 0) && (
+                {state && (
                     <div style={{ display: "flex", gap: 8 }}>
-                        {queue && <SummaryCard label="PRs" value={String(queue.yours)} note={queue.pastSla ? `${queue.pastSla} past SLA` : "nothing late"} noteColor={queue.pastSla ? T.brick : T.muted} onClick={() => toggleView("prs")} />}
+                        {queue ? (
+                            <SummaryCard label="PRs" value={String(queue.yours)} note={running.has("gh-prs") ? "updating…" : queue.pastSla ? `${queue.pastSla} past SLA` : "nothing late"} noteColor={queue.pastSla ? T.brick : T.muted} onClick={() => toggleView("prs")} />
+                        ) : (
+                            <SummaryCard label="PRs" value="…" note="loading from GitHub" noteColor={T.faint} onClick={() => toggleView("prs")} />
+                        )}
                         {panels.map((p) => {
                             const c = cardValue(p.counts);
-                            return <SummaryCard key={p.name} label={p.title} value={c.value} note={c.note} noteColor={p.error || p.counts.some((x) => x.count == null) ? T.brick : T.muted} onClick={() => openPanel(p.name)} />;
+                            return <SummaryCard key={p.name} label={p.title} value={c.value} note={running.has(p.name) ? "updating…" : c.note} noteColor={p.error || p.counts.some((x) => x.count == null) ? T.brick : T.muted} onClick={() => openPanel(p.name)} />;
                         })}
+                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} value="…" note="loading" noteColor={T.faint} onClick={() => openPanel(p.name)} />)}
                     </div>
                 )}
                 {offline || !model ? (
@@ -289,6 +296,21 @@ function DateTime() {
             {d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).toLowerCase()} · {d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
         </>
     );
+}
+
+// A panel's title from its last run, so after a restart its loading card says "On call", not
+// the plugin's file name. Per-viewer convenience, so browser storage.
+const TITLES_KEY = "wintos:panel-titles";
+function lastPanelTitles(panels: { name: string; title: string }[]): Record<string, string> {
+    let saved: Record<string, string> = {};
+    try {
+        saved = JSON.parse(localStorage.getItem(TITLES_KEY) ?? "{}");
+        const now = Object.fromEntries(panels.map((p) => [p.name, p.title]));
+        if (panels.some((p) => saved[p.name] !== p.title)) localStorage.setItem(TITLES_KEY, JSON.stringify({ ...saved, ...now }));
+        return { ...saved, ...now };
+    } catch {
+        return saved;
+    }
 }
 
 function SummaryCard({ label, value, note, noteColor, onClick }: { label: string; value: string; note: string; noteColor: string; onClick: () => void }) {

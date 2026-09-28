@@ -71,3 +71,11 @@ describe("rank", () => {
         expect(r.needs).toEqual([]);
     });
 });
+
+describe("parked sessions", () => {
+    test("a session parked on CI runs; it is not waiting on you", () => {
+        const r = rank(["t1"], [s("t1", "parked", NOW - 1000)], NOW);
+        expect(r.running.map((x) => x.tabId)).toEqual(["t1"]);
+        expect(r.needs).toEqual([]);
+    });
+});

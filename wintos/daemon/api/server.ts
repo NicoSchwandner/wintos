@@ -5,7 +5,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { injection } from "../inject";
 import { Plugin, PluginRunner } from "../plugins/runner";
 import { ProjectStore } from "../projects/store";
-import { HookEvent, reduceSession, Session } from "../sessions/reduce";
+import { HookEvent, parkSession, reduceSession, Session } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -31,6 +31,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         sessions: [...sessions.values()],
         projects: store.list().map(({ body: _body, ...p }) => p),
         plugins: runner.results,
+        pluginNames: runner.names,
+        pluginsRunning: runner.running,
     });
     const broadcast = () => {
         const frame = JSON.stringify(state());
@@ -117,6 +119,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const r = store.saveMine(decodeURIComponent(mine[1]), b.text, typeof b.baseMtime === "number" ? b.baseMtime : undefined);
                 if (r === "no project") return send(res, 404, "no project for this tab");
                 if (r === "conflict") return send(res, 409, "mine.md changed on disk since you started editing");
+                return send(res, 200, "");
+            }
+            const wait = /^\/blocks\/([^/]+)\/wait$/.exec(url.pathname);
+            if (req.method === "POST" && wait) {
+                const blockId = decodeURIComponent(wait[1]);
+                const b = (await body(req)) as { reason?: unknown };
+                const reason = typeof b?.reason === "string" ? b.reason.trim() : "";
+                if (!isSafe(blockId) || !reason || !isSafe(reason) || reason.length > MAX_TITLE)
+                    return send(res, 400, `need a one-line reason up to ${MAX_TITLE} characters`);
+                sessions = parkSession(sessions, blockId, reason, Date.now());
+                broadcast();
                 return send(res, 200, "");
             }
             const title = /^\/projects\/([^/]+)\/title$/.exec(url.pathname);

@@ -20,7 +20,16 @@ export class PluginRunner {
     // finishing late can't overwrite a newer result.
     private inFlight = new Map<string, Promise<boolean>>();
 
-    constructor(private plugins: Plugin[], private onResult: () => void) {}
+    // onChange fires when a run starts and when it ends, so `running` is always current.
+    constructor(private plugins: Plugin[], private onChange: () => void) {}
+
+    get names(): string[] {
+        return this.plugins.map((p) => p.name);
+    }
+
+    get running(): string[] {
+        return [...this.inFlight.keys()];
+    }
 
     start(): void {
         for (const p of this.plugins) {
@@ -38,8 +47,9 @@ export class PluginRunner {
         if (!p) return Promise.resolve(false);
         const running = this.inFlight.get(name);
         if (running) return running;
-        const run = this.spawn(p).finally(() => this.inFlight.delete(name));
+        const run = this.spawn(p).finally(() => (this.inFlight.delete(name), this.onChange()));
         this.inFlight.set(name, run);
+        this.onChange();
         return run;
     }
 
@@ -62,7 +72,6 @@ export class PluginRunner {
                         }
                     }
                     this.results[name] = result;
-                    this.onResult();
                     resolve(true);
                 }
             );

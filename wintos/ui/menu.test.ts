@@ -1,5 +1,7 @@
-import { describe, expect, test } from "vitest";
-import { blockDefFor, newSessionScript } from "./menu";
+import { describe, expect, test, vi } from "vitest";
+import { globalStore } from "@/app/store/jotaiStore";
+import { blockDefFor, newSessionScript, runKey, wintosClose } from "./menu";
+import { mainViewAtom, prTabsAtom } from "./notes/state";
 
 const widgets = {
     "defwidget@terminal": { blockdef: { meta: { view: "term", controller: "shell" } } },
@@ -33,5 +35,47 @@ describe("newSessionScript", () => {
 
     test("with no session to copy from it just starts Claude", () => {
         expect(newSessionScript(undefined)).toBe("claude");
+    });
+});
+
+describe("wintosClose", () => {
+    test("⌘W with PRs open beside the queue closes the shown tab, not a hidden pane", () => {
+        vi.stubGlobal("document", { querySelector: () => null });
+        globalStore.set(mainViewAtom, "prs");
+        globalStore.set(prTabsAtom, { urls: ["https://github.com/acme/api/pull/1", "https://github.com/acme/api/pull/2"], active: 1 });
+        expect(wintosClose()).toBe(true);
+        expect(globalStore.get(prTabsAtom)).toEqual({ urls: ["https://github.com/acme/api/pull/1"], active: 0 });
+    });
+
+    test("in the terminals ⌘W stays Wave's close", () => {
+        globalStore.set(mainViewAtom, "terminal");
+        expect(wintosClose()).toBe(false);
+    });
+});
+
+describe("runKey for the PR browser", () => {
+    test("⇧⌘C copies the shown tab's current address", async () => {
+        // Through emain: navigator.clipboard refuses while the focus is inside the page.
+        const writeText = vi.fn();
+        vi.stubGlobal("window", { api: { writeClipboard: writeText } });
+        vi.stubGlobal("document", { querySelector: () => ({ getURL: () => "https://github.com/acme/api/pull/2/files" }) });
+        globalStore.set(mainViewAtom, "prs");
+        globalStore.set(prTabsAtom, { urls: ["https://github.com/acme/api/pull/2"], active: 0 });
+        expect(runKey("browser-copy-url")).toBe(true);
+        expect(writeText).toHaveBeenCalledWith("https://github.com/acme/api/pull/2/files");
+    });
+
+    test("⌥⌘→ steps the PR tabs while the queue is shown", () => {
+        globalStore.set(mainViewAtom, "prs");
+        globalStore.set(prTabsAtom, { urls: ["https://github.com/acme/api/pull/1", "https://github.com/acme/api/pull/2"], active: 0 });
+        expect(runKey("tab-next")).toBe(true);
+        expect(globalStore.get(prTabsAtom).active).toBe(1);
+    });
+
+    test("elsewhere ⌘← and ⌥⌘← stay the terminal's and Wave's", () => {
+        globalStore.set(mainViewAtom, "terminal");
+        expect(runKey("browser-back")).toBe(false);
+        expect(runKey("tab-prev")).toBe(false);
+        expect(runKey("browser-copy-url")).toBe(false);
     });
 });

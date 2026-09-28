@@ -1,8 +1,9 @@
 import { useFocusOnMount } from "./useFocusOnMount";
-import { useAtomValue, useSetAtom } from "jotai";
+import { focusArea } from "./focus";
+import { useAtomValue } from "jotai";
 import { memo, useRef } from "react";
 import { Key } from "./Key";
-import { mainViewAtom, panelNameAtom } from "./notes/state";
+import { panelNameAtom } from "./notes/state";
 import { pluginPanels } from "./panels";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
@@ -15,7 +16,6 @@ export const PanelView = memo(() => {
     const { state } = useWintos();
     const now = useNow();
     const name = useAtomValue(panelNameAtom);
-    const setView = useSetAtom(mainViewAtom);
     const panes = useRef<(HTMLElement | null)[]>([]);
     const panel = state ? pluginPanels(state).find((p) => p.name === name) : undefined;
     if (!panel) return <div style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, background: "#171413" }}>This panel is not available right now.</div>;
@@ -30,7 +30,7 @@ export const PanelView = memo(() => {
                 const n = Number(e.key);
                 if (n >= 1 && n <= withUrl.length) panes.current[n - 1]?.focus();
                 else if (e.key === "r" && !e.repeat) void resync();
-                else if (e.key === "Escape") setView("terminal");
+                else if (e.key === "Escape") focusArea("terminal");
                 else return;
                 e.preventDefault();
             }}

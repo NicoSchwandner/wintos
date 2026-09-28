@@ -53,3 +53,9 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     if (row.band === "running") return { title, next: project?.next ?? "Claude is working", tone: "secondary", age, meta };
     return { title, age, reason: prs?.reason ?? meta ?? age };
 }
+
+// The tab wcore leaves when the last project closes (a window can't hold zero tabs). It is
+// not a project until a pane opens in it.
+export function isPlaceholderTab(tab: Tab | undefined): boolean {
+    return tab?.meta?.["wintos:blank"] === true && !tab.blockids?.length;
+}

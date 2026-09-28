@@ -1,35 +1,34 @@
 import { useFocusOnMount } from "./useFocusOnMount";
-import { useSetAtom } from "jotai";
 import { memo } from "react";
-import { overlayAtom } from "./notes/state";
+import { closeOverlay } from "./focus";
 import { KEYCAP_FONT } from "./Key";
 import { T } from "./tokens";
 
 // Only keys that exist. KeymapC lists a few more from the spec that are not built yet.
 const SECTIONS: [string, [string, string][]][] = [
-    ["Anywhere", [["⌘K", "everything, including dropped projects"], ["⇧⌘K  ?", "this card"], ["⌘1 ⌘2 ⌘3", "sidebar · terminal · notes"], ["⇧⌘P", "PRs by action"], ["⇧⌘O", "plugin panel (on call)"]]],
-    ["Sidebar", [["j / k", "move, across bands"], ["⏎", "open project"], ["right-click", "open · rename · edit mine.md · close"]]],
-    ["Sessions", [["⌃⇥", "next session waiting on you"], ["⇧⌘N", "new session in this project"], ["⌘W", "close the focused block"], ["⌘M", "magnify the focused block"]]],
-    ["Notes", [["e", "edit mine.md, the only file you write"], ["⌘⏎ / esc", "save · discard"], ["⌘J", "both files, full width · again to close"]]],
+    ["Projects", [["⌘J / ⌘K", "hold ⌘, tap to walk all projects, release to switch"], ["⌘N", "new project"], ["⌘R", "rename this project"], ["⇧⌘W", "close this project (asks first while Claude runs)"]]],
+    ["Sessions", [["⌃⇥", "next session waiting on you"], ["⌘T / ⇧⌘T", "new terminal · new Claude session"], ["⌃⇧H J K L", "move between panes"], ["⌘W / ⌘M", "close · magnify the focused pane"]]],
+    ["Open", [["⇧⌘P", "everything, including dropped projects"], ["⇧⌘J", "notes, full width"], ["⇧⌘G", "PRs by action"], ["⇧⌘O", "plugin panel (on call)"], ["⇧⌘K", "this card"]]],
+    ["Focus", [["⌘2 / ⌘3", "terminal · notes rail"], ["esc", "out of a view, back to the terminal"]]],
+    ["Notes", [["⌘E", "edit mine.md, the only file you write"], ["⌘⏎ / esc", "save · discard"]]],
     ["Queues", [["j / k", "row"], ["⏎ / o", "open the PR · go to its project"], ["1 / 2", "panel: focus a pane"], ["r", "resync now"]]],
 ];
 
 export const Keymap = memo(() => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
-    const setOverlay = useSetAtom(overlayAtom);
     return (
-        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(10,8,7,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setOverlay("")}>
+        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(10,8,7,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={closeOverlay}>
             <div
                 data-wintos="keymap"
                 tabIndex={0}
                 ref={focusRef}
-                onKeyDown={(e) => (e.key === "Escape" || e.key === "?") && (e.preventDefault(), setOverlay(""))}
+                onKeyDown={(e) => (e.key === "Escape" || e.key === "?") && (e.preventDefault(), closeOverlay())}
                 onClick={(e) => e.stopPropagation()}
                 style={{ width: 640, padding: "22px 26px", background: "#171413", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px 32px" }}
             >
                 <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "baseline", gap: 12 }}>
                     <span style={{ fontFamily: T.display, fontSize: 26, color: T.emphasis }}>Keys</span>
-                    <span style={{ fontSize: 11.5, color: T.muted }}>single letters act on the cursor · ⌘ keys work anywhere</span>
+                    <span style={{ fontSize: 11.5, color: T.muted }}>⌘ keys work anywhere · single letters act inside a view</span>
                 </div>
                 {SECTIONS.map(([name, keys]) => (
                     <div key={name} style={{ display: "flex", flexDirection: "column", gap: 7 }}>

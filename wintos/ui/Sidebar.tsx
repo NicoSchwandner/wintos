@@ -4,19 +4,19 @@ import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, getApi } from "@/store/global";
 import { fireAndForget } from "@/util/util";
-import { atom, useAtomValue } from "jotai";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { atom, useAtom, useAtomValue } from "jotai";
+import { memo, useEffect, useMemo, useState } from "react";
 import type { Row } from "../daemon/ranking/rank";
 import { Key } from "./Key";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
-import { setLatestSessions } from "./focus";
+import { editMine, focusArea, setLatestSessions } from "./focus";
+import { setSwitchOrder, switchTargetAtom } from "./switcher";
 import { registerWintosMenu } from "./menu";
-import { editingMineAtom, mainViewAtom, overlayAtom } from "./notes/state";
-import { globalStore } from "@/app/store/jotaiStore";
+import { renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
 import { setProjectTitle, useWintos } from "./useWintos";
-import { ghPrs, prsByTab, rowView, RowView, sidebarModel } from "./view";
+import { ghPrs, isPlaceholderTab, prsByTab, rowView, RowView, sidebarModel } from "./view";
 import { queueModel } from "./prs";
 import { openPanel, toggleView } from "./menu";
 import { cardValue, pluginPanels } from "./panels";
@@ -36,17 +36,17 @@ function useTabs(tabIds: string[]): Record<string, Tab | undefined> {
 }
 
 export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
-    const tabIds = workspace?.tabids ?? [];
+    const allTabIds = workspace?.tabids ?? [];
     const activeTabId = useAtomValue(atoms.staticTabId);
-    const tabs = useTabs(tabIds);
+    const tabs = useTabs(allTabIds);
+    const tabIds = allTabIds.filter((id) => !isPlaceholderTab(tabs[id]));
     const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
     const { state: raw, offline } = useWintos();
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
     const now = useNow();
     const [showAll, setShowAll] = useState(false);
-    const [cursor, setCursor] = useState(0);
-    const [renaming, setRenaming] = useState<string | null>(null);
-    const listRef = useRef<HTMLDivElement>(null);
+    const switchTarget = useAtomValue(switchTargetAtom);
+    const [renaming, setRenaming] = useAtom(renamingAtom);
 
     const model = state ? sidebarModel(tabIds, state) : null;
     const prsTab = state ? prsByTab(tabIds, state) : {};
@@ -54,13 +54,17 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const queue = gh ? queueModel(gh.prs, gh.me, now) : null;
     const panels = state ? pluginPanels(state) : [];
     const project = (tabId: string) => state?.projects.find((p) => p.id === tabId);
-    // Until ⌘K exists, "Show all" is the only way to reach a stale tab, and the open tab is
-    // always visible even when it is stale.
-    const activeStale = model?.quietStale.filter((r) => r.tabId === activeTabId && !showAll) ?? [];
-    const quiet = model ? (showAll ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
-    const order = model ? [...model.needs, ...model.running, ...quiet] : [];
+    // The open tab is always visible even when it is stale; walking with ⌘J/⌘K or renaming
+    // (the row must exist to hold the input) shows them all.
+    const expanded = showAll || switchTarget != null || renaming != null;
+    const activeStale = model?.quietStale.filter((r) => r.tabId === activeTabId && !expanded) ?? [];
+    const quiet = model ? (expanded ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
+    const switchOrder = model ? [...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId) : [];
 
     useEffect(registerWintosMenu, []);
+
+    useEffect(() => void setSwitchOrder(switchOrder), [switchOrder.join(",")]);
+    useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-tabid="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
 
     useEffect(() => {
         if (state) setLatestSessions(state.sessions, tabIds);
@@ -84,7 +88,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 {
                     label: "Edit mine.md",
                     enabled: tabId === activeTabId,
-                    click: () => (globalStore.set(mainViewAtom, "notes"), globalStore.set(editingMineAtom, true)),
+                    click: () => editMine(true),
                 },
                 { type: "separator" },
                 { label: "Close tab", click: () => fireAndForget(() => getApi().closeTab(workspace.oid, tabId, true)) },
@@ -92,16 +96,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             e
         );
     };
-    const onKey = (e: React.KeyboardEvent) => {
-        if (renaming || !order.length) return;
-        if (e.key === "?") return void (e.preventDefault(), globalStore.set(overlayAtom, "keymap"));
-        if (e.key === "j") setCursor((c) => Math.min(c + 1, order.length - 1));
-        else if (e.key === "k") setCursor((c) => Math.max(c - 1, 0));
-        else if (e.key === "Enter") open(order[Math.min(cursor, order.length - 1)].tabId);
-        else return;
-        e.preventDefault();
-    };
-
     const renderRow = (row: Row) => {
         const v = rowView(row, project(row.tabId), names[row.tabId], now, prsTab[row.tabId]);
         const props = {
@@ -109,13 +103,13 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             tabId: row.tabId,
             v,
             active: row.tabId === activeTabId,
-            cursor: order[cursor]?.tabId === row.tabId,
+            cursor: switchTarget === row.tabId,
             renaming: renaming === row.tabId,
             onOpen: () => open(row.tabId),
             onMenu: (e: React.MouseEvent) => menu(e, row.tabId),
             onRename: (title: string | null) => {
                 setRenaming(null);
-                listRef.current?.focus();
+                focusArea("terminal");
                 if (title?.trim()) fireAndForget(() => setProjectTitle(row.tabId, title.trim(), true));
             },
         };
@@ -128,17 +122,14 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                     <span style={{ fontFamily: T.display, fontSize: 21, lineHeight: 1 }}>WintOS</span>
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>
-                        {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).toLowerCase()}
+                        <DateTime />
                     </span>
                 </div>
                 <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{tabIds.length} {tabIds.length === 1 ? "project" : "projects"}</span>
             </div>
             <div
-                ref={listRef}
                 data-wintos="sidebar-list"
-                tabIndex={0}
-                onKeyDown={onKey}
-                style={{ flexGrow: 1, overflowY: "auto", padding: "4px 12px 12px", display: "flex", flexDirection: "column", gap: 18, outline: "none" }}
+                style={{ flexGrow: 1, overflowY: "auto", padding: "4px 12px 12px", display: "flex", flexDirection: "column", gap: 18 }}
             >
                 {(queue || panels.length > 0) && (
                     <div style={{ display: "flex", gap: 8 }}>
@@ -176,9 +167,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 )}
             </div>
             <div style={{ flexShrink: 0, height: 34, padding: "0 14px", display: "flex", alignItems: "center", gap: 16, borderTop: `1px solid ${T.hairline}`, fontSize: 11, color: T.faint }}>
-                <Key k="j k" label="move" />
-                <Key k="⏎" label="open" />
+                <Key k="⌘J ⌘K" label="switch" />
                 <Key k="⌃⇥" label="waiting" />
+                <Key k="⌘R" label="rename" />
             </div>
         </div>
     );
@@ -247,7 +238,7 @@ function CardRow(p: RowProps) {
                 cursor: "pointer",
                 borderRadius: 10,
                 background: p.active ? T.cardActive : T.card,
-                border: `1px solid ${p.active || p.cursor ? T.borderActive : T.border}`,
+                border: `1px solid ${p.cursor ? T.apricot : p.active ? T.borderActive : T.border}`,
             }}
         >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -280,7 +271,7 @@ function QuietRow(p: RowProps) {
                 cursor: "pointer",
                 borderRadius: 8,
                 background: p.active ? T.cardActive : "transparent",
-                border: `1px solid ${p.cursor ? T.borderActive : "transparent"}`,
+                border: `1px solid ${p.cursor ? T.apricot : "transparent"}`,
             }}
         >
             <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui }} />
@@ -289,6 +280,16 @@ function QuietRow(p: RowProps) {
     );
 }
 
+
+// Its own component so the per-second tick re-renders only this line, not the sidebar.
+function DateTime() {
+    const d = new Date(useNow(1_000));
+    return (
+        <>
+            {d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).toLowerCase()} · {d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
+        </>
+    );
+}
 
 function SummaryCard({ label, value, note, noteColor, onClick }: { label: string; value: string; note: string; noteColor: string; onClick: () => void }) {
     return (

@@ -1,24 +1,23 @@
 import { globalStore } from "@/app/store/jotaiStore";
 import { atoms, getApi } from "@/store/global";
-import { useSetAtom } from "jotai";
 import { memo, useMemo, useState } from "react";
-import { focusSession } from "./focus";
+import { closeOverlay, focusSession } from "./focus";
 import { runAction } from "./menu";
-import { mainViewAtom, overlayAtom } from "./notes/state";
+import { mainViewAtom } from "./notes/state";
 import { searchPalette, type PaletteItem } from "./palette-search";
 import { pluginPanels } from "./panels";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
-import { prsByTab, relTime, sidebarModel } from "./view";
+import { isPlaceholderTab, prsByTab, relTime, sidebarModel } from "./view";
+import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 
 const KIND_LABEL = { project: "Projects", session: "Sessions", action: "Do" } as const;
 
-// ⌘K: everything, including the projects the sidebar dropped (PaletteC).
+// ⇧⌘P: everything, including the projects the sidebar dropped (PaletteC).
 export const Palette = memo(({ names }: { names: Record<string, string | undefined> }) => {
     const { state } = useWintos();
     const now = useNow();
-    const setOverlay = useSetAtom(overlayAtom);
     const [q, setQ] = useState("");
     const [cursor, setCursor] = useState(0);
 
@@ -26,7 +25,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
         if (!state) return [];
         const ws = globalStore.get(atoms.workspace);
         const activeTab = globalStore.get(atoms.staticTabId);
-        const tabIds = ws?.tabids ?? [];
+        const tabIds = (ws?.tabids ?? []).filter((id) => !isPlaceholderTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))));
         const model = sidebarModel(tabIds, state);
         const title = (id: string) => state.projects.find((p) => p.id === id)?.title ?? names[id] ?? "Untitled";
         const band: Record<string, string> = {};
@@ -43,12 +42,15 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
             out.push({ id: `s:${s.id}`, kind: "session", title: s.label ?? "session", subtitle: `${s.state} · ${title(s.tabId)}`, run: () => focusSession({ tabId: s.tabId, blockId: s.blockId }) });
         const here = title(activeTab);
         const pr = prsByTab([activeTab], state)[activeTab]?.items[0]?.pr;
-        out.push({ id: "a:session", kind: "action", title: `New session in ${here}`, hint: "⇧⌘N", run: () => runAction("session") });
+        out.push({ id: "a:session", kind: "action", title: `New Claude session in ${here}`, hint: "⇧⌘T", run: () => runAction("session") });
+        out.push({ id: "a:terminal", kind: "action", title: `New terminal in ${here}`, hint: "⌘T", run: () => runAction("terminal") });
+        out.push({ id: "a:project", kind: "action", title: "New project", hint: "⌘N", run: () => runAction("project") });
+        out.push({ id: "a:rename", kind: "action", title: `Rename ${here}`, hint: "⌘R", run: () => runAction("rename") });
         if (pr) out.push({ id: "a:pr", kind: "action", title: `Open PR #${pr.number} in a browser pane`, hint: "", run: () => runAction(`open-url:${pr.url}`) });
-        out.push({ id: "a:notes", kind: "action", title: `Notes for ${here}`, hint: "⌘J", run: () => runAction("notes") });
-        out.push({ id: "a:prs", kind: "action", title: "PRs need attention", hint: "⇧⌘P", run: () => runAction("prs") });
+        out.push({ id: "a:notes", kind: "action", title: `Notes for ${here}`, hint: "⇧⌘J", run: () => runAction("notes") });
+        out.push({ id: "a:prs", kind: "action", title: "PRs need attention", hint: "⇧⌘G", run: () => runAction("prs") });
         for (const p of pluginPanels(state)) out.push({ id: `a:panel:${p.name}`, kind: "action", title: p.title, hint: "⇧⌘O", run: () => runAction(`panel:${p.name}`) });
-        out.push({ id: "a:close", kind: "action", title: `Close ${here}`, hint: "⇧⌘W", run: () => void getApi().closeTab(ws!.oid, activeTab, true) });
+        out.push({ id: "a:close", kind: "action", title: `Close ${here}`, hint: "⇧⌘W", run: () => runAction("close-project") });
         out.push({ id: "a:keys", kind: "action", title: "Keyboard shortcuts", hint: "⇧⌘K", run: () => runAction("keymap") });
         return out;
     }, [state, names]);
@@ -56,12 +58,12 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
     const results = searchPalette(items, q);
     const run = (i: PaletteItem | undefined) => {
         if (!i) return;
-        setOverlay("");
+        closeOverlay();
         i.run?.();
     };
     let lastKind = "";
     return (
-        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(10,8,7,0.55)", display: "flex", justifyContent: "center", paddingTop: "12vh" }} onClick={() => setOverlay("")}>
+        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(10,8,7,0.55)", display: "flex", justifyContent: "center", paddingTop: "12vh" }} onClick={closeOverlay}>
             <div
                 data-wintos="palette"
                 onClick={(e) => e.stopPropagation()}
@@ -76,7 +78,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                         onChange={(e) => (setQ(e.target.value), setCursor(0))}
                         onKeyDown={(e) => {
                             e.stopPropagation();
-                            if (e.key === "Escape") setOverlay("");
+                            if (e.key === "Escape") closeOverlay();
                             else if (e.key === "ArrowDown" || (e.key === "n" && e.ctrlKey)) setCursor((c) => Math.min(c + 1, results.length - 1));
                             else if (e.key === "ArrowUp" || (e.key === "p" && e.ctrlKey)) setCursor((c) => Math.max(c - 1, 0));
                             else if (e.key === "Enter") run(results[cursor]);

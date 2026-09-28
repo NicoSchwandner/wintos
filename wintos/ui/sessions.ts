@@ -28,3 +28,9 @@ export function nextWaiting(sessions: Session[], tabIds: string[], activeTabId: 
     const oldest = [...elsewhere].sort((a, b) => a.since - b.since)[0];
     return oldest ? { tabId: oldest.tabId, blockId: oldest.blockId } : null;
 }
+
+// ⇧⌘W asks first only when closing would stop Claude sessions; closing a tab kills its panes.
+export function closeWarning(sessions: Session[], tabId: string): string | null {
+    const n = sessions.filter((s) => s.tabId === tabId && s.state !== "ended").length;
+    return n ? `${n} Claude session${n === 1 ? "" : "s"} will stop` : null;
+}

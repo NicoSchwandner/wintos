@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { liveSessions, nextWaiting, stripSessions } from "./sessions";
+import { closeWarning, liveSessions, nextWaiting, stripSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
 
@@ -51,5 +51,17 @@ describe("liveSessions", () => {
 
     test("tabs the UI knows nothing about keep nothing", () => {
         expect(liveSessions([s("1", "gone", "waiting")], { t: ["b-1"] })).toEqual([]);
+    });
+});
+
+describe("closeWarning", () => {
+    test("names the Claude sessions a close would stop", () => {
+        const all = [s("a", "t1", "working"), s("b", "t1", "waiting"), s("c", "t2", "working"), s("d", "t1", "ended")];
+        expect(closeWarning(all, "t1")).toBe("2 Claude sessions will stop");
+        expect(closeWarning([s("a", "t1", "idle")], "t1")).toBe("1 Claude session will stop");
+    });
+
+    test("nothing to lose means no question", () => {
+        expect(closeWarning([s("d", "t1", "ended"), s("c", "t2", "working")], "t1")).toBeNull();
     });
 });

@@ -721,6 +721,12 @@ export class TermViewModel implements ViewModel {
                 event.stopPropagation();
                 return false;
             }
+            if (keyutil.checkKeyPressed(waveEvent, "Cmd:Backspace")) {
+                this.sendDataToController("\x15"); // Ctrl-U (delete the line), as in Terminal.app
+                event.preventDefault();
+                event.stopPropagation();
+                return false;
+            }
         }
         if (keyutil.checkKeyPressed(waveEvent, "Shift:Enter")) {
             const shiftEnterNewlineAtom = getOverrideConfigAtom(this.blockId, "term:shiftenternewline");
@@ -758,11 +764,6 @@ export class TermViewModel implements ViewModel {
                 sel = trimTerminalSelection(sel);
             }
             navigator.clipboard.writeText(sel);
-            return false;
-        } else if (keyutil.checkKeyPressed(waveEvent, "Cmd:k")) {
-            event.preventDefault();
-            event.stopPropagation();
-            this.termRef.current?.terminal?.clear();
             return false;
         }
         const shellProcStatus = globalStore.get(this.shellProcStatus);

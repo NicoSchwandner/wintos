@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { relTime, rowView, sidebarModel } from "./view";
+import { isPlaceholderTab, relTime, rowView, sidebarModel } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -83,5 +83,22 @@ describe("sidebarModel", () => {
     test("the project file's mtime counts as activity", () => {
         const m = sidebarModel(["a"], { now: NOW, sessions: [], projects: [{ id: "a", dir: "/p", mtime: NOW - 5 }] });
         expect(m.quiet[0].lastAt).toBe(NOW - 5);
+    });
+});
+
+describe("isPlaceholderTab", () => {
+    const tab = (meta: Record<string, unknown>, blockids: string[] = []) => ({ meta, blockids }) as unknown as Tab;
+
+    test("the empty tab that stands in when no project is open", () => {
+        expect(isPlaceholderTab(tab({ "wintos:blank": true }))).toBe(true);
+    });
+
+    test("becomes a project once a pane is opened in it", () => {
+        expect(isPlaceholderTab(tab({ "wintos:blank": true }, ["b1"]))).toBe(false);
+    });
+
+    test("an ordinary tab, or one not loaded yet, is a project", () => {
+        expect(isPlaceholderTab(tab({}))).toBe(false);
+        expect(isPlaceholderTab(undefined)).toBe(false);
     });
 });

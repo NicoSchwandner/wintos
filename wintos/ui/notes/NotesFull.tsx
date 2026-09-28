@@ -1,27 +1,27 @@
 import { useFocusOnMount } from "../useFocusOnMount";
-import { useAtom } from "jotai";
+import { editMine, focusArea } from "../focus";
+import { useAtomValue } from "jotai";
 import { memo } from "react";
 import { T } from "../tokens";
 import { Mine } from "./Mine";
 import { Key } from "../Key";
 import { ProjectNotes } from "./ProjectNotes";
-import { editingMineAtom, mainViewAtom } from "./state";
+import { editingMineAtom } from "./state";
 import { useNotes } from "./useNotes";
 
-// ⌘J: both files full width, side by side (NotesC).
+// ⇧⌘J: both files full width, side by side (NotesC).
 export const NotesFull = memo(({ tabId }: { tabId: string }) => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     const { notes, project, save } = useNotes(tabId);
-    const [editing, setEditing] = useAtom(editingMineAtom);
-    const [, setView] = useAtom(mainViewAtom);
+    const editing = useAtomValue(editingMineAtom);
     return (
         <div
             data-wintos="notes-full"
             tabIndex={0}
             ref={focusRef}
             onKeyDown={(e) => {
-                if (e.key === "e" && !editing && notes) (e.preventDefault(), setEditing(true));
-                if (e.key === "Escape" && !editing) setView("terminal");
+                if (e.key === "e" && !editing && notes) (e.preventDefault(), editMine(true));
+                if (e.key === "Escape" && !editing) focusArea("terminal");
             }}
             style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#171413", outline: "none", fontFamily: T.ui, minWidth: 0 }}
         >
@@ -30,7 +30,7 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 30, fontWeight: 400, lineHeight: 1, color: T.emphasis }}>{project?.title ?? "Untitled"}</h1>
                     <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>{notes?.dir ?? "no project folder yet"}</span>
                 </div>
-                <Key k="⌘J" label="back to the terminal" />
+                <Key k="esc" label="back to the terminal" />
             </div>
             <div style={{ flexGrow: 1, padding: "0 26px 20px", display: "flex", gap: 20, overflow: "hidden" }}>
                 <div style={{ flexGrow: 1, flexBasis: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -55,7 +55,7 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
                                 <Key k="esc" label="discard" />
                             </>
                         ) : (
-                            <Key k="e" label="edit mine.md" />
+                            <Key k="⌘E" label="edit mine.md" />
                         )}
                     </div>
                     <div style={{ marginTop: 14, padding: "11px 13px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, fontSize: 11.5, lineHeight: 1.6, color: T.muted }}>

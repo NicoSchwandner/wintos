@@ -1,4 +1,5 @@
-import { useAtom } from "jotai";
+import { useAtomValue } from "jotai";
+import { editMine } from "../focus";
 import { useEffect, useRef, useState } from "react";
 import { T } from "../tokens";
 import { editingMineAtom } from "./state";
@@ -18,7 +19,7 @@ export function Mine({
     save: (t: string, baseMtime: number) => Promise<SaveResult>;
     size: "rail" | "full";
 }) {
-    const [editing, setEditing] = useAtom(editingMineAtom);
+    const editing = useAtomValue(editingMineAtom);
     const [draft, setDraft] = useState(text);
     const [error, setError] = useState<string | null>(null);
     // The version the edit started from; a save against anything newer is refused.
@@ -38,11 +39,11 @@ export function Mine({
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={async (e) => {
                         e.stopPropagation();
-                        if (e.key === "Escape") setEditing(false);
+                        if (e.key === "Escape") editMine(false);
                         if (e.key === "Enter" && e.metaKey) {
                             e.preventDefault();
                             const r = await save(draft, base);
-                            if (r === "ok") setEditing(false);
+                            if (r === "ok") editMine(false);
                             else if (r === "conflict")
                                 setError(
                                     "mine.md changed on disk while you edited. Copy your text, press esc and edit again."

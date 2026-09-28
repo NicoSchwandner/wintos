@@ -4,6 +4,7 @@
 import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { FocusManager } from "@/app/store/focusManager";
 import { jumpToNextWaiting } from "@/wintos/ui/focus";
+import { runKey, WINTOS_KEYS } from "@/wintos/ui/menu";
 import {
     atoms,
     createBlock,
@@ -162,12 +163,7 @@ function uxCloseBlock(blockId: string) {
     const blockData = globalStore.get(blockAtom);
     const isAIFileDiff = blockData?.meta?.view === "aifilediff";
 
-    // If this is the last block, closing it will close the tab — route through simpleCloseStaticTab
-    // so the tab:confirmclose setting is respected.
-    if (getStaticTabBlockCount() === 1) {
-        simpleCloseStaticTab();
-        return;
-    }
+    // WintOS: closing the last pane leaves the project open and empty (pkg/wcore DeleteBlock).
 
     const layoutModel = getLayoutModelForStaticTab();
     const node = layoutModel.getNodeByBlockId(blockId);
@@ -202,18 +198,8 @@ function genericClose() {
             }
         }
     }
-    const blockCount = getStaticTabBlockCount();
-    if (blockCount === 0) {
-        simpleCloseStaticTab();
-        return;
-    }
-
-    // If this is the last block, closing it will close the tab — route through simpleCloseStaticTab
-    // so the tab:confirmclose setting is respected.
-    if (blockCount === 1) {
-        simpleCloseStaticTab();
-        return;
-    }
+    // WintOS: ⌘W never closes a project, not even an empty one; that is ⇧⌘W.
+    if (getStaticTabBlockCount() === 0) return;
 
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
@@ -748,6 +734,9 @@ function registerGlobalKeys() {
         WorkspaceLayoutModel.getInstance().setAIPanelVisible(!currentVisible);
         return true;
     });
+    // WintOS: the sidebar replaces the tab bar, so ⌘1–9 no longer mean "tab N".
+    for (let idx = 1; idx <= 9; idx++) globalKeyMap.delete(`Cmd:${idx}`);
+    for (const [key, action] of WINTOS_KEYS) globalKeyMap.set(key, () => runKey(action));
     const allKeys = Array.from(globalKeyMap.keys());
     // special case keys, handled by web view
     allKeys.push("Cmd:l", "Cmd:r", "Cmd:ArrowRight", "Cmd:ArrowLeft", "Cmd:o");
@@ -791,6 +780,7 @@ export {
     appHandleKeyDown,
     disableGlobalKeybindings,
     enableGlobalKeybindings,
+    getDefaultNewBlockDef,
     getSimpleControlShiftAtom,
     globalRefocus,
     globalRefocusWithTimeout,

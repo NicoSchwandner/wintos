@@ -1,4 +1,5 @@
 import { useFocusOnMount } from "./useFocusOnMount";
+import { focusArea } from "./focus";
 import { globalStore } from "@/app/store/jotaiStore";
 import { atoms, createBlock, getApi } from "@/store/global";
 import { useSetAtom } from "jotai";
@@ -20,7 +21,7 @@ const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
     team: { label: "The team's", note: "not yours to move, useful to know", color: T.muted },
 };
 
-// ⇧⌘P: every PR that concerns you, grouped by the action it asks of you (spec §4, PRQueueC).
+// ⇧⌘G: every PR that concerns you, grouped by the action it asks of you (spec §4, PRQueueC).
 export const PrQueue = memo(() => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     const { state } = useWintos();
@@ -60,7 +61,7 @@ export const PrQueue = memo(() => {
                 else if (e.key === "Enter" && r) openPr(r);
                 else if (e.key === "o" && r) goToProject(r);
                 else if (e.key === "r" && !e.repeat) void refresh();
-                else if (e.key === "Escape") setView("terminal");
+                else if (e.key === "Escape") focusArea("terminal");
                 else return;
                 e.preventDefault();
             }}
@@ -96,7 +97,7 @@ export const PrQueue = memo(() => {
                 <Key k="j k" label="row" />
                 <Key k="⏎" label="open in browser pane" />
                 <Key k="o" label="go to project" />
-                <Key k="⇧⌘P" label="back" />
+                <Key k="esc" label="back" />
             </div>
         </div>
     );

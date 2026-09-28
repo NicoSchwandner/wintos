@@ -23,7 +23,19 @@ describe("queueModel", () => {
             ["merge", [1]], ["fix", [2]], ["review", [3]], ["chase", [4]], ["team", [5]],
         ]));
 
-    test("header counts: yours are the four you act on, team is the rest", () => expect([m.yours, m.team]).toEqual([4, 1]));
+    test("header counts: yours are the four you act on, team is the rest", () => expect([m.yours, m.waiting, m.team]).toEqual([4, 0, 1]));
+
+    test("your PRs waiting on others count as waiting, not yours", () => {
+        const w = queueModel([pr({ number: 6, reviewers: ["ana"] })], "me", MON);
+        expect([w.groups.map((g) => g.group), w.yours, w.waiting]).toEqual([["waiting"], 0, 1]);
+    });
+
+    test("a stacked PR names a snoozed base by its number", () => {
+        const base = pr({ number: 20, url: "u20", branch: "a", base: "main", defaultBranch: "main", reviewDecision: "APPROVED", checks: "SUCCESS" });
+        const top = pr({ number: 21, url: "u21", branch: "b", base: "a", defaultBranch: "main", stackedOn: "u20", checks: "FAILURE" });
+        const w = queueModel([base, top], "me", MON, { u20: { until: MON + 1, movedAt: base.createdAt } });
+        expect(w.groups[0].rows[0].qualifier?.text).toBe("CI red · stacked on #20");
+    });
 
     test("past SLA counts chases and late reviews", () => expect(m.pastSla).toBe(2));
 
@@ -79,5 +91,20 @@ describe("queueModel with snoozes", () => {
         const m = queueModel([{ ...fix, lastReviewAt: "2026-09-28T08:30:00Z" }], "me", MON, { u9: { until: MON + 1, movedAt: "2026-09-28T08:00:00Z" } });
         expect(m.groups.map((g) => g.group)).toEqual(["fix"]);
         expect(m.snoozed).toEqual([]);
+    });
+});
+
+describe("queueModel order", () => {
+    test("within a group the longest-waiting PR comes first, not just late before on time", () => {
+        const m = queueModel(
+            [
+                pr({ number: 1, author: "ana", createdAt: "2026-09-27T09:00:00Z" }),
+                pr({ number: 2, author: "ana", createdAt: "2026-09-20T09:00:00Z" }),
+                pr({ number: 3, author: "ana", createdAt: "2026-09-25T09:00:00Z" }),
+            ],
+            "me",
+            MON
+        );
+        expect(m.groups[0].rows.map((r) => r.pr.number)).toEqual([2, 3, 1]);
     });
 });

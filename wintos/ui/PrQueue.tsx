@@ -21,6 +21,7 @@ const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
     fix: { label: "Fix", note: "your PR, ball in your court", color: T.apricot },
     review: { label: "Review", note: "someone asked you", color: T.title },
     chase: { label: "Chase", note: "past the team's two working days with nobody on it", color: T.brick },
+    waiting: { label: "Waiting", note: "yours, with someone else", color: T.muted },
     team: { label: "The team's", note: "not yours to move, useful to know", color: T.muted },
 };
 
@@ -84,7 +85,7 @@ export const PrQueue = memo(() => {
             <div style={{ padding: "18px 26px 16px", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 30, fontWeight: 400, lineHeight: 1, color: T.emphasis }}>PRs need attention</h1>
-                    {model && <span style={{ fontSize: 12, color: T.muted }}>{model.yours} yours · {model.team} team</span>}
+                    {model && <span style={{ fontSize: 12, color: T.muted }}>{model.yours} yours · {model.waiting} waiting · {model.team} team</span>}
                 </div>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11, color: result && !result.ok ? T.brick : T.faint }}>
                     {refreshing ? "refreshing…" : result ? (result.ok ? `GitHub · ${relTime(now - result.at)} ago` : `GitHub failed ${relTime(now - result.at)} ago: ${result.error}`) : "fetching from GitHub…"}

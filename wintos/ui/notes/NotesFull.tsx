@@ -1,4 +1,5 @@
 import { useFocusOnMount } from "../useFocusOnMount";
+import { isPlainKey } from "../keys";
 import { editMine, focusArea } from "../focus";
 import { useAtomValue } from "jotai";
 import { memo } from "react";
@@ -8,20 +9,25 @@ import { Key } from "../Key";
 import { ProjectNotes } from "./ProjectNotes";
 import { editingMineAtom } from "./state";
 import { useNotes } from "./useNotes";
+import { openProjectPr, PrList } from "./PrList";
+import { useWintos } from "../useWintos";
 
 // ⇧⌘J: both files full width, side by side (NotesC).
 export const NotesFull = memo(({ tabId }: { tabId: string }) => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     const { notes, project, save } = useNotes(tabId);
     const editing = useAtomValue(editingMineAtom);
+    const { state } = useWintos();
     return (
         <div
             data-wintos="notes-full"
             tabIndex={0}
             ref={focusRef}
             onKeyDown={(e) => {
+                if (!isPlainKey(e) && e.key !== "Escape") return;
                 if (e.key === "e" && !editing && notes) (e.preventDefault(), editMine(true));
                 if (e.key === "Escape" && !editing) focusArea("terminal");
+                if (!editing && /^[1-9]$/.test(e.key) && openProjectPr(tabId, state, Number(e.key))) e.preventDefault();
             }}
             style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#171413", outline: "none", fontFamily: T.ui, minWidth: 0 }}
         >
@@ -35,7 +41,8 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
             <div style={{ flexGrow: 1, padding: "0 26px 20px", display: "flex", gap: 20, overflow: "hidden" }}>
                 <div style={{ flexGrow: 1, flexBasis: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
                     <Header name="project.md" note="the sessions write this · rendered, not editable here" />
-                    <div style={{ paddingTop: 18, overflowY: "auto" }}>
+                    <div style={{ paddingTop: 18, overflowY: "auto", display: "flex", flexDirection: "column", gap: 18 }}>
+                        <PrList tabId={tabId} size="full" />
                         {notes?.projectMd == null ? (
                             <span style={{ fontSize: 13.5, color: notes ? T.brick : T.faint }}>{notes ? "project.md is unreadable. The next prompt asks Claude to repair it." : "No notes yet."}</span>
                         ) : (

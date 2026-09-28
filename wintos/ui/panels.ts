@@ -32,8 +32,9 @@ export function pluginPanels(state: WintosState): Panel[] {
     return out;
 }
 
-export function cardValue(counts: Pick<PanelCount, "label" | "count">[]): { value: string; note: string } {
-    return { value: counts.map((c) => (c.count == null ? "?" : String(c.count))).join("·"), note: counts.map((c) => c.label).join(" · ") };
+export type CardStat = { value: string; label: string };
+export function cardValue(counts: Pick<PanelCount, "label" | "count">[]): CardStat[] {
+    return counts.map((c) => ({ value: c.count == null ? "?" : String(c.count), label: c.label }));
 }
 
 // Plugins still on their first run: shown as loading cards instead of not at all. gh-prs has

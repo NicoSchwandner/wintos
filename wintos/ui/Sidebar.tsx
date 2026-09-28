@@ -19,7 +19,7 @@ import { setProjectTitle, useWintos } from "./useWintos";
 import { ghPrs, isPlaceholderTab, prsByTab, rowView, RowView, sidebarModel } from "./view";
 import { queueModel } from "./prs";
 import { openPanel, toggleView } from "./menu";
-import { cardValue, loadingPanels, pluginPanels } from "./panels";
+import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 
 const BAND_STYLE = {
     needs: { label: "Needs you", color: T.apricot },
@@ -136,15 +136,16 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 {state && (
                     <div style={{ display: "flex", gap: 8 }}>
                         {queue ? (
-                            <SummaryCard label="PRs" value={String(queue.yours)} note={running.has("gh-prs") ? "updating…" : queue.pastSla ? `${queue.pastSla} past SLA` : "nothing late"} noteColor={queue.pastSla ? T.brick : T.muted} onClick={() => toggleView("prs")} />
+                            <SummaryCard label="PRs" stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={running.has("gh-prs") ? "updating…" : queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={running.has("gh-prs") ? T.faint : T.brick} onClick={() => toggleView("prs")} />
                         ) : (
-                            <SummaryCard label="PRs" value="…" note="loading from GitHub" noteColor={T.faint} onClick={() => toggleView("prs")} />
+                            <SummaryCard label="PRs" stats={[]} note="loading from GitHub" noteColor={T.faint} onClick={() => toggleView("prs")} />
                         )}
                         {panels.map((p) => {
                             const c = cardValue(p.counts);
-                            return <SummaryCard key={p.name} label={p.title} value={c.value} note={running.has(p.name) ? "updating…" : c.note} noteColor={p.error || p.counts.some((x) => x.count == null) ? T.brick : T.muted} onClick={() => openPanel(p.name)} />;
+                            const failed = p.error || p.counts.some((x) => x.count == null);
+                            return <SummaryCard key={p.name} label={p.title} stats={c} note={running.has(p.name) ? "updating…" : failed ? "couldn't fetch everything" : undefined} noteColor={running.has(p.name) ? T.faint : T.brick} onClick={() => openPanel(p.name)} />;
                         })}
-                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} value="…" note="loading" noteColor={T.faint} onClick={() => openPanel(p.name)} />)}
+                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} stats={[]} note="loading" noteColor={T.faint} onClick={() => openPanel(p.name)} />)}
                     </div>
                 )}
                 {offline || !model ? (
@@ -313,14 +314,21 @@ function lastPanelTitles(panels: { name: string; title: string }[]): Record<stri
     }
 }
 
-function SummaryCard({ label, value, note, noteColor, onClick }: { label: string; value: string; note: string; noteColor: string; onClick: () => void }) {
+// A title over its numbers, each number stacked on its own label; the note is only for what
+// the numbers can't say (late, updating, loading).
+function SummaryCard({ label, stats, note, noteColor, onClick }: { label: string; stats: CardStat[]; note?: string; noteColor: string; onClick: () => void }) {
     return (
-        <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#1E1A18", border: "1px solid #2E2825", borderRadius: 10, display: "flex", flexDirection: "column", gap: 5, cursor: "pointer" }}>
-            <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 11.5, fontWeight: 600, color: T.secondary }}>{label}</span>
-                <span style={{ fontFamily: T.display, fontSize: 22, lineHeight: 1, color: T.text }}>{value}</span>
+        <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#1E1A18", border: "1px solid #2E2825", borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer" }}>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: T.secondary }}>{label}</span>
+            <span style={{ display: "flex", gap: 18 }}>
+                {stats.map((s) => (
+                    <span key={s.label} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <span style={{ fontFamily: T.display, fontSize: 24, lineHeight: 1, color: T.text }}>{s.value}</span>
+                        <span style={{ fontFamily: T.mono, fontSize: 9.5, color: T.muted }}>{s.label}</span>
+                    </span>
+                ))}
             </span>
-            <span style={{ fontFamily: T.mono, fontSize: 9.5, color: noteColor }}>{note}</span>
+            {note && <span style={{ fontFamily: T.mono, fontSize: 9.5, color: noteColor }}>{note}</span>}
         </div>
     );
 }

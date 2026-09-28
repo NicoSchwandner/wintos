@@ -1,4 +1,5 @@
 import { useFocusOnMount } from "./useFocusOnMount";
+import { isPlainKey } from "./keys";
 import { focusArea } from "./focus";
 import { globalStore } from "@/app/store/jotaiStore";
 import { atoms, getApi } from "@/store/global";
@@ -16,13 +17,13 @@ import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { ghPrs, prsByTab, relTime } from "./view";
 
-const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
+export const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
     merge: { label: "Merge", note: "approved, green, waiting on the button", color: T.moss },
     fix: { label: "Fix", note: "your PR, ball in your court", color: T.apricot },
     review: { label: "Review", note: "someone asked you", color: T.title },
     chase: { label: "Chase", note: "past the team's two working days with nobody on it", color: T.brick },
     waiting: { label: "Waiting", note: "yours, with someone else", color: T.muted },
-    team: { label: "The team's", note: "not yours to move, useful to know", color: T.muted },
+    team: { label: "The team's", note: "asked of your team: yours to review too", color: T.muted },
 };
 
 // ⇧⌘G: every PR that concerns you, grouped by the action it asks of you (spec §4, PRQueueC).
@@ -68,6 +69,7 @@ export const PrQueue = memo(() => {
             tabIndex={0}
             ref={focusRef}
             onKeyDown={(e) => {
+                if (!isPlainKey(e) && e.key !== "Escape") return;
                 const r = flat[Math.min(cursor, flat.length - 1)];
                 if (e.key === "j") setCursor((c) => Math.min(c + 1, flat.length - 1));
                 else if (e.key === "k") setCursor((c) => Math.max(c - 1, 0));

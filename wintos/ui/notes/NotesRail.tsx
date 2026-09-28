@@ -1,4 +1,5 @@
 import { useAtomValue } from "jotai";
+import { isPlainKey } from "../keys";
 import { editMine } from "../focus";
 import { memo } from "react";
 import { Key } from "../Key";
@@ -7,17 +8,22 @@ import { Mine } from "./Mine";
 import { ProjectNotes } from "./ProjectNotes";
 import { editingMineAtom } from "./state";
 import { useNotes } from "./useNotes";
+import { openProjectPr, PrList } from "./PrList";
+import { useWintos } from "../useWintos";
 
 // The notes rail beside the terminal (MainC): next action, project.md, mine.md.
 export const NotesRail = memo(({ tabId }: { tabId: string }) => {
     const { notes, project, save } = useNotes(tabId);
     const editing = useAtomValue(editingMineAtom);
+    const { state } = useWintos();
     return (
         <div
             data-wintos="notes-rail"
             tabIndex={0}
             onKeyDown={(e) => {
+                if (!isPlainKey(e) && e.key !== "Escape") return;
                 if (e.key === "e" && !editing && notes) (e.preventDefault(), editMine(true));
+                else if (!editing && /^[1-9]$/.test(e.key) && openProjectPr(tabId, state, Number(e.key))) e.preventDefault();
             }}
             style={{ width: 352, flexShrink: 0, boxSizing: "border-box", padding: "12px 22px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", outline: "none", fontFamily: T.ui, borderLeft: `1px solid ${T.hairline}` }}
         >
@@ -27,6 +33,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
                     <span style={{ fontSize: 12.5, lineHeight: 1.55, color: "#EBDCCB" }}>{project.next}</span>
                 </div>
             )}
+            <PrList tabId={tabId} size="rail" />
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.secondary }}>project.md</span>

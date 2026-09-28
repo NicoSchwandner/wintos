@@ -24,6 +24,12 @@ export function magnifyBlock(blockId: string): boolean {
     return true;
 }
 
+export function focusBlock(blockId: string): void {
+    const lm = getLayoutModelForStaticTab();
+    const node = lm?.getNodeByBlockId(blockId);
+    if (node) lm.focusNode(node.id);
+}
+
 export function focusSession(t: Target): void {
     if (t.tabId === globalStore.get(atoms.staticTabId)) {
         globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden

@@ -38,8 +38,11 @@ describe("pluginPanels", () => {
 });
 
 describe("cardValue", () => {
-    test("counts joined with a dot, unknown ones as ?", () =>
-        expect(cardValue([{ label: "errors", count: 12 }, { label: "errands", count: null }])).toEqual({ value: "12·?", note: "errors · errands" }));
+    test("each count with its own label, unknown ones as ?", () =>
+        expect(cardValue([{ label: "errors", count: 12 }, { label: "errands", count: null }])).toEqual([
+            { value: "12", label: "errors" },
+            { value: "?", label: "errands" },
+        ]));
 });
 
 describe("loadingPanels", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { isPlaceholderTab, prsByTab, relTime, rowView, sidebarModel, type WintosState } from "./view";
+import { isPlaceholderTab, projectPrList, prsByTab, relTime, rowView, sidebarModel, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -123,5 +123,35 @@ describe("rowView after a restart", () => {
         const r: Row = { tabId: "t", band: "needs", lastAt: 1, waitingSince: 1, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "waiting", since: 1, lastAt: 1, restored: true }] };
         expect(rowView(r, { dir: "/p", mtime: 0, title: "X", pr: ["Core#1"] }, "T", 10).meta).toBe("Core#1 · not started, opens with the project");
         expect(rowView({ ...r, sessions: [{ ...r.sessions[0], restored: undefined }] }, { dir: "/p", mtime: 0, title: "X", pr: ["Core#1"] }, "T", 10).meta).toBe("Core#1");
+    });
+});
+
+describe("projectPrList (the notes' Pull requests section)", () => {
+    const base = { repo: "acme/api", title: "t", author: "me", isDraft: false, conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1 };
+    const p = (n: number, extra: object = {}) => ({ ...base, number: n, url: `https://github.com/acme/api/pull/${n}`, branch: `b${n}`, createdAt: "2026-09-25T08:00:00Z", ...extra });
+    const st = (prs: object[], snoozes = {}) =>
+        ({ now: Date.parse("2026-09-28T09:00:00Z"), sessions: [], projects: [{ id: "t1", title: "x", titleLocked: false, pr: ["acme/api#1", "acme/api#2", "acme/api#3"], dir: "/d", mtime: 0 }], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs } } }, snoozes }) as unknown as WintosState;
+
+    test("the project's PRs, most urgent group first, with what each one waits on", () => {
+        const list = projectPrList(st([p(1, { reviewers: ["ana"] }), p(2, { checks: "FAILURE" }), p(3, { reviewDecision: "APPROVED", checks: "SUCCESS" })]), "t1");
+        expect(list.map((r) => [r.pr.number, r.group, r.note])).toEqual([
+            [3, "merge", undefined],
+            [2, "fix", "CI red"],
+            [1, "waiting", "waiting on ana"],
+        ]);
+    });
+
+    test("a snoozed one stays listed, marked, at the end; a stacked one names its base", () => {
+        const one = p(1, { reviewers: ["ana"] });
+        const two = p(2, { base: "b1", defaultBranch: "main", stackedOn: one.url, reviewDecision: "APPROVED", checks: "SUCCESS" });
+        const list = projectPrList(st([one, two], { [one.url]: { until: Date.parse("2026-09-29T00:00:00Z"), movedAt: one.createdAt } }), "t1");
+        expect(list.map((r) => [r.pr.number, r.snoozed, r.note])).toEqual([
+            [2, false, "stacked on #1"],
+            [1, true, "waiting on ana"],
+        ]);
+    });
+
+    test("no PR data yet, or no project, is an empty list", () => {
+        expect(projectPrList({ now: 0, sessions: [], projects: [] } as unknown as WintosState, "t1")).toEqual([]);
     });
 });

@@ -2,7 +2,7 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, isDev } from "@/store/global";
-import { editMine, focusArea, focusedSession, latestSessions, toggleOverlay } from "./focus";
+import { editMine, focusArea, focusBlock, focusedSession, latestSessions, toggleOverlay } from "./focus";
 import { closeWarning } from "./sessions";
 import { mainViewAtom, overlayAtom, panelNameAtom, prCopiedAtom, prTabsAtom, renamingAtom, type MainView } from "./notes/state";
 import { closeTab, stepTab } from "./prtabs";
@@ -114,6 +114,7 @@ export function runAction(action: string): void {
     if (action === "rename") return globalStore.set(renamingAtom, globalStore.get(atoms.staticTabId));
     if (action === "palette" || action === "keymap") return toggleOverlay(action);
     if (action.startsWith("focus-")) return focusArea(action.slice(6) as "terminal" | "notes");
+    if (action.startsWith("open-pr:")) return openPrHere(action.slice(8));
     if (action.startsWith("open-url:")) return void createBlock({ meta: { view: "web", url: action.slice(9) } });
     if (action.startsWith("panel:")) return openPanel(action.slice(6));
     if (action === "notes" || action === "prs") return toggleView(action);
@@ -147,6 +148,20 @@ export function wintosEscape(): boolean {
     if (!view) return false;
     view.focus();
     return true;
+}
+
+export function paneShowing(blocks: (Block | undefined)[], url: string): string | undefined {
+    return blocks.find((b) => b?.meta?.view === "web" && b.meta.url === url)?.oid;
+}
+
+// A PR from the project's notes or the palette opens in the project, beside its terminals; the
+// PR view keeps its own tabs. One pane per PR: open again, it is focused.
+function openPrHere(url: string): void {
+    globalStore.set(mainViewAtom, "terminal");
+    const tab = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))));
+    const shown = paneShowing((tab?.blockids ?? []).map((id) => globalStore.get(getWaveObjectAtom<Block>(makeORef("block", id)))), url);
+    if (shown) focusBlock(shown);
+    else void createBlock({ meta: { view: "web", url } });
 }
 
 // ⇧⌘W: asks first when Claude sessions would stop; ⇧⌘W again confirms.

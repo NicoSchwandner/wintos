@@ -1,4 +1,5 @@
 import { useFocusOnMount } from "./useFocusOnMount";
+import { isPlainKey } from "./keys";
 import { focusArea } from "./focus";
 import { useAtomValue } from "jotai";
 import { memo, useRef } from "react";
@@ -29,6 +30,7 @@ export const PanelView = memo(() => {
             tabIndex={0}
             ref={focusRef}
             onKeyDown={(e) => {
+                if (!isPlainKey(e) && e.key !== "Escape") return;
                 const n = Number(e.key);
                 if (n >= 1 && n <= withUrl.length) panes.current[n - 1]?.focus();
                 else if (e.key === "r" && !e.repeat) void resync();

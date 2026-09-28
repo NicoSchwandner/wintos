@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { globalStore } from "@/app/store/jotaiStore";
-import { blockDefFor, newSessionScript, runKey, wintosClose } from "./menu";
+import { blockDefFor, newSessionScript, paneShowing, runKey, wintosClose } from "./menu";
 import { mainViewAtom, prTabsAtom } from "./notes/state";
 
 const widgets = {
@@ -78,4 +78,11 @@ describe("runKey for the PR browser", () => {
         expect(runKey("tab-prev")).toBe(false);
         expect(runKey("browser-copy-url")).toBe(false);
     });
+});
+
+describe("paneShowing", () => {
+    const blocks = [{ oid: "b1", meta: { view: "term" } }, { oid: "b2", meta: { view: "web", url: "https://github.com/acme/api/pull/9" } }] as unknown as Block[];
+
+    test("a PR already open in a browser pane of the project is reused", () => expect(paneShowing(blocks, "https://github.com/acme/api/pull/9")).toBe("b2"));
+    test("otherwise a new pane opens", () => expect(paneShowing(blocks, "https://github.com/acme/api/pull/10")).toBeUndefined());
 });

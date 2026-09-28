@@ -1,7 +1,7 @@
 import { rank, Ranking, Row } from "../daemon/ranking/rank";
 import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
-import { isSnoozed, projectPrs, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
+import { GROUPS, isSnoozed, isStacked, lastMovement, projectPrs, qualifier, type Group, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
 import type { Session } from "../daemon/sessions/reduce";
 
 export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes };
@@ -66,4 +66,23 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
 // not a project until a pane opens in it.
 export function isPlaceholderTab(tab: Tab | undefined): boolean {
     return tab?.meta?.["wintos:blank"] === true && !tab.blockids?.length;
+}
+
+// The notes' Pull requests section: every PR of the project, snoozed ones included (marked,
+// last), most urgent group first, each with what it waits on.
+export type ProjectPrRow = { pr: PR; group: Group; note?: string; snoozed: boolean };
+
+export function projectPrList(state: WintosState, tabId: string): ProjectPrRow[] {
+    const gh = ghPrs(state);
+    const project = state.projects.find((p) => p.id === tabId);
+    if (!gh || !project) return [];
+    const numbers = new Map(gh.prs.map((p) => [p.url, p.number]));
+    const rows = projectPrs(project, gh.prs, gh.me, state.now).items.map(({ pr, group }): ProjectPrRow => {
+        const on = !isStacked(pr) ? undefined : pr.stackedOn && numbers.has(pr.stackedOn) ? `#${numbers.get(pr.stackedOn)}` : pr.base;
+        const note = [qualifier(pr, group)?.text, on && `stacked on ${on}`].filter(Boolean).join(" · ") || undefined;
+        return { pr, group, note, snoozed: isSnoozed(pr, state.snoozes ?? {}, state.now) };
+    });
+    return rows.sort(
+        (a, b) => Number(a.snoozed) - Number(b.snoozed) || GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || lastMovement(a.pr).localeCompare(lastMovement(b.pr))
+    );
 }

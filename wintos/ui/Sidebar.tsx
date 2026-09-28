@@ -136,14 +136,14 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 {state && (
                     <div style={{ display: "flex", gap: 8 }}>
                         {queue ? (
-                            <SummaryCard label="PRs" stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={running.has("gh-prs") ? "updating…" : queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={running.has("gh-prs") ? T.faint : T.brick} onClick={() => toggleView("prs")} />
+                            <SummaryCard label="PRs" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={T.brick} onClick={() => toggleView("prs")} />
                         ) : (
                             <SummaryCard label="PRs" stats={[]} note="loading from GitHub" noteColor={T.faint} onClick={() => toggleView("prs")} />
                         )}
                         {panels.map((p) => {
                             const c = cardValue(p.counts);
                             const failed = p.error || p.counts.some((x) => x.count == null);
-                            return <SummaryCard key={p.name} label={p.title} stats={c} note={running.has(p.name) ? "updating…" : failed ? "couldn't fetch everything" : undefined} noteColor={running.has(p.name) ? T.faint : T.brick} onClick={() => openPanel(p.name)} />;
+                            return <SummaryCard key={p.name} label={p.title} busy={running.has(p.name)} stats={c} note={failed ? "couldn't fetch everything" : undefined} noteColor={T.brick} onClick={() => openPanel(p.name)} />;
                         })}
                         {loading.map((p) => <SummaryCard key={p.name} label={p.title} stats={[]} note="loading" noteColor={T.faint} onClick={() => openPanel(p.name)} />)}
                     </div>
@@ -314,12 +314,28 @@ function lastPanelTitles(panels: { name: string; title: string }[]): Record<stri
     }
 }
 
+// A refresh in flight while the old numbers stay up: three dots tapping in turn, quiet enough
+// to ignore.
+function Drumming() {
+    return (
+        <span style={{ display: "inline-flex", gap: 3 }} aria-label="updating">
+            <style>{"@keyframes wintos-drum{0%,60%,100%{transform:translateY(0);opacity:.35}30%{transform:translateY(-2px);opacity:1}}"}</style>
+            {[0, 1, 2].map((i) => (
+                <span key={i} style={{ width: 3, height: 3, borderRadius: "50%", background: T.muted, animation: `wintos-drum 1.2s ${i * 0.15}s infinite ease-in-out` }} />
+            ))}
+        </span>
+    );
+}
+
 // A title over its numbers, each number stacked on its own label; the note is only for what
 // the numbers can't say (late, updating, loading).
-function SummaryCard({ label, stats, note, noteColor, onClick }: { label: string; stats: CardStat[]; note?: string; noteColor: string; onClick: () => void }) {
+function SummaryCard({ label, stats, note, noteColor, busy, onClick }: { label: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; onClick: () => void }) {
     return (
         <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#1E1A18", border: "1px solid #2E2825", borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer" }}>
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: T.secondary }}>{label}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, fontWeight: 600, color: T.secondary }}>
+                {label}
+                {busy && <Drumming />}
+            </span>
             <span style={{ display: "flex", gap: 18 }}>
                 {stats.map((s) => (
                     <span key={s.label} style={{ display: "flex", flexDirection: "column", gap: 3 }}>

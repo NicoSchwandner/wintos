@@ -4,13 +4,13 @@ import { focusArea } from "./focus";
 import { globalStore } from "@/app/store/jotaiStore";
 import { atoms, getApi } from "@/store/global";
 import { useAtom, useSetAtom } from "jotai";
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { Group } from "../daemon/prs/group";
 import { mainViewAtom, prTabsAtom } from "./notes/state";
 import { PrBrowser } from "./PrBrowser";
 import { closeTab, openTab } from "./prtabs";
 import { Key } from "./Key";
-import { initials, queueModel, type QueueRow } from "./prs";
+import { initials, keepSelection, queueModel, type QueueRow } from "./prs";
 import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
@@ -32,7 +32,8 @@ export const PrQueue = memo(() => {
     const { state } = useWintos();
     const now = useNow();
     const setView = useSetAtom(mainViewAtom);
-    const [cursor, setCursor] = useState(0);
+    const [selected, setSelected] = useState<string | undefined>();
+    const shownBefore = useRef<string[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const result = state?.plugins?.["gh-prs"];
     const gh = state && ghPrs(state);
@@ -41,6 +42,14 @@ export const PrQueue = memo(() => {
     const withStack = (r: QueueRow, depth = 0): { r: QueueRow; depth: number }[] => [{ r, depth }, ...r.children.flatMap((c) => withStack(c, depth + 1))];
     const flat = [...(model?.groups.flatMap((g) => g.rows.flatMap((r) => withStack(r).map((x) => x.r))) ?? []), ...(model?.snoozed ?? [])];
     const snoozedUrls = new Set(model?.snoozed.map((r) => r.pr.url));
+    const urls = flat.map((r) => r.pr.url);
+    const current = keepSelection(shownBefore.current, urls, selected);
+    const cursor = Math.max(0, urls.indexOf(current ?? ""));
+    useEffect(() => {
+        shownBefore.current = urls;
+        if (current !== selected) setSelected(current);
+    }, [urls.join(" ")]);
+    const step = (d: 1 | -1) => setSelected(urls[Math.max(0, Math.min(cursor + d, urls.length - 1))]);
     // z: looked at, handed on. Back at the next working day, or as soon as the PR moves.
     const toggleSnooze = (r: QueueRow) =>
         daemonFetch("/prs/snooze", { method: "POST", body: snoozedUrls.has(r.pr.url) ? { url: r.pr.url, until: null } : { url: r.pr.url, until: nextWorkingDayStart(Date.now()), movedAt: lastMovement(r.pr) } }).catch(() => {});
@@ -71,12 +80,16 @@ export const PrQueue = memo(() => {
             onKeyDown={(e) => {
                 if (!isPlainKey(e) && e.key !== "Escape") return;
                 const r = flat[Math.min(cursor, flat.length - 1)];
-                if (e.key === "j") setCursor((c) => Math.min(c + 1, flat.length - 1));
-                else if (e.key === "k") setCursor((c) => Math.max(c - 1, 0));
+                if (e.key === "j") step(1);
+                else if (e.key === "k") step(-1);
                 else if (e.key === "Enter" && r) openPr(r);
                 else if (e.key === "o" && r) goToProject(r);
                 else if (e.key === "r" && !e.repeat) void refresh();
-                else if (e.key === "z" && r && !e.repeat) void toggleSnooze(r);
+                else if (e.key === "z" && r && !e.repeat) {
+                    // Snoozing sends the PR to the bottom; carry on with the next one instead.
+                    if (!snoozedUrls.has(r.pr.url)) setSelected(urls[cursor + 1] ?? urls[cursor - 1]);
+                    void toggleSnooze(r);
+                }
                 else if (e.key === "Escape") openUrl ? setTabs((t) => closeTab(t, t.active)) : focusArea("terminal");
                 else return;
                 e.preventDefault();

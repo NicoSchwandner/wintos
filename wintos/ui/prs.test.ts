@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { PR } from "../daemon/prs/group";
-import { initials, queueModel } from "./prs";
+import { initials, keepSelection, queueModel } from "./prs";
 
 const MON = Date.parse("2026-09-28T09:00:00Z");
 const pr = (p: Partial<PR>): PR => ({
@@ -113,5 +113,18 @@ describe("group order", () => {
     test("the team's reviews (undone work) come before your PRs that are just waiting", () => {
         const m = queueModel([pr({ number: 1, reviewers: ["ana"] }), pr({ number: 2, author: "bo", requestedTeam: true })], "me", MON);
         expect(m.groups.map((g) => g.group)).toEqual(["team", "waiting"]);
+    });
+});
+
+describe("keepSelection", () => {
+    test("the selected PR stays selected wherever it moves", () => expect(keepSelection(["a", "b", "c"], ["x", "a", "b", "c"], "b")).toBe("b"));
+
+    test("gone, the selection moves to the next PR that was below it", () => expect(keepSelection(["a", "b", "c", "d"], ["a", "d"], "b")).toBe("d"));
+
+    test("gone from the bottom, to the one above it", () => expect(keepSelection(["a", "b", "c"], ["a", "b"], "c")).toBe("b"));
+
+    test("nothing selected yet or an empty list", () => {
+        expect(keepSelection([], ["a"], undefined)).toBe("a");
+        expect(keepSelection(["a"], [], "a")).toBeUndefined();
     });
 });

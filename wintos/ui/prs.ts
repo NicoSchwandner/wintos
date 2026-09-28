@@ -53,3 +53,13 @@ export function initials(login: string): string {
     if (caps && caps.length > 1) return caps.slice(0, 2).join("");
     return login.slice(0, 1).toUpperCase();
 }
+
+// The PR queue's cursor follows a PR, not a row number: the list reorders as PRs change group.
+// A PR that left the list hands the cursor to the next one that was below it, else above.
+export function keepSelection(before: string[], after: string[], selected: string | undefined): string | undefined {
+    if (selected && after.includes(selected)) return selected;
+    const i = selected ? before.indexOf(selected) : -1;
+    const below = before.slice(i + 1).find((u) => after.includes(u));
+    const above = before.slice(0, Math.max(i, 0)).reverse().find((u) => after.includes(u));
+    return (i >= 0 && (below ?? above)) || after[0];
+}

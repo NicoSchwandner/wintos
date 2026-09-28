@@ -33,6 +33,14 @@ describe("wintosd API", () => {
         expect(state.sessions).toEqual([expect.objectContaining({ state: "parked", parkedOn: "CI on #1479" })]);
     });
 
+    test("`wintos done` then Stop ends the session done", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/done", {})).status).toBe(200);
+        await event(stop);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions).toEqual([expect.objectContaining({ state: "done" })]);
+    });
+
     test("wait needs a one-line reason", async () => {
         expect((await post("/blocks/blk-1/wait", { reason: "a\nb" })).status).toBe(400);
         expect((await post("/blocks/blk-1/wait", {})).status).toBe(400);

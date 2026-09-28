@@ -4,7 +4,7 @@ import type { Project } from "./projects/store";
 // WintOS shows a session whose turn ended as waiting on the developer; this is how Claude says
 // it is waiting on something else instead.
 const WAIT_RULE =
-    'If you end a turn waiting on something outside the conversation (CI, a review, a deploy, a background job), run `wintos wait "<what, e.g. CI on #123>"` just before you stop, so WintOS does not show the turn as waiting on the developer.';
+    'If you end a turn waiting on something outside the conversation (CI, a review, a deploy, a background job), run `wintos wait "<what, e.g. CI on #123>"` just before you stop, so WintOS does not show the turn as waiting on the developer. If you end a turn with the goal met and nothing asked of the developer (no question, no decision, no step for them), run `wintos done` instead. Never run it when your last message asks them anything.';
 
 // The text a UserPromptSubmit hook adds to Claude's context. It is re-sent on every prompt so
 // the project survives /compact, and mine.md edits made mid-session are seen on the next one.

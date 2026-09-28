@@ -9,6 +9,11 @@ const s = (tabId: string, state: Session["state"], at: number, id = `${tabId}-${
 });
 
 describe("rank", () => {
+    test("a session that said it is done is quiet, not needs-you", () => {
+        const r = rank(["t"], [s("t", "done", NOW - 5)], NOW);
+        expect([r.needs, r.running, r.quiet.map((x) => x.tabId)]).toEqual([[], [], ["t"]]);
+    });
+
     test("waiting beats working inside one project", () => {
         const r = rank(["t"], [s("t", "waiting", NOW - 5), s("t", "working", NOW - 1)], NOW);
         expect(r.needs.map((x) => x.tabId)).toEqual(["t"]);

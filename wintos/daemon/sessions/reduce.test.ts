@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { HookEvent, parkSession, reduceSession, restoreSessions, Session } from "./reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -111,5 +111,24 @@ describe("restoreSessions (after a WintOS restart)", () => {
         const m = reduceSession(restoreSessions([s("a", "waiting")]), ev({ hook_event_name: "SessionStart", session_id: "a" }), 5);
         expect(only(m)).toMatchObject({ id: "a", state: "waiting" });
         expect(only(m).restored).toBeUndefined();
+    });
+});
+
+describe("finishSession (`wintos done`)", () => {
+    test("a turn that ends after `wintos done` is done, not waiting on the developer", () => {
+        const m = run([ev(prompt)]);
+        expect(only(reduceSession(finishSession(m, "blk-1", 5000), ev(stop), 6000))).toMatchObject({ state: "done", since: 6000 });
+    });
+
+    test("the next prompt starts over", () => {
+        const done = reduceSession(finishSession(run([ev(prompt)]), "blk-1", 5000), ev(stop), 6000);
+        const s = only(reduceSession(reduceSession(done, ev(prompt), 7000), ev(stop), 8000));
+        expect(s).toMatchObject({ state: "waiting" });
+    });
+
+    test("done and wait in one turn: the later call wins", () => {
+        const m = run([ev(prompt)]);
+        expect(only(reduceSession(parkSession(finishSession(m, "blk-1", 5000), "blk-1", "CI", 5100), ev(stop), 6000)).state).toBe("parked");
+        expect(only(reduceSession(finishSession(parkSession(m, "blk-1", "CI", 5000), "blk-1", 5100), ev(stop), 6000)).state).toBe("done");
     });
 });

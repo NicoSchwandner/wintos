@@ -2,6 +2,7 @@
 # wintos: small CLI around wintosd.
 #   wintos title <words…>              name this tab's project (used by Claude)
 #   wintos wait <what…>                end this turn parked on something outside (used by Claude)
+#   wintos done                        end this turn done: nothing waits on the developer (used by Claude)
 #   wintos hooks install|uninstall     wire the hook into Claude Code settings
 set -eu
 PORT="${WINTOS_PORT:-7730}"
@@ -44,6 +45,12 @@ wait)
         die "wintosd not reachable on port $PORT, or it refused the reason"
     echo "waiting on: $*"
     ;;
+done)
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    echo '{}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/done" >/dev/null ||
+        die "wintosd not reachable on port $PORT"
+    echo "done: nothing waits on the developer"
+    ;;
 hooks)
     [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
     [ -f "$SETTINGS.wintos-bak" ] || cp "$SETTINGS" "$SETTINGS.wintos-bak"
@@ -64,5 +71,5 @@ hooks)
     *) die "usage: wintos hooks install|uninstall" ;;
     esac
     ;;
-*) die "usage: wintos title <words> | wintos wait <what> | wintos hooks install|uninstall" ;;
+*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos hooks install|uninstall" ;;
 esac

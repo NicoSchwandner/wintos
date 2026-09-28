@@ -1,7 +1,8 @@
 export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string };
 export type HookEvent = { tabId: string; blockId: string; payload: HookPayload };
 // parked: the turn ended waiting on something outside (CI, a review), not on the developer.
-export type SessionState = "idle" | "working" | "waiting" | "parked" | "ended";
+// done: the turn ended with the goal met and nothing asked of the developer.
+export type SessionState = "idle" | "working" | "waiting" | "parked" | "done" | "ended";
 export type Session = {
     id: string;
     tabId: string;
@@ -13,6 +14,7 @@ export type Session = {
     label?: string;
     parkedOn?: string;
     parkPending?: boolean; // `wintos wait` ran this turn; the turn's Stop parks instead of waiting
+    donePending?: boolean; // `wintos done` ran this turn; the turn's Stop ends it done
     restored?: boolean; // saved at the last quit, its Claude not started again yet
 };
 
@@ -36,7 +38,8 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     // A resumed session starting up is still where it was at quit (a turn waiting on you).
     const next = prev?.restored && name === "SessionStart" ? undefined : TRANSITIONS[name];
     const parks = name === "Stop" && prev?.parkPending;
-    const state = parks ? "parked" : (next ?? prev?.state ?? "idle");
+    const finishes = name === "Stop" && prev?.donePending;
+    const state = parks ? "parked" : finishes ? "done" : (next ?? prev?.state ?? "idle");
     const session: Session = {
         id,
         tabId: ev.tabId,
@@ -49,6 +52,7 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
         // A parked mark lasts one turn: the next Stop or prompt decides afresh.
         parkedOn: parks ? prev.parkedOn : next ? undefined : prev?.parkedOn,
         parkPending: next ? undefined : prev?.parkPending,
+        donePending: next ? undefined : prev?.donePending,
     };
     const out = new Map(sessions);
     // The block's saved entry is replaced by whatever session now reports from it.
@@ -68,7 +72,17 @@ export function restoreSessions(saved: Session[]): Map<string, Session> {
 
 // `wintos wait "<what>"` from inside a session: the block's live session ends this turn parked.
 export function parkSession(sessions: Map<string, Session>, blockId: string, reason: string, now: number): Map<string, Session> {
-    const live = [...sessions.values()].filter((s) => s.blockId === blockId && s.state !== "ended").sort((a, b) => b.lastAt - a.lastAt)[0];
+    const live = liveIn(sessions, blockId);
     if (!live) return sessions;
-    return new Map(sessions).set(live.id, { ...live, parkedOn: reason, parkPending: true, lastAt: now });
+    return new Map(sessions).set(live.id, { ...live, parkedOn: reason, parkPending: true, donePending: undefined, lastAt: now });
 }
+
+// `wintos done` from inside a session: the block's live session ends this turn done.
+export function finishSession(sessions: Map<string, Session>, blockId: string, now: number): Map<string, Session> {
+    const live = liveIn(sessions, blockId);
+    if (!live) return sessions;
+    return new Map(sessions).set(live.id, { ...live, donePending: true, parkPending: undefined, lastAt: now });
+}
+
+const liveIn = (sessions: Map<string, Session>, blockId: string) =>
+    [...sessions.values()].filter((s) => s.blockId === blockId && s.state !== "ended").sort((a, b) => b.lastAt - a.lastAt)[0];

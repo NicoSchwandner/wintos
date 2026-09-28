@@ -7,7 +7,7 @@ import { injection } from "../inject";
 import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
-import { HookEvent, parkSession, reduceSession, restoreSessions, Session } from "../sessions/reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -142,6 +142,15 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const now = Date.now();
                 snoozes = Object.fromEntries(Object.entries(snoozes).filter(([, s]) => s.until > now));
                 writeFileSync(snoozeFile, JSON.stringify(snoozes));
+                broadcast();
+                return send(res, 200, "");
+            }
+            const done = /^\/blocks\/([^/]+)\/done$/.exec(url.pathname);
+            if (req.method === "POST" && done) {
+                const blockId = decodeURIComponent(done[1]);
+                if (!isSafe(blockId)) return send(res, 400, "bad block id");
+                sessions = finishSession(sessions, blockId, Date.now());
+                saveSessions();
                 broadcast();
                 return send(res, 200, "");
             }

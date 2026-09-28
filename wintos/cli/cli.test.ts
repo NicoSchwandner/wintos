@@ -218,3 +218,14 @@ describe("wintos wait", () => {
         expect(r.stderr).toContain("no WAVETERM_BLOCKID");
     });
 });
+
+describe("wintos done", () => {
+    test("ends this block's session turn as done", async () => {
+        const d = await fakeDaemon("");
+        const out = await new Promise<string>((resolve) =>
+            require("child_process").execFile(CLI, ["done"], { env: { ...process.env, WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+        );
+        expect(out.trim()).toBe("done: nothing waits on the developer");
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/done", body: {} });
+    });
+});

@@ -9,6 +9,36 @@ beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), "wintos-"));
 });
 
+describe("the folder belongs to its tab, whatever the file says", () => {
+    const rewriteId = (dir: string, id: string) => {
+        const f = join(dir, "project.md");
+        writeFileSync(f, readFileSync(f, "utf8").replace(/^id: .*$/m, `id: ${id}`));
+    };
+
+    test("a session rewriting the id keeps the project on its tab, and the id is put back", () => {
+        const s = new ProjectStore(root);
+        const { dir } = s.setTitle("tab-1", "Invoice OCR", { manual: false });
+        rewriteId(dir, "invoice-ocr");
+        s.reload();
+        expect(s.byTab("tab-1")?.title).toBe("Invoice OCR");
+        expect(readFileSync(join(dir, "project.md"), "utf8")).toMatch(/^id: tab-1$/m);
+    });
+
+    test("the binding survives a daemon restart", () => {
+        const { dir } = new ProjectStore(root).setTitle("tab-1", "Invoice OCR", { manual: false });
+        rewriteId(dir, "invoice-ocr");
+        expect(new ProjectStore(root).byTab("tab-1")?.title).toBe("Invoice OCR");
+    });
+
+    test("a folder the daemon never bound takes the id in its file", () => {
+        const s = new ProjectStore(root);
+        const { dir } = s.setTitle("tab-1", "Invoice OCR", { manual: false });
+        rmSync(join(root, ".bindings.json"));
+        rewriteId(dir, "tab-9");
+        expect(new ProjectStore(root).byTab("tab-9")?.title).toBe("Invoice OCR");
+    });
+});
+
 describe("ProjectStore", () => {
     test("setTitle creates the folder once and never renames it", () => {
         const s = new ProjectStore(root);
@@ -16,7 +46,7 @@ describe("ProjectStore", () => {
         expect(p.dir).toBe(join(root, "invoice-ocr"));
         expect(readFileSync(join(p.dir, "project.md"), "utf8")).toContain("title: Invoice OCR");
         s.setTitle("tab-1", "Something else", { manual: false });
-        expect(readdirSync(root)).toEqual(["invoice-ocr"]);
+        expect(readdirSync(root).filter((n) => !n.startsWith("."))).toEqual(["invoice-ocr"]);
         expect(s.byTab("tab-1")?.title).toBe("Something else");
     });
 
@@ -31,7 +61,7 @@ describe("ProjectStore", () => {
         const s = new ProjectStore(root);
         s.setTitle("a", "Same", { manual: false });
         s.setTitle("b", "Same", { manual: false });
-        expect(readdirSync(root).sort()).toEqual(["same", "same-2"]);
+        expect(readdirSync(root).filter((n) => !n.startsWith(".")).sort()).toEqual(["same", "same-2"]);
     });
 
     test("setTitle keeps the body Claude wrote", () => {

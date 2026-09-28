@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
-import { join } from "path";
+import { basename, join } from "path";
 import { lineDiff } from "./diff";
 import { parseProjectMd, ProjectMeta, serializeProjectMd } from "./parse";
 import { slugify } from "./slug";
@@ -12,12 +12,27 @@ export class ProjectStore {
     private projects: Project[] = [];
     // Keyed by session: each Claude session in a project must see a mine.md change once.
     private lastMine = new Map<string, string>();
-    // The last id seen per folder, so a note Claude broke still belongs to its tab.
-    private idByDir = new Map<string, string>();
+    // Which tab each folder belongs to. The daemon owns this, not the file: a session that
+    // rewrites project.md from its body alone invents an id, and the notes lose their tab.
+    // Kept beside the folders (a file there is not a project) so it survives restarts.
+    private bindings: Record<string, string>;
+    private readonly bindingsFile: string;
 
     constructor(readonly root: string) {
         mkdirSync(root, { recursive: true });
+        this.bindingsFile = join(root, ".bindings.json");
+        try {
+            this.bindings = JSON.parse(readFileSync(this.bindingsFile, "utf8"));
+        } catch {
+            this.bindings = {};
+        }
         this.reload();
+    }
+
+    private bind(dir: string, id: string): void {
+        if (this.bindings[basename(dir)] === id) return;
+        this.bindings[basename(dir)] = id;
+        writeFileSync(this.bindingsFile, JSON.stringify(this.bindings));
     }
 
     reload(): void {
@@ -39,6 +54,7 @@ export class ProjectStore {
         if (existing?.error || (existing?.titleLocked && !opts.manual)) return existing!;
         const dir = existing?.dir ?? join(this.root, slugify(title, new Set(readdirSync(this.root))));
         mkdirSync(dir, { recursive: true });
+        this.bind(dir, tabId);
         const meta: ProjectMeta = {
             id: tabId,
             titleLocked: opts.manual || !!existing?.titleLocked,
@@ -88,11 +104,13 @@ export class ProjectStore {
         const raw = readFileSync(file, "utf8");
         const parsed = parseProjectMd(raw);
         const mtime = statSync(file).mtimeMs;
+        const bound = this.bindings[basename(dir)];
         if (!("error" in parsed)) {
-            this.idByDir.set(dir, parsed.meta.id);
-            return { ...parsed.meta, body: parsed.body, dir, mtime, mineMtime };
+            if (!bound) this.bind(dir, parsed.meta.id);
+            else if (parsed.meta.id !== bound) writeFileSync(file, raw.replace(/^id:.*$/m, `id: ${bound}`));
+            return { ...parsed.meta, id: bound ?? parsed.meta.id, body: parsed.body, dir, mtime, mineMtime };
         }
-        const id = /^id:[ \t]*(\S+)/m.exec(raw)?.[1] ?? this.idByDir.get(dir);
+        const id = bound ?? /^id:[ \t]*(\S+)/m.exec(raw)?.[1];
         return { ...(id ? { id } : {}), dir, mtime, mineMtime, error: parsed.error };
     }
 }

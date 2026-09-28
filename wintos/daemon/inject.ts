@@ -29,7 +29,8 @@ export function injection(project: Project | undefined, mine: { text: string; di
 This file is the durable picture of this project. Keep it true as understanding moves:
 rewrite it when a decision is made, a belief is corrected, or the next action changes.
 Do not rewrite it when nothing changed.
-- Front matter: keep \`id\` and \`title\` as they are (rename with \`wintos title\`). \`next:\` is
+- Front matter: keep the first lines \`id: ${project.id}\` and \`title: ${project.title}\` exactly
+  as they are (the id ties the file to its tab; rename with \`wintos title\`). \`next:\` is
   the single concrete action that moves this forward now. \`pr:\` lists this project's pull
   requests, comma-separated, added the moment you open or learn of one.
 - Body sections, in order, in these exact formats (the WintOS notes view renders them):

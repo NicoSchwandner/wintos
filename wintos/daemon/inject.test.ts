@@ -13,6 +13,11 @@ describe("injection", () => {
         for (const marker of ["- 19 sep — ", "- [x]", "- [~]", "- [ ]", "(blocking)"]) expect(text).toContain(marker);
     });
 
+    test("it shows the exact front-matter lines to keep, since it only ever sees the body", () => {
+        const text = injection({ id: "d3ed-tab", title: "X", dir: "/p/x", mtime: 0, pr: [], titleLocked: false, body: "" }, { text: "m" });
+        expect(text).toContain("id: d3ed-tab");
+    });
+
     test.each([
         ["a titled project", { id: "t", title: "X", dir: "/p/x", mtime: 0, pr: [], titleLocked: false, body: "" }],
         ["an untitled one", undefined],

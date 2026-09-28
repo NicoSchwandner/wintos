@@ -1,9 +1,8 @@
 import { globalStore } from "@/app/store/jotaiStore";
-import { atoms, getApi } from "@/store/global";
+import { atoms } from "@/store/global";
 import { memo, useMemo, useState } from "react";
-import { closeOverlay, focusSession } from "./focus";
+import { closeOverlay, enterProject, focusSession } from "./focus";
 import { runAction } from "./menu";
-import { mainViewAtom } from "./notes/state";
 import { searchPalette, type PaletteItem } from "./palette-search";
 import { pluginPanels } from "./panels";
 import { T } from "./tokens";
@@ -36,7 +35,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
         const out: PaletteItem[] = tabIds.map((id) => ({
             id: `p:${id}`, kind: "project", title: title(id),
             subtitle: [band[id], state.projects.find((p) => p.id === id)?.next].filter(Boolean).join(" · "),
-            run: () => (globalStore.set(mainViewAtom, "terminal"), getApi().setActiveTab(id)),
+            run: () => enterProject(id),
         }));
         for (const s of state.sessions.filter((s) => s.state !== "ended" && tabIds.includes(s.tabId)))
             out.push({ id: `s:${s.id}`, kind: "session", title: s.label ?? "session", subtitle: `${s.state} · ${title(s.tabId)}`, run: () => focusSession({ tabId: s.tabId, blockId: s.blockId }) });

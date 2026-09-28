@@ -1,7 +1,7 @@
 import { globalStore } from "@/app/store/jotaiStore";
-import { atoms, getApi } from "@/store/global";
+import { atoms } from "@/store/global";
 import { atom } from "jotai";
-import { focusArea } from "./focus";
+import { enterProject, focusArea } from "./focus";
 
 // ⌘J / ⌘K work like ⌘⇥: hold ⌘ and tap to walk the ranked projects in this renderer's
 // sidebar, release ⌘ to switch once. Walking without switching keeps the cursor in the one
@@ -30,7 +30,7 @@ export function switchProject(delta: 1 | -1, cmdHeld: boolean): void {
 function commit(): void {
     const target = globalStore.get(switchTargetAtom);
     end();
-    if (target && target !== globalStore.get(atoms.staticTabId)) getApi().setActiveTab(target);
+    if (target && target !== globalStore.get(atoms.staticTabId)) enterProject(target);
     else focusArea("terminal");
 }
 

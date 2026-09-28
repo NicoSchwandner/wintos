@@ -10,7 +10,7 @@ import type { Row } from "../daemon/ranking/rank";
 import { Key } from "./Key";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
-import { editMine, focusArea, setLatestSessions } from "./focus";
+import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
 import { setSwitchOrder, switchTargetAtom } from "./switcher";
 import { registerWintosMenu } from "./menu";
 import { renamingAtom } from "./notes/state";
@@ -80,7 +80,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
         }
     }, [state, names]);
 
-    const open = (tabId: string) => getApi().setActiveTab(tabId);
+    const open = (tabId: string) => (tabId === activeTabId ? focusArea("terminal") : enterProject(tabId));
     const menu = (e: React.MouseEvent, tabId: string) => {
         e.preventDefault();
         ContextMenuModel.getInstance().showContextMenu(

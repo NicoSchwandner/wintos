@@ -30,6 +30,10 @@ export function focusBlock(blockId: string): void {
     if (node) lm.focusNode(node.id);
 }
 
+// Every project switch: the project opens on its terminals. Views are per renderer, so a PR
+// view left open in a project would otherwise greet you there later.
+export const enterProject = (tabId: string) => focusSession({ tabId, blockId: "" });
+
 export function focusSession(t: Target): void {
     if (t.tabId === globalStore.get(atoms.staticTabId)) {
         globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden

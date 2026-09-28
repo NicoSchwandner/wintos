@@ -1,8 +1,8 @@
 import { useFocusOnMount } from "./useFocusOnMount";
 import { isPlainKey } from "./keys";
-import { focusArea } from "./focus";
+import { enterProject, focusArea } from "./focus";
 import { globalStore } from "@/app/store/jotaiStore";
-import { atoms, getApi } from "@/store/global";
+import { atoms } from "@/store/global";
 import { useAtom, useSetAtom } from "jotai";
 import { memo, useEffect, useRef, useState } from "react";
 import type { Group } from "../daemon/prs/group";
@@ -64,7 +64,7 @@ export const PrQueue = memo(() => {
         const tabId = Object.entries(byTab).find(([, v]) => v.items.some((i) => i.pr.url === r.pr.url))?.[0];
         if (!tabId) return;
         setView("terminal");
-        getApi().setActiveTab(tabId);
+        enterProject(tabId);
     };
     const refresh = async () => {
         setRefreshing(true);

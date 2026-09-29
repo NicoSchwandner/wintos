@@ -151,7 +151,7 @@ export function wintosClose(): boolean {
     // and the page left is shown in front: the Inbox reads one page at a time, never tiled.
     if (action === "pane" && inInbox()) {
         const list = document.querySelector<HTMLElement>("[data-wintos=inbox-list]");
-        keepListFocus(list);
+        keepListFocus(list); // the page brought to the front grabs focus a moment later
         setTimeout(() => {
             const next = globalStore.get(lm.focusedNode)?.data?.blockId;
             if (next) magnifyBlock(next);
@@ -185,20 +185,34 @@ export function paneShowing(blocks: (Block | undefined)[], url: string): string 
 // PR view keeps its own tabs. One pane per PR: open again, it is focused.
 const opening = new Set<string>();
 // ⏎ in the Inbox list shows the page and leaves you in the list, to walk on with j/k; Esc goes
-// to the page. Wave's block focus pulls focus into the page once it is laid out, and again on
-// a redirect: hand it back each time, until you move focus yourself (a click, or Esc; j/k
-// don't count) or 30s have passed.
+// to the page. The page grabs focus by itself when it is laid out, and when it loads (an
+// autofocused sign-in field on a redirect): hand focus back only then, within a few seconds of
+// the open or of a load. A click into a page never reaches this document, so outside those
+// windows a move to the page is always yours and stays.
+// A page grabs focus at any of these, and a new page's load can take several seconds.
+const PAGE_LOADS = ["did-start-loading", "dom-ready", "did-stop-loading"];
 function keepListFocus(list: HTMLElement | null): void {
     if (!list) return;
-    // A page taking focus fires no focusin in this document, only the list's focusout.
-    const back = () => setTimeout(() => document.activeElement?.tagName === "WEBVIEW" && list.focus(), 0);
+    let until = Date.now() + 3000;
+    const loading = () => (until = Date.now() + 2500);
+    // A page taking focus fires no focusin in this document, only the list's focusout. The first
+    // page opening also relays out the Inbox, which drops focus to <body>: that is handed back
+    // too, to the list as it is now.
+    const lost = () => ["WEBVIEW", "BODY"].includes(document.activeElement?.tagName ?? "BODY");
+    const back = (e: FocusEvent) => {
+        if (!(e.target as Element)?.closest?.("[data-wintos=inbox-list]")) return;
+        setTimeout(() => Date.now() < until && lost() && document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus(), 0);
+    };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && stop();
     const stop = () => {
-        list.removeEventListener("focusout", back);
+        document.removeEventListener("focusout", back, true);
+        for (const ev of PAGE_LOADS) document.removeEventListener(ev, loading, true);
         document.removeEventListener("keydown", onKey, true);
         document.removeEventListener("pointerdown", stop, true);
     };
-    list.addEventListener("focusout", back);
+    document.addEventListener("focusout", back, true);
+    // webview events don't bubble, but the capture phase passes the document on the way down.
+    for (const ev of PAGE_LOADS) document.addEventListener(ev, loading, true);
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("pointerdown", stop, true);
     setTimeout(stop, 30000);

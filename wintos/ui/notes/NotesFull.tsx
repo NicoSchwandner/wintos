@@ -24,7 +24,7 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
             tabIndex={0}
             ref={focusRef}
             data-zone="list"
-            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#1d2021", outline: "none", fontFamily: T.ui, minWidth: 0 }}
+            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#1d2021", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
         >
             <div style={{ padding: "18px 26px 16px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
@@ -33,7 +33,8 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
                 </div>
                 <Key k="esc" label="back to the terminal" />
             </div>
-            <div style={{ flexGrow: 1, padding: "0 26px 20px", display: "flex", gap: 20, overflow: "hidden" }}>
+            {/* Each column scrolls on its own; minHeight 0 all the way down, or it grows past the window. */}
+            <div style={{ flexGrow: 1, minHeight: 0, padding: "0 26px 20px", display: "flex", gap: 20, overflow: "hidden" }}>
                 <div style={{ flexGrow: 1, flexBasis: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
                     <Header name="project.md" note="the sessions write this · rendered, not editable here" />
                     <div style={{ paddingTop: 18, overflowY: "auto", display: "flex", flexDirection: "column", gap: 18 }}>

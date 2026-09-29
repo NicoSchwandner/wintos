@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { isPlaceholderTab, prProjects, projectPrList, prsByTab, relTime, rowView, sidebarModel, type WintosState } from "./view";
+import { inboxTabId, isInboxTab, prProjects, projectTabIds, projectPrList, prsByTab, relTime, rowView, sidebarModel, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -91,20 +91,21 @@ describe("sidebarModel", () => {
     });
 });
 
-describe("isPlaceholderTab", () => {
-    const tab = (meta: Record<string, unknown>, blockids: string[] = []) => ({ meta, blockids }) as unknown as Tab;
+describe("the Inbox tab", () => {
+    const tab = (meta: Record<string, unknown>) => ({ meta, blockids: [] }) as unknown as Tab;
+    const tabs = { p1: tab({}), ib: tab({ "wintos:inbox": true }), p2: tab({}) };
 
-    test("the empty tab that stands in when no project is open", () => {
-        expect(isPlaceholderTab(tab({ "wintos:blank": true }))).toBe(true);
+    test("is recognised by its meta, and a tab not loaded yet is a project", () => {
+        expect(isInboxTab(tabs.ib)).toBe(true);
+        expect(isInboxTab(tabs.p1)).toBe(false);
+        expect(isInboxTab(undefined)).toBe(false);
     });
 
-    test("becomes a project once a pane is opened in it", () => {
-        expect(isPlaceholderTab(tab({ "wintos:blank": true }, ["b1"]))).toBe(false);
-    });
+    test("never counts as a project", () => expect(projectTabIds(["p1", "ib", "p2"], tabs)).toEqual(["p1", "p2"]));
 
-    test("an ordinary tab, or one not loaded yet, is a project", () => {
-        expect(isPlaceholderTab(tab({}))).toBe(false);
-        expect(isPlaceholderTab(undefined)).toBe(false);
+    test("is found among the tabs, or not at all", () => {
+        expect(inboxTabId(["p1", "ib"], tabs)).toBe("ib");
+        expect(inboxTabId(["p1"], tabs)).toBeUndefined();
     });
 });
 

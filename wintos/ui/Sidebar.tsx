@@ -16,7 +16,7 @@ import { registerWintosMenu } from "./menu";
 import { renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
-import { ghPrs, isPlaceholderTab, prsByTab, rowView, RowView, sidebarModel } from "./view";
+import { ghPrs, prsByTab, projectTabIds, rowView, RowView, sidebarModel } from "./view";
 import { queueModel } from "./prs";
 import { openPanel, toggleView } from "./menu";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
@@ -39,7 +39,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const allTabIds = workspace?.tabids ?? [];
     const activeTabId = useAtomValue(atoms.staticTabId);
     const tabs = useTabs(allTabIds);
-    const tabIds = allTabIds.filter((id) => !isPlaceholderTab(tabs[id]));
+    const tabIds = projectTabIds(allTabIds, tabs);
     const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
     const { state: raw, offline } = useWintos();
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };

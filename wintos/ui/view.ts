@@ -63,11 +63,10 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     return { title, age, reason: prs?.reason ?? meta ?? age };
 }
 
-// The tab wcore leaves when the last project closes (a window can't hold zero tabs). It is
-// not a project until a pane opens in it.
-export function isPlaceholderTab(tab: Tab | undefined): boolean {
-    return tab?.meta?.["wintos:blank"] === true && !tab.blockids?.length;
-}
+// The Inbox is the one tab that is not a project (pkg/wcore/inbox.go); a tab not loaded yet is one.
+export const isInboxTab = (tab: Tab | undefined) => tab?.meta?.["wintos:inbox"] === true;
+export const projectTabIds = (ids: string[], tabs: Record<string, Tab | undefined>) => ids.filter((id) => !isInboxTab(tabs[id]));
+export const inboxTabId = (ids: string[], tabs: Record<string, Tab | undefined>) => ids.find((id) => isInboxTab(tabs[id]));
 
 // The notes' Pull requests section: every PR of the project, snoozed ones included (marked,
 // last), most urgent group first, each with what it waits on.

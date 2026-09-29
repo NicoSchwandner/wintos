@@ -8,7 +8,7 @@ import { pluginPanels } from "./panels";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
-import { isPlaceholderTab, projectPrList, relTime, sidebarModel } from "./view";
+import { projectPrList, projectTabIds, relTime, sidebarModel } from "./view";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 
 const KIND_LABEL = { project: "Projects", session: "Sessions", action: "Do" } as const;
@@ -24,7 +24,8 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
         if (!state) return [];
         const ws = globalStore.get(atoms.workspace);
         const activeTab = globalStore.get(atoms.staticTabId);
-        const tabIds = (ws?.tabids ?? []).filter((id) => !isPlaceholderTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))));
+        const ids = ws?.tabids ?? [];
+        const tabIds = projectTabIds(ids, Object.fromEntries(ids.map((id) => [id, globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))])));
         const model = sidebarModel(tabIds, state);
         const title = (id: string) => state.projects.find((p) => p.id === id)?.title ?? names[id] ?? "Untitled";
         const band: Record<string, string> = {};

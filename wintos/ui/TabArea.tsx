@@ -6,7 +6,6 @@ import { ConfirmClose } from "./ConfirmClose";
 import "./theme.css";
 import { Key } from "./Key";
 import { Keymap } from "./Keymap";
-import { isPlaceholderTab } from "./view";
 import { useSeenReporter } from "./useSeenReporter";
 import { useNewProjectPaste } from "./newproject";
 import { useWintos } from "./useWintos";
@@ -43,7 +42,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
                         style={{ display: view === "terminal" ? "flex" : "none" }}
                     >
                         <SessionStrip tabId={tabId} />
-                        {empty ? <EmptyProject noProject={isPlaceholderTab(tab)} /> : children}
+                        {empty ? <EmptyProject /> : children}
                     </div>
                 </div>
                 {view === "terminal" && <NotesRail tabId={tabId} />}
@@ -57,15 +56,12 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
 });
 WintosTabArea.displayName = "WintosTabArea";
 
-// Closing the last pane leaves the project open, and closing the last project leaves the
-// placeholder tab; either way, say what to do next.
-function EmptyProject({ noProject }: { noProject: boolean }) {
-    const keys: [string, string][] = noProject
-        ? [["⌘N", "new project"], ["⌘Q", "quit WintOS"]]
-        : [["⇧⌘T", "new Claude session"], ["⌘T", "new terminal"], ["⌘J ⌘K", "another project"], ["⌘W", "close this project"]];
+// Closing the last pane leaves the project open; say what to do next.
+function EmptyProject() {
+    const keys: [string, string][] = [["⇧⌘T", "new Claude session"], ["⌘T", "new terminal"], ["⌘J ⌘K", "another project"], ["⌘W", "close this project"]];
     return (
         <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, fontFamily: T.ui, color: T.muted }}>
-            <span style={{ fontFamily: T.display, fontSize: 24, color: T.secondary }}>{noProject ? "No project open" : "Nothing open in this project"}</span>
+            <span style={{ fontFamily: T.display, fontSize: 24, color: T.secondary }}>Nothing open in this project</span>
             <div style={{ display: "grid", gridTemplateColumns: "auto auto", gap: "10px 28px" }}>
                 {keys.map(([k, label]) => <Key key={k} k={k} label={label} />)}
             </div>

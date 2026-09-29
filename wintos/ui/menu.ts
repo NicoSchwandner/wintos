@@ -63,9 +63,8 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:ArrowLeft", "pane-prev"],
     ["Option:Cmd:ArrowRight", "pane-next"],
     ["Shift:Cmd:c", "copy-url"],
-    ["Cmd:1", "focus-list"],
-    ["Cmd:2", "focus-terminal"],
-    ["Cmd:3", "focus-notes"],
+    ["Cmd:1", "focus-left"],
+    ["Cmd:2", "focus-right"],
 ];
 
 function focusedBlockView(): string | undefined {
@@ -110,7 +109,7 @@ export function runKey(action: string): boolean {
 
 // The Inbox holds pages and nothing else: a terminal or a Claude session started there would
 // belong to no project and never show in the sidebar, Needs you or ⌃⇥.
-const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "focus-notes"]);
+const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes"]);
 export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
 
@@ -125,8 +124,10 @@ export function runAction(action: string): void {
     if (action === "terminal") return void createBlock(getDefaultNewBlockDef());
     if (action === "rename") return globalStore.set(renamingAtom, globalStore.get(atoms.staticTabId));
     if (action === "palette" || action === "keymap") return toggleOverlay(action);
-    // ⌘1 is the Inbox's list; a project has no list that takes focus (the sidebar never does).
-    if (action === "focus-list") return void document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus();
+    // ⌘1 / ⌘2: the left and the right area, the same in every tab (the sidebar never takes
+    // focus): the Inbox's list and its page, a project's terminals and its notes.
+    if (action === "focus-left") return inInbox() ? void document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus() : focusArea("terminal");
+    if (action === "focus-right") return focusArea(inInbox() ? "terminal" : "notes");
     if (action.startsWith("focus-")) return focusArea(action.slice(6) as "terminal" | "notes");
     if (action.startsWith("open-page:")) return openPage(action.slice("open-page:".length));
     if (action.startsWith("open-url:")) return void createBlock({ meta: { view: "web", url: action.slice(9) } });

@@ -9,7 +9,7 @@ let intent: { zone: Zone; el: HTMLElement | null } = { zone: "pane", el: null };
 
 export const paneWanted = () => intent.zone === "pane";
 
-// WintOS moving focus into a pane on purpose (Esc to the panes, ⌘2, ⌥⌘←/→, landing on a session).
+// WintOS moving focus into a pane on purpose (Esc to the panes, ⌘1/⌘2, ⌥⌘←/→, landing on a session).
 export function wantPane(): void {
     intent = { zone: "pane", el: null };
 }

@@ -64,7 +64,7 @@ describe("focusedPageUrl", () => {
 
 describe("allowedInInbox", () => {
     test("the Inbox opens pages and moves between them; it starts no terminals or Claude sessions", () => {
-        for (const a of ["palette", "keymap", "prs", "panel", "open-page:https://github.com/acme/api/pull/1", "switch-next", "project", "copy-url", "pane-next", "browser"]) expect([a, allowedInInbox(a)]).toEqual([a, true]);
-        for (const a of ["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "focus-notes"]) expect([a, allowedInInbox(a)]).toEqual([a, false]);
+        for (const a of ["palette", "keymap", "prs", "panel", "open-page:https://github.com/acme/api/pull/1", "switch-next", "project", "copy-url", "pane-next", "browser", "focus-left", "focus-right"]) expect([a, allowedInInbox(a)]).toEqual([a, true]);
+        for (const a of ["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes"]) expect([a, allowedInInbox(a)]).toEqual([a, false]);
     });
 });

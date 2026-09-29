@@ -50,7 +50,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
         out.push({ id: "a:project", kind: "action", title: "New project", hint: "⌘N", run: () => runAction("project") });
         out.push({ id: "a:rename", kind: "action", title: `Rename ${here}`, hint: "⌘R", run: () => runAction("rename") });
         projectPrList(state, activeTab).forEach(({ pr }, i) =>
-            out.push({ id: `a:pr:${pr.url}`, kind: "action", title: `Open PR #${pr.number}: ${pr.title}`, hint: i < 9 ? `⌘3 ${i + 1}` : "", run: () => runAction(`open-page:${pr.url}`) })
+            out.push({ id: `a:pr:${pr.url}`, kind: "action", title: `Open PR #${pr.number}: ${pr.title}`, hint: i < 9 ? `⌘2 ${i + 1}` : "", run: () => runAction(`open-page:${pr.url}`) })
         );
         out.push({ id: "a:notes", kind: "action", title: `Notes for ${here}`, hint: "⇧⌘J", run: () => runAction("notes") });
         out.push({ id: "a:prs", kind: "action", title: "PRs need attention", hint: "⇧⌘G", run: () => runAction("prs") });

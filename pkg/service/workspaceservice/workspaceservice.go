@@ -218,6 +218,10 @@ func (svc *WorkspaceService) CloseTab_Meta() tsgenmeta.MethodMeta {
 func (svc *WorkspaceService) CloseTab(ctx context.Context, workspaceId string, tabId string, fromElectron bool) (*CloseTabRtnType, waveobj.UpdatesRtnType, error) {
 	ctx = waveobj.ContextWithUpdates(ctx)
 	tab, err := wstore.DBGet[*waveobj.Tab](ctx, tabId)
+	// WintOS: refused before its blocks' controllers are torn down, not after.
+	if wcore.IsInbox(tab) {
+		return nil, nil, fmt.Errorf("the Inbox cannot be closed")
+	}
 	if err == nil && tab != nil {
 		go func() {
 			for _, blockId := range tab.BlockIds {

@@ -20,6 +20,10 @@ import (
 
 func SwitchWorkspace(ctx context.Context, windowId string, workspaceId string) (*waveobj.Workspace, error) {
 	log.Printf("SwitchWorkspace %s %s\n", windowId, workspaceId)
+	// WintOS: a workspace from before the Inbox gets one; ensured before ws is read below.
+	if _, err := EnsureInbox(ctx, workspaceId); err != nil {
+		return nil, err
+	}
 	ws, err := GetWorkspace(ctx, workspaceId)
 	if err != nil {
 		return nil, fmt.Errorf("error getting new workspace: %w", err)
@@ -181,14 +185,20 @@ func CheckAndFixWindow(ctx context.Context, windowId string) *waveobj.Window {
 		CloseWindow(ctx, windowId, false)
 		return nil
 	}
-	if len(ws.TabIds) == 0 {
-		log.Printf("fixing workspace with no tabs %q (in checkAndFixWindow)\n", ws.OID)
-		_, err = CreateTab(ctx, ws.OID, "", true, false)
-		if err != nil {
-			log.Printf("error creating tab (in checkAndFixWindow): %v\n", err)
-		}
+	if err := ensureInboxActive(ctx, ws); err != nil {
+		log.Printf("error ensuring the Inbox (in checkAndFixWindow): %v\n", err)
 	}
 	return window
+}
+
+// WintOS: a workspace with no tabs gets only its Inbox, made active; a new project there would
+// be an Untitled one nobody asked for.
+func ensureInboxActive(ctx context.Context, ws *waveobj.Workspace) error {
+	inbox, err := EnsureInbox(ctx, ws.OID)
+	if err != nil || len(ws.TabIds) > 0 {
+		return err
+	}
+	return SetActiveTab(ctx, ws.OID, inbox)
 }
 
 func FocusWindow(ctx context.Context, windowId string) error {

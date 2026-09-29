@@ -66,6 +66,10 @@ func CreateWorkspace(ctx context.Context, name string, icon string, color string
 	if err != nil {
 		return nil, fmt.Errorf("error creating tab: %w", err)
 	}
+	// WintOS: every workspace (first launch, a new window, a second instance) gets its Inbox.
+	if _, err = EnsureInbox(ctx, ws.OID); err != nil {
+		return nil, err
+	}
 
 	wps.Broker.Publish(wps.WaveEvent{
 		Event: wps.Event_WorkspaceUpdate,
@@ -241,7 +245,6 @@ func CreateTab(ctx context.Context, workspaceId string, tabName string, activate
 	if err != nil {
 		return "", fmt.Errorf("error creating tab: %w", err)
 	}
-	removeBlankTabs(ctx, workspaceId, tab.OID)
 	if activateTab {
 		err = SetActiveTab(ctx, workspaceId, tab.OID)
 		if err != nil {
@@ -266,23 +269,6 @@ func CreateTab(ctx context.Context, workspaceId string, tabName string, activate
 		Event: "action:createtab",
 	})
 	return tab.OID, nil
-}
-
-// WintOS: the placeholder tab stands in only while no project is open; one with panes added
-// to it has become a project and stays.
-func removeBlankTabs(ctx context.Context, workspaceId string, keepTabId string) {
-	ws, err := GetWorkspace(ctx, workspaceId)
-	if err != nil {
-		return
-	}
-	for _, tabId := range ws.TabIds {
-		tab, _ := wstore.DBGet[*waveobj.Tab](ctx, tabId)
-		if tabId != keepTabId && tab != nil && tab.Meta[MetaKey_WintosBlank] == true && len(tab.BlockIds) == 0 {
-			if _, err := DeleteTab(ctx, workspaceId, tabId, false); err != nil {
-				log.Printf("removing placeholder tab %s: %v", tabId, err)
-			}
-		}
-	}
 }
 
 func createTabObj(ctx context.Context, workspaceId string, name string, meta waveobj.MetaMapType) (*waveobj.Tab, error) {
@@ -316,6 +302,10 @@ func DeleteTab(ctx context.Context, workspaceId string, tabId string, recursive 
 	ws, _ := wstore.DBGet[*waveobj.Workspace](ctx, workspaceId)
 	if ws == nil {
 		return "", fmt.Errorf("workspace not found: %q", workspaceId)
+	}
+	// WintOS: closing tabs (recursive) never takes the Inbox; deleting its workspace still does.
+	if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, tabId); recursive && IsInbox(tab) {
+		return ws.ActiveTabId, fmt.Errorf("the Inbox cannot be closed")
 	}
 
 	// ensure tab is in workspace
@@ -353,15 +343,6 @@ func DeleteTab(ctx context.Context, workspaceId string, tabId string, recursive 
 		wstore.DBDelete(ctx, waveobj.OType_LayoutState, tab.LayoutState)
 	}
 
-	// WintOS: closing the last project leaves a blank placeholder tab (the UI hides it and says
-	// how to start a project or quit) instead of closing the window.
-	if recursive && newActiveTabId == "" {
-		blank, err := createTabObj(ctx, workspaceId, "", waveobj.MetaMapType{MetaKey_WintosBlank: true})
-		if err != nil {
-			return "", fmt.Errorf("error creating placeholder tab: %w", err)
-		}
-		return blank.OID, SetActiveTab(ctx, workspaceId, blank.OID)
-	}
 	return newActiveTabId, nil
 }
 

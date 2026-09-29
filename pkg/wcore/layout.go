@@ -33,10 +33,6 @@ type PortableLayout []struct {
 	Focused  bool              `json:"focused"`
 }
 
-
-// Tab meta for the placeholder tab that stands in when no project is open.
-const MetaKey_WintosBlank = "wintos:blank"
-
 func GetStarterLayout() PortableLayout {
 	return PortableLayout{
 		{IndexArr: []int{0}, BlockDef: &waveobj.BlockDef{

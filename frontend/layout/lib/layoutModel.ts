@@ -325,7 +325,10 @@ export class LayoutModel {
         });
 
         this.ephemeralNode = atom();
-        this.magnifiedNodeSizeAtom = getSettingsKeyAtom("window:magnifiedblocksize");
+        // WintOS: in the Inbox a magnified page is read like a browser tab, filling the area; a
+        // smaller size shows the other pages blurred around it.
+        const magnifiedSizeSetting = getSettingsKeyAtom("window:magnifiedblocksize");
+        this.magnifiedNodeSizeAtom = atom((get) => (get(tabAtom)?.meta?.["wintos:inbox"] ? 1 : get(magnifiedSizeSetting)));
 
         this.magnifiedNodeIdAtom = atom((get) => {
             const treeState = get(this.localTreeStateAtom);

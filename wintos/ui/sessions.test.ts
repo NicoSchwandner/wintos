@@ -1,15 +1,8 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { closeWarning, liveSessions, nextNeedsYou, nextWaiting, stripSessions, unreadSessions } from "./sessions";
+import { closeWarning, liveSessions, nextNeedsYou, nextWaiting, unreadSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
-
-describe("stripSessions", () => {
-    test("the active tab's live sessions, in the order first seen", () => {
-        const all = [s("1", "t", "working"), s("2", "u", "waiting"), s("3", "t", "ended"), s("4", "t", "waiting")];
-        expect(stripSessions(all, "t").map((x) => x.id)).toEqual(["1", "4"]);
-    });
-});
 
 describe("nextWaiting", () => {
     const tabs = ["t", "u", "v"];

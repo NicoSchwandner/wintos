@@ -11,7 +11,7 @@ import { projectPrList } from "../view";
 export const PR_KEYS = 9;
 export const openProjectPr = (tabId: string, state: ReturnType<typeof useWintos>["state"], n: number): boolean => {
     const r = state ? projectPrList(state, tabId)[n - 1] : undefined;
-    if (r) runAction(`open-pr:${r.pr.url}`);
+    if (r) runAction(`open-page:${r.pr.url}`);
     return !!r;
 };
 
@@ -25,7 +25,7 @@ export const PrList = memo(({ tabId, size }: { tabId: string; size: "rail" | "fu
             {rows.map((r, i) => (
                 <div
                     key={r.pr.url}
-                    onClick={() => runAction(`open-pr:${r.pr.url}`)}
+                    onClick={() => runAction(`open-page:${r.pr.url}`)}
                     title={r.pr.url}
                     style={{ display: "flex", alignItems: "baseline", gap: 8, cursor: "pointer", opacity: r.snoozed ? 0.55 : 1, fontSize: size === "rail" ? 12 : 13, lineHeight: 1.4 }}
                 >

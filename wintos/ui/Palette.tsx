@@ -8,7 +8,7 @@ import { pluginPanels } from "./panels";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
-import { isPlaceholderTab, projectPrList, relTime, sidebarModel } from "./view";
+import { projectPrList, projectTabIds, relTime, sidebarModel } from "./view";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 
 const KIND_LABEL = { project: "Projects", session: "Sessions", action: "Do" } as const;
@@ -24,7 +24,8 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
         if (!state) return [];
         const ws = globalStore.get(atoms.workspace);
         const activeTab = globalStore.get(atoms.staticTabId);
-        const tabIds = (ws?.tabids ?? []).filter((id) => !isPlaceholderTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))));
+        const ids = ws?.tabids ?? [];
+        const tabIds = projectTabIds(ids, Object.fromEntries(ids.map((id) => [id, globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))])));
         const model = sidebarModel(tabIds, state);
         const title = (id: string) => state.projects.find((p) => p.id === id)?.title ?? names[id] ?? "Untitled";
         const band: Record<string, string> = {};
@@ -46,7 +47,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
         out.push({ id: "a:project", kind: "action", title: "New project", hint: "⌘N", run: () => runAction("project") });
         out.push({ id: "a:rename", kind: "action", title: `Rename ${here}`, hint: "⌘R", run: () => runAction("rename") });
         projectPrList(state, activeTab).forEach(({ pr }, i) =>
-            out.push({ id: `a:pr:${pr.url}`, kind: "action", title: `Open PR #${pr.number}: ${pr.title}`, hint: i < 9 ? `⌘3 ${i + 1}` : "", run: () => runAction(`open-pr:${pr.url}`) })
+            out.push({ id: `a:pr:${pr.url}`, kind: "action", title: `Open PR #${pr.number}: ${pr.title}`, hint: i < 9 ? `⌘3 ${i + 1}` : "", run: () => runAction(`open-page:${pr.url}`) })
         );
         out.push({ id: "a:notes", kind: "action", title: `Notes for ${here}`, hint: "⇧⌘J", run: () => runAction("notes") });
         out.push({ id: "a:prs", kind: "action", title: "PRs need attention", hint: "⇧⌘G", run: () => runAction("prs") });

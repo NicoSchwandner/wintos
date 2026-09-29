@@ -3,12 +3,10 @@ import { isPlainKey } from "./keys";
 import { enterProject, focusArea } from "./focus";
 import { atoms, createTab } from "@/store/global";
 import { offerPrompt, prLinkPaste } from "./newproject";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { memo, useEffect, useRef, useState } from "react";
 import type { Group } from "../daemon/prs/group";
-import { mainViewAtom, prTabsAtom } from "./notes/state";
-import { PrBrowser } from "./PrBrowser";
-import { closeTab, openTab } from "./prtabs";
+import { runAction } from "./menu";
 import { Key } from "./Key";
 import { initials, keepSelection, queueModel, reviewerChips, type QueueRow } from "./prs";
 import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
@@ -26,12 +24,12 @@ export const HEADERS: Record<Group, { label: string; note: string; color: string
     team: { label: "The team's", note: "asked of your team: yours to review too", color: T.muted },
 };
 
-// ⇧⌘G: every PR that concerns you, grouped by the action it asks of you (spec §4, PRQueueC).
+// The Inbox's PR list (⇧⌘G): every PR that concerns you, grouped by the action it asks of you.
+// A PR opens as an ordinary browser pane beside it, in the Inbox's own layout.
 export const PrQueue = memo(() => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     const { state } = useWintos();
     const now = useNow();
-    const setView = useSetAtom(mainViewAtom);
     const [selected, setSelected] = useState<string | undefined>();
     const shownBefore = useRef<string[]>([]);
     const [refreshing, setRefreshing] = useState(false);
@@ -54,10 +52,7 @@ export const PrQueue = memo(() => {
     const toggleSnooze = (r: QueueRow) =>
         daemonFetch("/prs/snooze", { method: "POST", body: snoozedUrls.has(r.pr.url) ? { url: r.pr.url, until: null } : { url: r.pr.url, until: nextWorkingDayStart(Date.now()), movedAt: lastMovement(r.pr) } }).catch(() => {});
 
-    // The terminals are hidden behind this view, so a PR opens beside the list, not as a block.
-    const [tabs, setTabs] = useAtom(prTabsAtom);
-    const openUrl = tabs.urls.length ? tabs.urls[tabs.active] : null;
-    const openPr = (r: QueueRow) => setTabs((t) => openTab(t, r.pr.url));
+    const openPr = (r: QueueRow) => runAction(`open-page:${r.pr.url}`);
     const tabIds = useAtomValue(atoms.workspace)?.tabids ?? [];
     const projectOf = state ? prProjects(tabIds, state) : new Map<string, string>();
     const titleOf = (tabId: string) => state?.projects.find((p) => p.id === tabId)?.title ?? "its project";
@@ -65,7 +60,6 @@ export const PrQueue = memo(() => {
     const goToProject = (r: QueueRow) => {
         const tabId = projectOf.get(r.pr.url);
         if (!tabId) return void (offerPrompt(prLinkPaste(r.pr.url)), createTab());
-        setView("terminal");
         enterProject(tabId);
     };
     const refresh = async () => {
@@ -76,7 +70,7 @@ export const PrQueue = memo(() => {
 
     return (
         <div
-            data-wintos="pr-queue"
+            data-wintos="inbox-list"
             tabIndex={0}
             ref={focusRef}
             onKeyDown={(e) => {
@@ -92,13 +86,12 @@ export const PrQueue = memo(() => {
                     if (!snoozedUrls.has(r.pr.url)) setSelected(urls[cursor + 1] ?? urls[cursor - 1]);
                     void toggleSnooze(r);
                 }
-                else if (e.key === "Escape") openUrl ? setTabs((t) => closeTab(t, t.active)) : focusArea("terminal");
+                else if (e.key === "Escape") focusArea("terminal");
                 else return;
                 e.preventDefault();
             }}
-            style={{ flexGrow: 1, display: "flex", background: "#1d2021", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
+            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#1d2021", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
         >
-            <div style={{ flexGrow: openUrl ? 0 : 1, width: openUrl ? "44%" : undefined, minWidth: openUrl ? 440 : 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "18px 26px 16px", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 30, fontWeight: 400, lineHeight: 1, color: T.emphasis }}>PRs need attention</h1>
@@ -114,7 +107,7 @@ export const PrQueue = memo(() => {
                     <div key={group} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         <GroupHeader {...HEADERS[group]} count={rows.length} />
                         {rows.flatMap((row) => withStack(row)).map(({ r, depth }) => (
-                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r || r.pr.url === openUrl} compact={!!openUrl} onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} compact onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 ))}
@@ -122,7 +115,7 @@ export const PrQueue = memo(() => {
                     <div style={{ display: "flex", flexDirection: "column", gap: 2, opacity: 0.6 }}>
                         <GroupHeader label="Snoozed" note="back next working day, or when it moves · z wakes" color={T.muted} count={model.snoozed.length} />
                         {model.snoozed.map((r) => (
-                            <PrRow key={r.pr.url} r={r} depth={0} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r || r.pr.url === openUrl} compact={!!openUrl} onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={0} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} compact onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 )}
@@ -130,14 +123,11 @@ export const PrQueue = memo(() => {
             </div>
             <div style={{ flexShrink: 0, height: 30, padding: "0 26px", display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
                 <Key k="j k" label="row" />
-                <Key k="⏎" label="open beside" />
-                {openUrl && <Key k="⇥" label="into the PR" />}
+                <Key k="⏎" label="open" />
                 <Key k="o" label={flat[cursor] && !projectOf.has(flat[cursor].pr.url) ? "open as new project" : "go to project"} off={!flat[cursor]} />
                 <Key k="z" label="snooze" />
-                <Key k={openUrl ? "esc ⌘W" : "esc"} label={openUrl ? "close the tab" : "back"} />
+                <Key k="esc" label="to the panes" />
             </div>
-            </div>
-            <PrBrowser />
         </div>
     );
 });
@@ -184,6 +174,7 @@ function PrRow({ r, depth, project, cursor, compact, onOpen }: { r: QueueRow; de
     return (
         <div
             data-pr={`${pr.repo}#${pr.number}`}
+            data-selected={cursor || undefined}
             onClick={onOpen}
             style={{ display: "flex", alignItems: "center", gap: 16, height: 44, padding: "0 12px", marginLeft: depth * 22, overflow: "hidden", borderRadius: 10, cursor: "pointer", background: cursor ? T.cardActive : "transparent", border: `1px solid ${cursor ? T.borderActive : "transparent"}` }}
         >

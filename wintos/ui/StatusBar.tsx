@@ -8,13 +8,10 @@ import { T } from "./tokens";
 const KEYS = {
     terminal: [["⌘J ⌘K", "projects"], ["⌃⇥", "next waiting"], ["⇧⌘P", "everything"], ["⇧⌘T", "new session"], ["⌘E", "edit mine.md"], ["⇧⌘J", "notes"], ["⇧⌘G", "PRs"], ["⇧⌘K", "keys"]],
     notes: [["⌘E", "edit mine.md"], ["⌘⏎", "save"], ["esc", "back"]],
-    prs: [["j k", "row"], ["⏎", "open"], ["o", "go to project"], ["r", "resync"], ["esc", "back"]],
-    panel: [["1 2", "focus a pane"], ["r", "resync"], ["esc", "back"]],
 } as const;
 
 export const StatusBar = memo(() => {
     const view = useAtomValue(mainViewAtom);
-    if (view === "prs") return null; // the queue carries its own key bar (PRQueueC)
     return (
         <div style={{ flexShrink: 0, height: 30, padding: "0 16px", display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${T.hairline}`, background: T.sidebar, fontFamily: T.ui }}>
             {KEYS[view].map(([k, label]) => (

@@ -147,12 +147,16 @@ export function wintosEscape(): boolean {
     return true;
 }
 
+// A PR pane keeps its identity while it moves between the PR's own tabs (/files, /commits).
+const pagePr = (url: string) => /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+(?=[/?#]|$)/.exec(url)?.[0];
 export function paneShowing(blocks: (Block | undefined)[], url: string): string | undefined {
-    return blocks.find((b) => b?.meta?.view === "web" && b.meta.url === url)?.oid;
+    const pr = pagePr(url);
+    return blocks.find((b) => b?.meta?.view === "web" && (b.meta.url === url || (pr != null && pagePr(b.meta.url ?? "") === pr)))?.oid;
 }
 
 // A PR from the project's notes or the palette opens in the project, beside its terminals; the
 // PR view keeps its own tabs. One pane per PR: open again, it is focused.
+const opening = new Set<string>();
 function openPage(url: string): void {
     globalStore.set(mainViewAtom, "terminal");
     const tab = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))));
@@ -162,7 +166,12 @@ function openPage(url: string): void {
     if (shown) return inInbox ? void magnifyBlock(shown) : focusBlock(shown);
     // The layout node arrives after createBlock resolves, so magnify once it exists (up to ~2s).
     const magnifyWhenLaid = (id: string, frames = 120) => magnifyBlock(id) || (frames > 0 && requestAnimationFrame(() => magnifyWhenLaid(id, frames - 1)));
-    void createBlock({ meta: { view: "web", url } }).then((id) => inInbox && magnifyWhenLaid(id));
+    // A double ⏎ would otherwise start two panes before either exists.
+    if (opening.has(url)) return;
+    opening.add(url);
+    void createBlock({ meta: { view: "web", url } })
+        .then((id) => inInbox && magnifyWhenLaid(id))
+        .finally(() => opening.delete(url));
 }
 
 // ⇧⌘W: asks first when Claude sessions would stop; ⇧⌘W again confirms.

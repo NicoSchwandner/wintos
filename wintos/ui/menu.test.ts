@@ -58,6 +58,13 @@ describe("paneShowing", () => {
 
     test("a PR already open in a browser pane of the project is reused", () => expect(paneShowing(blocks, "https://github.com/acme/api/pull/9")).toBe("b2"));
     test("otherwise a new pane opens", () => expect(paneShowing(blocks, "https://github.com/acme/api/pull/10")).toBeUndefined());
+    test("a PR pane that moved on to its files tab is still that PR", () => {
+        const moved = [{ oid: "b3", meta: { view: "web", url: "https://github.com/acme/api/pull/9/files#diff-1" } }] as unknown as Block[];
+        expect(paneShowing(moved, "https://github.com/acme/api/pull/9")).toBe("b3");
+        expect(paneShowing(moved, "https://github.com/acme/api/pull/90")).toBeUndefined();
+    });
+    test("other pages match only exactly", () =>
+        expect(paneShowing([{ oid: "b4", meta: { view: "web", url: "https://example.com/a/b" } }] as unknown as Block[], "https://example.com/a")).toBeUndefined());
 });
 
 describe("focusedPageUrl", () => {

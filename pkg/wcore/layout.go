@@ -33,7 +33,6 @@ type PortableLayout []struct {
 	Focused  bool              `json:"focused"`
 }
 
-
 func GetStarterLayout() PortableLayout {
 	return PortableLayout{
 		{IndexArr: []int{0}, BlockDef: &waveobj.BlockDef{

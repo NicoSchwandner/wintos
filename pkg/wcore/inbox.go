@@ -3,6 +3,7 @@ package wcore
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/wavetermdev/waveterm/pkg/waveobj"
 	"github.com/wavetermdev/waveterm/pkg/wstore"
@@ -16,8 +17,13 @@ func IsInbox(tab *waveobj.Tab) bool {
 	return tab != nil && tab.Meta[MetaKey_WintosInbox] == true
 }
 
+// Two windows loading at once would each find no Inbox and create one.
+var ensureInboxLock sync.Mutex
+
 // EnsureInbox returns the workspace's Inbox tab, creating it (not activated) when missing.
 func EnsureInbox(ctx context.Context, workspaceId string) (string, error) {
+	ensureInboxLock.Lock()
+	defer ensureInboxLock.Unlock()
 	ws, err := GetWorkspace(ctx, workspaceId)
 	if err != nil {
 		return "", fmt.Errorf("workspace %s not found: %w", workspaceId, err)

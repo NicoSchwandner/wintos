@@ -143,3 +143,11 @@ describe("snooze", () => {
         expect(isSnoozed(p, {}, MON)).toBe(false);
     });
 });
+
+describe("qualifier without reviewers (the queue shows them as chips)", () => {
+    test("drops the reviewer phrases, keeps the rest", () => {
+        expect(qualifier(pr({ reviewers: ["ana.b"] }), "team", { reviewers: false })).toBeUndefined();
+        expect(qualifier(pr({ reviewers: [], createdAt: "2026-09-01T09:00:00Z" }), "chase", { reviewers: false })).toBeUndefined();
+        expect(qualifier(pr({ checks: "FAILURE" }), "fix", { reviewers: false })).toEqual({ text: "CI red", brick: true });
+    });
+});

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { PR } from "../daemon/prs/group";
-import { initials, keepSelection, queueModel } from "./prs";
+import { initials, keepSelection, queueModel, reviewerChips } from "./prs";
 
 const MON = Date.parse("2026-09-28T09:00:00Z");
 const pr = (p: Partial<PR>): PR => ({
@@ -126,5 +126,13 @@ describe("keepSelection", () => {
     test("nothing selected yet or an empty list", () => {
         expect(keepSelection([], ["a"], undefined)).toBe("a");
         expect(keepSelection(["a"], [], "a")).toBeUndefined();
+    });
+});
+
+describe("reviewerChips", () => {
+    test("up to two, then how many more", () => expect(reviewerChips(pr({ reviewers: ["ana", "bo", "team-x"] }), 2)).toEqual({ chips: ["ana", "bo"], more: 1, none: false }));
+    test("nobody asked on a ready PR is a 'none' chip; on a draft it is nothing", () => {
+        expect(reviewerChips(pr({ reviewers: [] }), 2)).toEqual({ chips: [], more: 0, none: true });
+        expect(reviewerChips(pr({ reviewers: [], isDraft: true }), 2)).toEqual({ chips: [], more: 0, none: false });
     });
 });

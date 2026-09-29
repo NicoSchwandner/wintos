@@ -10,7 +10,7 @@ import { mainViewAtom, prTabsAtom } from "./notes/state";
 import { PrBrowser } from "./PrBrowser";
 import { closeTab, openTab } from "./prtabs";
 import { Key } from "./Key";
-import { initials, keepSelection, queueModel, type QueueRow } from "./prs";
+import { initials, keepSelection, queueModel, reviewerChips, type QueueRow } from "./prs";
 import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
@@ -142,6 +142,23 @@ export const PrQueue = memo(() => {
 PrQueue.displayName = "PrQueue";
 
 // compact: with a PR open beside the list the row has ~400px, so the name and size columns go.
+const CHIP: React.CSSProperties = { flexShrink: 0, maxWidth: 96, padding: "2px 7px", borderRadius: 10, border: `1px solid ${T.keycapBorder}`, fontSize: 10.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+
+function Reviewers({ r, compact }: { r: QueueRow; compact: boolean }) {
+    const { chips, more, none } = reviewerChips(r.pr, compact ? 1 : 2);
+    return (
+        <span style={{ width: compact ? 70 : 190, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: 4 }}>
+            {chips.map((c) => (
+                <span key={c} title={c} style={CHIP}>
+                    {compact ? initials(c) : c}
+                </span>
+            ))}
+            {more > 0 && <span style={{ ...CHIP, color: T.faint }}>+{more}</span>}
+            {none && <span style={{ ...CHIP, color: T.brick, borderColor: T.brick }}>none</span>}
+        </span>
+    );
+}
+
 function GroupHeader({ label, note, color, count }: { label: string; note: string; color: string; count: number }) {
     return (
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "0 12px 4px" }}>
@@ -181,6 +198,7 @@ function PrRow({ r, depth, cursor, compact, onOpen }: { r: QueueRow; depth: numb
                 {pr.title}
                 {r.qualifier && <span style={{ fontSize: 11, color: r.qualifier.brick ? T.brick : T.muted }}> — {r.qualifier.text}</span>}
             </span>
+            <Reviewers r={r} compact={compact} />
             <span style={{ width: compact ? 120 : 150, flexShrink: 0, textAlign: "right", fontFamily: T.mono, fontSize: 10.5, color: T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {r.repoShort} #{pr.number}
             </span>

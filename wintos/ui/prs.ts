@@ -13,7 +13,7 @@ export type QueueModel = { groups: { group: Group; rows: QueueRow[] }[]; snoozed
 export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes = {}): QueueModel {
     const toRow = (pr: PR): QueueRow => {
         const group = groupOf(pr, me, now);
-        return { pr, group, mine: pr.author === me, age: ageLabel(pr, now), qualifier: qualifier(pr, group), total: pr.additions + pr.deletions, repoShort: pr.repo.split("/").pop()!, children: [] };
+        return { pr, group, mine: pr.author === me, age: ageLabel(pr, now), qualifier: qualifier(pr, group, { reviewers: false }), total: pr.additions + pr.deletions, repoShort: pr.repo.split("/").pop()!, children: [] };
     };
     const snoozed = prs.filter((p) => isSnoozed(p, snoozes, now)).map(toRow);
     const all = prs.filter((p) => !isSnoozed(p, snoozes, now)).map(toRow);
@@ -62,4 +62,10 @@ export function keepSelection(before: string[], after: string[], selected: strin
     const below = before.slice(i + 1).find((u) => after.includes(u));
     const above = before.slice(0, Math.max(i, 0)).reverse().find((u) => after.includes(u));
     return (i >= 0 && (below ?? above)) || after[0];
+}
+
+// Who a PR waits on, as chips beside it (a wrapped "waiting on a, b, team" line was unreadable).
+// A ready PR nobody is asked on shows "none"; a draft is nobody's yet.
+export function reviewerChips(pr: PR, max: number): { chips: string[]; more: number; none: boolean } {
+    return { chips: pr.reviewers.slice(0, max), more: Math.max(0, pr.reviewers.length - max), none: !pr.isDraft && pr.reviewers.length === 0 };
 }

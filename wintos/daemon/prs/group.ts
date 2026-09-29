@@ -86,7 +86,8 @@ export function groupOf(pr: PR, me: string, now: number): Group {
     return mine ? "waiting" : "team";
 }
 
-export function qualifier(pr: PR, group: Group): { text: string; brick?: boolean } | undefined {
+// reviewers: false leaves out who it waits on, for views that show reviewers themselves.
+export function qualifier(pr: PR, group: Group, opts: { reviewers?: boolean } = {}): { text: string; brick?: boolean } | undefined {
     if (group === "merge") return undefined;
     if (group === "fix") {
         if (pr.reviewDecision === "CHANGES_REQUESTED") return { text: pr.changesRequestedBy ? `changes requested by ${pr.changesRequestedBy}` : "changes requested" };
@@ -95,6 +96,7 @@ export function qualifier(pr: PR, group: Group): { text: string; brick?: boolean
     }
     if (pr.reviewDecision === "APPROVED" && pr.mergeState === "BLOCKED") return { text: "approved · blocked by required reviews" };
     if (pr.reviewDecision === "APPROVED" && (pr.checks === "PENDING" || pr.checks === "EXPECTED")) return { text: "approved · checks pending" };
+    if (opts.reviewers === false) return undefined;
     if (group === "chase" && !pr.isDraft && pr.reviewers.length === 0) return { text: "no reviewer assigned" };
     if (pr.reviewers.length) return { text: `waiting on ${pr.reviewers.join(", ")}` };
     return undefined;

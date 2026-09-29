@@ -176,6 +176,8 @@ export function registerWintosMenu(): void {
     if (registered) return;
     registered = true;
     getApi().onWintosMenu(runAction);
+    // A link leaving a GitHub page (wintos/links.ts) opens beside it in this tab.
+    getApi().onWintosOpenPane((url) => runAction(`open-page:${url}`));
     // Dev builds only: lets wintos/e2e drive menu actions that native menus keep out of reach.
     if (isDev()) (window as unknown as { wintosAction: typeof runAction }).wintosAction = runAction;
 }

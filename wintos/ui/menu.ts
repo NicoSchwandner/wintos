@@ -161,9 +161,12 @@ export function wintosEscape(): boolean {
 
 // A PR pane keeps its identity while it moves between the PR's own tabs (/files, /commits).
 const pagePr = (url: string) => /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+(?=[/?#]|$)/.exec(url)?.[0];
+// The address a page was opened for: a sign-in or a viewer's own redirect changes its url, and it
+// is still that page when opened again.
+const OPENED = "wintos:opened";
 export function paneShowing(blocks: (Block | undefined)[], url: string): string | undefined {
     const pr = pagePr(url);
-    return blocks.find((b) => b?.meta?.view === "web" && (b.meta.url === url || (pr != null && pagePr(b.meta.url ?? "") === pr)))?.oid;
+    return blocks.find((b) => b?.meta?.view === "web" && (b.meta.url === url || b.meta[OPENED] === url || (pr != null && pagePr(b.meta.url ?? "") === pr)))?.oid;
 }
 
 // A PR from the project's notes or the palette opens in the project, beside its terminals; the
@@ -208,7 +211,7 @@ function openPage(url: string): void {
     if (opening.has(url)) return;
     opening.add(url);
     if (inInbox) keepListFocus(list);
-    void createBlock({ meta: { view: "web", url } })
+    void createBlock({ meta: { view: "web", url, [OPENED]: url } as MetaType })
         .then((id) => inInbox && magnifyWhenLaid(id))
         .finally(() => opening.delete(url));
 }

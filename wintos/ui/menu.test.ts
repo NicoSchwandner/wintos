@@ -46,6 +46,10 @@ describe("paneShowing", () => {
         expect(paneShowing(moved, "https://github.com/acme/api/pull/9")).toBe("b3");
         expect(paneShowing(moved, "https://github.com/acme/api/pull/90")).toBeUndefined();
     });
+    test("a page that redirected (a sign-in, a viewer's own address) is still the page it was opened for", () => {
+        const moved = [{ oid: "b5", meta: { view: "web", url: "https://accounts.example.com/signin?x=1", "wintos:opened": "https://errors.example.com/team/x" } }] as unknown as Block[];
+        expect(paneShowing(moved, "https://errors.example.com/team/x")).toBe("b5");
+    });
     test("other pages match only exactly", () =>
         expect(paneShowing([{ oid: "b4", meta: { view: "web", url: "https://example.com/a/b" } }] as unknown as Block[], "https://example.com/a")).toBeUndefined());
 });

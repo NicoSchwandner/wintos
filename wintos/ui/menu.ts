@@ -102,7 +102,14 @@ export function runKey(action: string): boolean {
     return true;
 }
 
+// The Inbox holds pages and nothing else: a terminal or a Claude session started there would
+// belong to no project and never show in the sidebar, Needs you or ⌃⇥.
+const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "focus-notes"]);
+export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
+const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
+
 export function runAction(action: string): void {
+    if (!allowedInInbox(action) && inInbox()) return;
     if (action === "session") return newSession();
     if (action === "switch-next" || action === "switch-prev") return switchProject(action === "switch-next" ? 1 : -1, false);
     if (action === "project") return void createTab();

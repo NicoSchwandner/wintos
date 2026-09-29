@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { globalStore } from "@/app/store/jotaiStore";
-import { blockDefFor, focusedPageUrl, newSessionScript, paneShowing, wintosClose } from "./menu";
+import { allowedInInbox, blockDefFor, focusedPageUrl, newSessionScript, paneShowing, wintosClose } from "./menu";
 import { mainViewAtom } from "./notes/state";
 
 const widgets = {
@@ -65,5 +65,12 @@ describe("focusedPageUrl", () => {
         expect(focusedPageUrl({ meta: { view: "web", url: "https://github.com/acme/api/pull/7" } } as unknown as Block)).toBe("https://github.com/acme/api/pull/7");
         expect(focusedPageUrl({ meta: { view: "term" } } as unknown as Block)).toBeUndefined();
         expect(focusedPageUrl(undefined)).toBeUndefined();
+    });
+});
+
+describe("allowedInInbox", () => {
+    test("the Inbox opens pages and moves between them; it starts no terminals or Claude sessions", () => {
+        for (const a of ["palette", "keymap", "prs", "panel", "open-page:https://github.com/acme/api/pull/1", "switch-next", "project", "copy-url", "pane-next", "browser"]) expect([a, allowedInInbox(a)]).toEqual([a, true]);
+        for (const a of ["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "focus-notes"]) expect([a, allowedInInbox(a)]).toEqual([a, false]);
     });
 });

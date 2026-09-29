@@ -1,7 +1,8 @@
-// Drives a running WintOS dev build (wintos/dev.sh, debug port 9223) for UI checks.
+// Drives the WintOS dev instance (wintos/dev-instance.sh, debug port 9224) for UI checks; never
+// the everyday one on 9223, where keystrokes would land in the developer's window.
 // usage: node cdp.mjs shot <out.png> | eval '<js>' | key <key>
 const [, , cmd, arg] = process.argv;
-const list = await (await fetch("http://127.0.0.1:9223/json/list")).json();
+const list = await (await fetch(`http://127.0.0.1:${process.env.WINTOS_DEBUG_PORT ?? 9224}/json/list`)).json();
 const page = list.find((t) => t.type === "page" && t.url.includes("index.html"));
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 let id = 0;

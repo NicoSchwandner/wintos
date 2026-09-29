@@ -1,7 +1,7 @@
 // Drive one renderer by target-id prefix (from all.mjs).
 // usage: node in.mjs <prefix> '<js>' | <prefix> --type '<text>' | <prefix> --shot out.png
 const [, , prefix, a, b] = process.argv;
-const t = (await (await fetch("http://127.0.0.1:9223/json/list")).json()).find((x) => x.id.startsWith(prefix));
+const t = (await (await fetch(`http://127.0.0.1:${process.env.WINTOS_DEBUG_PORT ?? 9224}/json/list`)).json()).find((x) => x.id.startsWith(prefix));
 const ws = new WebSocket(t.webSocketDebuggerUrl);
 await new Promise((r) => ws.addEventListener("open", r));
 let id = 0;

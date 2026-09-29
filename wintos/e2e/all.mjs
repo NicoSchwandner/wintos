@@ -1,6 +1,7 @@
 // Evaluate JS in every WintOS renderer (one per cached tab), or in the first one with a sidebar.
 // usage: node all.mjs '<js>' [first]
-const list = (await (await fetch("http://127.0.0.1:9223/json/list")).json()).filter((t) => t.type === "page" && t.url.includes("index.html"));
+const [expr, first] = process.argv.slice(2);
+const list = (await (await fetch(`http://127.0.0.1:${process.env.WINTOS_DEBUG_PORT ?? 9224}/json/list`)).json()).filter((t) => t.type === "page" && t.url.includes("index.html"));
 const evalIn = async (t, expression) => {
   const ws = new WebSocket(t.webSocketDebuggerUrl);
   await new Promise((r) => ws.addEventListener("open", r));

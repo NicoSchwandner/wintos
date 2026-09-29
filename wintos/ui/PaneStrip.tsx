@@ -4,7 +4,7 @@ import { atom, useAtomValue } from "jotai";
 import { memo, useEffect, useMemo } from "react";
 import { focusSession, takeHandoff } from "./focus";
 import { Key } from "./Key";
-import { stripPanes } from "./panes";
+import { paneOrder, stripPanes } from "./panes";
 import { liveSessions, unreadSessions } from "./sessions";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
@@ -19,10 +19,10 @@ const GLYPH = { terminal: "›_", web: "◎", other: "□" } as const;
 export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     const { state } = useWintos();
     const tab = useAtomValue(getWaveObjectAtom<Tab>(makeORef("tab", tabId)));
-    const ids = tab?.blockids ?? [];
+    const lm = getLayoutModelForStaticTab();
+    const ids = paneOrder(useAtomValue(lm.leafOrder), tab?.blockids ?? []);
     const blocks = useAtomValue(useMemo(() => atom((get) => ids.map((id) => get(getWaveObjectAtom<Block>(makeORef("block", id))))), [ids.join(",")]));
     const now = useNow();
-    const lm = getLayoutModelForStaticTab();
     const magnified = useAtomValue(lm.magnifiedNodeIdAtom);
     const focused = useAtomValue(lm.focusedNode);
 

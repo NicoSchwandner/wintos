@@ -10,6 +10,7 @@ import { stepProject, switchProject } from "./switcher";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { isInboxTab } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
+import { paneOrder } from "./panes";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
 // defines, so a user's widgets.json overrides still apply.
@@ -74,7 +75,7 @@ export const focusedPageUrl = (block: Block | undefined): string | undefined => 
 // ⌥⌘←/→ magnify the previous/next pane of this tab, in layout order, wrapping.
 function stepPane(delta: 1 | -1): boolean {
     const lm = getLayoutModelForStaticTab();
-    const ids = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))))?.blockids ?? [];
+    const ids = paneOrder(globalStore.get(lm.leafOrder), globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))))?.blockids ?? []);
     const next = stepProject(ids, globalStore.get(lm.focusedNode)?.data?.blockId ?? "", delta);
     if (next) magnifyBlock(next);
     return true;

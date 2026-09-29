@@ -25,3 +25,9 @@ export function stripPanes(blocks: (Block | undefined)[], sessions: Session[]): 
         return { blockId: b.oid, kind: "other", label: String(view ?? "pane") };
     });
 }
+
+// The tab's panes in layout order (the order on screen), then any not laid out yet.
+export function paneOrder(leafOrder: LeafOrderEntry[], blockIds: string[]): string[] {
+    const laid = leafOrder.map((l) => l.blockid).filter((id) => blockIds.includes(id));
+    return [...laid, ...blockIds.filter((id) => !laid.includes(id))];
+}

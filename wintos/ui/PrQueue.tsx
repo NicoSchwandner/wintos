@@ -147,7 +147,7 @@ PrQueue.displayName = "PrQueue";
 const CHIP: React.CSSProperties = { flexShrink: 0, maxWidth: 96, padding: "2px 7px", borderRadius: 10, border: `1px solid ${T.keycapBorder}`, fontSize: 10.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
 function Reviewers({ r, compact }: { r: QueueRow; compact: boolean }) {
-    const { chips, more, none } = reviewerChips(r.pr, compact ? 1 : 2);
+    const { chips, more, none, approved } = reviewerChips(r.pr, compact ? 1 : 2);
     return (
         // As wide as its chips (up to a cap), so a short reviewer list leaves the room to the title.
         <span style={{ maxWidth: compact ? 70 : 230, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: 4, overflow: "hidden" }}>
@@ -157,6 +157,11 @@ function Reviewers({ r, compact }: { r: QueueRow; compact: boolean }) {
                 </span>
             ))}
             {more > 0 && <span style={{ ...CHIP, color: T.faint }}>+{more}</span>}
+            {approved.map((a) => (
+                <span key={a} title={`approved by ${a}`} style={{ ...CHIP, color: T.moss, borderColor: T.moss }}>
+                    ✓ {compact ? initials(a) : a}
+                </span>
+            ))}
             {none && <span style={{ ...CHIP, color: T.brick, borderColor: T.brick }}>none</span>}
         </span>
     );

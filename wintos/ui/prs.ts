@@ -66,6 +66,8 @@ export function keepSelection(before: string[], after: string[], selected: strin
 
 // Who a PR waits on, as chips beside it (a wrapped "waiting on a, b, team" line was unreadable).
 // A ready PR nobody is asked on shows "none"; a draft is nobody's yet.
-export function reviewerChips(pr: PR, max: number): { chips: string[]; more: number; none: boolean } {
-    return { chips: pr.reviewers.slice(0, max), more: Math.max(0, pr.reviewers.length - max), none: !pr.isDraft && pr.reviewers.length === 0 };
+// With nobody still asked, whoever approved is shown (✓) instead.
+export function reviewerChips(pr: PR, max: number): { chips: string[]; more: number; none: boolean; approved: string[] } {
+    const approved = pr.reviewers.length ? [] : (pr.approvedBy ?? []).slice(0, max);
+    return { chips: pr.reviewers.slice(0, max), more: Math.max(0, pr.reviewers.length - max), none: !pr.isDraft && pr.reviewers.length === 0 && !approved.length, approved };
 }

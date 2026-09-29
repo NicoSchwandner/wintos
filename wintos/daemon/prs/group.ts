@@ -17,6 +17,7 @@ export type PR = {
     reviewedByMe: boolean;
     reviewers: string[]; // people and teams still asked, bots excluded
     changesRequestedBy?: string;
+    approvedBy?: string[]; // people whose latest review approves
     additions: number;
     deletions: number;
     branch: string;

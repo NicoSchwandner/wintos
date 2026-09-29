@@ -130,9 +130,12 @@ describe("keepSelection", () => {
 });
 
 describe("reviewerChips", () => {
-    test("up to two, then how many more", () => expect(reviewerChips(pr({ reviewers: ["ana", "bo", "team-x"] }), 2)).toEqual({ chips: ["ana", "bo"], more: 1, none: false }));
+    test("up to two, then how many more", () => expect(reviewerChips(pr({ reviewers: ["ana", "bo", "team-x"] }), 2)).toEqual({ chips: ["ana", "bo"], more: 1, none: false, approved: [] }));
+
+    test("with nobody still asked, whoever approved shows instead of none", () =>
+        expect(reviewerChips(pr({ reviewers: [], approvedBy: ["genne"] }), 2)).toEqual({ chips: [], more: 0, none: false, approved: ["genne"] }));
     test("nobody asked on a ready PR is a 'none' chip; on a draft it is nothing", () => {
-        expect(reviewerChips(pr({ reviewers: [] }), 2)).toEqual({ chips: [], more: 0, none: true });
-        expect(reviewerChips(pr({ reviewers: [], isDraft: true }), 2)).toEqual({ chips: [], more: 0, none: false });
+        expect(reviewerChips(pr({ reviewers: [] }), 2)).toEqual({ chips: [], more: 0, none: true, approved: [] });
+        expect(reviewerChips(pr({ reviewers: [], isDraft: true }), 2)).toEqual({ chips: [], more: 0, none: false, approved: [] });
     });
 });

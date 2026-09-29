@@ -58,6 +58,11 @@ export function normalize(n: Node, me: string, asked: { requestedMe: boolean; re
     if (latest) pr.lastReviewAt = latest;
     const changes = reviews.filter((r) => r.state === "CHANGES_REQUESTED").pop();
     if (changes) pr.changesRequestedBy = changes.author!.login;
+    const approvers = reviews.filter((r) => r.state === "APPROVED").map((r) => r.author!.login);
+    if (approvers.length) pr.approvedBy = approvers;
+    // A repo that requires no reviews gets no decision from GitHub, approved or not; there a
+    // person's approval with nobody asking for changes is the decision.
+    if (!n.reviewDecision && approvers.length && !changes) pr.reviewDecision = "APPROVED";
     return pr;
 }
 

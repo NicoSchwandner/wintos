@@ -76,3 +76,23 @@ describe("stacks", () => {
         expect(out.map((p) => p.stackedOn)).toEqual([undefined, "u1", undefined]);
     });
 });
+
+describe("approval in a repo that requires no reviews", () => {
+    const asked = { requestedMe: false, requestedTeam: false };
+    const review = (login: string, state: string) => ({ author: { login }, state, submittedAt: "2026-09-25T17:23:52Z" });
+
+    test("GitHub gives no decision there; a person's approval counts, and names them", () => {
+        const p = normalize(node({ reviewDecision: null, latestReviews: { nodes: [review("copilot-pull-request-reviewer", "COMMENTED"), review("genne", "APPROVED")] } }), "me", asked);
+        expect([p.reviewDecision, p.approvedBy]).toEqual(["APPROVED", ["genne"]]);
+    });
+
+    test("a request for changes outweighs an approval", () => {
+        const p = normalize(node({ reviewDecision: null, latestReviews: { nodes: [review("genne", "APPROVED"), review("ana", "CHANGES_REQUESTED")] } }), "me", asked);
+        expect(p.reviewDecision).not.toBe("APPROVED");
+    });
+
+    test("where GitHub decides, its decision stands", () => {
+        const p = normalize(node({ reviewDecision: "REVIEW_REQUIRED", latestReviews: { nodes: [review("genne", "APPROVED")] } }), "me", asked);
+        expect(p.reviewDecision).toBe("REVIEW_REQUIRED");
+    });
+});

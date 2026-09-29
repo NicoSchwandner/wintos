@@ -3,6 +3,7 @@ import { atoms } from "@/store/global";
 import { atom, useAtomValue } from "jotai";
 import { memo, useMemo } from "react";
 import { ConfirmClose } from "./ConfirmClose";
+import "./theme.css";
 import { Key } from "./Key";
 import { Keymap } from "./Keymap";
 import { isPlaceholderTab } from "./view";

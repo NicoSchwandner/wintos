@@ -31,7 +31,7 @@ const MacOSTabBarSpacer = memo(() => {
                     height: "calc(8px * var(--zoomfactor-inv))",
                     WebkitAppRegion: "drag",
                     backdropFilter: "blur(20px)",
-                    background: "rgba(0, 0, 0, 0.35)",
+                    background: "#1d2021", // WintOS: gruvbox ground (wintos/ui/theme.css)
                 } as React.CSSProperties
             }
         />

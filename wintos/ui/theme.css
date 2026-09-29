@@ -1,0 +1,25 @@
+/* WintOS paints Wave's own chrome (window, pane frames, gaps, panels) in the same gruvbox
+   palette as tokens.ts. Doubled :root outranks Wave's theme.scss whatever the load order. */
+:root:root {
+    --main-bg-color: #1d2021;
+    --block-bg-color: #1d2021;
+    --block-bg-solid-color: #1d2021;
+    --panel-bg-color: #282828;
+    --border-color: #3c3836;
+    --main-text-color: #ebdbb2;
+    --secondary-text-color: #d5c4a1;
+    --grey-text-color: #7c6f64;
+    --accent-color: #b8bb26;
+    --hover-bg-color: rgba(235, 219, 178, 0.08);
+    --highlight-bg-color: rgba(235, 219, 178, 0.14);
+    --error-color: #fb4934;
+    --warning-color: #fabd2f;
+    --success-color: #b8bb26;
+    --keybinding-color: #d5c4a1;
+    --keybinding-bg-color: #3c3836;
+    --keybinding-border-color: #504945;
+    --scrollbar-thumb-color: rgba(235, 219, 178, 0.15);
+}
+body {
+    background: #1d2021;
+}

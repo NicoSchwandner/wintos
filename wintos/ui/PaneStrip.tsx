@@ -49,6 +49,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                     <button
                         key={c.blockId}
                         data-pane={c.blockId}
+                        data-on={isOn || undefined}
                         type="button"
                         onClick={() => focusSession({ tabId, blockId: c.blockId })}
                         style={{ WebkitAppRegion: "no-drag", display: "inline-flex", alignItems: "center", gap: 7, maxWidth: 240, padding: "5px 10px", borderRadius: 8, border: `1px solid ${isOn ? T.borderActive : T.border}`, background: isOn ? T.cardActive : "transparent", color: isOn ? T.emphasis : T.secondary, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}

@@ -174,6 +174,7 @@ function PrRow({ r, depth, project, cursor, compact, onOpen }: { r: QueueRow; de
     return (
         <div
             data-pr={`${pr.repo}#${pr.number}`}
+            data-selected={cursor || undefined}
             onClick={onOpen}
             style={{ display: "flex", alignItems: "center", gap: 16, height: 44, padding: "0 12px", marginLeft: depth * 22, overflow: "hidden", borderRadius: 10, cursor: "pointer", background: cursor ? T.cardActive : "transparent", border: `1px solid ${cursor ? T.borderActive : "transparent"}` }}
         >

@@ -44,6 +44,11 @@ async function visible() {
 // So WintOS keys are pressed after CDP's own DOM.focus on the Inbox list, else the document body.
 async function focusOut(t) {
     if (await evalIn(t, "document.hasFocus() && document.activeElement?.tagName !== 'WEBVIEW'")) return;
+    await cdpFocus(t, "[data-wintos=inbox-list]", "body");
+}
+
+// Real focus through CDP on the first selector that matches; node ids live per session.
+async function cdpFocus(t, ...selectors) {
     const ws = new WebSocket(t.webSocketDebuggerUrl);
     await new Promise((r) => ws.addEventListener("open", r));
     let id = 0;
@@ -57,9 +62,13 @@ async function focusOut(t) {
             ws.send(JSON.stringify({ id: n, method, params }));
         });
     const { root } = await call("DOM.getDocument");
-    const list = await call("DOM.querySelector", { nodeId: root.nodeId, selector: "[data-wintos=inbox-list]" });
-    const body = await call("DOM.querySelector", { nodeId: root.nodeId, selector: "body" });
-    await call("DOM.focus", { nodeId: list?.nodeId || body.nodeId });
+    for (const selector of selectors) {
+        const found = await call("DOM.querySelector", { nodeId: root.nodeId, selector });
+        if (found?.nodeId) {
+            await call("DOM.focus", { nodeId: found.nodeId });
+            break;
+        }
+    }
     ws.close();
 }
 
@@ -110,6 +119,9 @@ if (projects() === 0) {
     await evalIn(await visible(), `window.wintosAction("project")`);
     await until("a project", async () => projects() > 0);
 }
+
+// Panes in the Inbox before the run; the run closes every other one at the end.
+const inboxPanesAtStart = sql(`select j.value from db_tab t, json_each(t.data->'blockids') j where t.data->>'$.meta."wintos:inbox"' = 1`).split("\n").filter(Boolean);
 
 await scenario("9 · the Inbox exists exactly once", async () => {
     const n = sql(`select count(*) from db_tab where data->>'$.meta."wintos:inbox"' = 1`);
@@ -186,6 +198,76 @@ await scenario("8 · ⇧⌘W in the Inbox leaves it open", async () => {
     // Wave's own ⇧⌘W once shadowed WintOS's and closed a project without asking.
     if (projects() !== before) throw new Error("a project was closed");
 });
+
+const inboxId = () => sql(`select oid from db_tab where data->>'$.meta."wintos:inbox"' = 1`);
+const inboxPanes = () => Number(sql(`select json_array_length(data->'blockids') from db_tab where oid = '${inboxId()}'`));
+const selectedRow = (t) => evalIn(t, `document.querySelector("[data-selected]")?.dataset.pr`);
+const toInbox = async () => {
+    const t = await visible();
+    if (!(await inboxIn(t))) await press(t, "g", { mods: ["meta", "shift"] });
+    const inbox = await until("the Inbox in front", async () => ((await inboxIn(await visible())) ? visible() : false));
+    await cdpFocus(inbox, "[data-wintos=inbox-list]");
+    return inbox;
+};
+
+await scenario("5 · ⌘J from the PR list switches the project and leaves the list cursor where it was", async () => {
+    const inbox = await toInbox();
+    await press(inbox, "j");
+    await until("a row selected", () => selectedRow(inbox));
+    const row = await selectedRow(inbox);
+    await press(inbox, "j", { mods: ["meta"] });
+    await until("a project in front", async () => !(await inboxIn(await visible())));
+    const after = await selectedRow(inbox);
+    if (after !== row) throw new Error(`the list cursor moved from ${row} to ${after}`);
+});
+
+await scenario("6 · ⌘W with the list focused closes nothing", async () => {
+    const inbox = await toInbox();
+    const [panes, before] = [inboxPanes(), projects()];
+    await press(inbox, "w", { mods: ["meta"] });
+    await sleep(1500);
+    if (inboxPanes() !== panes) throw new Error(`${panes - inboxPanes()} pane(s) closed`);
+    if (projects() !== before) throw new Error("a project was closed");
+});
+
+await scenario("7 · Esc closes the palette and focus goes back to the list; from a page, back to the list", async () => {
+    const inbox = await toInbox();
+    await press(inbox, "p", { mods: ["meta", "shift"] });
+    await until("the palette", () => evalIn(inbox, `!!document.querySelector("[data-wintos=palette]")`));
+    await press(inbox, "Escape", { code: "Escape", keyCode: 27 });
+    await until("the palette closed", () => evalIn(inbox, `!document.querySelector("[data-wintos=palette]")`));
+    await until("the list focused again", () => evalIn(inbox, `document.activeElement?.dataset?.wintos === "inbox-list"`));
+    // A click, as a person would: it gives the guest page real focus.
+    const at = await evalIn(inbox, `(() => { const w = [...document.querySelectorAll("webview")].find((w) => w.getURL().includes("github.com") && w.getBoundingClientRect().width > 0); const r = w?.getBoundingClientRect(); return r && { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    if (!at) throw new Error("no visible page in the Inbox");
+    for (const type of ["mousePressed", "mouseReleased"]) await cdp(inbox, "Input.dispatchMouseEvent", { type, ...at, button: "left", clickCount: 1 });
+    await until("the page focused", () => evalIn(inbox, `document.activeElement?.tagName === "WEBVIEW"`));
+    // CDP's keys never pass Electron's before-input-event, so emain can't forward them: hand the
+    // renderer the event emain reinjects for a real Esc in the page.
+    await evalIn(inbox, `window.wintosKeyDown({ type: "keydown", key: "Escape", code: "Escape", shift: false, control: false, alt: false, meta: false, cmd: false, option: false, repeat: false, location: 0 })`);
+    await until("the list focused from the page", () => evalIn(inbox, `document.activeElement?.dataset?.wintos === "inbox-list"`));
+});
+
+await scenario("10 · ⌘D in the Inbox makes no terminal", async () => {
+    const inbox = await toInbox();
+    const panes = inboxPanes();
+    await press(inbox, "d", { mods: ["meta"] });
+    await sleep(1500);
+    if (inboxPanes() !== panes) throw new Error("a pane was added to the Inbox");
+});
+
+// The run leaves the Inbox as it found it: the pages it opened close again.
+{
+    const inbox = await toInbox();
+    await evalIn(inbox, `(async () => {
+        const keep = new Set(${JSON.stringify(inboxPanesAtStart)});
+        const lm = window.wintosLayout();
+        for (const el of document.querySelectorAll("[data-blockid]")) {
+            const node = !keep.has(el.dataset.blockid) && lm.getNodeByBlockId(el.dataset.blockid);
+            if (node) await lm.closeNode(node.id);
+        }
+    })()`);
+}
 
 for (const r of results) console.log(r.join("  "));
 process.exit(results.some((r) => r[0] === "FAIL") ? 1 : 0);

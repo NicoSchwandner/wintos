@@ -1,5 +1,5 @@
 import { globalStore } from "@/app/store/jotaiStore";
-import { getDefaultNewBlockDef } from "@/app/store/keymodel";
+import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, isDev } from "@/store/global";
 import { closeOverlay, editMine, focusArea, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
@@ -208,5 +208,6 @@ export function registerWintosMenu(): void {
     // A link leaving a GitHub page (wintos/links.ts) opens beside it in this tab.
     getApi().onWintosOpenPane((url) => runAction(`open-page:${url}`));
     // Dev builds only: lets wintos/e2e drive menu actions that native menus keep out of reach.
-    if (isDev()) Object.assign(window, { wintosAction: runAction, wintosTabId: () => globalStore.get(atoms.staticTabId) });
+    // A dynamic import() from the harness would load second copies of these modules, not the live ones.
+    if (isDev()) Object.assign(window, { wintosAction: runAction, wintosTabId: () => globalStore.get(atoms.staticTabId), wintosKeyDown: appHandleKeyDown, wintosLayout: getLayoutModelForStaticTab });
 }

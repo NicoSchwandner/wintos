@@ -188,6 +188,9 @@ func CheckAndFixWindow(ctx context.Context, windowId string) *waveobj.Window {
 			log.Printf("error creating tab (in checkAndFixWindow): %v\n", err)
 		}
 	}
+	if _, err := EnsureInbox(ctx, ws.OID); err != nil {
+		log.Printf("error ensuring the Inbox (in checkAndFixWindow): %v\n", err)
+	}
 	return window
 }
 

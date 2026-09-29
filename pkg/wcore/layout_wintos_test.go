@@ -1,6 +1,7 @@
 package wcore
 
 import (
+	"context"
 	"testing"
 
 	"github.com/wavetermdev/waveterm/pkg/waveobj"
@@ -63,51 +64,69 @@ func TestDeletingLastBlockKeepsTheTab(t *testing.T) {
 	}
 }
 
-// Closing the last project leaves a blank placeholder tab instead of closing the window.
-func TestClosingLastTabLeavesABlankTab(t *testing.T) {
+func newTestWorkspace(t *testing.T) (context.Context, *waveobj.Workspace) {
+	t.Helper()
 	ctx := initTestWStore(t)
 	ws, err := CreateWorkspace(ctx, "w", "", "", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := CreateTab(ctx, ws.OID, "", true, false); err != nil {
+	return ctx, ws
+}
+
+// The Inbox holds what belongs to no project; every workspace has exactly one.
+func TestEnsureInboxCreatesOnce(t *testing.T) {
+	ctx, ws := newTestWorkspace(t)
+	first, err := EnsureInbox(ctx, ws.OID)
+	if err != nil {
 		t.Fatal(err)
 	}
+	second, err := EnsureInbox(ctx, ws.OID)
+	if err != nil || second != first {
+		t.Fatalf("second EnsureInbox = %q, %v; want %q", second, err, first)
+	}
 	ws, _ = GetWorkspace(ctx, ws.OID)
-	var newActive string
-	for _, tabId := range ws.TabIds {
-		if newActive, err = DeleteTab(ctx, ws.OID, tabId, true); err != nil {
-			t.Fatal(err)
+	inboxes := 0
+	for _, id := range ws.TabIds {
+		tab, _ := wstore.DBGet[*waveobj.Tab](ctx, id)
+		if tab.Meta[MetaKey_WintosInbox] == true {
+			inboxes++
+			if len(tab.BlockIds) != 0 {
+				t.Fatalf("new Inbox has blocks: %v", tab.BlockIds)
+			}
 		}
 	}
-	ws, _ = GetWorkspace(ctx, ws.OID)
-	if len(ws.TabIds) != 1 || ws.TabIds[0] != newActive || ws.ActiveTabId != newActive {
-		t.Fatalf("want one active blank tab, got tabs %v active %q (returned %q)", ws.TabIds, ws.ActiveTabId, newActive)
-	}
-	blank, _ := wstore.DBGet[*waveobj.Tab](ctx, newActive)
-	if blank.Meta[MetaKey_WintosBlank] != true || len(blank.BlockIds) != 0 {
-		t.Fatalf("placeholder tab = %+v", blank)
+	if inboxes != 1 {
+		t.Fatalf("inboxes = %d, want 1", inboxes)
 	}
 }
 
-// The placeholder only stands in until a project opens; the new tab replaces it.
-func TestNewTabReplacesTheBlankTab(t *testing.T) {
-	ctx := initTestWStore(t)
-	ws, err := CreateWorkspace(ctx, "w", "", "", false, false)
-	if err != nil {
-		t.Fatal(err)
+func TestInboxCannotBeDeleted(t *testing.T) {
+	ctx, ws := newTestWorkspace(t)
+	inbox, _ := EnsureInbox(ctx, ws.OID)
+	if _, err := DeleteTab(ctx, ws.OID, inbox, true); err == nil {
+		t.Fatal("deleting the Inbox succeeded")
 	}
-	for _, tabId := range ws.TabIds {
-		if _, err := DeleteTab(ctx, ws.OID, tabId, true); err != nil {
-			t.Fatal(err)
+	if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, inbox); tab == nil {
+		t.Fatal("the Inbox is gone")
+	}
+}
+
+// With the Inbox always there, closing the last project lands on it; the window stays.
+func TestClosingLastProjectActivatesInbox(t *testing.T) {
+	ctx, ws := newTestWorkspace(t)
+	inbox, _ := EnsureInbox(ctx, ws.OID)
+	ws, _ = GetWorkspace(ctx, ws.OID)
+	var active string
+	var err error
+	for _, id := range ws.TabIds {
+		if id != inbox {
+			if active, err = DeleteTab(ctx, ws.OID, id, true); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
-	newTab, err := CreateTab(ctx, ws.OID, "", true, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ws, _ = GetWorkspace(ctx, ws.OID)
-	if len(ws.TabIds) != 1 || ws.TabIds[0] != newTab {
-		t.Fatalf("want only the new tab, got %v", ws.TabIds)
+	if active != inbox {
+		t.Fatalf("active after closing the last project = %q, want the Inbox %q", active, inbox)
 	}
 }

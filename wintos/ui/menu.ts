@@ -171,19 +171,28 @@ export function paneShowing(blocks: (Block | undefined)[], url: string): string 
 const opening = new Set<string>();
 // ⏎ in the Inbox list shows the page and leaves you in the list, to walk on with j/k; Esc goes
 // to the page. Wave's block focus pulls focus into the page once it is laid out: hand it back
-// each time, until you press a key or click (then where focus goes is yours).
+// each time, until you move focus yourself (a click, or Esc); j/k while it opens don't count.
 function keepListFocus(list: HTMLElement | null): void {
     if (!list) return;
-    const back = (e: FocusEvent) => (e.target as Element)?.tagName === "WEBVIEW" && list.focus();
+    // A page taking focus fires no focusin in this document, only the list's focusout.
+    // A new page can take seconds to load before it grabs focus; after the first hand-back, Wave's
+    // own retry comes within a frame or two.
+    const back = () =>
+        setTimeout(() => {
+            if (document.activeElement?.tagName !== "WEBVIEW") return;
+            list.focus();
+            setTimeout(stop, 1000);
+        }, 0);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && stop();
     const stop = () => {
-        document.removeEventListener("focusin", back, true);
-        document.removeEventListener("keydown", stop, true);
+        list.removeEventListener("focusout", back);
+        document.removeEventListener("keydown", onKey, true);
         document.removeEventListener("pointerdown", stop, true);
     };
-    document.addEventListener("focusin", back, true);
-    document.addEventListener("keydown", stop, true);
+    list.addEventListener("focusout", back);
+    document.addEventListener("keydown", onKey, true);
     document.addEventListener("pointerdown", stop, true);
-    setTimeout(stop, 3000);
+    setTimeout(stop, 10000);
 }
 function openPage(url: string): void {
     const list = document.activeElement?.closest<HTMLElement>("[data-wintos=inbox-list]") ?? null;

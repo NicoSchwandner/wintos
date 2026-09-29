@@ -13,10 +13,10 @@ import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
 import { setSwitchOrder, switchTargetAtom } from "./switcher";
 import { registerWintosMenu } from "./menu";
-import { renamingAtom } from "./notes/state";
+import { inboxListAtom, renamingAtom, type InboxList } from "./notes/state";
 import { liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
-import { ghPrs, prsByTab, projectTabIds, rowView, RowView, sidebarModel } from "./view";
+import { ghPrs, isInboxTab, prsByTab, projectTabIds, rowView, RowView, sidebarModel } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
@@ -40,6 +40,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const activeTabId = useAtomValue(atoms.staticTabId);
     const tabs = useTabs(allTabIds);
     const tabIds = projectTabIds(allTabIds, tabs);
+    // In the Inbox the card of the list it shows is marked, as the current project's row is.
+    const inboxList = useAtomValue(inboxListAtom);
+    const shows = (list: InboxList) => isInboxTab(tabs[activeTabId]) && inboxList === list;
     const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
     const { state: raw, offline } = useWintos();
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
@@ -142,16 +145,16 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 {state && (
                     <div style={{ display: "flex", gap: 8 }}>
                         {queue ? (
-                            <SummaryCard label="PRs" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={T.brick} onClick={() => goToInbox("prs")} />
+                            <SummaryCard label="PRs" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={T.brick} active={shows("prs")} onClick={() => goToInbox("prs")} />
                         ) : (
-                            <SummaryCard label="PRs" stats={[]} note="loading from GitHub" noteColor={T.faint} onClick={() => goToInbox("prs")} />
+                            <SummaryCard label="PRs" stats={[]} note="loading from GitHub" noteColor={T.faint} active={shows("prs")} onClick={() => goToInbox("prs")} />
                         )}
                         {panels.map((p) => {
                             const c = cardValue(p.counts);
                             const failed = p.error || p.counts.some((x) => x.count == null);
-                            return <SummaryCard key={p.name} label={p.title} busy={running.has(p.name)} stats={c} note={failed ? "couldn't fetch everything" : undefined} noteColor={T.brick} onClick={() => goToInbox("oncall")} />;
+                            return <SummaryCard key={p.name} label={p.title} busy={running.has(p.name)} stats={c} note={failed ? "couldn't fetch everything" : undefined} noteColor={T.brick} active={shows("oncall")} onClick={() => goToInbox("oncall")} />;
                         })}
-                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} stats={[]} note="loading" noteColor={T.faint} onClick={() => goToInbox("oncall")} />)}
+                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
                 {offline || !model ? (
@@ -183,7 +186,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             <div style={{ flexShrink: 0, height: 34, padding: "0 14px", display: "flex", alignItems: "center", gap: 16, borderTop: `1px solid ${T.hairline}`, fontSize: 11, color: T.faint }}>
                 <Key k="⌘J ⌘K" label="switch" />
                 <Key k="⌃⇥" label="waiting" />
-                <Key k="⌘R" label="rename" />
+                {!isInboxTab(tabs[activeTabId]) && <Key k="⌘R" label="rename" />}
             </div>
         </div>
     );
@@ -336,9 +339,9 @@ function Drumming() {
 
 // A title over its numbers, each number stacked on its own label; the note is only for what
 // the numbers can't say (late, updating, loading).
-function SummaryCard({ label, stats, note, noteColor, busy, onClick }: { label: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; onClick: () => void }) {
+function SummaryCard({ label, stats, note, noteColor, busy, active, onClick }: { label: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; active?: boolean; onClick: () => void }) {
     return (
-        <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#32302f", border: "1px solid #3c3836", borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer" }}>
+        <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: active ? T.cardActive : "#32302f", border: `1px solid ${active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, fontWeight: 600, color: T.secondary }}>
                 {label}
                 {busy && <Drumming />}

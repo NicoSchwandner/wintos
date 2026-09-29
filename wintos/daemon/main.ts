@@ -1,10 +1,11 @@
 import { homedir } from "os";
 import { join } from "path";
+import { wintosInstance } from "../instance";
 import { startServer } from "./api/server";
 import { discoverPlugins, type Plugin } from "./plugins/runner";
 
 const root = process.env.WINTOS_ROOT?.replace(/^~/, homedir()) ?? join(homedir(), ".local/share/wintos/projects");
-const port = Number(process.env.WINTOS_PORT ?? 7730);
+const { port } = wintosInstance(process.env);
 
 // Core plugins are bundled next to this file and run on the same Node as the daemon.
 const core: Plugin[] = [

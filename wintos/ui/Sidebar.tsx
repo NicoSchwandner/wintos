@@ -15,7 +15,7 @@ import { setSwitchOrder, switchTargetAtom } from "./switcher";
 import { registerWintosMenu } from "./menu";
 import { renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
-import { setProjectTitle, useWintos } from "./useWintos";
+import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { ghPrs, isPlaceholderTab, prsByTab, rowView, RowView, sidebarModel } from "./view";
 import { queueModel } from "./prs";
 import { openPanel, toggleView } from "./menu";
@@ -120,6 +120,11 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
 
     return (
         <div style={{ height: "100%", display: "flex", flexDirection: "column", background: T.sidebar, borderRight: `1px solid ${T.border}`, fontFamily: T.ui, color: T.text }}>
+            {instance().label && (
+                <div style={{ padding: "30px 12px 6px", background: T.brick, color: T.ground, fontFamily: T.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", textAlign: "center", WebkitAppRegion: "drag" } as React.CSSProperties}>
+                    {instance().label.toUpperCase()} INSTANCE · NOT YOUR WINTOS
+                </div>
+            )}
             {/* The header drags the window, as a macOS title bar would; nothing in it is clickable. */}
             <div style={{ padding: "36px 16px 13px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", WebkitAppRegion: "drag" } as React.CSSProperties}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>

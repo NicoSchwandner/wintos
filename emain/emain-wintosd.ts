@@ -6,12 +6,14 @@ import { randomBytes } from "node:crypto";
 import { ipcMain } from "electron";
 import * as path from "node:path";
 import * as readline from "node:readline";
+import { wintosInstance } from "../wintos/instance";
 import { getElectronAppUnpackedBasePath } from "./emain-platform";
 
 let proc: child_process.ChildProcess | null = null;
 // A fresh secret per launch, shared with the renderer: web pages can reach 127.0.0.1 too.
 const token = randomBytes(24).toString("hex");
 ipcMain.on("wintos-token", (e) => (e.returnValue = token));
+ipcMain.on("wintos-instance", (e) => (e.returnValue = wintosInstance(process.env)));
 
 export function runWintosd(): void {
     const script = path.join(getElectronAppUnpackedBasePath(), "wintos", "wintosd.cjs");

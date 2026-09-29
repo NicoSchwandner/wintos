@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld("api", {
     installAppUpdate: () => ipcRenderer.send("install-app-update"),
     onMenuItemAbout: (callback) => ipcRenderer.on("menu-item-about", callback),
     getWintosToken: () => ipcRenderer.sendSync("wintos-token"),
+    getWintosInstance: () => ipcRenderer.sendSync("wintos-instance"),
     onWintosMenu: (callback) => ipcRenderer.on("wintos-menu", (_e, action) => callback(action)),
     writeClipboard: (text) => ipcRenderer.send("wintos-clipboard", text),
     registerWintosWebview: (webContentsId) => ipcRenderer.send("wintos-register-webview", webContentsId),

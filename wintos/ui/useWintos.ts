@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { getApi } from "@/store/global";
 import type { WintosState } from "./view";
 
-const BASE = "127.0.0.1:7730";
+// This window's daemon: the everyday one, or a second (dev) instance's own.
+export const instance = (() => {
+    let cached: { port: number; label: string } | undefined;
+    return () => (cached ??= getApi().getWintosInstance());
+})();
+const base = () => `127.0.0.1:${instance().port}`;
 const OFFLINE_AFTER_MS = 3000;
 const RETRY_MS = 1000;
 
@@ -24,7 +29,7 @@ const token = () => getApi().getWintosToken();
 
 // Every UI request to wintosd goes through here, so none forgets the launch token.
 export function daemonFetch(path: string, init: { method?: string; body?: unknown } = {}): Promise<Response> {
-    return fetch(`http://${BASE}${path}`, {
+    return fetch(`http://${base()}${path}`, {
         method: init.method ?? "GET",
         headers: { "X-Wintos-Token": token(), ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}) },
         ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
@@ -32,7 +37,7 @@ export function daemonFetch(path: string, init: { method?: string; body?: unknow
 }
 
 function connect() {
-    const ws = new WebSocket(`ws://${BASE}/ws?token=${token()}`);
+    const ws = new WebSocket(`ws://${base()}/ws?token=${token()}`);
     ws.onmessage = (m) => {
         clearTimeout(offlineTimer);
         offlineTimer = undefined;

@@ -15,6 +15,9 @@ import * as keyutil from "../frontend/util/keyutil";
 // On Linux, it will store to ~/.config/waveterm/electron
 // On Windows, it will store to %LOCALAPPDATA%/waveterm/electron
 app.setName("waveterm/electron");
+// WintOS: a second instance (WINTOS_INSTANCE=dev) needs its own Electron data folder, or the
+// single-instance lock, which Electron keys on it, quits it at once.
+if (process.env.WINTOS_INSTANCE) app.setPath("userData", path.join(app.getPath("appData"), `waveterm-${process.env.WINTOS_INSTANCE}`, "electron"));
 
 const isDev = !app.isPackaged;
 const isDevVite = isDev && process.env.ELECTRON_RENDERER_URL;

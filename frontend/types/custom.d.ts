@@ -108,6 +108,7 @@ declare global {
         onMenuItemAbout: (callback: () => void) => void; // menu-item-about
         onWintosMenu: (callback: (action: string) => void) => void; // wintos-menu
         getWintosToken: () => string; // wintos-token
+        getWintosInstance: () => { port: number; label: string }; // wintos-instance
         writeClipboard: (text: string) => void; // wintos-clipboard
         registerWintosWebview: (webContentsId: number) => void; // wintos-register-webview
         onWintosOpenTab: (callback: (url: string) => void) => void; // wintos-open-tab

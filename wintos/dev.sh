@@ -6,7 +6,8 @@ cd "$(dirname "$0")/.."
 for v in $(env | grep -oE '^(CLAUDE[A-Z_]*|CMUX[A-Z_]*)='); do unset "${v%=}"; done
 # Personal settings (WINTOS_ROOT, WINTOS_NEW_PROJECT_CMD) live outside the repo.
 # Exported, so plugins see their own settings too.
-[ -r "$HOME/.config/wintos/env" ] && { set -a; . "$HOME/.config/wintos/env"; set +a; }
+# A second instance (dev-instance.sh) keeps its own settings and must not pick these up.
+[ -z "${WINTOS_INSTANCE:-}" ] && [ -r "$HOME/.config/wintos/env" ] && { set -a; . "$HOME/.config/wintos/env"; set +a; }
 export WINTOS_ROOT="${WINTOS_ROOT:-$HOME/.local/share/wintos/projects}"
 export WAVETERM_ENVFILE=$PWD/.env WAVETERM_NOCONFIRMQUIT=1 \
     WCLOUD_PING_ENDPOINT=https://ping-dev.waveterm.dev/central \
@@ -15,4 +16,4 @@ export WAVETERM_ENVFILE=$PWD/.env WAVETERM_NOCONFIRMQUIT=1 \
 node wintos/build.mjs || exit 1
 # Not via npx: npm exports npm_config_* into the child, every Wave shell inherits them, and
 # nvm then prints a warning into each new terminal.
-exec ./node_modules/.bin/electron-vite dev --remoteDebuggingPort 9223
+exec ./node_modules/.bin/electron-vite dev --remoteDebuggingPort "${WINTOS_DEBUG_PORT:-9223}"

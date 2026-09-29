@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { isPlaceholderTab, projectPrList, prsByTab, relTime, rowView, sidebarModel, type WintosState } from "./view";
+import { isPlaceholderTab, prProjects, projectPrList, prsByTab, relTime, rowView, sidebarModel, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -160,5 +160,14 @@ describe("rowView of an unread reply", () => {
     test("a done session's reply you haven't read says so", () => {
         const r: Row = { tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, unread: true, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "done", since: 5, lastAt: 5, turnEndedAt: 5 }] };
         expect(rowView(r, { dir: "/p", mtime: 0, title: "X", next: "Ship it", pr: [] }, "T", 10)).toMatchObject({ next: "New reply · Ship it", tone: "apricot" });
+    });
+});
+
+describe("prProjects", () => {
+    test("which project each PR belongs to, snoozed PRs included", () => {
+        const pr = { repo: "acme/api", number: 5, url: "https://github.com/acme/api/pull/5", title: "t", author: "me", isDraft: false, createdAt: "2026-09-28T08:00:00Z", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b" };
+        const other = { ...pr, number: 6, url: "https://github.com/acme/api/pull/6" };
+        const state = { now: 0, sessions: [], projects: [{ id: "t1", title: "X", titleLocked: false, pr: ["acme/api#5"], dir: "/d", mtime: 0 }], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs: [pr, other] } } }, snoozes: { [pr.url]: { until: 1e15, movedAt: pr.createdAt } } } as unknown as WintosState;
+        expect([...prProjects(["t1"], state)]).toEqual([[pr.url, "t1"]]);
     });
 });

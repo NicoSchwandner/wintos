@@ -87,3 +87,16 @@ export function projectPrList(state: WintosState, tabId: string): ProjectPrRow[]
         (a, b) => Number(a.snoozed) - Number(b.snoozed) || GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || lastMovement(a.pr).localeCompare(lastMovement(b.pr))
     );
 }
+
+// Which project each PR belongs to, for "go to project" in the queue. Snoozed PRs included:
+// snoozing a PR doesn't detach it from its project.
+export function prProjects(tabIds: string[], state: WintosState): Map<string, string> {
+    const gh = ghPrs(state);
+    const out = new Map<string, string>();
+    if (!gh) return out;
+    for (const id of tabIds) {
+        const p = state.projects.find((x) => x.id === id);
+        if (p) for (const { pr } of projectPrs(p, gh.prs, gh.me, state.now).items) if (!out.has(pr.url)) out.set(pr.url, id);
+    }
+    return out;
+}

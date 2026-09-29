@@ -1,9 +1,8 @@
 import { useFocusOnMount } from "./useFocusOnMount";
 import { isPlainKey } from "./keys";
 import { enterProject, focusArea } from "./focus";
-import { globalStore } from "@/app/store/jotaiStore";
 import { atoms } from "@/store/global";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { memo, useEffect, useRef, useState } from "react";
 import type { Group } from "../daemon/prs/group";
 import { mainViewAtom, prTabsAtom } from "./notes/state";
@@ -15,7 +14,7 @@ import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
-import { ghPrs, prsByTab, relTime } from "./view";
+import { ghPrs, prProjects, relTime } from "./view";
 
 export const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
     merge: { label: "Merge", note: "approved, green, waiting on the button", color: T.moss },
@@ -58,10 +57,11 @@ export const PrQueue = memo(() => {
     const [tabs, setTabs] = useAtom(prTabsAtom);
     const openUrl = tabs.urls.length ? tabs.urls[tabs.active] : null;
     const openPr = (r: QueueRow) => setTabs((t) => openTab(t, r.pr.url));
+    const tabIds = useAtomValue(atoms.workspace)?.tabids ?? [];
+    const projectOf = state ? prProjects(tabIds, state) : new Map<string, string>();
+    const titleOf = (tabId: string) => state?.projects.find((p) => p.id === tabId)?.title ?? "its project";
     const goToProject = (r: QueueRow) => {
-        const ws = globalStore.get(atoms.workspace);
-        const byTab = state ? prsByTab(ws?.tabids ?? [], state) : {};
-        const tabId = Object.entries(byTab).find(([, v]) => v.items.some((i) => i.pr.url === r.pr.url))?.[0];
+        const tabId = projectOf.get(r.pr.url);
         if (!tabId) return;
         setView("terminal");
         enterProject(tabId);
@@ -112,7 +112,7 @@ export const PrQueue = memo(() => {
                     <div key={group} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         <GroupHeader {...HEADERS[group]} count={rows.length} />
                         {rows.flatMap((row) => withStack(row)).map(({ r, depth }) => (
-                            <PrRow key={r.pr.url} r={r} depth={depth} cursor={flat[cursor] === r || r.pr.url === openUrl} compact={!!openUrl} onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r || r.pr.url === openUrl} compact={!!openUrl} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 ))}
@@ -120,7 +120,7 @@ export const PrQueue = memo(() => {
                     <div style={{ display: "flex", flexDirection: "column", gap: 2, opacity: 0.6 }}>
                         <GroupHeader label="Snoozed" note="back next working day, or when it moves · z wakes" color={T.muted} count={model.snoozed.length} />
                         {model.snoozed.map((r) => (
-                            <PrRow key={r.pr.url} r={r} depth={0} cursor={flat[cursor] === r || r.pr.url === openUrl} compact={!!openUrl} onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={0} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r || r.pr.url === openUrl} compact={!!openUrl} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 )}
@@ -130,7 +130,7 @@ export const PrQueue = memo(() => {
                 <Key k="j k" label="row" />
                 <Key k="⏎" label="open beside" />
                 {openUrl && <Key k="⇥" label="into the PR" />}
-                <Key k="o" label="go to project" />
+                <Key k="o" label="go to project" off={!flat[cursor] || !projectOf.has(flat[cursor].pr.url)} />
                 <Key k="z" label="snooze" />
                 <Key k={openUrl ? "esc ⌘W" : "esc"} label={openUrl ? "close the tab" : "back"} />
             </div>
@@ -170,7 +170,8 @@ function GroupHeader({ label, note, color, count }: { label: string; note: strin
     );
 }
 
-function PrRow({ r, depth, cursor, compact, onOpen }: { r: QueueRow; depth: number; cursor: boolean; compact: boolean; onOpen: () => void }) {
+// project: the title of the project this PR belongs to, for its marker (o goes there).
+function PrRow({ r, depth, project, cursor, compact, onOpen }: { r: QueueRow; depth: number; project?: string; cursor: boolean; compact: boolean; onOpen: () => void }) {
     const { pr } = r;
     return (
         <div
@@ -199,6 +200,7 @@ function PrRow({ r, depth, cursor, compact, onOpen }: { r: QueueRow; depth: numb
                 {r.qualifier && <span style={{ fontSize: 11, color: r.qualifier.brick ? T.brick : T.muted }}> — {r.qualifier.text}</span>}
             </span>
             <Reviewers r={r} compact={compact} />
+            <span title={project ? `Project: ${project} (o)` : "No project"} style={{ width: 12, flexShrink: 0, textAlign: "center", fontSize: 11, color: project ? T.moss : "transparent" }}>◆</span>
             <span style={{ width: compact ? 120 : 150, flexShrink: 0, textAlign: "right", fontFamily: T.mono, fontSize: 10.5, color: T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {r.repoShort} #{pr.number}
             </span>

@@ -12,6 +12,7 @@ import { isInboxTab } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
 import { installFocusRing } from "./focusRing";
+import { flog } from "./focusLog";
 import { installFocusOwner, wantPane } from "./focusOwner";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
@@ -78,7 +79,7 @@ export const focusedPageUrl = (block: Block | undefined): string | undefined => 
 function stepPane(delta: 1 | -1): boolean {
     const lm = getLayoutModelForStaticTab();
     const ids = paneOrder(globalStore.get(lm.leafOrder), globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))))?.blockids ?? []);
-    wantPane();
+    wantPane("⌥⌘←/→");
     const next = stepProject(ids, globalStore.get(lm.focusedNode)?.data?.blockId ?? "", delta);
     if (next) magnifyBlock(next);
     return true;
@@ -114,6 +115,7 @@ export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
 
 export function runAction(action: string): void {
+    flog(`action ${action}`);
     if (!allowedInInbox(action) && inInbox()) return;
     if (action === "session") return newSession();
     if (action === "switch-next" || action === "switch-prev") return switchProject(action === "switch-next" ? 1 : -1, false);

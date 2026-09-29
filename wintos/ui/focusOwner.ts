@@ -1,3 +1,4 @@
+import { flog, where } from "./focusLog";
 import { zoneOf, type Zone } from "./zones";
 
 // The one owner of where focus should be. Wave's rule is that its layout's focused pane holds
@@ -9,15 +10,24 @@ let intent: { zone: Zone; el: HTMLElement | null } = { zone: "pane", el: null };
 
 export const paneWanted = () => intent.zone === "pane";
 
+// Wave's block effect asking to take focus into a pane that just became the layout's focused one.
+export function mayFocusPane(blockId: string): boolean {
+    if (paneWanted()) return true;
+    flog(`wave wanted focus in pane ${blockId.slice(0, 6)}: kept on ${where(intent.el)} (intent ${intent.zone})`);
+    return false;
+}
+
 // WintOS moving focus into a pane on purpose (Esc to the panes, ⌘1/⌘2, ⌥⌘←/→, landing on a session).
-export function wantPane(): void {
+export function wantPane(why = "wintos"): void {
+    if (intent.zone !== "pane") flog(`intent → pane (${why})`);
     intent = { zone: "pane", el: null };
 }
 
 // Back where focus should be, when something else took or dropped it. A pane is Wave's to focus.
-export function restoreFocus(): boolean {
+export function restoreFocus(why: string): boolean {
     if (intent.zone === "pane") return false;
     const el = intent.el?.isConnected ? intent.el : document.querySelector<HTMLElement>(`[data-zone="${intent.zone}"]`);
+    flog(`restore (${why}) → ${where(el)}${el ? "" : ": nothing to focus"}`);
     el?.focus();
     return true;
 }
@@ -25,12 +35,15 @@ export function restoreFocus(): boolean {
 let pagePressedAt = 0;
 
 export function installFocusOwner(): void {
+    document.addEventListener("visibilitychange", () => flog(document.visibilityState === "visible" ? "tab shown" : "tab hidden"));
     // Anything focused in this document is a move you or WintOS made (Wave's own are gated).
     document.addEventListener(
         "focusin",
         (e) => {
             const el = e.target as HTMLElement;
-            if (el.tagName !== "WEBVIEW") intent = { zone: zoneOf(el), el: zoneOf(el) === "pane" ? null : el };
+            if (el.tagName === "WEBVIEW") return;
+            intent = { zone: zoneOf(el), el: zoneOf(el) === "pane" ? null : el };
+            flog(`focus → ${where(el)} (intent ${intent.zone})`);
         },
         true
     );
@@ -39,9 +52,15 @@ export function installFocusOwner(): void {
     document.addEventListener(
         "focus",
         (e) => {
-            if ((e.target as HTMLElement).tagName !== "WEBVIEW") return;
-            if (paneWanted() || Date.now() - pagePressedAt < 1000) return wantPane();
-            setTimeout(restoreFocus, 0);
+            const page = e.target as HTMLElement;
+            if (page.tagName !== "WEBVIEW") return;
+            const pressed = Date.now() - pagePressedAt < 1000;
+            if (paneWanted() || pressed) {
+                flog(`focus → ${where(page)} (${pressed ? "you clicked it" : "a pane was wanted"})`);
+                return wantPane(pressed ? "click in page" : "wintos");
+            }
+            flog(`${where(page)} took focus by itself (a load, an autofocus): putting it back`);
+            setTimeout(() => restoreFocus("page grabbed focus"), 0);
         },
         true
     );
@@ -52,8 +71,9 @@ export function installFocusOwner(): void {
             const ev = e as Event & { channel?: string };
             if (ev.channel !== "wintos-page-pressed") return;
             pagePressedAt = Date.now();
-            wantPane();
             const page = e.target as HTMLElement;
+            flog(`mouse pressed in ${where(page)}`);
+            wantPane("click in page");
             if (document.activeElement !== page) page.focus();
         },
         true
@@ -63,7 +83,12 @@ export function installFocusOwner(): void {
     // Inbox list.
     document.addEventListener(
         "focusout",
-        () => setTimeout(() => document.activeElement === document.body && !restoreFocus() && document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus(), 0),
+        () =>
+            setTimeout(() => {
+                if (document.activeElement !== document.body) return;
+                flog("focus lost to nothing");
+                if (!restoreFocus("focus lost")) document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus();
+            }, 0),
         true
     );
 }

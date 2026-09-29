@@ -8,6 +8,17 @@ import { sameChord } from "@/wintos/ui/keys";
 import { runKey, WINTOS_KEYS, wintosClose, wintosEscape } from "@/wintos/ui/menu";
 import { zoneKey } from "@/wintos/ui/zones";
 import { restoreFocus } from "@/wintos/ui/focusOwner";
+import { flog, where } from "@/wintos/ui/focusLog";
+
+// WintOS: a key in the focus trail, never one typed into a terminal or a field.
+function logKey(e: WaveKeyboardEvent, zone: "handled" | "typing" | false): void {
+    if (e.type !== "keydown" || ["Meta", "Shift", "Control", "Alt"].includes(e.key)) return;
+    const named = e.cmd || e.control || e.alt || e.option || !keyutil.isCharacterKeyEvent(e);
+    if (!named && zone !== "handled") return;
+    const mods = (e.control ? "⌃" : "") + (e.alt || e.option ? "⌥" : "") + (e.shift ? "⇧" : "") + (e.cmd ? "⌘" : "");
+    const name = e.key.length === 1 ? e.key.toUpperCase() : { Escape: "Esc", Enter: "⏎", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓" }[e.key] ?? e.key;
+    flog(`key ${mods}${name} in ${where(document.activeElement)}${zone === "handled" ? " → its zone" : zone === "typing" ? " → kept by the field" : ""}`);
+}
 import {
     atoms,
     createBlock,
@@ -314,7 +325,7 @@ function globalRefocus() {
         return;
     }
     // WintOS: focus goes where it should be (focusOwner.ts); a pane only when a pane is wanted.
-    if (restoreFocus()) return;
+    if (restoreFocus("wave refocus")) return;
 
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
@@ -414,6 +425,7 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
     // WintOS: the focused zone's own keys (a list's j/k, a field's Enter) come first, before any
     // Wave chord can start or finish: a text field keeps Ctrl+Shift+S and what follows it.
     const zone = zoneKey(waveEvent, document.activeElement);
+    logKey(waveEvent, zone);
     if (zone !== false && activeChord) resetChord();
     if (zone === "handled") return true;
     if (zone === "typing") return false;

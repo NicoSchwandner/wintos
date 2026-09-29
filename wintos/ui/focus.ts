@@ -5,6 +5,7 @@ import type { Session } from "../daemon/sessions/reduce";
 import { nextNeedsYou, Target } from "./sessions";
 import { editingMineAtom, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
 import { wantPane } from "./focusOwner";
+import { flog, where } from "./focusLog";
 
 // Every Wave tab runs in its own renderer, so a renderer can only magnify blocks of its own
 // tab. To reach a block elsewhere we leave the target in localStorage, which all renderers
@@ -46,7 +47,7 @@ export function focusSession(t: Target): void {
 function landOn(blockId: string): void {
     if (!blockId && mineEditor()) return focusMineEditor();
     globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
-    wantPane();
+    wantPane(blockId ? "landing on a session" : "landing on the terminals");
     if (blockId) magnifyBlock(blockId);
     else focusArea("terminal");
 }
@@ -72,7 +73,7 @@ export function focusedSession(): Session | undefined {
 
 // ⌘1 ⌘2 in a project: the focused terminal, the notes rail. The sidebar never takes focus (⌘J/⌘K switch).
 export function focusArea(area: "terminal" | "notes"): void {
-    if (area === "terminal") wantPane();
+    if (area === "terminal") wantPane("to the panes");
     globalStore.set(mainViewAtom, "terminal");
     // After the view switch renders: a hidden terminal or unmounted rail can't take focus.
     requestAnimationFrame(() => {
@@ -108,11 +109,13 @@ let beforeOverlay: HTMLElement | null = null;
 export function toggleOverlay(o: Exclude<Overlay, "">): void {
     const open = globalStore.get(overlayAtom);
     if (open === o) return closeOverlay();
+    flog(`overlay ${o} opens`);
     if (!open) beforeOverlay = document.activeElement as HTMLElement | null;
     globalStore.set(overlayAtom, o);
 }
 
 export function closeOverlay(): void {
+    flog(`overlay closes, back to ${where(beforeOverlay)}`);
     globalStore.set(overlayAtom, "");
     const el = beforeOverlay;
     beforeOverlay = null;

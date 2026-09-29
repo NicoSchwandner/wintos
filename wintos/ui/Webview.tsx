@@ -2,6 +2,9 @@ import { getApi } from "@/store/global";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 // tabbed: links the page opens elsewhere become tabs of the view (emain/emain-wintos-webview.ts).
+// The webview emain forwards keys from; only the one holding it may clear it.
+let focused: number | null = null;
+
 type Props = { src: string; hidden?: boolean; tabbed?: boolean; onTitle?: (title: string) => void };
 
 // A <webview> for WintOS views. Registering focus the way Wave's web blocks do makes emain
@@ -17,8 +20,10 @@ export const Webview = forwardRef<Electron.WebviewTag | null, Props>(({ src, hid
         const wv = ref.current;
         if (!wv) return;
         const on: [string, (e: any) => void][] = [
-            ["focus", () => getApi().setWebviewFocus(wv.getWebContentsId())],
-            ["blur", () => getApi().setWebviewFocus(null)],
+            ["focus", () => getApi().setWebviewFocus((focused = wv.getWebContentsId()))],
+            // A tab switch fires the new page's focus before the old page's blur; clearing blindly
+            // then unregistered the new page, and its ⌘ keys (⇧⌘C…) stopped reaching WintOS.
+            ["blur", () => focused === wv.getWebContentsId() && getApi().setWebviewFocus((focused = null))],
             ["dom-ready", () => {
                 wv.dataset.webcontentsid = String(wv.getWebContentsId());
                 if (tabbed) getApi().registerWintosWebview(wv.getWebContentsId());

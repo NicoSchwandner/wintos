@@ -1,3 +1,4 @@
+import { isUnread } from "../daemon/ranking/rank";
 import type { Session } from "../daemon/sessions/reduce";
 
 export type Target = { tabId: string; blockId: string };
@@ -42,4 +43,9 @@ export function nextNeedsYou(sessions: Session[], tabIds: string[], activeTabId:
     if (waiting) return waiting;
     if (!needsTabIds.length) return null;
     return { tabId: needsTabIds[(needsTabIds.indexOf(activeTabId) + 1) % needsTabIds.length] };
+}
+
+// A reply you haven't seen: the session's last turn ended after you last looked at its project.
+export function unreadSessions(sessions: Session[], tabId: string, seenAt: number | undefined): Session[] {
+    return sessions.filter((s) => s.tabId === tabId && isUnread(s, seenAt ?? 0));
 }

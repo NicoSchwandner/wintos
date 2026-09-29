@@ -15,7 +15,8 @@ export type Session = {
     parkedOn?: string;
     parkPending?: boolean; // `wintos wait` ran this turn; the turn's Stop parks instead of waiting
     donePending?: boolean; // `wintos done` ran this turn; the turn's Stop ends it done
-    restored?: boolean; // saved at the last quit, its Claude not started again yet
+    restored?: boolean;
+    turnEndedAt?: number; // the last Stop: a reply the developer may not have read yet // saved at the last quit, its Claude not started again yet
 };
 
 const LABEL_MAX = 24;
@@ -53,6 +54,7 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
         parkedOn: parks ? prev.parkedOn : next ? undefined : prev?.parkedOn,
         parkPending: next ? undefined : prev?.parkPending,
         donePending: next ? undefined : prev?.donePending,
+        turnEndedAt: name === "Stop" ? now : prev?.turnEndedAt,
     };
     const out = new Map(sessions);
     // The block's saved entry is replaced by whatever session now reports from it.

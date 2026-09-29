@@ -6,6 +6,7 @@ import { ConfirmClose } from "./ConfirmClose";
 import { Key } from "./Key";
 import { Keymap } from "./Keymap";
 import { isPlaceholderTab } from "./view";
+import { useSeenReporter } from "./useSeenReporter";
 import { NotesFull } from "./notes/NotesFull";
 import { NotesRail } from "./notes/NotesRail";
 import { mainViewAtom, overlayAtom } from "./notes/state";
@@ -22,6 +23,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
     const view = useAtomValue(mainViewAtom);
     const overlay = useAtomValue(overlayAtom);
     const names = useTabNames();
+    useSeenReporter(tabId);
     const tab = useAtomValue(useMemo(() => getWaveObjectAtom<Tab>(makeORef("tab", tabId)), [tabId]));
     const empty = tab?.blockids?.length === 0;
     return (

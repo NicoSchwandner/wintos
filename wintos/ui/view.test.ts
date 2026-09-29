@@ -155,3 +155,10 @@ describe("projectPrList (the notes' Pull requests section)", () => {
         expect(projectPrList({ now: 0, sessions: [], projects: [] } as unknown as WintosState, "t1")).toEqual([]);
     });
 });
+
+describe("rowView of an unread reply", () => {
+    test("a done session's reply you haven't read says so", () => {
+        const r: Row = { tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, unread: true, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "done", since: 5, lastAt: 5, turnEndedAt: 5 }] };
+        expect(rowView(r, { dir: "/p", mtime: 0, title: "X", next: "Ship it", pr: [] }, "T", 10)).toMatchObject({ next: "New reply · Ship it", tone: "apricot" });
+    });
+});

@@ -28,6 +28,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const sessionFile = join(opts.root, ".sessions.json");
     let sessions = restoreSessions(readJson<Session[]>(sessionFile, []));
     const saveSessions = () => writeFileSync(sessionFile, JSON.stringify([...sessions.values()]));
+    // When the developer last looked at each project: a reply after that is unread.
+    const seenFile = join(opts.root, ".seen.json");
+    const seen = readJson<Record<string, number>>(seenFile, {});
+    const markSeen = (tabId: string) => ((seen[tabId] = Date.now()), writeFileSync(seenFile, JSON.stringify(seen)));
     const sockets = new Set<WebSocket>();
     let port = opts.port;
 
@@ -39,6 +43,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         pluginNames: runner.names,
         pluginsRunning: runner.running,
         snoozes,
+        seen,
     });
     const broadcast = () => {
         const frame = JSON.stringify(state());
@@ -110,6 +115,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     return send(res, 400, "need string tabId, blockId, payload.session_id, payload.hook_event_name");
                 sessions = reduceSession(sessions, ev, Date.now());
                 saveSessions();
+                if (p.hook_event_name === "UserPromptSubmit") markSeen(ev.tabId); // you read it to answer it
                 const text =
                     p.hook_event_name === "UserPromptSubmit" ? injection(store.byTab(ev.tabId), store.mineDiff(ev.tabId, p.session_id)) : "";
                 broadcast();
@@ -142,6 +148,14 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const now = Date.now();
                 snoozes = Object.fromEntries(Object.entries(snoozes).filter(([, s]) => s.until > now));
                 writeFileSync(snoozeFile, JSON.stringify(snoozes));
+                broadcast();
+                return send(res, 200, "");
+            }
+            const seenTab = /^\/projects\/([^/]+)\/seen$/.exec(url.pathname);
+            if (req.method === "POST" && seenTab) {
+                const tabId = decodeURIComponent(seenTab[1]);
+                if (!isSafe(tabId)) return send(res, 400, "bad tab id");
+                markSeen(tabId);
                 broadcast();
                 return send(res, 200, "");
             }

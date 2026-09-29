@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { closeWarning, liveSessions, nextNeedsYou, nextWaiting, stripSessions } from "./sessions";
+import { closeWarning, liveSessions, nextNeedsYou, nextWaiting, stripSessions, unreadSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
 
@@ -82,5 +82,15 @@ describe("nextNeedsYou", () => {
 
     test("nothing needs you, nowhere to go", () => {
         expect(nextNeedsYou([], ["t1"], "t1", undefined, [])).toBeNull();
+    });
+});
+
+describe("unreadSessions", () => {
+    const e = (id: string, tabId: string, state: Session["state"], turnEndedAt?: number): Session => ({ ...s(id, tabId, state), turnEndedAt });
+
+    test("sessions of this tab whose last turn ended after you last looked", () => {
+        const all = [e("a", "t1", "done", 50), e("b", "t1", "working", 10), e("c", "t2", "done", 50), e("d", "t1", "ended", 60)];
+        expect(unreadSessions(all, "t1", 20).map((x) => x.id)).toEqual(["a"]);
+        expect(unreadSessions(all, "t1", undefined).map((x) => x.id)).toEqual(["a", "b"]);
     });
 });

@@ -4,7 +4,7 @@ import { useAtomValue } from "jotai";
 import { memo, useEffect } from "react";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { focusSession, takeHandoff } from "./focus";
-import { liveSessions, stripSessions } from "./sessions";
+import { liveSessions, stripSessions, unreadSessions } from "./sessions";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
@@ -29,6 +29,7 @@ export const SessionStrip = memo(({ tabId }: { tabId: string }) => {
 
     const sessions = state ? stripSessions(liveSessions(state.sessions, { [tabId]: tab?.blockids }), tabId) : [];
     if (!sessions.length) return null;
+    const unread = new Set(unreadSessions(sessions, tabId, state?.seen?.[tabId]).map((s) => s.id));
     return (
         <div style={{ display: "flex", gap: 4, padding: "6px 8px 0", fontFamily: T.mono, fontSize: 11, flexShrink: 0, overflowX: "auto" }}>
             {sessions.map((s, i) => {
@@ -54,7 +55,8 @@ export const SessionStrip = memo(({ tabId }: { tabId: string }) => {
                             fontSize: 11,
                         }}
                     >
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: DOT[s.state] }} />
+                        {/* Unread: a ring in the waiting colour until you have looked. */}
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: DOT[s.state], boxShadow: unread.has(s.id) && s.state !== "waiting" ? `0 0 0 2px ${T.apricot}` : undefined }} />
                         {s.label ?? `session ${i + 1}`}
                         {s.state === "waiting" && <span style={{ color: T.apricot }}>{relTime(now - s.since)}</span>}
                     </button>

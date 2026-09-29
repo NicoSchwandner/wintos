@@ -281,3 +281,22 @@ describe("sessions across a restart", () => {
         expect(sessions).toMatchObject([{ id: "s-1", state: "waiting", restored: true }]);
     });
 });
+
+describe("seen", () => {
+    const seenOf = async () => (await (await fetch(base + "/state")).json()).seen["tab-1"];
+
+    test("the UI marks a project seen; it survives a restart", async () => {
+        expect((await post("/projects/tab-1/seen", {})).status).toBe(200);
+        const at = await seenOf();
+        expect(at).toBeGreaterThan(0);
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect(await seenOf()).toBe(at);
+    });
+
+    test("prompting a session means you read what came before", async () => {
+        await event(prompt);
+        expect(await seenOf()).toBeGreaterThan(0);
+    });
+});

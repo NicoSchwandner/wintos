@@ -132,3 +132,11 @@ describe("finishSession (`wintos done`)", () => {
         expect(only(reduceSession(finishSession(parkSession(m, "blk-1", "CI", 5000), "blk-1", 5100), ev(stop), 6000)).state).toBe("done");
     });
 });
+
+describe("turnEndedAt", () => {
+    test("every ended turn records when, so the UI can tell a new reply from one you saw", () => {
+        const m = run([ev(prompt), ev(stop)]);
+        expect(only(m).turnEndedAt).toBe(1010);
+        expect(only(reduceSession(m, ev(prompt), 2000)).turnEndedAt).toBe(1010);
+    });
+});

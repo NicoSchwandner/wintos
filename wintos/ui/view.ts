@@ -4,7 +4,7 @@ import type { Project } from "../daemon/projects/store";
 import { GROUPS, isSnoozed, isStacked, lastMovement, projectPrs, qualifier, type Group, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
 import type { Session } from "../daemon/sessions/reduce";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes };
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number> };
 export type Tone = "apricot" | "brick" | "secondary";
 export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
 
@@ -36,7 +36,7 @@ export function sidebarModel(tabIds: string[], state: WintosState): Ranking {
     const touched = Object.fromEntries(state.projects.filter((p) => p.id).map((p) => [p.id!, p.mtime]));
     const byTab = prsByTab(tabIds, state);
     const blocked = Object.fromEntries(Object.entries(byTab).filter(([, v]) => v.blocked).map(([k, v]) => [k, v.blocked!.since]));
-    return rank(tabIds, state.sessions, state.now, touched, blocked);
+    return rank(tabIds, state.sessions, state.now, touched, blocked, state.seen);
 }
 
 export function rowView(row: Row, project: Project | undefined, tabName: string | undefined, now: number, prs?: ProjectPrs): RowView {
@@ -51,6 +51,7 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     if (project?.error) return { title, next: `note unreadable: ${project.dir}/project.md`, tone: "brick", age, meta };
     if (row.band === "needs") {
         const sessionWaiting = row.sessions.some((s) => s.state === "waiting");
+        if (!sessionWaiting && row.unread) return { title, next: project?.next ? `New reply · ${project.next}` : "New reply", tone: "apricot", age, meta };
         if (!sessionWaiting && prs?.blocked) return { title, next: prs.blocked.text, tone: prs.blocked.tone, age, meta };
         return { title, next: project?.next ?? "Your turn", tone: "apricot", age, meta };
     }

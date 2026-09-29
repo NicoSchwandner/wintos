@@ -66,7 +66,7 @@ export const OnCallList = memo(() => {
                 <Key k="j k" label="row" />
                 <Key k="⏎ 1–9" label="open" />
                 <Key k="r" label="resync" />
-                <Key k="esc" label="to the panes" />
+                <Key k="esc ⌘2" label="to the page" />
             </div>
         </div>
     );

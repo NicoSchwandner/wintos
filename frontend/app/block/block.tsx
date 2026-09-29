@@ -1,6 +1,7 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { paneWanted } from "@/wintos/ui/focusOwner";
 import {
     BlockComponentModel2,
     BlockProps,
@@ -120,7 +121,8 @@ const BlockFull = memo(({ nodeModel, viewModel }: FullBlockProps) => {
         }
         setBlockClicked(false);
         const focusWithin = focusedBlockId() == nodeModel.blockId;
-        if (!focusWithin) {
+        // WintOS: a pane becoming the layout's focused one takes focus only when a pane is wanted.
+        if (!focusWithin && paneWanted()) {
             setFocusTarget();
         }
         if (!isFocused) {

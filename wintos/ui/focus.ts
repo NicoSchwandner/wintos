@@ -4,6 +4,7 @@ import { getLayoutModelForStaticTab } from "@/layout/index";
 import type { Session } from "../daemon/sessions/reduce";
 import { nextNeedsYou, Target } from "./sessions";
 import { editingMineAtom, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
+import { wantPane } from "./focusOwner";
 
 // Every Wave tab runs in its own renderer, so a renderer can only magnify blocks of its own
 // tab. To reach a block elsewhere we leave the target in localStorage, which all renderers
@@ -45,6 +46,7 @@ export function focusSession(t: Target): void {
 function landOn(blockId: string): void {
     if (!blockId && mineEditor()) return focusMineEditor();
     globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
+    wantPane();
     if (blockId) magnifyBlock(blockId);
     else focusArea("terminal");
 }
@@ -70,6 +72,7 @@ export function focusedSession(): Session | undefined {
 
 // ⌘2 ⌘3: the focused terminal, the notes rail. The sidebar never takes focus (⌘J/⌘K switch).
 export function focusArea(area: "terminal" | "notes"): void {
+    if (area === "terminal") wantPane();
     globalStore.set(mainViewAtom, "terminal");
     // After the view switch renders: a hidden terminal or unmounted rail can't take focus.
     requestAnimationFrame(() => {

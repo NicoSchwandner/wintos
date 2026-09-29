@@ -131,7 +131,7 @@ export const PrQueue = memo(() => {
                 <Key k="⏎" label="open" />
                 <Key k="o" label={flat[cursor] && !projectOf.has(flat[cursor].pr.url) ? "open as new project" : "go to project"} off={!flat[cursor]} />
                 <Key k="z" label="snooze" />
-                <Key k="esc" label="to the panes" />
+                <Key k="esc ⌘2" label="to the page" />
             </div>
         </div>
     );

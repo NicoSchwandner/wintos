@@ -36,4 +36,14 @@ document.addEventListener("mouseup", (event) => {
     }
 });
 
+// WintOS: a press in the page, so the host can tell your click from the page taking focus by
+// itself (wintos/ui/focusOwner.ts).
+document.addEventListener(
+    "pointerdown",
+    (event) => {
+        if (event.isTrusted) ipcRenderer.sendToHost("wintos-page-pressed");
+    },
+    true
+);
+
 console.log("loaded wave preload-webview.ts");

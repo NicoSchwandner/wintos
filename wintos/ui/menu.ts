@@ -12,6 +12,7 @@ import { isInboxTab } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
 import { installFocusRing } from "./focusRing";
+import { installFocusOwner, wantPane } from "./focusOwner";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
 // defines, so a user's widgets.json overrides still apply.
@@ -62,6 +63,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:ArrowLeft", "pane-prev"],
     ["Option:Cmd:ArrowRight", "pane-next"],
     ["Shift:Cmd:c", "copy-url"],
+    ["Cmd:1", "focus-list"],
     ["Cmd:2", "focus-terminal"],
     ["Cmd:3", "focus-notes"],
 ];
@@ -77,6 +79,7 @@ export const focusedPageUrl = (block: Block | undefined): string | undefined => 
 function stepPane(delta: 1 | -1): boolean {
     const lm = getLayoutModelForStaticTab();
     const ids = paneOrder(globalStore.get(lm.leafOrder), globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))))?.blockids ?? []);
+    wantPane();
     const next = stepProject(ids, globalStore.get(lm.focusedNode)?.data?.blockId ?? "", delta);
     if (next) magnifyBlock(next);
     return true;
@@ -122,6 +125,8 @@ export function runAction(action: string): void {
     if (action === "terminal") return void createBlock(getDefaultNewBlockDef());
     if (action === "rename") return globalStore.set(renamingAtom, globalStore.get(atoms.staticTabId));
     if (action === "palette" || action === "keymap") return toggleOverlay(action);
+    // ⌘1 is the Inbox's list; a project has no list that takes focus (the sidebar never does).
+    if (action === "focus-list") return void document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus();
     if (action.startsWith("focus-")) return focusArea(action.slice(6) as "terminal" | "notes");
     if (action.startsWith("open-page:")) return openPage(action.slice("open-page:".length));
     if (action.startsWith("open-url:")) return void createBlock({ meta: { view: "web", url: action.slice(9) } });
@@ -147,15 +152,11 @@ export function wintosClose(): boolean {
     });
     if (action === "overlay") closeOverlay();
     if (action === "view") focusArea("terminal");
-    // In the Inbox a closed page hands focus back to the list, not to nowhere or the next page,
-    // and the page left is shown in front: the Inbox reads one page at a time, never tiled.
+    // The Inbox reads one page at a time, never tiled: the page left after a close comes to the front.
     if (action === "pane" && inInbox()) {
-        const list = document.querySelector<HTMLElement>("[data-wintos=inbox-list]");
-        keepListFocus(list); // the page brought to the front grabs focus a moment later
         setTimeout(() => {
             const next = globalStore.get(lm.focusedNode)?.data?.blockId;
             if (next) magnifyBlock(next);
-            list?.focus();
         }, 150);
     }
     return action !== "pane";
@@ -166,7 +167,7 @@ export function wintosEscape(): boolean {
     const active = document.activeElement;
     const action = escapeAction({ overlay: !!globalStore.get(overlayAtom), zone: zoneOf(active), inInbox: inInbox(), onPage: active?.tagName === "WEBVIEW" });
     if (action === "overlay") closeOverlay();
-    if (action === "panes") focusArea("terminal");
+    if (action === "panes") focusArea("terminal"); // focusArea declares the pane wanted
     if (action === "list") document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus();
     return action !== "wave";
 }
@@ -184,53 +185,20 @@ export function paneShowing(blocks: (Block | undefined)[], url: string): string 
 // A PR from the project's notes or the palette opens in the project, beside its terminals; the
 // PR view keeps its own tabs. One pane per PR: open again, it is focused.
 const opening = new Set<string>();
-// ⏎ in the Inbox list shows the page and leaves you in the list, to walk on with j/k; Esc goes
-// to the page. The page grabs focus by itself when it is laid out, and when it loads (an
-// autofocused sign-in field on a redirect): hand focus back only then, within a few seconds of
-// the open or of a load. A click into a page never reaches this document, so outside those
-// windows a move to the page is always yours and stays.
-// A page grabs focus at any of these, and a new page's load can take several seconds.
-const PAGE_LOADS = ["did-start-loading", "dom-ready", "did-stop-loading"];
-function keepListFocus(list: HTMLElement | null): void {
-    if (!list) return;
-    let until = Date.now() + 3000;
-    const loading = () => (until = Date.now() + 2500);
-    // A page taking focus fires no focusin in this document, only the list's focusout. The first
-    // page opening also relays out the Inbox, which drops focus to <body>: that is handed back
-    // too, to the list as it is now.
-    const lost = () => ["WEBVIEW", "BODY"].includes(document.activeElement?.tagName ?? "BODY");
-    const back = (e: FocusEvent) => {
-        if (!(e.target as Element)?.closest?.("[data-wintos=inbox-list]")) return;
-        setTimeout(() => Date.now() < until && lost() && document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus(), 0);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && stop();
-    const stop = () => {
-        document.removeEventListener("focusout", back, true);
-        for (const ev of PAGE_LOADS) document.removeEventListener(ev, loading, true);
-        document.removeEventListener("keydown", onKey, true);
-        document.removeEventListener("pointerdown", stop, true);
-    };
-    document.addEventListener("focusout", back, true);
-    // webview events don't bubble, but the capture phase passes the document on the way down.
-    for (const ev of PAGE_LOADS) document.addEventListener(ev, loading, true);
-    document.addEventListener("keydown", onKey, true);
-    document.addEventListener("pointerdown", stop, true);
-    setTimeout(stop, 30000);
-}
+// ⏎ in the Inbox list shows the page and leaves you in the list, to walk on with j/k: the
+// focus owner keeps the page from taking focus (focusOwner.ts). Esc or ⌘2 goes to the page.
 function openPage(url: string): void {
-    const list = document.activeElement?.closest<HTMLElement>("[data-wintos=inbox-list]") ?? null;
     globalStore.set(mainViewAtom, "terminal");
     const tab = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))));
     const shown = paneShowing((tab?.blockids ?? []).map((id) => globalStore.get(getWaveObjectAtom<Block>(makeORef("block", id)))), url);
     // In the Inbox a page is read one at a time, like a tab: it is magnified, not tiled.
     const inInbox = isInboxTab(tab);
-    if (shown) return inInbox ? void (keepListFocus(list), magnifyBlock(shown)) : focusBlock(shown);
+    if (shown) return inInbox ? void magnifyBlock(shown) : focusBlock(shown);
     // The layout node arrives after createBlock resolves, so magnify once it exists (up to ~2s).
     const magnifyWhenLaid = (id: string, frames = 120) => magnifyBlock(id) || (frames > 0 && requestAnimationFrame(() => magnifyWhenLaid(id, frames - 1)));
     // A double ⏎ would otherwise start two panes before either exists.
     if (opening.has(url)) return;
     opening.add(url);
-    if (inInbox) keepListFocus(list);
     void createBlock({ meta: { view: "web", url, [OPENED]: url } as MetaType })
         .then((id) => inInbox && magnifyWhenLaid(id))
         .finally(() => opening.delete(url));
@@ -256,6 +224,7 @@ export function registerWintosMenu(): void {
     if (registered) return;
     registered = true;
     installFocusRing();
+    installFocusOwner();
     getApi().onWintosMenu(runAction);
     // A link leaving a GitHub page (wintos/links.ts) opens beside it in this tab.
     getApi().onWintosOpenPane((url) => runAction(`open-page:${url}`));

@@ -4,6 +4,7 @@
 import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { FocusManager } from "@/app/store/focusManager";
 import { jumpToNextWaiting } from "@/wintos/ui/focus";
+import { sameChord } from "@/wintos/ui/keys";
 import { runKey, WINTOS_KEYS, wintosClose, wintosEscape } from "@/wintos/ui/menu";
 import {
     atoms,
@@ -737,7 +738,10 @@ function registerGlobalKeys() {
     });
     // WintOS: the sidebar replaces the tab bar, so ⌘1–9 no longer mean "tab N".
     for (let idx = 1; idx <= 9; idx++) globalKeyMap.delete(`Cmd:${idx}`);
-    for (const [key, action] of WINTOS_KEYS) globalKeyMap.set(key, () => runKey(action));
+    for (const [key, action] of WINTOS_KEYS) {
+        for (const existing of [...globalKeyMap.keys()]) if (existing !== key && sameChord(existing, key)) globalKeyMap.delete(existing);
+        globalKeyMap.set(key, () => runKey(action));
+    }
     const waveClose = globalKeyMap.get("Cmd:w");
     globalKeyMap.set("Cmd:w", (e) => wintosClose() || waveClose(e));
     const waveEscape = globalKeyMap.get("Escape");

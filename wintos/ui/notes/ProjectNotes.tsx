@@ -14,7 +14,7 @@ export function Rich({ text, size }: { text: string; size: Size }) {
         <>
             {spans(text).map((s, i) =>
                 s.code ? (
-                    <span key={i} style={{ fontFamily: T.mono, fontSize: SIZES[size].code, color: T.title }}>
+                    <span key={i} style={{ fontFamily: T.mono, fontSize: SIZES[size].code, color: T.emphasis, background: T.cardActive, borderRadius: 4, padding: "0 4px" }}>
                         {s.text}
                     </span>
                 ) : (
@@ -122,7 +122,9 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
                                 <Rich text={cb.text} size={size} />
                             </Line>
                         ) : (
-                            <p key={j} style={{ margin: 0, fontSize: z.text, lineHeight: z.line, color: z.textColor, whiteSpace: "pre-wrap" }}>{line}</p>
+                            <p key={j} style={{ margin: 0, fontSize: z.text, lineHeight: z.line, color: z.textColor, whiteSpace: "pre-wrap" }}>
+                                <Rich text={line} size={size} />
+                            </p>
                         );
                     })}
                 </Section>

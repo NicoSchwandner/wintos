@@ -149,12 +149,13 @@ export function wintosClose(): boolean {
     return action !== "pane";
 }
 
+// Esc forwarded out of a page in the Inbox hands focus back to its list.
 export function wintosEscape(): boolean {
     const active = document.activeElement;
     const action = escapeAction({ overlay: !!globalStore.get(overlayAtom), zone: zoneOf(active), inInbox: inInbox(), onPage: active?.tagName === "WEBVIEW" });
     if (action === "overlay") closeOverlay();
     if (action === "panes") focusArea("terminal");
-    if (action === "list") document.querySelector<HTMLElement>("[data-zone=list]")?.focus();
+    if (action === "list") document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus();
     return action !== "wave";
 }
 

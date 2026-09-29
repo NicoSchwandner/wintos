@@ -359,11 +359,19 @@ function getApi(): ElectronApi {
     return (window as any).api;
 }
 
+// WintOS: the Inbox holds pages only; a terminal or anything else there would belong to no
+// project. Every way of adding a pane (keys, menus, splits) ends in one of the three below.
+function refusedInInbox(blockDef: BlockDef): boolean {
+    const tab = globalStore.get(WOS.getWaveObjectAtom<Tab>(WOS.makeORef("tab", globalStore.get(atoms.staticTabId))));
+    return tab?.meta?.["wintos:inbox"] === true && blockDef?.meta?.view !== "web";
+}
+
 async function createBlockSplitHorizontally(
     blockDef: BlockDef,
     targetBlockId: string,
     position: "before" | "after"
 ): Promise<string> {
+    if (refusedInInbox(blockDef)) return "";
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
     const newBlockId = await ObjectService.CreateBlock(blockDef, rtOpts);
@@ -387,6 +395,7 @@ async function createBlockSplitVertically(
     targetBlockId: string,
     position: "before" | "after"
 ): Promise<string> {
+    if (refusedInInbox(blockDef)) return "";
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
     const newBlockId = await ObjectService.CreateBlock(blockDef, rtOpts);
@@ -406,6 +415,7 @@ async function createBlockSplitVertically(
 }
 
 async function createBlock(blockDef: BlockDef, magnified = false, ephemeral = false): Promise<string> {
+    if (refusedInInbox(blockDef)) return "";
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
     const blockId = await ObjectService.CreateBlock(blockDef, rtOpts);

@@ -364,17 +364,12 @@ function getDefaultNewBlockDef(): BlockDef {
     return termBlockDef;
 }
 
-// WintOS: the Inbox holds pages only; a terminal there would belong to no project.
-const inInboxTab = () => globalStore.get(WOS.getWaveObjectAtom<Tab>(WOS.makeORef("tab", globalStore.get(atoms.staticTabId))))?.meta?.["wintos:inbox"] === true;
-
 async function handleCmdN() {
-    if (inInboxTab()) return;
     const blockDef = getDefaultNewBlockDef();
     await createBlock(blockDef);
 }
 
 async function handleSplitHorizontal(position: "before" | "after") {
-    if (inInboxTab()) return;
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
     if (focusedNode == null) {
@@ -385,7 +380,6 @@ async function handleSplitHorizontal(position: "before" | "after") {
 }
 
 async function handleSplitVertical(position: "before" | "after") {
-    if (inInboxTab()) return;
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
     if (focusedNode == null) {
@@ -438,7 +432,9 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
     }
 
     // WintOS: the focused zone's own keys (a list's j/k, a field's Enter) come first.
-    if (zoneKey(waveEvent, document.activeElement)) return true;
+    const zone = zoneKey(waveEvent, document.activeElement);
+    if (zone === "handled") return true;
+    if (zone === "typing") return false;
     const [, globalHandler] = checkKeyMap(waveEvent, globalKeyMap);
     if (globalHandler) {
         const handled = globalHandler(waveEvent);

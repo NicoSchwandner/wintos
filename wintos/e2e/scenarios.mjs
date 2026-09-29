@@ -113,6 +113,23 @@ async function toProject() {
     return until("a project in front", async () => ((t = await visible()), !(await inboxIn(t)) && t));
 }
 
+// The dev window usually sits behind the developer's own windows, and it must stay there: a
+// covered window is neither focused nor visible, so focus handoffs stall. Focus emulation makes
+// each renderer behave as if in front; it lasts while its CDP session stays open, so hold one per
+// renderer for the whole run.
+const held = new Set();
+async function holdFocus() {
+    for (const t of await renderers()) {
+        if (held.has(t.id)) continue;
+        const ws = new WebSocket(t.webSocketDebuggerUrl);
+        await new Promise((r) => ws.addEventListener("open", r));
+        ws.send(JSON.stringify({ id: 1, method: "Emulation.setFocusEmulationEnabled", params: { enabled: true } }));
+        held.add(t.id);
+    }
+}
+await holdFocus();
+const heldTimer = setInterval(holdFocus, 1000); // renderers created during the run
+
 // Every run starts with at least one project (the dev-only wintosAction hook creates one).
 const projects = () => Number(sql(`select count(*) from db_tab where coalesce(data->>'$.meta."wintos:inbox"', 0) != 1`));
 if (projects() === 0) {
@@ -244,6 +261,10 @@ await scenario("7 · Esc closes the palette and focus goes back to the list; fro
     const typed = await evalIn(inbox, `document.querySelector("[data-wintos=palette] input")?.value`);
     if (typed !== "jz") throw new Error(`the palette field reads "${typed}", want "jz"`);
     if ((await selectedRow(inbox)) !== row) throw new Error("typing in the palette moved the list");
+    // A ⌘ key in the field stays there: no project switches behind the palette.
+    await press(inbox, "j", { mods: ["meta"] });
+    await sleep(800);
+    if (!(await inboxIn(await visible()))) throw new Error("⌘J in the palette switched the project");
     await press(inbox, "Escape", { code: "Escape", keyCode: 27 });
     await until("the palette closed", () => evalIn(inbox, `!document.querySelector("[data-wintos=palette]")`));
     await until("the list focused again", () => evalIn(inbox, `document.activeElement?.dataset?.wintos === "inbox-list"`));
@@ -266,8 +287,9 @@ await scenario("10 · ⌘D in the Inbox makes no terminal", async () => {
     if (inboxPanes() !== panes) throw new Error("a pane was added to the Inbox");
 });
 
-// The run leaves the Inbox as it found it: the pages it opened close again.
-{
+// The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
+// must not cost the run its results.
+await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {
         const keep = new Set(${JSON.stringify(inboxPanesAtStart)});
@@ -277,7 +299,8 @@ await scenario("10 · ⌘D in the Inbox makes no terminal", async () => {
             if (node) await lm.closeNode(node.id);
         }
     })()`);
-}
+});
 
+clearInterval(heldTimer);
 for (const r of results) console.log(r.join("  "));
 process.exit(results.some((r) => r[0] === "FAIL") ? 1 : 0);

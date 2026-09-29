@@ -1,6 +1,7 @@
 import { useAtomValue } from "jotai";
 import { memo, useRef } from "react";
 import { useZoneKeys } from "../zones";
+import { useRailWidth } from "./railWidth";
 import { Key } from "../Key";
 import { T } from "../tokens";
 import { Mine } from "./Mine";
@@ -17,13 +18,24 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
     const { state } = useWintos();
     const ref = useRef<HTMLDivElement>(null);
     useZoneKeys(ref, notesKeys(tabId, state, !editing && !!notes));
+    const [width, setWidth, saveWidth] = useRailWidth();
+    const drag = (e: React.PointerEvent<HTMLDivElement>) => {
+        const handle = e.currentTarget;
+        const right = handle.getBoundingClientRect().right + width; // the rail's right edge stays put
+        handle.setPointerCapture(e.pointerId);
+        handle.onpointermove = (m) => setWidth(right - m.clientX);
+        handle.onpointerup = () => ((handle.onpointermove = handle.onpointerup = null), saveWidth());
+    };
     return (
+        <>
+        {/* The rail's left edge: drag to resize, as the sidebar's right edge. */}
+        <div onPointerDown={drag} style={{ width: 5, flexShrink: 0, cursor: "col-resize", borderLeft: `1px solid ${T.hairline}` }} />
         <div
             data-wintos="notes-rail"
             tabIndex={0}
             data-zone="list"
             ref={ref}
-            style={{ width: 352, flexShrink: 0, boxSizing: "border-box", padding: "12px 22px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", overflowX: "hidden", outline: "none", fontFamily: T.ui, borderLeft: `1px solid ${T.hairline}` }}
+            style={{ width, flexShrink: 0, boxSizing: "border-box", padding: "12px 22px 12px 17px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", overflowX: "hidden", outline: "none", fontFamily: T.ui }}
         >
             {project?.next && (
                 <div style={{ padding: "12px 14px", background: "#32302f", border: "1px solid #d65d0e", borderRadius: 10, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -53,6 +65,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
                 <Mine text={notes?.mine ?? ""} mtime={notes?.mineMtime ?? 0} canEdit={!!notes} save={save} size="rail" />
             </div>
         </div>
+        </>
     );
 });
 NotesRail.displayName = "NotesRail";

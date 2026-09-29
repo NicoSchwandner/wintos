@@ -31,7 +31,7 @@ const MacOSTabBarSpacer = memo(() => {
                     height: "calc(8px * var(--zoomfactor-inv))",
                     WebkitAppRegion: "drag",
                     backdropFilter: "blur(20px)",
-                    background: "#1d2021", // WintOS: gruvbox ground (wintos/ui/theme.css)
+                    background: "rgba(0, 0, 0, 0.35)",
                 } as React.CSSProperties
             }
         />
@@ -109,7 +109,7 @@ const WorkspaceElem = memo(() => {
     return (
         <div className="flex flex-col w-full flex-grow overflow-hidden">
             {!(showLeftTabBar && isMacOS()) && <TabBar key={ws.oid} workspace={ws} noTabs={showLeftTabBar} />}
-            {showLeftTabBar && isMacOS() && <MacOSTabBarSpacer />}
+            {/* WintOS: no spacer strip; the sidebar header and the session strip drag the window. */}
             <div ref={panelContainerRef} className="flex flex-row flex-grow overflow-hidden">
                 <ErrorBoundary key={tabId}>
                     <PanelGroup

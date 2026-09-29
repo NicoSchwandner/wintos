@@ -31,7 +31,8 @@ export const SessionStrip = memo(({ tabId }: { tabId: string }) => {
     if (!sessions.length) return null;
     const unread = new Set(unreadSessions(sessions, tabId, state?.seen?.[tabId]).map((s) => s.id));
     return (
-        <div style={{ display: "flex", gap: 4, padding: "6px 8px 0", fontFamily: T.mono, fontSize: 11, flexShrink: 0, overflowX: "auto" }}>
+        // The strip's empty space drags the window (the spacer strip above it is gone); tabs don't.
+        <div style={{ display: "flex", gap: 4, padding: "6px 8px 0", fontFamily: T.mono, fontSize: 11, flexShrink: 0, overflowX: "auto", WebkitAppRegion: "drag" } as React.CSSProperties}>
             {sessions.map((s, i) => {
                 const isOn = magnified != null && globalStore.get(lm.magnifiedNodeIdAtom) === lm.getNodeByBlockId(s.blockId)?.id;
                 return (
@@ -41,6 +42,7 @@ export const SessionStrip = memo(({ tabId }: { tabId: string }) => {
                         type="button"
                         onClick={() => focusSession({ tabId, blockId: s.blockId })}
                         style={{
+                            WebkitAppRegion: "no-drag",
                             display: "inline-flex",
                             alignItems: "center",
                             gap: 7,
@@ -53,7 +55,7 @@ export const SessionStrip = memo(({ tabId }: { tabId: string }) => {
                             whiteSpace: "nowrap",
                             fontFamily: T.mono,
                             fontSize: 11,
-                        }}
+                        } as React.CSSProperties}
                     >
                         {/* Unread: a ring in the waiting colour until you have looked. */}
                         <span style={{ width: 6, height: 6, borderRadius: "50%", background: DOT[s.state], boxShadow: unread.has(s.id) && s.state !== "waiting" ? `0 0 0 2px ${T.apricot}` : undefined }} />

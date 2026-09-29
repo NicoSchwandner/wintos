@@ -32,8 +32,9 @@ export const InboxArea = memo(({ tabId, empty, children }: { tabId: string; empt
                         <button
                             key={l.list}
                             type="button"
-                            // A click must not leave focus on the button, outside every zone.
+                            // Neither a click nor Tab leaves focus on the button, outside every zone.
                             onMouseDown={(e) => e.preventDefault()}
+                            tabIndex={-1}
                             onClick={() => setList(l.list)}
                             style={{ WebkitAppRegion: "no-drag", display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 10px", borderRadius: 8, cursor: "pointer", fontFamily: T.ui, fontSize: 13, color: list === l.list ? T.title : T.muted, background: list === l.list ? T.cardActive : "transparent", border: `1px solid ${list === l.list ? T.borderActive : "transparent"}` } as React.CSSProperties}
                         >

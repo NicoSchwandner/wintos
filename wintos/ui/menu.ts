@@ -170,10 +170,20 @@ export function paneShowing(blocks: (Block | undefined)[], url: string): string 
 // PR view keeps its own tabs. One pane per PR: open again, it is focused.
 const opening = new Set<string>();
 // ⏎ in the Inbox list shows the page and leaves you in the list, to walk on with j/k; Esc goes
-// to the page. Wave's block focus pulls focus into a page a frame or two after it is shown.
-// ponytail: fixed retries; a focus hint in the layout model if 300ms turns out short.
+// to the page. Wave's block focus pulls focus into the page once it is laid out: hand it back
+// each time, until you press a key or click (then where focus goes is yours).
 function keepListFocus(list: HTMLElement | null): void {
-    if (list) for (const ms of [0, 100, 300]) setTimeout(() => document.activeElement?.tagName === "WEBVIEW" && list.focus(), ms);
+    if (!list) return;
+    const back = (e: FocusEvent) => (e.target as Element)?.tagName === "WEBVIEW" && list.focus();
+    const stop = () => {
+        document.removeEventListener("focusin", back, true);
+        document.removeEventListener("keydown", stop, true);
+        document.removeEventListener("pointerdown", stop, true);
+    };
+    document.addEventListener("focusin", back, true);
+    document.addEventListener("keydown", stop, true);
+    document.addEventListener("pointerdown", stop, true);
+    setTimeout(stop, 3000);
 }
 function openPage(url: string): void {
     const list = document.activeElement?.closest<HTMLElement>("[data-wintos=inbox-list]") ?? null;
@@ -182,14 +192,15 @@ function openPage(url: string): void {
     const shown = paneShowing((tab?.blockids ?? []).map((id) => globalStore.get(getWaveObjectAtom<Block>(makeORef("block", id)))), url);
     // In the Inbox a page is read one at a time, like a tab: it is magnified, not tiled.
     const inInbox = isInboxTab(tab);
-    if (shown) return inInbox ? void (magnifyBlock(shown), keepListFocus(list)) : focusBlock(shown);
+    if (shown) return inInbox ? void (keepListFocus(list), magnifyBlock(shown)) : focusBlock(shown);
     // The layout node arrives after createBlock resolves, so magnify once it exists (up to ~2s).
     const magnifyWhenLaid = (id: string, frames = 120) => magnifyBlock(id) || (frames > 0 && requestAnimationFrame(() => magnifyWhenLaid(id, frames - 1)));
     // A double ⏎ would otherwise start two panes before either exists.
     if (opening.has(url)) return;
     opening.add(url);
+    if (inInbox) keepListFocus(list);
     void createBlock({ meta: { view: "web", url } })
-        .then((id) => inInbox && (magnifyWhenLaid(id), keepListFocus(list)))
+        .then((id) => inInbox && magnifyWhenLaid(id))
         .finally(() => opening.delete(url));
 }
 

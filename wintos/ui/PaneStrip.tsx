@@ -51,8 +51,9 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                         data-pane={c.blockId}
                         data-on={isOn || undefined}
                         type="button"
-                        // A click must not leave focus on the chip, outside every zone.
+                        // Neither a click nor Tab leaves focus on the chip, outside every zone.
                         onMouseDown={(e) => e.preventDefault()}
+                        tabIndex={-1}
                         onClick={() => focusSession({ tabId, blockId: c.blockId })}
                         style={{ WebkitAppRegion: "no-drag", display: "inline-flex", alignItems: "center", gap: 7, maxWidth: 240, padding: "5px 10px", borderRadius: 8, border: `1px solid ${isOn ? T.borderActive : T.border}`, background: isOn ? T.cardActive : "transparent", color: isOn ? T.emphasis : T.secondary, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}
                     >

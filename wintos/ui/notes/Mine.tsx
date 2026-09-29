@@ -81,7 +81,7 @@ export function Mine({
         setError(r === "ok" ? null : r === "conflict" ? "mine.md changed on disk; it reloads, then tick again." : "could not save: wintosd refused or is offline");
     };
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: size === "rail" ? 4 : 6 }}>
+        <div data-wintos={canEdit ? "mine-editable" : undefined} style={{ display: "flex", flexDirection: "column", gap: size === "rail" ? 4 : 6 }}>
             {error && <span style={{ color: T.brick, fontSize: 11 }}>{error}</span>}
             {!text.trim() && (
                 <span style={{ fontSize: 12.5, color: T.faint }}>

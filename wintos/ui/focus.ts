@@ -43,13 +43,14 @@ export function focusSession(t: Target): void {
 // Arriving in a project: on the session asked for, else back in an unsaved mine.md edit (its
 // view left as it was, so the draft stays), else on the terminals.
 function landOn(blockId: string): void {
-    if (!blockId && globalStore.get(editingMineAtom)) return focusMineEditor();
+    if (!blockId && mineEditor()) return focusMineEditor();
     globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
     if (blockId) magnifyBlock(blockId);
     else focusArea("terminal");
 }
 
-const focusMineEditor = () => void requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-wintos=mine-editor]")?.focus());
+const mineEditor = () => document.querySelector<HTMLElement>("[data-wintos=mine-editor]");
+const focusMineEditor = () => void requestAnimationFrame(() => mineEditor()?.focus());
 
 export function takeHandoff(): void {
     const raw = localStorage.getItem(HANDOFF);
@@ -86,6 +87,9 @@ let beforeEdit: HTMLElement | null = null;
 export function editMine(on: boolean): void {
     // ⌘E with the edit already open (focus went elsewhere) takes you back into it.
     if (on && globalStore.get(editingMineAtom)) return focusMineEditor();
+    // A project with no title has no mine.md yet: ⌘E there opens nothing, so nothing is left
+    // half-open to catch focus later.
+    if (on && !document.querySelector("[data-wintos=mine-editable]")) return;
     if (on === globalStore.get(editingMineAtom)) return;
     if (on) beforeEdit = document.activeElement as HTMLElement | null;
     globalStore.set(editingMineAtom, on);

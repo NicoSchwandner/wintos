@@ -169,20 +169,27 @@ export function paneShowing(blocks: (Block | undefined)[], url: string): string 
 // A PR from the project's notes or the palette opens in the project, beside its terminals; the
 // PR view keeps its own tabs. One pane per PR: open again, it is focused.
 const opening = new Set<string>();
+// ⏎ in the Inbox list shows the page and leaves you in the list, to walk on with j/k; Esc goes
+// to the page. Wave's block focus pulls focus into a page a frame or two after it is shown.
+// ponytail: fixed retries; a focus hint in the layout model if 300ms turns out short.
+function keepListFocus(list: HTMLElement | null): void {
+    if (list) for (const ms of [0, 100, 300]) setTimeout(() => document.activeElement?.tagName === "WEBVIEW" && list.focus(), ms);
+}
 function openPage(url: string): void {
+    const list = document.activeElement?.closest<HTMLElement>("[data-wintos=inbox-list]") ?? null;
     globalStore.set(mainViewAtom, "terminal");
     const tab = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))));
     const shown = paneShowing((tab?.blockids ?? []).map((id) => globalStore.get(getWaveObjectAtom<Block>(makeORef("block", id)))), url);
     // In the Inbox a page is read one at a time, like a tab: it is magnified, not tiled.
     const inInbox = isInboxTab(tab);
-    if (shown) return inInbox ? void magnifyBlock(shown) : focusBlock(shown);
+    if (shown) return inInbox ? void (magnifyBlock(shown), keepListFocus(list)) : focusBlock(shown);
     // The layout node arrives after createBlock resolves, so magnify once it exists (up to ~2s).
     const magnifyWhenLaid = (id: string, frames = 120) => magnifyBlock(id) || (frames > 0 && requestAnimationFrame(() => magnifyWhenLaid(id, frames - 1)));
     // A double ⏎ would otherwise start two panes before either exists.
     if (opening.has(url)) return;
     opening.add(url);
     void createBlock({ meta: { view: "web", url } })
-        .then((id) => inInbox && magnifyWhenLaid(id))
+        .then((id) => inInbox && (magnifyWhenLaid(id), keepListFocus(list)))
         .finally(() => opening.delete(url));
 }
 

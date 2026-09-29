@@ -10,7 +10,7 @@ const SECTIONS: [string, [string, string][]][] = [
     ["Projects", [["⌘J / ⌘K", "hold ⌘, tap to walk all projects, release to switch"], ["⌘N", "new project"], ["⌘R", "rename this project"], ["⇧⌘W", "close this project (asks first while Claude runs)"]]],
     ["Sessions", [["⌃⇥", "next that needs you: a waiting session, else a project"], ["⌘T / ⇧⌘T", "new terminal · new Claude session"], ["⌥⌘← →", "previous · next pane (the strip)"], ["⇧⌘C", "copy a browser pane's url"], ["⌘W / ⌘M", "close · magnify the focused pane"]]],
     ["Open", [["⇧⌘P", "everything, including dropped projects"], ["⇧⌘J", "notes, full width"], ["⇧⌘G / ⇧⌘O", "the Inbox: PRs · on call"], ["⇧⌘K", "this card"]]],
-    ["Focus", [["⌘2 / ⌘3", "terminal · notes rail"], ["esc", "out of a view, back to the terminal"]]],
+    ["Focus", [["⌘2 / ⌘3", "terminal · notes rail"], ["esc", "closes an overlay · a list back to its panes · an Inbox page back to its list"]]],
     ["Notes", [["⌘E", "edit mine.md, the only file you write"], ["1–9", "notes focused: open that PR beside the terminals"], ["⌘⏎ / esc", "save · discard"]]],
     ["Queues", [["j / k", "row"], ["⏎ / o", "open the PR beside the list · its project, or a new one"], ["z", "snooze the PR until the next working day"], ["1–9", "on call: open that count's page"], ["r", "resync now"]]],
 ];

@@ -27,7 +27,8 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
     const names = useTabNames();
     useSeenReporter(tabId);
     const tab = useAtomValue(useMemo(() => getWaveObjectAtom<Tab>(makeORef("tab", tabId)), [tabId]));
-    const empty = tab?.blockids?.length === 0;
+    // The last pane closing leaves blockids null, not [].
+    const empty = !!tab && !tab.blockids?.length;
     const { state } = useWintos();
     const inbox = isInboxTab(tab);
     useNewProjectPaste(tabId, inbox ? undefined : tab?.blockids, state ?? undefined);
@@ -65,7 +66,7 @@ WintosTabArea.displayName = "WintosTabArea";
 
 // Closing the last pane leaves the project open; say what to do next.
 function EmptyProject() {
-    const keys: [string, string][] = [["⇧⌘T", "new Claude session"], ["⌘T", "new terminal"], ["⌘J ⌘K", "another project"], ["⌘W", "close this project"]];
+    const keys: [string, string][] = [["⇧⌘T", "new Claude session"], ["⌘T", "new terminal"], ["⌘J ⌘K", "another project"], ["⇧⌘W", "close this project"]];
     return (
         <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, fontFamily: T.ui, color: T.muted }}>
             <span style={{ fontFamily: T.display, fontSize: 24, color: T.secondary }}>Nothing open in this project</span>

@@ -72,7 +72,8 @@ export function focusArea(area: "terminal" | "notes"): void {
         const lm = getLayoutModelForStaticTab();
         const node = lm && globalStore.get(lm.focusedNode);
         if (node) lm.focusNode(node.id);
-        document.querySelector<HTMLElement>(`[data-blockid="${node?.data?.blockId}"] .xterm-helper-textarea`)?.focus();
+        // A terminal takes focus in its hidden textarea, a browser pane in its page.
+        document.querySelector<HTMLElement>(`[data-blockid="${node?.data?.blockId}"] :is(.xterm-helper-textarea, webview)`)?.focus();
     });
 }
 

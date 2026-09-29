@@ -234,6 +234,16 @@ await scenario("7 · Esc closes the palette and focus goes back to the list; fro
     const inbox = await toInbox();
     await press(inbox, "p", { mods: ["meta", "shift"] });
     await until("the palette", () => evalIn(inbox, `!!document.querySelector("[data-wintos=palette]")`));
+    // j and z are the list's keys; in the palette's field they are typing.
+    const row = await selectedRow(inbox);
+    for (const k of ["j", "z"]) {
+        const ev = { key: k, code: `Key${k.toUpperCase()}`, windowsVirtualKeyCode: k.toUpperCase().charCodeAt(0) };
+        await cdp(inbox, "Input.dispatchKeyEvent", { type: "keyDown", text: k, ...ev });
+        await cdp(inbox, "Input.dispatchKeyEvent", { type: "keyUp", ...ev });
+    }
+    const typed = await evalIn(inbox, `document.querySelector("[data-wintos=palette] input")?.value`);
+    if (typed !== "jz") throw new Error(`the palette field reads "${typed}", want "jz"`);
+    if ((await selectedRow(inbox)) !== row) throw new Error("typing in the palette moved the list");
     await press(inbox, "Escape", { code: "Escape", keyCode: 27 });
     await until("the palette closed", () => evalIn(inbox, `!document.querySelector("[data-wintos=palette]")`));
     await until("the list focused again", () => evalIn(inbox, `document.activeElement?.dataset?.wintos === "inbox-list"`));

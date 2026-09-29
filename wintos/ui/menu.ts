@@ -11,6 +11,7 @@ import { getLayoutModelForStaticTab } from "@/layout/index";
 import { isInboxTab } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
+import { installFocusRing } from "./focusRing";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
 // defines, so a user's widgets.json overrides still apply.
@@ -235,6 +236,7 @@ let registered = false;
 export function registerWintosMenu(): void {
     if (registered) return;
     registered = true;
+    installFocusRing();
     getApi().onWintosMenu(runAction);
     // A link leaving a GitHub page (wintos/links.ts) opens beside it in this tab.
     getApi().onWintosOpenPane((url) => runAction(`open-page:${url}`));

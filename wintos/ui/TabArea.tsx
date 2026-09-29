@@ -13,8 +13,8 @@ import { NotesFull } from "./notes/NotesFull";
 import { NotesRail } from "./notes/NotesRail";
 import { mainViewAtom, overlayAtom } from "./notes/state";
 import { Palette } from "./Palette";
-import { PanelView } from "./PanelView";
-import { PrQueue } from "./PrQueue";
+import { InboxArea } from "./InboxArea";
+import { isInboxTab } from "./view";
 import { SessionStrip } from "./SessionStrip";
 import { StatusBar } from "./StatusBar";
 import { T } from "./tokens";
@@ -29,14 +29,19 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
     const tab = useAtomValue(useMemo(() => getWaveObjectAtom<Tab>(makeORef("tab", tabId)), [tabId]));
     const empty = tab?.blockids?.length === 0;
     const { state } = useWintos();
-    useNewProjectPaste(tabId, tab?.blockids, state ?? undefined);
+    const inbox = isInboxTab(tab);
+    useNewProjectPaste(tabId, inbox ? undefined : tab?.blockids, state ?? undefined);
     return (
         <div className="flex flex-col flex-grow min-w-0" style={{ position: "relative" }}>
+            {inbox ? (
+                <InboxArea tabId={tabId} empty={empty}>
+                    {children}
+                </InboxArea>
+            ) : (
+            <>
             <div className="flex flex-row flex-grow min-w-0" style={{ minHeight: 0 }}>
                 <div className="flex flex-col flex-grow min-w-0" style={{ minHeight: 0 }}>
                     {view === "notes" && <NotesFull tabId={tabId} />}
-                    {view === "prs" && <PrQueue />}
-                    {view === "panel" && <PanelView />}
                     <div
                         className="flex flex-col flex-grow min-w-0"
                         style={{ display: view === "terminal" ? "flex" : "none" }}
@@ -48,6 +53,8 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
                 {view === "terminal" && <NotesRail tabId={tabId} />}
             </div>
             <StatusBar />
+            </>
+            )}
             {overlay === "palette" && <Palette names={names} />}
             {overlay === "keymap" && <Keymap />}
             {overlay === "confirm-close" && <ConfirmClose />}

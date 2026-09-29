@@ -18,7 +18,7 @@ import { liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { ghPrs, prsByTab, projectTabIds, rowView, RowView, sidebarModel } from "./view";
 import { queueModel } from "./prs";
-import { openPanel, toggleView } from "./menu";
+import { goToInbox } from "./inbox";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 
 const BAND_STYLE = {
@@ -142,16 +142,16 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 {state && (
                     <div style={{ display: "flex", gap: 8 }}>
                         {queue ? (
-                            <SummaryCard label="PRs" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={T.brick} onClick={() => toggleView("prs")} />
+                            <SummaryCard label="PRs" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={T.brick} onClick={() => goToInbox("prs")} />
                         ) : (
-                            <SummaryCard label="PRs" stats={[]} note="loading from GitHub" noteColor={T.faint} onClick={() => toggleView("prs")} />
+                            <SummaryCard label="PRs" stats={[]} note="loading from GitHub" noteColor={T.faint} onClick={() => goToInbox("prs")} />
                         )}
                         {panels.map((p) => {
                             const c = cardValue(p.counts);
                             const failed = p.error || p.counts.some((x) => x.count == null);
-                            return <SummaryCard key={p.name} label={p.title} busy={running.has(p.name)} stats={c} note={failed ? "couldn't fetch everything" : undefined} noteColor={T.brick} onClick={() => openPanel(p.name)} />;
+                            return <SummaryCard key={p.name} label={p.title} busy={running.has(p.name)} stats={c} note={failed ? "couldn't fetch everything" : undefined} noteColor={T.brick} onClick={() => goToInbox("oncall")} />;
                         })}
-                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} stats={[]} note="loading" noteColor={T.faint} onClick={() => openPanel(p.name)} />)}
+                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} stats={[]} note="loading" noteColor={T.faint} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
                 {offline || !model ? (

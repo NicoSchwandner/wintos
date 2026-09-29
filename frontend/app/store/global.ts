@@ -360,7 +360,7 @@ function getApi(): ElectronApi {
 }
 
 // WintOS: the Inbox holds pages only; a terminal or anything else there would belong to no
-// project. Every way of adding a pane (keys, menus, splits) ends in one of the three below.
+// project. Every way of adding a pane (keys, menus, splits, a replace) ends in one of these.
 function refusedInInbox(blockDef: BlockDef): boolean {
     const tab = globalStore.get(WOS.getWaveObjectAtom<Tab>(WOS.makeORef("tab", globalStore.get(atoms.staticTabId))));
     return tab?.meta?.["wintos:inbox"] === true && blockDef?.meta?.view !== "web";
@@ -434,6 +434,7 @@ async function createBlock(blockDef: BlockDef, magnified = false, ephemeral = fa
 }
 
 async function replaceBlock(blockId: string, blockDef: BlockDef, focus: boolean): Promise<string> {
+    if (refusedInInbox(blockDef)) return "";
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
     const newBlockId = await ObjectService.CreateBlock(blockDef, rtOpts);

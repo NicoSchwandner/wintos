@@ -411,6 +411,12 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
         return false;
     }
     lastHandledEvent = nativeEvent;
+    // WintOS: the focused zone's own keys (a list's j/k, a field's Enter) come first, before any
+    // Wave chord can start or finish: a text field keeps Ctrl+Shift+S and what follows it.
+    const zone = zoneKey(waveEvent, document.activeElement);
+    if (zone !== false && activeChord) resetChord();
+    if (zone === "handled") return true;
+    if (zone === "typing") return false;
     if (activeChord) {
         console.log("handle activeChord", activeChord);
         // If we're in chord mode, look for the second key.
@@ -431,10 +437,6 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
         return true;
     }
 
-    // WintOS: the focused zone's own keys (a list's j/k, a field's Enter) come first.
-    const zone = zoneKey(waveEvent, document.activeElement);
-    if (zone === "handled") return true;
-    if (zone === "typing") return false;
     const [, globalHandler] = checkKeyMap(waveEvent, globalKeyMap);
     if (globalHandler) {
         const handled = globalHandler(waveEvent);

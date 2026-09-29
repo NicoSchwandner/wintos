@@ -147,7 +147,8 @@ const CHIP: React.CSSProperties = { flexShrink: 0, maxWidth: 96, padding: "2px 7
 function Reviewers({ r, compact }: { r: QueueRow; compact: boolean }) {
     const { chips, more, none } = reviewerChips(r.pr, compact ? 1 : 2);
     return (
-        <span style={{ width: compact ? 70 : 190, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: 4 }}>
+        // As wide as its chips (up to a cap), so a short reviewer list leaves the room to the title.
+        <span style={{ maxWidth: compact ? 70 : 230, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: 4, overflow: "hidden" }}>
             {chips.map((c) => (
                 <span key={c} title={c} style={CHIP}>
                     {compact ? initials(c) : c}

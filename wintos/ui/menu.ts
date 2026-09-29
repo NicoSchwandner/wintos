@@ -147,6 +147,17 @@ export function wintosClose(): boolean {
     });
     if (action === "overlay") closeOverlay();
     if (action === "view") focusArea("terminal");
+    // In the Inbox a closed page hands focus back to the list, not to nowhere or the next page,
+    // and the page left is shown in front: the Inbox reads one page at a time, never tiled.
+    if (action === "pane" && inInbox()) {
+        const list = document.querySelector<HTMLElement>("[data-wintos=inbox-list]");
+        keepListFocus(list);
+        setTimeout(() => {
+            const next = globalStore.get(lm.focusedNode)?.data?.blockId;
+            if (next) magnifyBlock(next);
+            list?.focus();
+        }, 150);
+    }
     return action !== "pane";
 }
 
@@ -174,19 +185,13 @@ export function paneShowing(blocks: (Block | undefined)[], url: string): string 
 // PR view keeps its own tabs. One pane per PR: open again, it is focused.
 const opening = new Set<string>();
 // ⏎ in the Inbox list shows the page and leaves you in the list, to walk on with j/k; Esc goes
-// to the page. Wave's block focus pulls focus into the page once it is laid out: hand it back
-// each time, until you move focus yourself (a click, or Esc); j/k while it opens don't count.
+// to the page. Wave's block focus pulls focus into the page once it is laid out, and again on
+// a redirect: hand it back each time, until you move focus yourself (a click, or Esc; j/k
+// don't count) or 30s have passed.
 function keepListFocus(list: HTMLElement | null): void {
     if (!list) return;
     // A page taking focus fires no focusin in this document, only the list's focusout.
-    // A new page can take seconds to load before it grabs focus; after the first hand-back, Wave's
-    // own retry comes within a frame or two.
-    const back = () =>
-        setTimeout(() => {
-            if (document.activeElement?.tagName !== "WEBVIEW") return;
-            list.focus();
-            setTimeout(stop, 1000);
-        }, 0);
+    const back = () => setTimeout(() => document.activeElement?.tagName === "WEBVIEW" && list.focus(), 0);
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && stop();
     const stop = () => {
         list.removeEventListener("focusout", back);
@@ -196,7 +201,7 @@ function keepListFocus(list: HTMLElement | null): void {
     list.addEventListener("focusout", back);
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("pointerdown", stop, true);
-    setTimeout(stop, 10000);
+    setTimeout(stop, 30000);
 }
 function openPage(url: string): void {
     const list = document.activeElement?.closest<HTMLElement>("[data-wintos=inbox-list]") ?? null;

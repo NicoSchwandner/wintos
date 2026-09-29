@@ -1,7 +1,7 @@
 import { T } from "../tokens";
+import { checkbox, type CheckState } from "./checkbox";
 import { parseNotes, spans } from "./parse";
 
-const DOT = { done: T.moss, partial: T.apricot, todo: "#3c3836" } as const;
 
 export type Size = "rail" | "full";
 const SIZES = {
@@ -22,6 +22,25 @@ export function Rich({ text, size }: { text: string; size: Size }) {
                 )
             )}
         </>
+    );
+}
+
+// A task box: done filled green with a tick, partial half-filled, todo empty. Clickable only
+// where the file is the developer's (mine.md), as a real button so ⇥ and Space reach it.
+export function Box({ state, size, onToggle }: { state: CheckState; size: Size; onToggle?: () => void }) {
+    const style: React.CSSProperties = {
+        width: 12, height: 12, padding: 0, flexShrink: 0, marginTop: size === "rail" ? 4 : 6, borderRadius: 3,
+        border: `1.5px solid ${state === "done" ? T.moss : state === "partial" ? T.apricot : T.muted}`,
+        background: state === "done" ? T.moss : state === "partial" ? `linear-gradient(90deg, ${T.apricot} 50%, transparent 50%)` : "transparent",
+        display: "inline-flex", alignItems: "center", justifyContent: "center", color: T.ground, fontSize: 9, fontWeight: 700, lineHeight: 1,
+        cursor: onToggle ? "pointer" : "default",
+    };
+    const mark = state === "done" ? "✓" : "";
+    if (!onToggle) return <span style={style}>{mark}</span>;
+    return (
+        <button type="button" onClick={onToggle} title={state === "done" ? "Untick" : "Tick"} aria-label={state === "done" ? "Untick" : "Tick"} style={style}>
+            {mark}
+        </button>
     );
 }
 
@@ -78,7 +97,7 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
             {n.built.length > 0 && (
                 <Section label="Built" size={size}>
                     {n.built.map((b, i) => (
-                        <Line key={i} size={size} lead={dot(b.state ? DOT[b.state] : T.dim)}>
+                        <Line key={i} size={size} lead={b.state ? <Box state={b.state} size={size} /> : dot(T.dim)}>
                             <Rich text={b.text} size={size} />
                         </Line>
                     ))}
@@ -96,7 +115,16 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
             )}
             {n.other.map((o, i) => (
                 <Section key={i} label={o.heading || "Notes"} size={size}>
-                    <p style={{ margin: 0, fontSize: z.text, lineHeight: z.line, color: z.textColor, whiteSpace: "pre-wrap" }}>{o.text}</p>
+                    {o.text.split("\n").map((line, j) => {
+                        const cb = checkbox(line);
+                        return cb ? (
+                            <Line key={j} size={size} lead={<Box state={cb.state} size={size} />}>
+                                <Rich text={cb.text} size={size} />
+                            </Line>
+                        ) : (
+                            <p key={j} style={{ margin: 0, fontSize: z.text, lineHeight: z.line, color: z.textColor, whiteSpace: "pre-wrap" }}>{line}</p>
+                        );
+                    })}
                 </Section>
             ))}
         </div>

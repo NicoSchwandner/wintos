@@ -315,6 +315,9 @@ function globalRefocus() {
     if (isBuilderWindow()) {
         return;
     }
+    // WintOS: a switch to the Inbox focuses its list; the refocus after a tab is shown must not
+    // pull focus back into the page beside it.
+    if (document.activeElement?.closest("[data-wintos=inbox-list]")) return;
 
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);

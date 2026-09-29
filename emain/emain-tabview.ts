@@ -320,7 +320,9 @@ export async function getOrCreateWebViewForTab(waveWindowId: string, tabId: stri
             if (wc == null || wc.isDestroyed() || tabView.webContents == null || tabView.webContents.isDestroyed()) {
                 return { action: "deny" };
             }
-            tabView.webContents.send("webview-new-window", wc.id, details);
+            // WintOS: a web link opens a pane the way an off-site click does, shown in front.
+            if (/^https?:/.test(details.url)) tabView.webContents.send("wintos-open-pane", details.url);
+            else tabView.webContents.send("webview-new-window", wc.id, details);
             return { action: "deny" };
         });
         watchWintosNavigation(wc, tabView.webContents);

@@ -40,9 +40,28 @@ async function visible() {
 }
 
 // CDP's synthetic keys go to whatever holds focus; inside a page they skip the main-process
-// forwarding a real keypress goes through. So WintOS keys are pressed with focus on the page's
-// own document, the list in the Inbox.
-const focusOut = (t) => evalIn(t, `document.activeElement?.tagName === "WEBVIEW" && (document.querySelector("[data-wintos=inbox-list]") ?? document.body).focus()`);
+// forwarding a real keypress goes through, and an element's .focus() leaves the page holding it.
+// So WintOS keys are pressed after CDP's own DOM.focus on the Inbox list, else the document body.
+async function focusOut(t) {
+    if (await evalIn(t, "document.hasFocus() && document.activeElement?.tagName !== 'WEBVIEW'")) return;
+    const ws = new WebSocket(t.webSocketDebuggerUrl);
+    await new Promise((r) => ws.addEventListener("open", r));
+    let id = 0;
+    const call = (method, params = {}) =>
+        new Promise((r) => {
+            const n = ++id;
+            ws.addEventListener("message", function on(m) {
+                const d = JSON.parse(m.data);
+                if (d.id === n) (ws.removeEventListener("message", on), r(d.result));
+            });
+            ws.send(JSON.stringify({ id: n, method, params }));
+        });
+    const { root } = await call("DOM.getDocument");
+    const list = await call("DOM.querySelector", { nodeId: root.nodeId, selector: "[data-wintos=inbox-list]" });
+    const body = await call("DOM.querySelector", { nodeId: root.nodeId, selector: "body" });
+    await call("DOM.focus", { nodeId: list?.nodeId || body.nodeId });
+    ws.close();
+}
 
 // modifiers: Alt 1, Ctrl 2, Meta 4, Shift 8 (CDP's bitmask).
 const MODS = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
@@ -137,6 +156,16 @@ await scenario("3 · a link leaving GitHub opens a new pane and keeps the PR", a
     await until("a second pane", async () => (await evalIn(inbox, `document.querySelectorAll("webview").length`)) > before);
     const kept = await evalIn(inbox, `[...document.querySelectorAll("webview")].some(w => w.getURL().includes("github.com"))`);
     if (!kept) throw new Error("the PR page navigated away");
+});
+
+await scenario("3b · a new-window link in the Inbox opens a pane you can see", async () => {
+    const inbox = await visible();
+    const before = await evalIn(inbox, `document.querySelectorAll("webview").length`);
+    const url = `https://example.org/?e2e=${Date.now()}`;
+    await evalIn(inbox, `[...document.querySelectorAll("webview")].find(w => w.getURL().includes("github.com")).executeJavaScript('window.open(${JSON.stringify(url)}, "_blank")', true)`);
+    await until("a new pane", async () => (await evalIn(inbox, `document.querySelectorAll("webview").length`)) > before);
+    // Shown, not tiled behind the magnified PR: the strip marks it as the active pane.
+    await until("the new pane in front", () => evalIn(inbox, `(() => { const on = document.querySelector("[data-pane][data-on]")?.dataset.pane; return !!on && document.querySelector('[data-blockid="' + on + '"] webview')?.getAttribute("src") === ${JSON.stringify(url)}; })()`));
 });
 
 await scenario("4 · ⌥⌘→ moves to the next pane", async () => {

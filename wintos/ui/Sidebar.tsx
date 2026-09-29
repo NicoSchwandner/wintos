@@ -120,7 +120,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
 
     return (
         <div style={{ height: "100%", display: "flex", flexDirection: "column", background: T.sidebar, borderRight: `1px solid ${T.border}`, fontFamily: T.ui, color: T.text }}>
-            <div style={{ padding: "36px 16px 13px", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+            {/* The header drags the window, as a macOS title bar would; nothing in it is clickable. */}
+            <div style={{ padding: "36px 16px 13px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", WebkitAppRegion: "drag" } as React.CSSProperties}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                     <span style={{ fontFamily: T.display, fontSize: 21, lineHeight: 1 }}>WintOS</span>
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>
@@ -282,8 +283,9 @@ function QuietRow(p: RowProps) {
                 border: `1px solid ${p.cursor ? T.apricot : "transparent"}`,
             }}
         >
-            <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui }} />
-            <span style={{ fontSize: 10.5, color: v.tone === "brick" ? T.brick : T.faint, flexShrink: 0 }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>
+            {/* The title gets the room; the note is capped and cut, so neither wraps. */}
+            <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} />
+            <span title={v.reason} style={{ maxWidth: "48%", fontSize: 10.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>
         </div>
     );
 }

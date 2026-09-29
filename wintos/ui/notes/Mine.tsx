@@ -51,6 +51,7 @@ export function Mine({
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     data-zone="overlay"
+                    data-wintos="mine-editor"
                     spellCheck={false}
                     style={{
                         flexGrow: 1,

@@ -5,6 +5,7 @@ import { closeOverlay, enterProject, focusSession } from "./focus";
 import { runAction } from "./menu";
 import { searchPalette, type PaletteItem } from "./palette-search";
 import { pluginPanels } from "./panels";
+import { Key } from "./Key";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
@@ -105,7 +106,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                                         <span style={{ fontSize: 13, color: n === cursor ? T.emphasis : T.title, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{i.title}</span>
                                         {i.subtitle && <span style={{ fontSize: 11, color: T.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{i.subtitle}</span>}
                                     </span>
-                                    {i.hint && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{i.hint}</span>}
+                                    {i.hint && <Key k={i.hint} label="" />}
                                 </div>
                             </div>
                         );

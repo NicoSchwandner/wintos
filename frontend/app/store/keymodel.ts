@@ -312,9 +312,9 @@ function globalRefocus() {
     if (isBuilderWindow()) {
         return;
     }
-    // WintOS: a switch to the Inbox focuses its list; the refocus after a tab is shown must not
-    // pull focus back into the page beside it.
-    if (document.activeElement?.closest("[data-wintos=inbox-list]")) return;
+    // WintOS: a switch that lands in a zone (the Inbox list, an open mine.md edit) must keep it;
+    // the refocus after a tab is shown would pull focus back into the pane.
+    if (document.activeElement?.closest("[data-zone]")) return;
 
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);

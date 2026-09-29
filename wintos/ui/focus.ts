@@ -35,15 +35,21 @@ export function focusBlock(blockId: string): void {
 export const enterProject = (tabId: string) => focusSession({ tabId, blockId: "" });
 
 export function focusSession(t: Target): void {
-    if (t.tabId === globalStore.get(atoms.staticTabId)) {
-        globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
-        if (t.blockId) magnifyBlock(t.blockId);
-        else focusArea("terminal");
-        return;
-    }
+    if (t.tabId === globalStore.get(atoms.staticTabId)) return landOn(t.blockId);
     localStorage.setItem(HANDOFF, JSON.stringify({ ...t, at: Date.now() }));
     getApi().setActiveTab(t.tabId);
 }
+
+// Arriving in a project: on the session asked for, else back in an unsaved mine.md edit (its
+// view left as it was, so the draft stays), else on the terminals.
+function landOn(blockId: string): void {
+    if (!blockId && globalStore.get(editingMineAtom)) return focusMineEditor();
+    globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
+    if (blockId) magnifyBlock(blockId);
+    else focusArea("terminal");
+}
+
+const focusMineEditor = () => void requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-wintos=mine-editor]")?.focus());
 
 export function takeHandoff(): void {
     const raw = localStorage.getItem(HANDOFF);
@@ -52,9 +58,7 @@ export function takeHandoff(): void {
     if (t.tabId !== globalStore.get(atoms.staticTabId)) return;
     localStorage.removeItem(HANDOFF);
     if (Date.now() - t.at >= HANDOFF_TTL_MS) return;
-    globalStore.set(mainViewAtom, "terminal");
-    if (t.blockId) magnifyBlock(t.blockId);
-    else focusArea("terminal");
+    landOn(t.blockId);
 }
 
 export function focusedSession(): Session | undefined {
@@ -80,6 +84,8 @@ export function focusArea(area: "terminal" | "notes"): void {
 // ⌘E edits mine.md from anywhere; save or esc hands focus back to where the edit started.
 let beforeEdit: HTMLElement | null = null;
 export function editMine(on: boolean): void {
+    // ⌘E with the edit already open (focus went elsewhere) takes you back into it.
+    if (on && globalStore.get(editingMineAtom)) return focusMineEditor();
     if (on === globalStore.get(editingMineAtom)) return;
     if (on) beforeEdit = document.activeElement as HTMLElement | null;
     globalStore.set(editingMineAtom, on);

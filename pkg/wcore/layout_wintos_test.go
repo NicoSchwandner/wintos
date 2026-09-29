@@ -145,3 +145,22 @@ func TestNewWorkspaceHasAnInbox(t *testing.T) {
 		t.Fatalf("a new workspace has %d Inbox tabs, want 1", inboxes)
 	}
 }
+
+// A workspace that lost every tab comes back with only the Inbox, and it is active.
+func TestEmptyWorkspaceGetsOnlyTheInbox(t *testing.T) {
+	ctx, ws := newTestWorkspace(t)
+	ws.TabIds, ws.ActiveTabId = nil, ""
+	if err := wstore.DBUpdate(ctx, ws); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureInboxActive(ctx, ws); err != nil {
+		t.Fatal(err)
+	}
+	ws, _ = GetWorkspace(ctx, ws.OID)
+	if len(ws.TabIds) != 1 {
+		t.Fatalf("tabs = %v, want only the Inbox", ws.TabIds)
+	}
+	if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, ws.ActiveTabId); !IsInbox(tab) {
+		t.Fatalf("active tab %q is not the Inbox", ws.ActiveTabId)
+	}
+}

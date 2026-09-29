@@ -32,6 +32,7 @@ const USER_AGENT_ANDROID =
     "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.43 Mobile Safari/537.36";
 
 let webviewPreloadUrl = null;
+let focusedWebContentsId: number = null; // WintOS: the web pane that last took focus, see webviewBlur
 
 function getWebviewPreloadUrl(env: WebViewEnv) {
     if (webviewPreloadUrl == null) {
@@ -1055,10 +1056,15 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
             }
         };
         const webviewFocus = () => {
-            env.electron.setWebviewFocus(webview.getWebContentsId());
+            focusedWebContentsId = webview.getWebContentsId();
+            env.electron.setWebviewFocus(focusedWebContentsId);
             model.nodeModel.focusNode();
         };
+        // WintOS: a tab holds several web panes, and the next one can focus before this one
+        // blurs; clearing then would stop key forwarding into the page that has focus.
         const webviewBlur = () => {
+            if (focusedWebContentsId !== webview.getWebContentsId()) return;
+            focusedWebContentsId = null;
             env.electron.setWebviewFocus(null);
         };
         const handleDomReady = () => {

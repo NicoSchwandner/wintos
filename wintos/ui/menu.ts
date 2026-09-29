@@ -6,7 +6,8 @@ import { editMine, focusArea, focusBlock, focusedSession, latestSessions, magnif
 import { closeWarning } from "./sessions";
 import { goToInbox } from "./inbox";
 import { mainViewAtom, overlayAtom, renamingAtom, type MainView } from "./notes/state";
-import { switchProject } from "./switcher";
+import { stepProject, switchProject } from "./switcher";
+import { getLayoutModelForStaticTab } from "@/layout/index";
 import { isInboxTab } from "./view";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
@@ -55,6 +56,9 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:o", "panel"],
     ["Shift:Cmd:b", "browser"],
     ["Shift:Cmd:e", "files"],
+    ["Option:Cmd:ArrowLeft", "pane-prev"],
+    ["Option:Cmd:ArrowRight", "pane-next"],
+    ["Shift:Cmd:c", "copy-url"],
     ["Cmd:2", "focus-terminal"],
     ["Cmd:3", "focus-notes"],
 ];
@@ -64,7 +68,30 @@ function focusedBlockView(): string | undefined {
     return blockId ? globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId)))?.meta?.view : undefined;
 }
 
+export const focusedPageUrl = (block: Block | undefined): string | undefined => (block?.meta?.view === "web" ? block.meta.url : undefined);
+
+// ⌥⌘←/→ magnify the previous/next pane of this tab, in layout order, wrapping.
+function stepPane(delta: 1 | -1): boolean {
+    const lm = getLayoutModelForStaticTab();
+    const ids = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))))?.blockids ?? [];
+    const next = stepProject(ids, globalStore.get(lm.focusedNode)?.data?.blockId ?? "", delta);
+    if (next) magnifyBlock(next);
+    return true;
+}
+
+// ⇧⌘C copies the focused browser pane's address, through emain: navigator.clipboard refuses
+// while focus is inside the page. Anywhere else ⇧⌘C stays what it was.
+function copyUrl(): boolean {
+    const blockId = globalStore.get(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
+    const url = blockId && focusedPageUrl(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId))));
+    if (!url) return false;
+    getApi().writeClipboard(url);
+    return true;
+}
+
 export function runKey(action: string): boolean {
+    if (action === "pane-prev" || action === "pane-next") return stepPane(action === "pane-next" ? 1 : -1);
+    if (action === "copy-url") return copyUrl();
     // ⌘R in a browser pane stays its reload.
     if (action === "rename" && document.activeElement?.tagName === "WEBVIEW") return false;
     // ⌘E in a file preview stays its edit toggle.

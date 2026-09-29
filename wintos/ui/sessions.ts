@@ -10,10 +10,6 @@ export function liveSessions(sessions: Session[], blocksByTab: Record<string, st
     return sessions.filter((s) => blocksByTab[s.tabId]?.includes(s.blockId));
 }
 
-export function stripSessions(sessions: Session[], tabId: string): Session[] {
-    return sessions.filter((s) => s.tabId === tabId && s.state !== "ended");
-}
-
 // ⌃⇥: the next waiting session in this tab after the current one, cycling; failing that,
 // the longest wait in any other tab of this workspace.
 export function nextWaiting(sessions: Session[], tabIds: string[], activeTabId: string, currentBlockId?: string): Target | null {

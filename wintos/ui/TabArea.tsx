@@ -15,7 +15,7 @@ import { mainViewAtom, overlayAtom } from "./notes/state";
 import { Palette } from "./Palette";
 import { InboxArea } from "./InboxArea";
 import { isInboxTab } from "./view";
-import { SessionStrip } from "./SessionStrip";
+import { PaneStrip } from "./PaneStrip";
 import { StatusBar } from "./StatusBar";
 import { T } from "./tokens";
 
@@ -46,7 +46,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
                         className="flex flex-col flex-grow min-w-0"
                         style={{ display: view === "terminal" ? "flex" : "none" }}
                     >
-                        <SessionStrip tabId={tabId} />
+                        <PaneStrip tabId={tabId} />
                         {empty ? <EmptyProject /> : children}
                     </div>
                 </div>

@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { globalStore } from "@/app/store/jotaiStore";
-import { blockDefFor, newSessionScript, paneShowing, wintosClose } from "./menu";
+import { blockDefFor, focusedPageUrl, newSessionScript, paneShowing, wintosClose } from "./menu";
 import { mainViewAtom } from "./notes/state";
 
 const widgets = {
@@ -58,4 +58,12 @@ describe("paneShowing", () => {
 
     test("a PR already open in a browser pane of the project is reused", () => expect(paneShowing(blocks, "https://github.com/acme/api/pull/9")).toBe("b2"));
     test("otherwise a new pane opens", () => expect(paneShowing(blocks, "https://github.com/acme/api/pull/10")).toBeUndefined());
+});
+
+describe("focusedPageUrl", () => {
+    test("the focused pane's address when it is a browser page, else nothing", () => {
+        expect(focusedPageUrl({ meta: { view: "web", url: "https://github.com/acme/api/pull/7" } } as unknown as Block)).toBe("https://github.com/acme/api/pull/7");
+        expect(focusedPageUrl({ meta: { view: "term" } } as unknown as Block)).toBeUndefined();
+        expect(focusedPageUrl(undefined)).toBeUndefined();
+    });
 });

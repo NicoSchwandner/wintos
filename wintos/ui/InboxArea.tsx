@@ -5,7 +5,7 @@ import { Key } from "./Key";
 import { inboxListAtom, type InboxList } from "./notes/state";
 import { OnCallList } from "./OnCallList";
 import { PrQueue } from "./PrQueue";
-import { SessionStrip } from "./SessionStrip";
+import { PaneStrip } from "./PaneStrip";
 import { T } from "./tokens";
 
 const LISTS: { list: InboxList; label: string; key: string }[] = [
@@ -43,7 +43,7 @@ export const InboxArea = memo(({ tabId, empty, children }: { tabId: string; empt
                 {list === "prs" ? <PrQueue /> : <OnCallList />}
             </div>
             <div className="flex flex-col flex-grow min-w-0" style={{ minHeight: 0 }}>
-                <SessionStrip tabId={tabId} />
+                <PaneStrip tabId={tabId} />
                 {empty ? (
                     <div style={{ flexGrow: 1, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.ui, fontSize: 13, color: T.muted }}>
                         <Key k="⏎" label={list === "prs" ? "opens the selected PR here" : "opens the selected page here"} />

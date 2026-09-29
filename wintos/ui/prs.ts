@@ -71,3 +71,8 @@ export function reviewerChips(pr: PR, max: number): { chips: string[]; more: num
     const approved = pr.reviewers.length ? [] : (pr.approvedBy ?? []).slice(0, max);
     return { chips: pr.reviewers.slice(0, max), more: Math.max(0, pr.reviewers.length - max), none: !pr.isDraft && pr.reviewers.length === 0 && !approved.length, approved };
 }
+
+// Which optional columns fit beside a readable title: the size bar goes first, then the names
+// (the author's, and reviewers' in full rather than initials).
+export type RowColumns = { size: boolean; names: boolean };
+export const rowColumns = (width: number): RowColumns => ({ size: width >= 1000, names: width >= 850 });

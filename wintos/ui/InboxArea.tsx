@@ -25,7 +25,8 @@ export const InboxArea = memo(({ tabId, empty, children }: { tabId: string; empt
     }, []);
     return (
         <div className="flex flex-row flex-grow min-w-0" style={{ minHeight: 0 }}>
-            <div data-wintos="inbox" style={{ width: "44%", minWidth: 440, flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0, borderRight: `1px solid ${T.border}`, background: T.ground }}>
+            {/* With no page open the list has the whole width; a page takes the right side. */}
+            <div data-wintos="inbox" style={{ ...(empty ? { flexGrow: 1, minWidth: 0 } : { width: "44%", minWidth: 440, flexShrink: 0 }), display: "flex", flexDirection: "column", minHeight: 0, borderRight: empty ? "none" : `1px solid ${T.border}`, background: T.ground }}>
                 <div style={{ padding: "16px 26px 10px", display: "flex", alignItems: "center", gap: 18, WebkitAppRegion: "drag" } as React.CSSProperties}>
                     <span style={{ fontFamily: T.display, fontSize: 30, lineHeight: 1, color: T.emphasis }}>Inbox</span>
                     {LISTS.map((l) => (
@@ -45,16 +46,12 @@ export const InboxArea = memo(({ tabId, empty, children }: { tabId: string; empt
                 </div>
                 {list === "prs" ? <PrQueue /> : <OnCallList />}
             </div>
-            <div className="flex flex-col flex-grow min-w-0" style={{ minHeight: 0 }}>
-                <PaneStrip tabId={tabId} />
-                {empty ? (
-                    <div style={{ flexGrow: 1, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.ui, fontSize: 13, color: T.muted }}>
-                        <Key k="⏎" label={list === "prs" ? "opens the selected PR here" : "opens the selected page here"} />
-                    </div>
-                ) : (
-                    children
-                )}
-            </div>
+            {!empty && (
+                <div className="flex flex-col flex-grow min-w-0" style={{ minHeight: 0 }}>
+                    <PaneStrip tabId={tabId} />
+                    {children}
+                </div>
+            )}
         </div>
     );
 });

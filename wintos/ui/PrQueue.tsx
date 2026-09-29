@@ -4,11 +4,12 @@ import { enterProject } from "./focus";
 import { atoms, createTab } from "@/store/global";
 import { offerPrompt, prLinkPaste } from "./newproject";
 import { useAtomValue } from "jotai";
-import { memo, useEffect, useRef, useState } from "react";
+import { useOnResize } from "@/app/hook/useDimensions";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Group } from "../daemon/prs/group";
 import { runAction } from "./menu";
 import { Key } from "./Key";
-import { initials, keepSelection, queueModel, reviewerChips, type QueueRow } from "./prs";
+import { initials, keepSelection, queueModel, reviewerChips, rowColumns, type QueueRow, type RowColumns } from "./prs";
 import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
@@ -28,6 +29,12 @@ export const HEADERS: Record<Group, { label: string; note: string; color: string
 // A PR opens as an ordinary browser pane beside it, in the Inbox's own layout.
 export const PrQueue = memo(() => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
+    // The rows drop the author, size and full reviewer names only when there is no room for them:
+    // the list alone, or a wide screen with a page beside it, shows everything.
+    const rowsRef = useRef<HTMLDivElement>(null);
+    const [width, setWidth] = useState(0);
+    useOnResize(rowsRef, useCallback((r: DOMRectReadOnly) => setWidth(r.width), []));
+    const cols = rowColumns(width);
     const { state } = useWintos();
     const now = useNow();
     const [selected, setSelected] = useState<string | undefined>();
@@ -100,12 +107,12 @@ export const PrQueue = memo(() => {
                     <Key k="r" label="" />
                 </span>
             </div>
-            <div style={{ flexGrow: 1, overflowY: "auto", padding: "0 26px", display: "flex", flexDirection: "column", gap: 14 }}>
+            <div ref={rowsRef} style={{ flexGrow: 1, overflowY: "auto", padding: "0 26px", display: "flex", flexDirection: "column", gap: 14 }}>
                 {model?.groups.map(({ group, rows }) => (
                     <div key={group} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         <GroupHeader {...HEADERS[group]} count={rows.length} />
                         {rows.flatMap((row) => withStack(row)).map(({ r, depth }) => (
-                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} compact onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} cols={cols} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 ))}
@@ -113,7 +120,7 @@ export const PrQueue = memo(() => {
                     <div style={{ display: "flex", flexDirection: "column", gap: 2, opacity: 0.6 }}>
                         <GroupHeader label="Snoozed" note="back next working day, or when it moves · z wakes" color={T.muted} count={model.snoozed.length} />
                         {model.snoozed.map((r) => (
-                            <PrRow key={r.pr.url} r={r} depth={0} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} compact onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={0} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} cols={cols} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 )}
@@ -131,10 +138,10 @@ export const PrQueue = memo(() => {
 });
 PrQueue.displayName = "PrQueue";
 
-// compact: with a PR open beside the list the row has ~400px, so the name and size columns go.
 const CHIP: React.CSSProperties = { flexShrink: 0, maxWidth: 96, padding: "2px 7px", borderRadius: 10, border: `1px solid ${T.keycapBorder}`, fontSize: 10.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
-function Reviewers({ r, compact }: { r: QueueRow; compact: boolean }) {
+function Reviewers({ r, names }: { r: QueueRow; names: boolean }) {
+    const compact = !names;
     const { chips, more, none, approved } = reviewerChips(r.pr, compact ? 1 : 2);
     return (
         // As wide as its chips (up to a cap), so a short reviewer list leaves the room to the title.
@@ -167,8 +174,9 @@ function GroupHeader({ label, note, color, count }: { label: string; note: strin
 }
 
 // project: the title of the project this PR belongs to, for its marker (o goes there).
-function PrRow({ r, depth, project, cursor, compact, onOpen }: { r: QueueRow; depth: number; project?: string; cursor: boolean; compact: boolean; onOpen: () => void }) {
+function PrRow({ r, depth, project, cursor, cols, onOpen }: { r: QueueRow; depth: number; project?: string; cursor: boolean; cols: RowColumns; onOpen: () => void }) {
     const { pr } = r;
+    const compact = !cols.names;
     return (
         <div
             data-pr={`${pr.repo}#${pr.number}`}
@@ -184,7 +192,7 @@ function PrRow({ r, depth, project, cursor, compact, onOpen }: { r: QueueRow; de
                 </span>
                 {!compact && <span style={{ fontSize: 12, color: r.mine ? T.title : T.quietTitle, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.mine ? "you" : pr.author}</span>}
             </span>
-            {!compact && <span style={{ width: 104, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            {cols.size && <span style={{ width: 104, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ display: "flex", gap: 2, width: 44 }}>
                     <span style={{ height: 5, borderRadius: 3, background: T.moss, flexGrow: Math.max(pr.additions, 0.5) }} />
                     <span style={{ height: 5, borderRadius: 3, background: T.brick, flexGrow: Math.max(pr.deletions, 0.5) }} />
@@ -196,7 +204,7 @@ function PrRow({ r, depth, project, cursor, compact, onOpen }: { r: QueueRow; de
                 {pr.title}
                 {r.qualifier && <span style={{ fontSize: 11, color: r.qualifier.brick ? T.brick : T.muted }}> — {r.qualifier.text}</span>}
             </span>
-            <Reviewers r={r} compact={compact} />
+            <Reviewers r={r} names={cols.names} />
             <span title={project ? `Project: ${project} (o)` : "No project"} style={{ width: 12, flexShrink: 0, textAlign: "center", fontSize: 11, color: project ? T.moss : "transparent" }}>◆</span>
             <span style={{ width: compact ? 120 : 150, flexShrink: 0, textAlign: "right", fontFamily: T.mono, fontSize: 10.5, color: T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {r.repoShort} #{pr.number}

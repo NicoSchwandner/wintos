@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { PR } from "../daemon/prs/group";
-import { initials, keepSelection, queueModel, reviewerChips } from "./prs";
+import { initials, keepSelection, queueModel, reviewerChips, rowColumns } from "./prs";
 
 const MON = Date.parse("2026-09-28T09:00:00Z");
 const pr = (p: Partial<PR>): PR => ({
@@ -138,4 +138,10 @@ describe("reviewerChips", () => {
         expect(reviewerChips(pr({ reviewers: [] }), 2)).toEqual({ chips: [], more: 0, none: true, approved: [] });
         expect(reviewerChips(pr({ reviewers: [], isDraft: true }), 2)).toEqual({ chips: [], more: 0, none: false, approved: [] });
     });
+});
+
+describe("rowColumns", () => {
+    test("the list alone or a wide split shows every column", () => expect(rowColumns(1400)).toEqual({ size: true, names: true }));
+    test("a little narrower, the size bar goes first", () => expect(rowColumns(900)).toEqual({ size: false, names: true }));
+    test("beside a page on a laptop, names become initials too", () => expect(rowColumns(500)).toEqual({ size: false, names: false }));
 });

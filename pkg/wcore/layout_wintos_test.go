@@ -130,3 +130,18 @@ func TestClosingLastProjectActivatesInbox(t *testing.T) {
 		t.Fatalf("active after closing the last project = %q, want the Inbox %q", active, inbox)
 	}
 }
+
+// First launch, a new window and a second instance all create a workspace; each needs its Inbox.
+func TestNewWorkspaceHasAnInbox(t *testing.T) {
+	ctx, ws := newTestWorkspace(t)
+	ws, _ = GetWorkspace(ctx, ws.OID)
+	inboxes := 0
+	for _, id := range ws.TabIds {
+		if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, id); isInbox(tab) {
+			inboxes++
+		}
+	}
+	if inboxes != 1 {
+		t.Fatalf("a new workspace has %d Inbox tabs, want 1", inboxes)
+	}
+}

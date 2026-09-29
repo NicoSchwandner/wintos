@@ -66,6 +66,10 @@ func CreateWorkspace(ctx context.Context, name string, icon string, color string
 	if err != nil {
 		return nil, fmt.Errorf("error creating tab: %w", err)
 	}
+	// WintOS: every workspace (first launch, a new window, a second instance) gets its Inbox.
+	if _, err = EnsureInbox(ctx, ws.OID); err != nil {
+		return nil, err
+	}
 
 	wps.Broker.Publish(wps.WaveEvent{
 		Event: wps.Event_WorkspaceUpdate,

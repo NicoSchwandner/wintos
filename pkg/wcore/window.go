@@ -20,6 +20,10 @@ import (
 
 func SwitchWorkspace(ctx context.Context, windowId string, workspaceId string) (*waveobj.Workspace, error) {
 	log.Printf("SwitchWorkspace %s %s\n", windowId, workspaceId)
+	// WintOS: a workspace from before the Inbox gets one; ensured before ws is read below.
+	if _, err := EnsureInbox(ctx, workspaceId); err != nil {
+		return nil, err
+	}
 	ws, err := GetWorkspace(ctx, workspaceId)
 	if err != nil {
 		return nil, fmt.Errorf("error getting new workspace: %w", err)

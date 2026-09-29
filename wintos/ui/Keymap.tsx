@@ -11,7 +11,7 @@ const SECTIONS: [string, [string, string][]][] = [
     ["Open", [["⇧⌘P", "everything, including dropped projects"], ["⇧⌘J", "notes, full width"], ["⇧⌘G / ⇧⌘O", "the Inbox: PRs · on call"], ["⇧⌘K", "this card"]]],
     ["Focus", [["⌘2 / ⌘3", "terminal · notes rail"], ["esc", "out of a view, back to the terminal"]]],
     ["Notes", [["⌘E", "edit mine.md, the only file you write"], ["1–9", "notes focused: open that PR beside the terminals"], ["⌘⏎ / esc", "save · discard"]]],
-    ["Queues", [["j / k", "row"], ["⏎ / o", "open the PR beside the list · its project, or a new one"], ["z", "snooze the PR until the next working day"], ["1 / 2", "panel: focus a pane"], ["r", "resync now"]]],
+    ["Queues", [["j / k", "row"], ["⏎ / o", "open the PR beside the list · its project, or a new one"], ["z", "snooze the PR until the next working day"], ["1–9", "on call: open that count's page"], ["r", "resync now"]]],
 ];
 
 export const Keymap = memo(() => {

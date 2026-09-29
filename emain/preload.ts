@@ -83,7 +83,7 @@ contextBridge.exposeInMainWorld("api", {
 // Custom event for "new-window"
 ipcRenderer.on("webview-new-window", (e, webContentsId, details) => {
     const event = new CustomEvent("new-window", { detail: details });
-    // WintOS: to the webview that asked (several can live in one tab), else Wave's own.
+    // WintOS: to the webview that asked (a tab can hold several browser panes), else Wave's own.
     const target = document.querySelector(`webview[data-webcontentsid='${webContentsId}']`) ?? document.getElementById("webview");
     target?.dispatchEvent(event);
 });

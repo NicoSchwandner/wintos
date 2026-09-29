@@ -103,6 +103,9 @@ describe("the Inbox tab", () => {
 
     test("never counts as a project", () => expect(projectTabIds(["p1", "ib", "p2"], tabs)).toEqual(["p1", "p2"]));
 
+    test("an old blank placeholder tab is not a project either", () =>
+        expect(projectTabIds(["p1", "old"], { ...tabs, old: { meta: { "wintos:blank": true } } as unknown as Tab })).toEqual(["p1"]));
+
     test("is found among the tabs, or not at all", () => {
         expect(inboxTabId(["p1", "ib"], tabs)).toBe("ib");
         expect(inboxTabId(["p1"], tabs)).toBeUndefined();

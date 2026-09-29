@@ -1,6 +1,6 @@
 // WintOS: every browser pane follows one link rule (wintos/links.ts), decided here because a
-// navigation can only be cancelled in the main process. New-window links need nothing: Wave's
-// browser pane already opens them as a new pane.
+// navigation can only be cancelled in the main process. New-window links are routed to the
+// same wintos-open-pane in emain-tabview.ts.
 import { clipboard, ipcMain, WebContents } from "electron";
 import { opensNewPane } from "../wintos/links";
 

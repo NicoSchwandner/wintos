@@ -160,7 +160,9 @@ function openPage(url: string): void {
     // In the Inbox a page is read one at a time, like a tab: it is magnified, not tiled.
     const inInbox = isInboxTab(tab);
     if (shown) return inInbox ? void magnifyBlock(shown) : focusBlock(shown);
-    void createBlock({ meta: { view: "web", url } }).then((id) => inInbox && setTimeout(() => magnifyBlock(id), 50));
+    // The layout node arrives after createBlock resolves, so magnify once it exists (up to ~2s).
+    const magnifyWhenLaid = (id: string, frames = 120) => magnifyBlock(id) || (frames > 0 && requestAnimationFrame(() => magnifyWhenLaid(id, frames - 1)));
+    void createBlock({ meta: { view: "web", url } }).then((id) => inInbox && magnifyWhenLaid(id));
 }
 
 // ⇧⌘W: asks first when Claude sessions would stop; ⇧⌘W again confirms.

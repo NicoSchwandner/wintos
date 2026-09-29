@@ -137,7 +137,7 @@ func TestNewWorkspaceHasAnInbox(t *testing.T) {
 	ws, _ = GetWorkspace(ctx, ws.OID)
 	inboxes := 0
 	for _, id := range ws.TabIds {
-		if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, id); isInbox(tab) {
+		if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, id); IsInbox(tab) {
 			inboxes++
 		}
 	}

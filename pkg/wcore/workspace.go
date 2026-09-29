@@ -304,7 +304,7 @@ func DeleteTab(ctx context.Context, workspaceId string, tabId string, recursive 
 		return "", fmt.Errorf("workspace not found: %q", workspaceId)
 	}
 	// WintOS: closing tabs (recursive) never takes the Inbox; deleting its workspace still does.
-	if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, tabId); recursive && isInbox(tab) {
+	if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, tabId); recursive && IsInbox(tab) {
 		return ws.ActiveTabId, fmt.Errorf("the Inbox cannot be closed")
 	}
 

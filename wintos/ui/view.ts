@@ -65,7 +65,8 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
 
 // The Inbox is the one tab that is not a project (pkg/wcore/inbox.go); a tab not loaded yet is one.
 export const isInboxTab = (tab: Tab | undefined) => tab?.meta?.["wintos:inbox"] === true;
-export const projectTabIds = (ids: string[], tabs: Record<string, Tab | undefined>) => ids.filter((id) => !isInboxTab(tabs[id]));
+// A blank placeholder saved by an earlier version (meta wintos:blank) is not a project either.
+export const projectTabIds = (ids: string[], tabs: Record<string, Tab | undefined>) => ids.filter((id) => !isInboxTab(tabs[id]) && tabs[id]?.meta?.["wintos:blank"] !== true);
 export const inboxTabId = (ids: string[], tabs: Record<string, Tab | undefined>) => ids.find((id) => isInboxTab(tabs[id]));
 
 // The notes' Pull requests section: every PR of the project, snoozed ones included (marked,

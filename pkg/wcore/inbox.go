@@ -12,7 +12,7 @@ import (
 // which belong to no project, so there is exactly one per workspace and it is never closed.
 const MetaKey_WintosInbox = "wintos:inbox"
 
-func isInbox(tab *waveobj.Tab) bool {
+func IsInbox(tab *waveobj.Tab) bool {
 	return tab != nil && tab.Meta[MetaKey_WintosInbox] == true
 }
 
@@ -23,7 +23,12 @@ func EnsureInbox(ctx context.Context, workspaceId string) (string, error) {
 		return "", fmt.Errorf("workspace %s not found: %w", workspaceId, err)
 	}
 	for _, tabId := range ws.TabIds {
-		if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, tabId); isInbox(tab) {
+		// An unreadable tab may be the Inbox; creating another would break "exactly one".
+		tab, err := wstore.DBGet[*waveobj.Tab](ctx, tabId)
+		if err != nil {
+			return "", fmt.Errorf("error reading tab %s: %w", tabId, err)
+		}
+		if IsInbox(tab) {
 			return tabId, nil
 		}
 	}

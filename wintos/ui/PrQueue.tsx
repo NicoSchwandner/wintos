@@ -1,7 +1,8 @@
 import { useFocusOnMount } from "./useFocusOnMount";
 import { isPlainKey } from "./keys";
 import { enterProject, focusArea } from "./focus";
-import { atoms } from "@/store/global";
+import { atoms, createTab } from "@/store/global";
+import { offerPrompt, prLinkPaste } from "./newproject";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { memo, useEffect, useRef, useState } from "react";
 import type { Group } from "../daemon/prs/group";
@@ -60,9 +61,10 @@ export const PrQueue = memo(() => {
     const tabIds = useAtomValue(atoms.workspace)?.tabids ?? [];
     const projectOf = state ? prProjects(tabIds, state) : new Map<string, string>();
     const titleOf = (tabId: string) => state?.projects.find((p) => p.id === tabId)?.title ?? "its project";
+    // o: the PR's project, or a new one for it whose Claude prompt starts with the PR's link.
     const goToProject = (r: QueueRow) => {
         const tabId = projectOf.get(r.pr.url);
-        if (!tabId) return;
+        if (!tabId) return void (offerPrompt(prLinkPaste(r.pr.url)), createTab());
         setView("terminal");
         enterProject(tabId);
     };
@@ -130,7 +132,7 @@ export const PrQueue = memo(() => {
                 <Key k="j k" label="row" />
                 <Key k="⏎" label="open beside" />
                 {openUrl && <Key k="⇥" label="into the PR" />}
-                <Key k="o" label="go to project" off={!flat[cursor] || !projectOf.has(flat[cursor].pr.url)} />
+                <Key k="o" label={flat[cursor] && !projectOf.has(flat[cursor].pr.url) ? "open as new project" : "go to project"} off={!flat[cursor]} />
                 <Key k="z" label="snooze" />
                 <Key k={openUrl ? "esc ⌘W" : "esc"} label={openUrl ? "close the tab" : "back"} />
             </div>

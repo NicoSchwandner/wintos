@@ -7,6 +7,8 @@ import { Key } from "./Key";
 import { Keymap } from "./Keymap";
 import { isPlaceholderTab } from "./view";
 import { useSeenReporter } from "./useSeenReporter";
+import { useNewProjectPaste } from "./newproject";
+import { useWintos } from "./useWintos";
 import { NotesFull } from "./notes/NotesFull";
 import { NotesRail } from "./notes/NotesRail";
 import { mainViewAtom, overlayAtom } from "./notes/state";
@@ -26,6 +28,8 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
     useSeenReporter(tabId);
     const tab = useAtomValue(useMemo(() => getWaveObjectAtom<Tab>(makeORef("tab", tabId)), [tabId]));
     const empty = tab?.blockids?.length === 0;
+    const { state } = useWintos();
+    useNewProjectPaste(tabId, tab?.blockids, state ?? undefined);
     return (
         <div className="flex flex-col flex-grow min-w-0" style={{ position: "relative" }}>
             <div className="flex flex-row flex-grow min-w-0" style={{ minHeight: 0 }}>

@@ -25,7 +25,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
                 if (e.key === "e" && !editing && notes) (e.preventDefault(), editMine(true));
                 else if (!editing && /^[1-9]$/.test(e.key) && openProjectPr(tabId, state, Number(e.key))) e.preventDefault();
             }}
-            style={{ width: 352, flexShrink: 0, boxSizing: "border-box", padding: "12px 22px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", outline: "none", fontFamily: T.ui, borderLeft: `1px solid ${T.hairline}` }}
+            style={{ width: 352, flexShrink: 0, boxSizing: "border-box", padding: "12px 22px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", overflowX: "hidden", outline: "none", fontFamily: T.ui, borderLeft: `1px solid ${T.hairline}` }}
         >
             {project?.next && (
                 <div style={{ padding: "12px 14px", background: "#32302f", border: "1px solid #d65d0e", borderRadius: 10, display: "flex", flexDirection: "column", gap: 6 }}>

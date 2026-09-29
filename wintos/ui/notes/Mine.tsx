@@ -93,11 +93,11 @@ export function Mine({
                 if (!line.trim()) return i > 0 && lines[i - 1].trim() ? <span key={i} style={{ height: size === "rail" ? 4 : 8 }} /> : null;
                 const cb = checkbox(line);
                 const style = { fontFamily: size === "full" ? T.mono : T.ui, fontSize: 12.5, lineHeight: 1.6, color: /^#+ /.test(line) ? T.apricot : T.secondary };
-                if (!cb) return <span key={i} style={style}><Rich text={line} size={size} /></span>;
+                if (!cb) return <span key={i} style={{ ...style, overflowWrap: "anywhere" }}><Rich text={line} size={size} /></span>;
                 return (
-                    <span key={i} style={{ ...style, display: "flex", gap: 8, color: cb.state === "done" ? T.muted : T.secondary, textDecoration: cb.state === "done" ? "line-through" : undefined }}>
+                    <span key={i} style={{ ...style, display: "flex", gap: 8, minWidth: 0, overflowWrap: "anywhere", color: cb.state === "done" ? T.muted : T.secondary, textDecoration: cb.state === "done" ? "line-through" : undefined }}>
                         <Box state={cb.state} size={size} onToggle={canEdit ? () => void tick(i) : undefined} />
-                        <span><Rich text={cb.text} size={size} /></span>
+                        <span style={{ minWidth: 0 }}><Rich text={cb.text} size={size} /></span>
                     </span>
                 );
             })}

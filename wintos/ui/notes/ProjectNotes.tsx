@@ -14,7 +14,7 @@ export function Rich({ text, size }: { text: string; size: Size }) {
         <>
             {spans(text).map((s, i) =>
                 s.code ? (
-                    <span key={i} style={{ fontFamily: T.mono, fontSize: SIZES[size].code, color: T.emphasis, background: T.cardActive, borderRadius: 4, padding: "0 4px" }}>
+                    <span key={i} style={{ fontFamily: T.mono, fontSize: SIZES[size].code, color: T.emphasis, background: T.cardActive, borderRadius: 4, padding: "0 4px", overflowWrap: "anywhere" }}>
                         {s.text}
                     </span>
                 ) : (
@@ -59,7 +59,7 @@ function Line({ lead, size, children }: { lead: React.ReactNode; size: Size; chi
     return (
         <div style={{ display: "flex", gap: size === "rail" ? 9 : 11, fontSize: z.text, lineHeight: z.line, color: z.textColor }}>
             {lead}
-            <span style={{ textWrap: "pretty" } as React.CSSProperties}>{children}</span>
+            <span style={{ textWrap: "pretty", minWidth: 0, overflowWrap: "anywhere" } as React.CSSProperties}>{children}</span>
         </div>
     );
 }

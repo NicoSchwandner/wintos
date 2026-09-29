@@ -1,6 +1,5 @@
 import { useFocusOnMount } from "../useFocusOnMount";
-import { isPlainKey } from "../keys";
-import { editMine, focusArea } from "../focus";
+import { useZoneKeys } from "../zones";
 import { useAtomValue } from "jotai";
 import { memo } from "react";
 import { T } from "../tokens";
@@ -9,7 +8,7 @@ import { Key } from "../Key";
 import { ProjectNotes } from "./ProjectNotes";
 import { editingMineAtom } from "./state";
 import { useNotes } from "./useNotes";
-import { openProjectPr, PrList } from "./PrList";
+import { notesKeys, PrList } from "./PrList";
 import { useWintos } from "../useWintos";
 
 // ⇧⌘J: both files full width, side by side (NotesC).
@@ -18,17 +17,13 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
     const { notes, project, save } = useNotes(tabId);
     const editing = useAtomValue(editingMineAtom);
     const { state } = useWintos();
+    useZoneKeys(focusRef, notesKeys(tabId, state, !editing && !!notes));
     return (
         <div
             data-wintos="notes-full"
             tabIndex={0}
             ref={focusRef}
-            onKeyDown={(e) => {
-                if (!isPlainKey(e) && e.key !== "Escape") return;
-                if (e.key === "e" && !editing && notes) (e.preventDefault(), editMine(true));
-                if (e.key === "Escape" && !editing) focusArea("terminal");
-                if (!editing && /^[1-9]$/.test(e.key) && openProjectPr(tabId, state, Number(e.key))) e.preventDefault();
-            }}
+            data-zone="list"
             style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#1d2021", outline: "none", fontFamily: T.ui, minWidth: 0 }}
         >
             <div style={{ padding: "18px 26px 16px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>

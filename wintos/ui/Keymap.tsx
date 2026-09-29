@@ -1,6 +1,7 @@
 import { useFocusOnMount } from "./useFocusOnMount";
 import { memo } from "react";
 import { closeOverlay } from "./focus";
+import { useZoneKeys } from "./zones";
 import { KEYCAP_FONT } from "./Key";
 import { T } from "./tokens";
 
@@ -16,13 +17,14 @@ const SECTIONS: [string, [string, string][]][] = [
 
 export const Keymap = memo(() => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
+    useZoneKeys(focusRef, { "Shift:?": closeOverlay });
     return (
         <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(15,16,17,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={closeOverlay}>
             <div
                 data-wintos="keymap"
                 tabIndex={0}
                 ref={focusRef}
-                onKeyDown={(e) => (e.key === "Escape" || e.key === "?") && (e.preventDefault(), closeOverlay())}
+                data-zone="overlay"
                 onClick={(e) => e.stopPropagation()}
                 style={{ width: 640, padding: "22px 26px", background: "#1d2021", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px 32px" }}
             >

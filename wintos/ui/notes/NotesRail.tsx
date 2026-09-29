@@ -1,14 +1,13 @@
 import { useAtomValue } from "jotai";
-import { isPlainKey } from "../keys";
-import { editMine } from "../focus";
-import { memo } from "react";
+import { memo, useRef } from "react";
+import { useZoneKeys } from "../zones";
 import { Key } from "../Key";
 import { T } from "../tokens";
 import { Mine } from "./Mine";
 import { ProjectNotes } from "./ProjectNotes";
 import { editingMineAtom } from "./state";
 import { useNotes } from "./useNotes";
-import { openProjectPr, PrList } from "./PrList";
+import { notesKeys, PrList } from "./PrList";
 import { useWintos } from "../useWintos";
 
 // The notes rail beside the terminal (MainC): next action, project.md, mine.md.
@@ -16,15 +15,14 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
     const { notes, project, save } = useNotes(tabId);
     const editing = useAtomValue(editingMineAtom);
     const { state } = useWintos();
+    const ref = useRef<HTMLDivElement>(null);
+    useZoneKeys(ref, notesKeys(tabId, state, !editing && !!notes));
     return (
         <div
             data-wintos="notes-rail"
             tabIndex={0}
-            onKeyDown={(e) => {
-                if (!isPlainKey(e) && e.key !== "Escape") return;
-                if (e.key === "e" && !editing && notes) (e.preventDefault(), editMine(true));
-                else if (!editing && /^[1-9]$/.test(e.key) && openProjectPr(tabId, state, Number(e.key))) e.preventDefault();
-            }}
+            data-zone="list"
+            ref={ref}
             style={{ width: 352, flexShrink: 0, boxSizing: "border-box", padding: "12px 22px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", overflowX: "hidden", outline: "none", fontFamily: T.ui, borderLeft: `1px solid ${T.hairline}` }}
         >
             {project?.next && (

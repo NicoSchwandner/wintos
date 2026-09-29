@@ -1,11 +1,10 @@
 import { memo, useState } from "react";
-import { focusArea } from "./focus";
 import { Key } from "./Key";
-import { isPlainKey } from "./keys";
 import { runAction } from "./menu";
 import { pluginPanels } from "./panels";
 import { T } from "./tokens";
 import { useFocusOnMount } from "./useFocusOnMount";
+import { useZoneKeys } from "./zones";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { relTime } from "./view";
@@ -21,23 +20,19 @@ export const OnCallList = memo(() => {
     const rows = panels.flatMap((p) => p.counts.map((c) => ({ panel: p, count: c })));
     const open = (i: number) => rows[i]?.count.url && runAction(`open-page:${rows[i].count.url}`);
     const resync = () => panels.forEach((p) => void daemonFetch(`/plugins/${encodeURIComponent(p.name)}/run`, { method: "POST", body: {} }).catch(() => {}));
+    useZoneKeys(focusRef, {
+        j: () => setCursor((c) => Math.min(c + 1, rows.length - 1)),
+        k: () => setCursor((c) => Math.max(c - 1, 0)),
+        Enter: () => void open(cursor),
+        ...Object.fromEntries(["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => [d, () => void open(Number(d) - 1)])),
+        r: (e) => void (e.repeat || resync()),
+    });
     return (
         <div
             data-wintos="inbox-list"
             tabIndex={0}
             ref={focusRef}
-            onKeyDown={(e) => {
-                if (!isPlainKey(e) && e.key !== "Escape") return;
-                const n = Number(e.key);
-                if (e.key === "j") setCursor((c) => Math.min(c + 1, rows.length - 1));
-                else if (e.key === "k") setCursor((c) => Math.max(c - 1, 0));
-                else if (e.key === "Enter") open(cursor);
-                else if (n >= 1 && n <= 9) open(n - 1);
-                else if (e.key === "r" && !e.repeat) resync();
-                else if (e.key === "Escape") focusArea("terminal");
-                else return;
-                e.preventDefault();
-            }}
+            data-zone="list"
             style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
         >
             <div style={{ flexGrow: 1, overflowY: "auto", padding: "18px 26px", display: "flex", flexDirection: "column", gap: 18 }}>

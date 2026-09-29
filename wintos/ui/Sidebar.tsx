@@ -5,7 +5,7 @@ import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, getApi } from "@/store/global";
 import { fireAndForget } from "@/util/util";
 import { atom, useAtom, useAtomValue } from "jotai";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Row } from "../daemon/ranking/rank";
 import { Key } from "./Key";
 import { T } from "./tokens";
@@ -19,6 +19,7 @@ import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { ghPrs, isInboxTab, prsByTab, projectTabIds, rowView, RowView, sidebarModel } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
+import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 
 const BAND_STYLE = {
@@ -221,17 +222,16 @@ type RowProps = {
 };
 
 function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming" | "onRename"> & { style: React.CSSProperties }) {
+    const ref = useRef<HTMLInputElement>(null);
+    useZoneKeys(ref, { Enter: () => onRename(ref.current?.value ?? null), Escape: () => onRename(null) });
     if (!renaming) return <span style={style}>{v.title}</span>;
     return (
         <input
             autoFocus
+            ref={ref}
+            data-zone="overlay"
             defaultValue={v.title}
             onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-                e.stopPropagation();
-                if (e.key === "Enter") onRename(e.currentTarget.value);
-                if (e.key === "Escape") onRename(null);
-            }}
             onBlur={(e) => onRename(e.currentTarget.value)}
             style={{ ...style, background: T.ground, border: `1px solid ${T.borderActive}`, borderRadius: 5, padding: "1px 4px", outline: "none", width: "100%" }}
         />

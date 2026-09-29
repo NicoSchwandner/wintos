@@ -6,6 +6,7 @@ import { FocusManager } from "@/app/store/focusManager";
 import { jumpToNextWaiting } from "@/wintos/ui/focus";
 import { sameChord } from "@/wintos/ui/keys";
 import { runKey, WINTOS_KEYS, wintosClose, wintosEscape } from "@/wintos/ui/menu";
+import { zoneKey } from "@/wintos/ui/zones";
 import {
     atoms,
     createBlock,
@@ -199,10 +200,6 @@ function genericClose() {
             }
         }
     }
-    // WintOS: the last pane's ⌘W leaves the project open; ⌘W again, on the empty project,
-    // closes it (through ⇧⌘W's path, which asks while Claude sessions would stop).
-    if (getStaticTabBlockCount() === 0) return runKey("close-project");
-
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
     const blockId = focusedNode?.data?.blockId;
@@ -434,6 +431,8 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
         return true;
     }
 
+    // WintOS: the focused zone's own keys (a list's j/k, a field's Enter) come first.
+    if (zoneKey(waveEvent, document.activeElement)) return true;
     const [, globalHandler] = checkKeyMap(waveEvent, globalKeyMap);
     if (globalHandler) {
         const handled = globalHandler(waveEvent);

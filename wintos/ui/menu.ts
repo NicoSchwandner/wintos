@@ -2,13 +2,14 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, isDev } from "@/store/global";
-import { editMine, focusArea, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
+import { closeOverlay, editMine, focusArea, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
 import { closeWarning } from "./sessions";
 import { goToInbox } from "./inbox";
 import { mainViewAtom, overlayAtom, renamingAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject } from "./switcher";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { isInboxTab } from "./view";
+import { closeAction, escapeAction, zoneOf } from "./zones";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
 // defines, so a user's widgets.json overrides still apply.
@@ -130,21 +131,30 @@ export function runAction(action: string): void {
     if (b) createBlock(b.def, false, b.ephemeral);
 }
 
-// ⌘W inside a WintOS view acts on the view: the terminals are hidden behind it, and Wave's
-// close would kill the focused one unseen.
+// ⌘W and Esc resolve by the rules in zones.ts; false hands the key on to Wave's own.
 export function wintosClose(): boolean {
-    if (globalStore.get(mainViewAtom) === "terminal") return false;
-    focusArea("terminal");
-    return true;
+    const lm = getLayoutModelForStaticTab();
+    const focused = lm && globalStore.get(lm.focusedNode);
+    const magnified = lm && globalStore.get(lm.magnifiedNodeIdAtom);
+    const action = closeAction({
+        overlay: !!globalStore.get(overlayAtom),
+        notesShown: globalStore.get(mainViewAtom) !== "terminal",
+        zone: zoneOf(document.activeElement),
+        paneFocused: !!focused,
+        paneHidden: !!magnified && magnified !== focused?.id,
+    });
+    if (action === "overlay") closeOverlay();
+    if (action === "view") focusArea("terminal");
+    return action !== "pane";
 }
 
-// Esc forwarded out of a page in the Inbox hands focus back to its list.
 export function wintosEscape(): boolean {
-    if (document.activeElement?.tagName !== "WEBVIEW") return false;
-    const list = document.querySelector<HTMLElement>("[data-wintos=inbox-list]");
-    if (!list) return false;
-    list.focus();
-    return true;
+    const active = document.activeElement;
+    const action = escapeAction({ overlay: !!globalStore.get(overlayAtom), zone: zoneOf(active), inInbox: inInbox(), onPage: active?.tagName === "WEBVIEW" });
+    if (action === "overlay") closeOverlay();
+    if (action === "panes") focusArea("terminal");
+    if (action === "list") document.querySelector<HTMLElement>("[data-zone=list]")?.focus();
+    return action !== "wave";
 }
 
 // A PR pane keeps its identity while it moves between the PR's own tabs (/files, /commits).

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { T } from "../tokens";
 import { editingMineAtom } from "./state";
 import type { SaveResult } from "./useNotes";
+import { useZoneKeys } from "../zones";
 
 // mine.md: rendered as paragraphs, edited in place. ⌘⏎ saves, esc discards.
 export function Mine({
@@ -31,6 +32,16 @@ export function Mine({
         if (editing) (setDraft(text), setBase(mtime), setError(null), setTimeout(() => ref.current?.focus(), 0));
     }, [editing]);
 
+    useZoneKeys(ref, {
+        Escape: () => editMine(false),
+        "Cmd:Enter": () =>
+            void save(draft, base).then((r) => {
+                if (r === "ok") editMine(false);
+                else if (r === "conflict") setError("mine.md changed on disk while you edited. Copy your text, press esc and edit again.");
+                else setError("could not save: wintosd refused or is offline");
+            }),
+    });
+
     if (editing && canEdit) {
         return (
             <>
@@ -39,20 +50,7 @@ export function Mine({
                     ref={ref}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={async (e) => {
-                        e.stopPropagation();
-                        if (e.key === "Escape") editMine(false);
-                        if (e.key === "Enter" && e.metaKey) {
-                            e.preventDefault();
-                            const r = await save(draft, base);
-                            if (r === "ok") editMine(false);
-                            else if (r === "conflict")
-                                setError(
-                                    "mine.md changed on disk while you edited. Copy your text, press esc and edit again."
-                                );
-                            else setError("could not save: wintosd refused or is offline");
-                        }
-                    }}
+                    data-zone="overlay"
                     spellCheck={false}
                     style={{
                         flexGrow: 1,

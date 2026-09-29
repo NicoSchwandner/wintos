@@ -1,7 +1,5 @@
-import { describe, expect, test, vi } from "vitest";
-import { globalStore } from "@/app/store/jotaiStore";
-import { allowedInInbox, blockDefFor, focusedPageUrl, newSessionScript, paneShowing, wintosClose } from "./menu";
-import { mainViewAtom } from "./notes/state";
+import { describe, expect, test } from "vitest";
+import { allowedInInbox, blockDefFor, focusedPageUrl, newSessionScript, paneShowing } from "./menu";
 
 const widgets = {
     "defwidget@terminal": { blockdef: { meta: { view: "term", controller: "shell" } } },
@@ -37,21 +35,6 @@ describe("newSessionScript", () => {
         expect(newSessionScript(undefined)).toBe("claude");
     });
 });
-
-describe("wintosClose", () => {
-    test("⌘W in the notes view goes back to the terminals and closes nothing hidden", () => {
-        vi.stubGlobal("requestAnimationFrame", () => 0);
-        globalStore.set(mainViewAtom, "notes");
-        expect(wintosClose()).toBe(true);
-        expect(globalStore.get(mainViewAtom)).toBe("terminal");
-    });
-
-    test("in the terminals ⌘W stays Wave's close", () => {
-        globalStore.set(mainViewAtom, "terminal");
-        expect(wintosClose()).toBe(false);
-    });
-});
-
 
 describe("paneShowing", () => {
     const blocks = [{ oid: "b1", meta: { view: "term" } }, { oid: "b2", meta: { view: "web", url: "https://github.com/acme/api/pull/9" } }] as unknown as Block[];

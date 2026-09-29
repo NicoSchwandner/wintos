@@ -1,6 +1,6 @@
 import { useFocusOnMount } from "./useFocusOnMount";
-import { isPlainKey } from "./keys";
-import { enterProject, focusArea } from "./focus";
+import { useZoneKeys } from "./zones";
+import { enterProject } from "./focus";
 import { atoms, createTab } from "@/store/global";
 import { offerPrompt, prLinkPaste } from "./newproject";
 import { useAtomValue } from "jotai";
@@ -68,28 +68,26 @@ export const PrQueue = memo(() => {
         setRefreshing(false);
     };
 
+    const r = flat[Math.min(cursor, flat.length - 1)];
+    useZoneKeys(focusRef, {
+        j: () => step(1),
+        k: () => step(-1),
+        Enter: () => (r ? openPr(r) : false),
+        o: () => (r ? goToProject(r) : false),
+        r: (e) => void (e.repeat || refresh()),
+        z: (e) => {
+            if (!r || e.repeat) return;
+            // Snoozing sends the PR to the bottom; carry on with the next one instead.
+            if (!snoozedUrls.has(r.pr.url)) setSelected(urls[cursor + 1] ?? urls[cursor - 1]);
+            void toggleSnooze(r);
+        },
+    });
     return (
         <div
             data-wintos="inbox-list"
             tabIndex={0}
             ref={focusRef}
-            onKeyDown={(e) => {
-                if (!isPlainKey(e) && e.key !== "Escape") return;
-                const r = flat[Math.min(cursor, flat.length - 1)];
-                if (e.key === "j") step(1);
-                else if (e.key === "k") step(-1);
-                else if (e.key === "Enter" && r) openPr(r);
-                else if (e.key === "o" && r) goToProject(r);
-                else if (e.key === "r" && !e.repeat) void refresh();
-                else if (e.key === "z" && r && !e.repeat) {
-                    // Snoozing sends the PR to the bottom; carry on with the next one instead.
-                    if (!snoozedUrls.has(r.pr.url)) setSelected(urls[cursor + 1] ?? urls[cursor - 1]);
-                    void toggleSnooze(r);
-                }
-                else if (e.key === "Escape") focusArea("terminal");
-                else return;
-                e.preventDefault();
-            }}
+            data-zone="list"
             style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#1d2021", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
         >
             <div style={{ padding: "18px 26px 16px", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>

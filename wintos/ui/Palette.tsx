@@ -1,6 +1,6 @@
 import { globalStore } from "@/app/store/jotaiStore";
 import { atoms } from "@/store/global";
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import { closeOverlay, enterProject, focusSession } from "./focus";
 import { runAction } from "./menu";
 import { searchPalette, type PaletteItem } from "./palette-search";
@@ -8,6 +8,7 @@ import { pluginPanels } from "./panels";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
+import { useZoneKeys } from "./zones";
 import { projectPrList, projectTabIds, relTime, sidebarModel } from "./view";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 
@@ -19,6 +20,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
     const now = useNow();
     const [q, setQ] = useState("");
     const [cursor, setCursor] = useState(0);
+    const ref = useRef<HTMLDivElement>(null);
 
     const items = useMemo((): PaletteItem[] => {
         if (!state) return [];
@@ -63,11 +65,16 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
         closeOverlay();
         i.run?.();
     };
+    const down = () => setCursor((c) => Math.min(c + 1, results.length - 1));
+    const up = () => setCursor((c) => Math.max(c - 1, 0));
+    useZoneKeys(ref, { ArrowDown: down, "Ctrl:n": down, ArrowUp: up, "Ctrl:p": up, Enter: () => run(results[cursor]) });
     let lastKind = "";
     return (
         <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(15,16,17,0.6)", display: "flex", justifyContent: "center", paddingTop: "12vh" }} onClick={closeOverlay}>
             <div
                 data-wintos="palette"
+                data-zone="overlay"
+                ref={ref}
                 onClick={(e) => e.stopPropagation()}
                 style={{ width: 620, maxHeight: "64vh", display: "flex", flexDirection: "column", background: "#32302f", border: `1px solid ${T.borderActive}`, borderRadius: 12, boxShadow: "0 22px 52px rgba(0,0,0,0.72)", overflow: "hidden", fontFamily: T.ui }}
             >
@@ -78,15 +85,6 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                         value={q}
                         placeholder="Search projects, sessions and actions"
                         onChange={(e) => (setQ(e.target.value), setCursor(0))}
-                        onKeyDown={(e) => {
-                            e.stopPropagation();
-                            if (e.key === "Escape") closeOverlay();
-                            else if (e.key === "ArrowDown" || (e.key === "n" && e.ctrlKey)) setCursor((c) => Math.min(c + 1, results.length - 1));
-                            else if (e.key === "ArrowUp" || (e.key === "p" && e.ctrlKey)) setCursor((c) => Math.max(c - 1, 0));
-                            else if (e.key === "Enter") run(results[cursor]);
-                            else return;
-                            e.preventDefault();
-                        }}
                         style={{ flexGrow: 1, background: "transparent", border: "none", outline: "none", fontSize: 15, color: T.text, fontFamily: T.ui }}
                     />
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{results.length} of {items.length}</span>

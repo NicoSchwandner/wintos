@@ -5,8 +5,8 @@
 [[ -n $WAVETERM_TABID ]] || return 0
 
 () {
-    local pill='#2A2421' text='#F2EDE8' secondary='#C3B9B1' muted='#91867E' faint='#3A3330'
-    local apricot='#EFA06A' brick='#E0736E' moss='#A3C08E'
+    local pill='#3c3836' text='#ebdbb2' secondary='#d5c4a1' muted='#a89984' faint='#504945'
+    local apricot='#fe8019' brick='#fb4934' moss='#b8bb26'
 
     typeset -g POWERLEVEL9K_DIR_BACKGROUND=$pill
     typeset -g POWERLEVEL9K_DIR_FOREGROUND=$secondary

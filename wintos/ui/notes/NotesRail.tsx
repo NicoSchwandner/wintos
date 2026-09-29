@@ -28,9 +28,9 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
             style={{ width: 352, flexShrink: 0, boxSizing: "border-box", padding: "12px 22px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", outline: "none", fontFamily: T.ui, borderLeft: `1px solid ${T.hairline}` }}
         >
             {project?.next && (
-                <div style={{ padding: "12px 14px", background: "#241C15", border: "1px solid #6B4F36", borderRadius: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ padding: "12px 14px", background: "#32302f", border: "1px solid #d65d0e", borderRadius: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                     <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.apricot }}>Next action</span>
-                    <span style={{ fontSize: 12.5, lineHeight: 1.55, color: "#EBDCCB" }}>{project.next}</span>
+                    <span style={{ fontSize: 12.5, lineHeight: 1.55, color: "#ebdbb2" }}>{project.next}</span>
                 </div>
             )}
             <PrList tabId={tabId} size="rail" />
@@ -47,7 +47,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
                     <ProjectNotes md={notes.projectMd} size="rail" />
                 )}
             </div>
-            <div style={{ padding: "12px 14px", background: "#1A1716", border: `1px solid ${editing ? T.borderActive : T.keycapBorder}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ padding: "12px 14px", background: "#282828", border: `1px solid ${editing ? T.borderActive : T.keycapBorder}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>mine.md</span>
                     <Key k={editing ? "⌘⏎" : "⌘E"} label={editing ? "save · esc discard" : "edit"} />

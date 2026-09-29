@@ -64,11 +64,11 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
     };
     let lastKind = "";
     return (
-        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(10,8,7,0.55)", display: "flex", justifyContent: "center", paddingTop: "12vh" }} onClick={closeOverlay}>
+        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(15,16,17,0.6)", display: "flex", justifyContent: "center", paddingTop: "12vh" }} onClick={closeOverlay}>
             <div
                 data-wintos="palette"
                 onClick={(e) => e.stopPropagation()}
-                style={{ width: 620, maxHeight: "64vh", display: "flex", flexDirection: "column", background: "#1C1918", border: `1px solid ${T.borderActive}`, borderRadius: 12, boxShadow: "0 22px 52px rgba(0,0,0,0.72)", overflow: "hidden", fontFamily: T.ui }}
+                style={{ width: 620, maxHeight: "64vh", display: "flex", flexDirection: "column", background: "#32302f", border: `1px solid ${T.borderActive}`, borderRadius: 12, boxShadow: "0 22px 52px rgba(0,0,0,0.72)", overflow: "hidden", fontFamily: T.ui }}
             >
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${T.hairline}` }}>
                     <span style={{ fontFamily: T.mono, color: T.apricot }}>&gt;</span>
@@ -100,7 +100,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                                 <div
                                     onMouseEnter={() => setCursor(n)}
                                     onClick={() => run(i)}
-                                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "8px 10px", borderRadius: 8, cursor: "pointer", background: n === cursor ? "#2E2825" : "transparent" }}
+                                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "8px 10px", borderRadius: 8, cursor: "pointer", background: n === cursor ? "#3c3836" : "transparent" }}
                                 >
                                     <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                                         <span style={{ fontSize: 13, color: n === cursor ? T.emphasis : T.title, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{i.title}</span>

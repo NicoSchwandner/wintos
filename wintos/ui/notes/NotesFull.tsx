@@ -29,7 +29,7 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
                 if (e.key === "Escape" && !editing) focusArea("terminal");
                 if (!editing && /^[1-9]$/.test(e.key) && openProjectPr(tabId, state, Number(e.key))) e.preventDefault();
             }}
-            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#171413", outline: "none", fontFamily: T.ui, minWidth: 0 }}
+            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#1d2021", outline: "none", fontFamily: T.ui, minWidth: 0 }}
         >
             <div style={{ padding: "18px 26px 16px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>

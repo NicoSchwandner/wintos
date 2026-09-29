@@ -17,14 +17,14 @@ const SECTIONS: [string, [string, string][]][] = [
 export const Keymap = memo(() => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     return (
-        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(10,8,7,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={closeOverlay}>
+        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(15,16,17,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={closeOverlay}>
             <div
                 data-wintos="keymap"
                 tabIndex={0}
                 ref={focusRef}
                 onKeyDown={(e) => (e.key === "Escape" || e.key === "?") && (e.preventDefault(), closeOverlay())}
                 onClick={(e) => e.stopPropagation()}
-                style={{ width: 640, padding: "22px 26px", background: "#171413", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px 32px" }}
+                style={{ width: 640, padding: "22px 26px", background: "#1d2021", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px 32px" }}
             >
                 <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "baseline", gap: 12 }}>
                     <span style={{ fontFamily: T.display, fontSize: 26, color: T.emphasis }}>Keys</span>

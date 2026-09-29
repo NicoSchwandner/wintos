@@ -21,7 +21,7 @@ export const PanelView = memo(() => {
     const panes = useRef<(HTMLElement | null)[]>([]);
     const panel = state ? pluginPanels(state).find((p) => p.name === name) : undefined;
     const loading = !panel && !!state?.pluginNames?.includes(name) && !state.plugins?.[name];
-    if (!panel) return <div style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, background: "#171413" }}>{loading ? "Loading… the plugin's first run is still going." : "This panel is not available right now."}</div>;
+    if (!panel) return <div style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, background: "#1d2021" }}>{loading ? "Loading… the plugin's first run is still going." : "This panel is not available right now."}</div>;
     const withUrl = panel.counts.filter((c) => c.url);
     const resync = () => daemonFetch(`/plugins/${encodeURIComponent(panel.name)}/run`, { method: "POST", body: {} }).catch(() => {});
     return (
@@ -38,7 +38,7 @@ export const PanelView = memo(() => {
                 else return;
                 e.preventDefault();
             }}
-            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#171413", outline: "none", fontFamily: T.ui, minWidth: 0 }}
+            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#1d2021", outline: "none", fontFamily: T.ui, minWidth: 0 }}
         >
             <div style={{ padding: "18px 26px 14px", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>

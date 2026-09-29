@@ -1,7 +1,7 @@
 import { T } from "../tokens";
 import { parseNotes, spans } from "./parse";
 
-const DOT = { done: T.moss, partial: T.apricot, todo: "#332E2B" } as const;
+const DOT = { done: T.moss, partial: T.apricot, todo: "#3c3836" } as const;
 
 export type Size = "rail" | "full";
 const SIZES = {

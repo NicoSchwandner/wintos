@@ -6,7 +6,7 @@ import { T } from "./tokens";
 
 // The keys that apply right now (spec §7), one row per view.
 const KEYS = {
-    terminal: [["⌘J ⌘K", "projects"], ["⌃⇥", "next waiting"], ["⇧⌘P", "everything"], ["⇧⌘T", "new session"], ["⌘E", "edit mine.md"], ["⇧⌘L", "notes"], ["⇧⌘G", "PRs"], ["⇧⌘K", "keys"]],
+    terminal: [["⌘J ⌘K", "projects"], ["⌃⇥", "next waiting"], ["⇧⌘P", "everything"], ["⇧⌘T", "new session"], ["⌘M", "magnify"], ["⌘E", "edit mine.md"], ["⇧⌘L", "notes"], ["⇧⌘G", "PRs"], ["⇧⌘K", "keys"]],
     notes: [["⌘E", "edit mine.md"], ["⌘⏎", "save"], ["esc", "back"]],
 } as const;
 

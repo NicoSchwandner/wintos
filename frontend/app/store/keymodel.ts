@@ -451,7 +451,16 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
 
     const [, globalHandler] = checkKeyMap(waveEvent, globalKeyMap);
     if (globalHandler) {
-        const handled = globalHandler(waveEvent);
+        // WintOS: a key handler that throws (one that assumed a focused pane) must never take
+        // the app down; the key is swallowed and the failure logged.
+        let handled: boolean;
+        try {
+            handled = globalHandler(waveEvent);
+        } catch (err) {
+            flog(`key handler failed: ${err}`);
+            console.error("key handler failed", err);
+            return true;
+        }
         if (handled) {
             return true;
         }
@@ -658,7 +667,7 @@ function registerGlobalKeys() {
     });
     globalKeyMap.set("Cmd:g", () => {
         const bcm = getBlockComponentModel(getFocusedBlockInStaticTab());
-        if (bcm.openSwitchConnection != null) {
+        if (bcm?.openSwitchConnection != null) {
             recordTEvent("action:other", { "action:type": "conndropdown", "action:initiator": "keyboard" });
             bcm.openSwitchConnection();
             return true;
@@ -713,6 +722,7 @@ function registerGlobalKeys() {
     function activateSearch(event: WaveKeyboardEvent): boolean {
         const bcm = getBlockComponentModel(getFocusedBlockInStaticTab());
         // Ctrl+f is reserved in most shells
+        if (bcm == null) return false; // WintOS: an Inbox list or notes has no focused block
         if (event.control && bcm.viewModel.viewType == "term") {
             return false;
         }
@@ -732,7 +742,7 @@ function registerGlobalKeys() {
     }
     function deactivateSearch(): boolean {
         const bcm = getBlockComponentModel(getFocusedBlockInStaticTab());
-        if (bcm.viewModel.searchAtoms && globalStore.get(bcm.viewModel.searchAtoms.isOpen)) {
+        if (bcm?.viewModel?.searchAtoms && globalStore.get(bcm.viewModel.searchAtoms.isOpen)) {
             globalStore.set(bcm.viewModel.searchAtoms.isOpen, false);
             return true;
         }

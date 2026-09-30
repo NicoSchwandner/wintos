@@ -44,8 +44,7 @@ const onKeyDown = (e: KeyboardEvent) => {
     if (e.key !== "Escape") return;
     e.preventDefault();
     e.stopPropagation(); // the Esc cancels the switch; it must not also interrupt Claude
-    end();
-    focusArea("terminal");
+    end(); // the walk only moved the sidebar's cursor: focus is still where it was
 };
 
 function listen(on: boolean): void {

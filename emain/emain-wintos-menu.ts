@@ -5,9 +5,13 @@ import * as electron from "electron";
 type Send = (window: electron.BaseWindow | undefined, action: string) => void;
 
 export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[] {
+    // The menu shows each key but does not take it (registerAccelerator: false): every key goes
+    // through the renderer's one key path (zones, the ⌘-hold project walk, text fields, the focus
+    // trail). A menu that took ⌘J switched at once and left no walk for Esc to cancel.
     const item = (label: string, action: string, accelerator?: string): Electron.MenuItemConstructorOptions => ({
         label,
         accelerator,
+        registerAccelerator: false,
         click: (_, window) => send(window, action),
     });
     // Mirrors WINTOS_KEYS (wintos/ui/menu.ts), which the renderer handles first.

@@ -1,4 +1,5 @@
 import { globalStore } from "@/app/store/jotaiStore";
+import { atom } from "jotai";
 import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, isDev } from "@/store/global";
@@ -140,11 +141,14 @@ function stepPane(delta: 1 | -1): boolean {
 
 // ⇧⌘C copies the focused browser pane's address, through emain: navigator.clipboard refuses
 // while focus is inside the page. Anywhere else ⇧⌘C stays what it was.
+export const copiedAtAtom = atom(0); // the strip's "copied" flash
+
 function copyUrl(): boolean {
     const blockId = globalStore.get(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
     const url = blockId && focusedPageUrl(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId))));
     if (!url) return false;
     getApi().writeClipboard(url);
+    globalStore.set(copiedAtAtom, Date.now());
     return true;
 }
 

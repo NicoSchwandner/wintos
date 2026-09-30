@@ -2,11 +2,12 @@ import { getLayoutModelForStaticTab } from "@/layout/index";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atom, useAtomValue } from "jotai";
 import { getSettingsKeyAtom } from "@/app/store/global";
-import { memo, useEffect, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 
 const STRIP_GAP = 6; // above the chips, and (with the tile gap) below them
 import { focusSession, takeHandoff } from "./focus";
 import { Key } from "./Key";
+import { copiedAtAtom, focusedPageUrl, runKey } from "./menu";
 import { paneOrder, stripPanes } from "./panes";
 import { liveSessions, unreadSessions } from "./sessions";
 import { T } from "./tokens";
@@ -89,6 +90,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
             )}
             {/* The focused pane's controls, the same for a terminal and a page. */}
             {inProject && chips.length > 1 && !magnified && focused && <StripAction k="⌘M" label="magnify" onClick={() => lm.magnifyNodeToggle(focused.id)} />}
+            {focused && focusedPageUrl(blocks[ids.indexOf(focused.data?.blockId)]) && <CopyUrl />}
             {focused && <StripAction k="⌘W" label="close" onClick={() => void lm.closeNode(focused.id)} />}
             {/* Magnify hides the other panes and has no header button here: say so, and offer the way back. */}
             {magnified && inProject && (
@@ -108,6 +110,18 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     );
 });
 PaneStrip.displayName = "PaneStrip";
+
+function CopyUrl() {
+    const copiedAt = useAtomValue(copiedAtAtom);
+    const [, rerender] = useState(0);
+    const copied = Date.now() - copiedAt < 1500;
+    useEffect(() => {
+        if (!copied) return;
+        const t = setTimeout(() => rerender((n) => n + 1), 1500);
+        return () => clearTimeout(t);
+    }, [copiedAt]);
+    return <StripAction k="⇧⌘C" label={copied ? "copied" : "copy url"} onClick={() => runKey("copy-url")} />;
+}
 
 // A key hint you can also click; it never takes focus, which stays in the pane.
 function StripAction({ k, label, onClick }: { k: string; label: string; onClick: () => void }) {

@@ -257,7 +257,12 @@ function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming"
 // The open project: a brighter row with a bar on its left, unmistakable at a glance (green is
 // taken by the focus frame), and the keys that walk away from it.
 const ACTIVE_ROW: React.CSSProperties = { background: T.borderActive, boxShadow: `inset 3px 0 0 ${T.emphasis}` };
-const WalkKeys = () => <Key k="⌘K ⌘J" label="" />;
+const WalkKeys = () => (
+    <span style={{ display: "inline-flex", gap: 8 }}>
+        <Key k="⌘K" label="↑" />
+        <Key k="⌘J" label="↓" />
+    </span>
+);
 
 function CardRow(p: RowProps) {
     const { v } = p;
@@ -364,7 +369,7 @@ function Drumming() {
 // the numbers can't say (late, updating, loading).
 function SummaryCard({ label, keys, stats, note, noteColor, busy, active, onClick }: { label: string; keys: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; active?: boolean; onClick: () => void }) {
     return (
-        <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: active ? T.cardActive : "#32302f", border: `1px solid ${active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer" }}>
+        <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#32302f", border: `1px solid ${active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", ...(active ? ACTIVE_ROW : {}) }}>
             <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, fontWeight: 600, color: T.secondary }}>
                 {label}
                 {busy && <Drumming />}

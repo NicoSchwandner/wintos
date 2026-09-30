@@ -208,7 +208,10 @@ await scenario("4 · ⌘L from the list goes to the page", async () => {
 });
 
 await scenario("8 · ⇧⌘W in the Inbox leaves it open", async () => {
-    const inbox = await visible();
+    // Pressed on a project it would close that project: make sure the Inbox is in front first.
+    let inbox = await visible();
+    if (!(await inboxIn(inbox))) await press(inbox, "g", { mods: ["meta", "shift"] });
+    inbox = await until("the Inbox in front", async () => ((await inboxIn(await visible())) ? visible() : false));
     const before = projects();
     await press(inbox, "w", { mods: ["meta", "shift"] });
     await sleep(1500);

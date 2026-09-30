@@ -67,6 +67,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const quiet = model ? (expanded ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
     const switchOrder = model ? [...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId) : [];
     // Snoozed rows show on "Show all" or while renaming one; the open one always, to find it again.
+    const isSnoozedHere = !!model?.snoozed.some((r) => r.tabId === activeTabId);
     const snoozedShown = model ? (showAll || renaming != null ? model.snoozed : model.snoozed.filter((r) => r.tabId === activeTabId)) : [];
     // A snoozed project that needs you is back for good, not only while it needs you.
     useEffect(() => model?.wake.forEach((id) => void setProjectSnoozed(id, false)), [model?.wake.join(",")]);
@@ -201,9 +202,10 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 )}
             </div>
             <div style={{ flexShrink: 0, height: 34, padding: "0 14px", display: "flex", alignItems: "center", gap: 16, borderTop: `1px solid ${T.hairline}`, fontSize: 11, color: T.faint }}>
-                <Key k="⌘J ⌘K" label="switch" />
+                {/* ⌘J/⌘K sit on the open project's row. */}
                 <Key k="⌃⇥" label="waiting" />
                 {!isInboxTab(tabs[activeTabId]) && <Key k="⌘R" label="rename" />}
+                {!isInboxTab(tabs[activeTabId]) && <Key k="⌥⌘Z" label={isSnoozedHere ? "wake" : "snooze"} />}
             </div>
         </div>
     );
@@ -386,6 +388,12 @@ function SummaryCard({ label, keys, stats, note, noteColor, busy, active, onClic
                 ))}
             </span>
             {note && <span style={{ fontFamily: T.mono, fontSize: 9.5, color: noteColor }}>{note}</span>}
+            {/* In PRs or On call no project row is open: the walk keys sit on this card instead. */}
+            {active && (
+                <span style={{ alignSelf: "flex-start" }}>
+                    <WalkKeys />
+                </span>
+            )}
         </div>
     );
 }

@@ -35,8 +35,8 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
 
     const sessions = state ? liveSessions(state.sessions, { [tabId]: ids }) : [];
     const chips = stripPanes(blocks, sessions);
-    // A lone plain pane needs no strip; a Claude session always shows its state.
-    if (chips.length < 2 && !chips.some((c) => c.kind === "session")) return null;
+    // The strip is where every pane's controls live, so it shows whenever there is a pane.
+    if (!chips.length) return null;
     const unread = new Set(unreadSessions(sessions, tabId, state?.seen?.[tabId]).map((s) => s.id));
     const on = magnified ?? focused?.id;
     const inProject = !isInboxTab(tab);
@@ -80,11 +80,9 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                     <Key k="⌘L" label="→" />
                 </span>
             )}
-            {inProject && chips.length > 1 && !magnified && (
-                <span style={{ marginLeft: 12 }}>
-                    <Key k="⌘M" label="magnify" />
-                </span>
-            )}
+            {/* The focused pane's controls, the same for a terminal and a page. */}
+            {inProject && chips.length > 1 && !magnified && focused && <StripAction k="⌘M" label="magnify" onClick={() => lm.magnifyNodeToggle(focused.id)} />}
+            {focused && <StripAction k="⌘W" label="close" onClick={() => void lm.closeNode(focused.id)} />}
             {/* Magnify hides the other panes and has no header button here: say so, and offer the way back. */}
             {magnified && inProject && (
                 <button
@@ -103,3 +101,18 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     );
 });
 PaneStrip.displayName = "PaneStrip";
+
+// A key hint you can also click; it never takes focus, which stays in the pane.
+function StripAction({ k, label, onClick }: { k: string; label: string; onClick: () => void }) {
+    return (
+        <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            tabIndex={-1}
+            onClick={onClick}
+            style={{ WebkitAppRegion: "no-drag", marginLeft: 10, padding: 0, background: "transparent", border: "none", cursor: "pointer" } as React.CSSProperties}
+        >
+            <Key k={k} label={label} />
+        </button>
+    );
+}

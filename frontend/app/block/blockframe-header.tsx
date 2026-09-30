@@ -5,7 +5,6 @@ import {
     blockViewToIcon,
     blockViewToName,
     getViewIconElem,
-    OptMagnifyButton,
     renderHeaderElements,
 } from "@/app/block/blockutil";
 import { ConnectionButton } from "@/app/block/connectionbutton";
@@ -15,7 +14,6 @@ import {
     createBlockSplitHorizontally,
     createBlockSplitVertically,
     recordTEvent,
-    refocusNode,
     WOS,
 } from "@/app/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
@@ -121,10 +119,7 @@ type HeaderEndIconsProps = {
 const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId }: HeaderEndIconsProps) => {
     const blockEnv = useWaveEnv<BlockEnv>();
     const endIconButtons = util.useAtomValueSafe(viewModel?.endIconButtons);
-    const magnified = jotai.useAtomValue(nodeModel.isMagnified);
     const ephemeral = jotai.useAtomValue(nodeModel.isEphemeral);
-    const numLeafs = jotai.useAtomValue(nodeModel.numLeafs);
-    const magnifyDisabled = numLeafs <= 1;
     const showSplitButtons = jotai.useAtomValue(blockEnv.getSettingsKeyAtom("term:showsplitbuttons"));
 
     const endIconsElem: React.ReactElement[] = [];
@@ -164,13 +159,9 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId }: HeaderEndI
         endIconsElem.push(<IconButton key="split-horizontal" decl={splitHorizontalDecl} />);
         endIconsElem.push(<IconButton key="split-vertical" decl={splitVerticalDecl} />);
     }
-    const settingsDecl: IconButtonDecl = {
-        elemtype: "iconbutton",
-        icon: "cog",
-        title: "Settings",
-        click: (e) => handleHeaderContextMenu(e, blockId, viewModel, nodeModel, blockEnv),
-    };
-    endIconsElem.push(<IconButton key="settings" decl={settingsDecl} className="block-frame-settings" />);
+    // WintOS: a pane's controls live in the pane strip for every kind of pane (⌘M magnify, ⌘W
+    // close); settings are in its right-click menu. A header keeps only what its view needs
+    // (a page's back, forward, address, reload).
     if (ephemeral) {
         const addToLayoutDecl: IconButtonDecl = {
             elemtype: "iconbutton",
@@ -181,27 +172,7 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId }: HeaderEndI
             },
         };
         endIconsElem.push(<IconButton key="add-to-layout" decl={addToLayoutDecl} />);
-    } else {
-        endIconsElem.push(
-            <OptMagnifyButton
-                key="unmagnify"
-                magnified={magnified}
-                toggleMagnify={() => {
-                    nodeModel.toggleMagnify();
-                    setTimeout(() => refocusNode(blockId), 50);
-                }}
-                disabled={magnifyDisabled}
-            />
-        );
     }
-
-    const closeDecl: IconButtonDecl = {
-        elemtype: "iconbutton",
-        icon: "xmark-large",
-        title: "Close",
-        click: () => uxCloseBlock(nodeModel.blockId),
-    };
-    endIconsElem.push(<IconButton key="close" decl={closeDecl} className="block-frame-default-close" />);
 
     return <div className="block-frame-end-icons">{endIconsElem}</div>;
 });

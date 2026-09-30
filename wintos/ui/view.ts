@@ -40,20 +40,23 @@ export function sidebarModel(tabIds: string[], state: WintosState): Ranking {
 }
 
 // Snoozed projects (done, but may need re-work) leave the bands and the ⌘J/⌘K walk for their own
-// group; one that needs you (a waiting session, a PR in Fix, a new reply) comes back, and is
-// marked to be woken for good.
+// group; one that needs you anew (a waiting session, a PR in Fix, a new reply, begun after the
+// snooze) comes back, and is marked to be woken for good. A need already there when you snoozed
+// is what you chose to put away.
 export type SidebarSplit = Ranking & { snoozed: Row[]; wake: string[] };
 export function withSnoozes(model: Ranking, snoozed: Record<string, number> = {}): SidebarSplit {
     const is = (r: Row) => r.tabId in snoozed;
     const out = (rows: Row[]) => rows.filter((r) => !is(r));
+    const woken = (r: Row) => is(r) && (r.waitingSince ?? 0) > snoozed[r.tabId];
+    const needs = model.needs.filter((r) => !is(r) || woken(r));
     return {
-        needs: model.needs,
+        needs,
         running: out(model.running),
         quiet: out(model.quiet),
         quietMore: out(model.quietMore),
         quietStale: out(model.quietStale),
-        snoozed: [...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].filter(is),
-        wake: model.needs.filter(is).map((r) => r.tabId),
+        snoozed: [...model.needs.filter((r) => is(r) && !woken(r)), ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].filter(is),
+        wake: needs.filter(woken).map((r) => r.tabId),
     };
 }
 

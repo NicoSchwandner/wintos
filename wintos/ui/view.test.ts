@@ -196,11 +196,21 @@ describe("withSnoozes", () => {
         expect(s.snoozed.map((x) => x.tabId)).toEqual(["b", "c", "e"]);
     });
 
-    test("one that needs you comes back on its own, and is marked to wake", () => {
-        const s = withSnoozes(model, { a: 1 });
+    test("one that needs you after the snooze comes back on its own, and is marked to wake", () => {
+        const s = withSnoozes({ ...model, needs: [row("needs", { tabId: "a", waitingSince: NOW })] }, { a: NOW - 1 });
         expect(s.needs.map((x) => x.tabId)).toEqual(["a"]);
         expect(s.wake).toEqual(["a"]);
         expect(s.snoozed).toEqual([]);
+    });
+
+    test("a need that was already there when you snoozed stays snoozed", () => {
+        const s = withSnoozes({ ...model, needs: [row("needs", { tabId: "a", waitingSince: NOW - 10 })] }, { a: NOW });
+        expect([s.needs, s.wake, s.snoozed.map((x) => x.tabId)]).toEqual([[], [], ["a"]]);
+    });
+
+    test("a need with no start time counts as already there", () => {
+        const s = withSnoozes(model, { a: NOW });
+        expect([s.needs, s.wake, s.snoozed.map((x) => x.tabId)]).toEqual([[], [], ["a"]]);
     });
 
     test("nothing snoozed changes nothing", () => expect(withSnoozes(model, {})).toEqual({ ...model, snoozed: [], wake: [] }));

@@ -77,7 +77,7 @@ export function focusedSession(): Session | undefined {
     return latest.sessions.find((s) => s.blockId === blockId) ?? latest.sessions.find((s) => s.tabId === globalStore.get(atoms.staticTabId));
 }
 
-// ⌘1 ⌘2 in a project: the focused terminal, the notes rail. The sidebar never takes focus (⌘J/⌘K switch).
+// ⌘H ⌘L in a project: the focused terminal, the notes rail. The sidebar never takes focus (⌘J/⌘K switch).
 export function focusArea(area: "terminal" | "notes"): void {
     if (area === "terminal") wantPane("to the panes");
     globalStore.set(mainViewAtom, "terminal");

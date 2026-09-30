@@ -151,16 +151,16 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 {state && (
                     <div style={{ display: "flex", gap: 8 }}>
                         {queue ? (
-                            <SummaryCard label="PRs" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={T.brick} active={shows("prs")} onClick={() => goToInbox("prs")} />
+                            <SummaryCard label="PRs" keys="⇧⌘G" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={T.brick} active={shows("prs")} onClick={() => goToInbox("prs")} />
                         ) : (
-                            <SummaryCard label="PRs" stats={[]} note="loading from GitHub" noteColor={T.faint} active={shows("prs")} onClick={() => goToInbox("prs")} />
+                            <SummaryCard label="PRs" keys="⇧⌘G" stats={[]} note="loading from GitHub" noteColor={T.faint} active={shows("prs")} onClick={() => goToInbox("prs")} />
                         )}
                         {panels.map((p) => {
                             const c = cardValue(p.counts);
                             const failed = p.error || p.counts.some((x) => x.count == null);
-                            return <SummaryCard key={p.name} label={p.title} busy={running.has(p.name)} stats={c} note={failed ? "couldn't fetch everything" : undefined} noteColor={T.brick} active={shows("oncall")} onClick={() => goToInbox("oncall")} />;
+                            return <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" busy={running.has(p.name)} stats={c} note={failed ? "couldn't fetch everything" : undefined} noteColor={T.brick} active={shows("oncall")} onClick={() => goToInbox("oncall")} />;
                         })}
-                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} onClick={() => goToInbox("oncall")} />)}
+                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
                 {offline || !model ? (
@@ -255,6 +255,11 @@ function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming"
     );
 }
 
+// The open project: a brighter row with a bar on its left, unmistakable at a glance (green is
+// taken by the focus frame), and the keys that walk away from it.
+const ACTIVE_ROW: React.CSSProperties = { background: T.borderActive, boxShadow: `inset 3px 0 0 ${T.emphasis}` };
+const WalkKeys = () => <Key k="⌘K ⌘J" label="" />;
+
 function CardRow(p: RowProps) {
     const { v } = p;
     const tone = { apricot: T.apricot, brick: T.brick, secondary: T.secondary }[v.tone ?? "secondary"];
@@ -271,14 +276,15 @@ function CardRow(p: RowProps) {
                 padding: "12px 13px",
                 cursor: "pointer",
                 borderRadius: 10,
-                background: p.active ? T.cardActive : T.card,
+                background: T.card,
                 border: `1px solid ${p.cursor ? T.apricot : p.active ? T.borderActive : T.border}`,
+                ...(p.active ? ACTIVE_ROW : {}),
             }}
         >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                 <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.005em", color: p.active ? T.emphasis : T.title, fontFamily: T.ui }} />
                 <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                    {p.active && <span style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: "0.06em", color: T.muted }}>open</span>}
+                    {p.active && <WalkKeys />}
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{v.age}</span>
                 </span>
             </div>
@@ -304,13 +310,14 @@ function QuietRow(p: RowProps) {
                 padding: "8px 13px",
                 cursor: "pointer",
                 borderRadius: 8,
-                background: p.active ? T.cardActive : "transparent",
+                background: "transparent",
                 border: `1px solid ${p.cursor ? T.apricot : "transparent"}`,
+                ...(p.active ? ACTIVE_ROW : {}),
             }}
         >
             {/* The title gets the room; the note is capped and cut, so neither wraps. */}
             <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} />
-            <span title={v.reason} style={{ maxWidth: "48%", fontSize: 10.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>
+            {p.active ? <WalkKeys /> : <span title={v.reason} style={{ maxWidth: "48%", fontSize: 10.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>}
         </div>
     );
 }
@@ -356,12 +363,15 @@ function Drumming() {
 
 // A title over its numbers, each number stacked on its own label; the note is only for what
 // the numbers can't say (late, updating, loading).
-function SummaryCard({ label, stats, note, noteColor, busy, active, onClick }: { label: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; active?: boolean; onClick: () => void }) {
+function SummaryCard({ label, keys, stats, note, noteColor, busy, active, onClick }: { label: string; keys: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; active?: boolean; onClick: () => void }) {
     return (
         <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: active ? T.cardActive : "#32302f", border: `1px solid ${active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, fontWeight: 600, color: T.secondary }}>
                 {label}
                 {busy && <Drumming />}
+                <span style={{ marginLeft: "auto" }}>
+                    <Key k={keys} label="" />
+                </span>
             </span>
             <span style={{ display: "flex", gap: 18 }}>
                 {stats.map((s) => (

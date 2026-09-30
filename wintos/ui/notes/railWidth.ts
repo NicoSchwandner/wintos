@@ -1,3 +1,5 @@
+import { globalStore } from "@/app/store/jotaiStore";
+import { atom } from "jotai";
 import { useEffect, useRef, useState } from "react";
 
 // The notes rail's width, dragged from its left edge. Kept in localStorage, which every
@@ -32,3 +34,21 @@ export function useRailWidth(): [number, (px: number) => void, () => void] {
     const set = (px: number) => setWidth((latest.current = clampRail(px, window.innerWidth)));
     return [width, set, save];
 }
+
+// Collapsed to a thin strip (mouse), one setting for every project like the width; ⌘L opens it.
+const COLLAPSED = "wintos:rail-collapsed";
+const storedCollapsed = () => {
+    try {
+        return localStorage.getItem(COLLAPSED) === "1";
+    } catch {
+        return false;
+    }
+};
+export const railCollapsedAtom = atom(storedCollapsed());
+export function setRailCollapsed(on: boolean): void {
+    globalStore.set(railCollapsedAtom, on);
+    try {
+        localStorage.setItem(COLLAPSED, on ? "1" : "0");
+    } catch {}
+}
+export const syncRailCollapsed = () => globalStore.set(railCollapsedAtom, storedCollapsed());

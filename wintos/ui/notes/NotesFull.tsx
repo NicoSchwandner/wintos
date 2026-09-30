@@ -11,7 +11,7 @@ import { useNotes } from "./useNotes";
 import { notesKeys, PrList } from "./PrList";
 import { useWintos } from "../useWintos";
 
-// ⇧⌘J: both files full width, side by side (NotesC).
+// ⇧⌘L: both files full width, side by side (NotesC).
 export const NotesFull = memo(({ tabId }: { tabId: string }) => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     const { notes, project, save } = useNotes(tabId);

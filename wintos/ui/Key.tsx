@@ -14,7 +14,7 @@ export function Key({ k, label, off }: { k: string; label: string; off?: boolean
     );
 }
 
-// Two keys that do the same thing, shown as two caps with "or" between: "esc" "⌘2" read as one
+// Two keys that do the same thing, shown as two caps with "or" between: "esc" "⌘L" read as one
 // combination otherwise.
 export function KeyOr({ keys, label }: { keys: string[]; label: string }) {
     return (

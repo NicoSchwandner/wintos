@@ -19,7 +19,7 @@ import { PaneStrip } from "./PaneStrip";
 import { StatusBar } from "./StatusBar";
 import { T } from "./tokens";
 
-// The project area: session strip over the terminals, the notes rail beside them, and ⇧⌘J
+// The project area: session strip over the terminals, the notes rail beside them, and ⇧⌘L
 // swapping the terminals for both notes files. Terminals stay mounted underneath.
 export const WintosTabArea = memo(({ tabId, children }: { tabId: string; children: React.ReactNode }) => {
     const view = useAtomValue(mainViewAtom);

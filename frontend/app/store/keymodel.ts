@@ -754,8 +754,12 @@ function registerGlobalKeys() {
         WorkspaceLayoutModel.getInstance().setAIPanelVisible(!currentVisible);
         return true;
     });
-    // WintOS: the sidebar replaces the tab bar, so ⌘1–9 no longer mean "tab N".
+    // WintOS: the sidebar replaces the tab bar, so ⌘1–9 no longer mean "tab N" and ⌘[ ⌘] no
+    // longer walk tabs (a web page gets back/forward again). Pane moves are ⌥⌘H/J/K/L, so ⌃⇧
+    // arrows and ⌃⇧hjkl go back to the terminal: ⌘ is WintOS's, the rest the terminal's.
     for (let idx = 1; idx <= 9; idx++) globalKeyMap.delete(`Cmd:${idx}`);
+    for (const k of ["Cmd:[", "Cmd:]", "Shift:Cmd:[", "Shift:Cmd:]"]) globalKeyMap.delete(k);
+    for (const d of ["h", "j", "k", "l", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]) globalKeyMap.delete(`Ctrl:Shift:${d}`);
     for (const [key, action] of WINTOS_KEYS) {
         for (const existing of [...globalKeyMap.keys()]) if (existing !== key && sameChord(existing, key)) globalKeyMap.delete(existing);
         globalKeyMap.set(key, () => runKey(action));
@@ -766,7 +770,7 @@ function registerGlobalKeys() {
     globalKeyMap.set("Escape", (e) => wintosEscape() || waveEscape(e));
     const allKeys = Array.from(globalKeyMap.keys());
     // special case keys, handled by web view
-    allKeys.push("Cmd:l", "Cmd:r", "Cmd:ArrowRight", "Cmd:ArrowLeft", "Cmd:o");
+    allKeys.push("Cmd:u", "Cmd:r", "Cmd:ArrowRight", "Cmd:ArrowLeft", "Cmd:o");
     getApi().registerGlobalWebviewKeys(allKeys);
 
     const splitBlockKeys = new Map<string, KeyHandler>();

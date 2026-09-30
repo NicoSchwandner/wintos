@@ -197,11 +197,11 @@ await scenario("3b · a new-window link in the Inbox opens a pane you can see", 
     await until("the new pane in front", () => evalIn(inbox, `(() => { const on = document.querySelector("[data-pane][data-on]")?.dataset.pane; return !!on && document.querySelector('[data-blockid="' + on + '"] webview')?.getAttribute("src") === ${JSON.stringify(url)}; })()`));
 });
 
-await scenario("4 · ⌥⌘→ moves to the next pane", async () => {
+await scenario("4 · ⌥⌘L moves to the next pane", async () => {
     const inbox = await visible();
     const on = () => evalIn(inbox, `document.querySelector("[data-pane][data-on]")?.dataset.pane`);
     const first = await on();
-    await press(inbox, "ArrowRight", { code: "ArrowRight", keyCode: 39, mods: ["alt", "meta"] });
+    await press(inbox, "l", { code: "KeyL", mods: ["alt", "meta"] });
     await until("another pane", async () => (await on()) !== first);
 });
 

@@ -11,7 +11,7 @@ import { relTime } from "./view";
 
 // The Inbox's on-call list (⇧⌘O): every plugin panel's counts as rows. ⏎ or 1–9 opens a count's
 // page as a browser pane beside the list, like a PR.
-// pageOpen: a page is open beside the list, so Esc or ⌘2 has somewhere to go.
+// pageOpen: a page is open beside the list, so Esc or ⌘L has somewhere to go.
 export const OnCallList = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     const { state } = useWintos();
@@ -67,7 +67,7 @@ export const OnCallList = memo(({ pageOpen }: { pageOpen: boolean }) => {
                 <Key k="j k" label="row" />
                 <Key k="⏎ 1–9" label="open" />
                 <Key k="r" label="resync" />
-                {pageOpen && <KeyOr keys={["esc", "⌘2"]} label="to the page" />}
+                {pageOpen && <KeyOr keys={["esc", "⌘L"]} label="to the page" />}
             </div>
         </div>
     );

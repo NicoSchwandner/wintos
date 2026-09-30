@@ -27,7 +27,7 @@ export const HEADERS: Record<Group, { label: string; note: string; color: string
 
 // The Inbox's PR list (⇧⌘G): every PR that concerns you, grouped by the action it asks of you.
 // A PR opens as an ordinary browser pane beside it, in the Inbox's own layout.
-// pageOpen: a page is open beside the list, so Esc or ⌘2 has somewhere to go.
+// pageOpen: a page is open beside the list, so Esc or ⌘L has somewhere to go.
 export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     // The rows drop the author, size and full reviewer names only when there is no room for them:
@@ -132,7 +132,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                 <Key k="⏎" label="open" />
                 <Key k="o" label={flat[cursor] && !projectOf.has(flat[cursor].pr.url) ? "open as new project" : "go to project"} off={!flat[cursor]} />
                 <Key k="z" label="snooze" />
-                {pageOpen && <KeyOr keys={["esc", "⌘2"]} label="to the page" />}
+                {pageOpen && <KeyOr keys={["esc", "⌘L"]} label="to the page" />}
             </div>
         </div>
     );

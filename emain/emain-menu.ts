@@ -193,8 +193,9 @@ function makeAppMenuItems(webContents: electron.WebContents): Electron.MenuItemC
         appMenuItems.push(
             { role: "services" },
             { type: "separator" },
-            { role: "hide" },
-            { role: "hideOthers" },
+            // WintOS: ⌘H / ⌥⌘H move focus left (wintos/ui/menu.ts); Hide stays, without a key.
+            { label: "Hide WintOS", click: () => electron.app.hide() },
+            { label: "Hide Others", click: () => electron.Menu.sendActionToFirstResponder("hideOtherApplications:") },
             { type: "separator" }
         );
     }

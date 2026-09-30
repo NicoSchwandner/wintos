@@ -7,7 +7,8 @@ import { closeWarning } from "./sessions";
 import { goToInbox } from "./inbox";
 import { mainViewAtom, overlayAtom, renamingAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject } from "./switcher";
-import { getLayoutModelForStaticTab } from "@/layout/index";
+import { getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
+import { setRailCollapsed } from "./notes/railWidth";
 import { isInboxTab } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
@@ -57,17 +58,21 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Cmd:e", "edit-mine"],
     ["Shift:Cmd:p", "palette"],
     ["Shift:Cmd:k", "keymap"],
-    ["Shift:Cmd:j", "notes"],
+    ["Shift:Cmd:l", "notes"],
     ["Shift:Cmd:g", "prs"],
     ["Shift:Cmd:o", "panel"],
     ["Shift:Cmd:b", "browser"],
     ["Shift:Cmd:e", "files"],
-    ["Option:Cmd:ArrowLeft", "pane-prev"],
-    ["Option:Cmd:ArrowRight", "pane-next"],
+    // ⌥ turns a letter into another character on macOS (⌥H is ª), so these match the key's
+    // place; h j k l sit in the same place on QWERTY and QWERTZ.
+    ["Option:Cmd:c{KeyH}", "pane-left"],
+    ["Option:Cmd:c{KeyJ}", "pane-down"],
+    ["Option:Cmd:c{KeyK}", "pane-up"],
+    ["Option:Cmd:c{KeyL}", "pane-right"],
     ["Shift:Cmd:c", "copy-url"],
     ["Option:Cmd:z", "snooze-project"],
-    ["Cmd:1", "focus-left"],
-    ["Cmd:2", "focus-right"],
+    ["Cmd:h", "focus-left"],
+    ["Cmd:l", "focus-right"],
 ];
 
 function focusedBlockView(): string | undefined {
@@ -77,11 +82,21 @@ function focusedBlockView(): string | undefined {
 
 export const focusedPageUrl = (block: Block | undefined): string | undefined => (block?.meta?.view === "web" ? block.meta.url : undefined);
 
-// ⌥⌘←/→: the previous/next pane of this tab, in layout order, wrapping.
+// ⌥⌘H/J/K/L: the pane in that direction. The Inbox and a magnified pane show one pane at a
+// time, so there ⌥⌘H/K and ⌥⌘L/J step to the previous and next pane in strip order instead.
+function movePane(dir: NavigateDirection): boolean {
+    const lm = getLayoutModelForStaticTab();
+    if (inInbox() || globalStore.get(lm.magnifiedNodeIdAtom)) return stepPane(dir === NavigateDirection.Left || dir === NavigateDirection.Up ? -1 : 1);
+    wantPane("⌥⌘ hjkl");
+    lm.switchNodeFocusInDirection(dir, false); // at the edge nothing moves
+    return true;
+}
+
+// The previous/next pane of this tab, in layout order, wrapping.
 function stepPane(delta: 1 | -1): boolean {
     const lm = getLayoutModelForStaticTab();
     const ids = paneOrder(globalStore.get(lm.leafOrder), globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))))?.blockids ?? []);
-    wantPane("⌥⌘←/→");
+    wantPane("⌥⌘ hjkl");
     const next = stepProject(ids, globalStore.get(lm.focusedNode)?.data?.blockId ?? "", delta);
     // The Inbox reads one page at a time, and a magnified pane stays magnified; a split in a
     // project stays side by side and only the focus moves.
@@ -100,7 +115,8 @@ function copyUrl(): boolean {
 }
 
 export function runKey(action: string): boolean {
-    if (action === "pane-prev" || action === "pane-next") return stepPane(action === "pane-next" ? 1 : -1);
+    const dir = { "pane-left": NavigateDirection.Left, "pane-right": NavigateDirection.Right, "pane-up": NavigateDirection.Up, "pane-down": NavigateDirection.Down }[action];
+    if (dir !== undefined) return movePane(dir);
     if (action === "copy-url") return copyUrl();
     // ⌘R in a browser pane stays its reload.
     if (action === "rename" && document.activeElement?.tagName === "WEBVIEW") return false;
@@ -120,6 +136,7 @@ const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef
 
 export function runAction(action: string): void {
     flog(`action ${action}`);
+    if (action.startsWith("pane-")) return void runKey(action); // from the app menu
     if (!allowedInInbox(action) && inInbox()) return;
     if (action === "session") return newSession();
     if (action === "switch-next" || action === "switch-prev") return switchProject(action === "switch-next" ? 1 : -1, false);
@@ -130,7 +147,7 @@ export function runAction(action: string): void {
     if (action === "terminal") return void createBlock(getDefaultNewBlockDef());
     if (action === "rename") return globalStore.set(renamingAtom, globalStore.get(atoms.staticTabId));
     if (action === "palette" || action === "keymap") return toggleOverlay(action);
-    // ⌘1 / ⌘2: the left and the right area, the same in every tab (the sidebar never takes
+    // ⌘H / ⌘L: the left and the right area, the same in every tab (the sidebar never takes
     // focus): the Inbox's list and its page, a project's terminals and its notes.
     // ⌥⌘Z: this project is done for now; the same key, or opening it, brings it back.
     if (action === "snooze-project") {
@@ -138,7 +155,7 @@ export function runAction(action: string): void {
         return void setProjectSnoozed(tabId, !isSnoozedProject(tabId));
     }
     if (action === "focus-left") return inInbox() ? void document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus() : focusArea("terminal");
-    if (action === "focus-right") return focusArea(inInbox() ? "terminal" : "notes");
+    if (action === "focus-right") return inInbox() ? focusArea("terminal") : (setRailCollapsed(false), focusArea("notes"));
     if (action.startsWith("focus-")) return focusArea(action.slice(6) as "terminal" | "notes");
     if (action.startsWith("open-page:")) return openPage(action.slice("open-page:".length));
     if (action.startsWith("open-url:")) return void createBlock({ meta: { view: "web", url: action.slice(9) } });
@@ -191,7 +208,7 @@ export function paneShowing(blocks: (Block | undefined)[], url: string): string 
 // PR view keeps its own tabs. One pane per PR: open again, it is focused.
 const opening = new Set<string>();
 // ⏎ in the Inbox list shows the page and leaves you in the list, to walk on with j/k: the
-// focus owner keeps the page from taking focus (focusOwner.ts). Esc or ⌘2 goes to the page.
+// focus owner keeps the page from taking focus (focusOwner.ts). Esc or ⌘L goes to the page.
 function openPage(url: string): void {
     globalStore.set(mainViewAtom, "terminal");
     const tab = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))));
@@ -218,7 +235,7 @@ function closeProject(): void {
     void getApi().closeTab(globalStore.get(atoms.workspace).oid, tabId, false);
 }
 
-// ⇧⌘J opens the notes, and the same key again goes back to the terminals.
+// ⇧⌘L opens the notes full width, and the same key again goes back to the terminals.
 export function toggleView(view: MainView): void {
     if (globalStore.get(mainViewAtom) === view) return focusArea("terminal");
     globalStore.set(mainViewAtom, view);

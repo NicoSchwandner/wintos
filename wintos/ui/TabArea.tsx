@@ -14,7 +14,7 @@ import { NotesRail } from "./notes/NotesRail";
 import { mainViewAtom, overlayAtom } from "./notes/state";
 import { Palette } from "./Palette";
 import { InboxArea } from "./InboxArea";
-import { isInboxTab } from "./view";
+import { inboxKind, isInboxTab } from "./view";
 import { PaneStrip } from "./PaneStrip";
 import { StatusBar } from "./StatusBar";
 import { T } from "./tokens";
@@ -35,7 +35,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
     return (
         <div className="flex flex-col flex-grow min-w-0" style={{ position: "relative" }}>
             {inbox ? (
-                <InboxArea tabId={tabId} empty={empty}>
+                <InboxArea tabId={tabId} list={inboxKind(tab)!} empty={empty}>
                     {children}
                 </InboxArea>
             ) : (

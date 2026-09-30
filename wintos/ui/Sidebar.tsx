@@ -13,10 +13,10 @@ import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
 import { setSwitchOrder, switchTargetAtom } from "./switcher";
 import { registerWintosMenu } from "./menu";
-import { inboxListAtom, renamingAtom, type InboxList } from "./notes/state";
+import { renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
 import { instance, setProjectSnoozed, setProjectTitle, useWintos } from "./useWintos";
-import { ghPrs, isInboxTab, prsByTab, projectTabIds, rowView, RowView, sidebarModel, withSnoozes } from "./view";
+import { ghPrs, inboxKind, isInboxTab, prsByTab, type InboxList, projectTabIds, rowView, RowView, sidebarModel, withSnoozes } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
@@ -42,9 +42,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const activeTabId = useAtomValue(atoms.staticTabId);
     const tabs = useTabs(allTabIds);
     const tabIds = projectTabIds(allTabIds, tabs);
-    // In the Inbox the card of the list it shows is marked, as the current project's row is.
-    const inboxList = useAtomValue(inboxListAtom);
-    const shows = (list: InboxList) => isInboxTab(tabs[activeTabId]) && inboxList === list;
+    // In the PRs or On call tab its card is marked, as the current project's row is.
+    const shows = (list: InboxList) => inboxKind(tabs[activeTabId]) === list;
     const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
     const { state: raw, offline } = useWintos();
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };

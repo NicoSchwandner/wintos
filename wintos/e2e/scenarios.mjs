@@ -131,18 +131,20 @@ await holdFocus();
 const heldTimer = setInterval(holdFocus, 1000); // renderers created during the run
 
 // Every run starts with at least one project (the dev-only wintosAction hook creates one).
-const projects = () => Number(sql(`select count(*) from db_tab where coalesce(data->>'$.meta."wintos:inbox"', 0) != 1`));
+const projects = () => Number(sql(`select count(*) from db_tab where data->>'$.meta."wintos:inbox"' is null`));
+// The PRs tab (1: an Inbox from before the split into PRs and On call).
+const PRS_TAB = `data->>'$.meta."wintos:inbox"' in (1, 'prs')`;
 if (projects() === 0) {
     await evalIn(await visible(), `window.wintosAction("project")`);
     await until("a project", async () => projects() > 0);
 }
 
 // Panes in the Inbox before the run; the run closes every other one at the end.
-const inboxPanesAtStart = sql(`select j.value from db_tab t, json_each(t.data->'blockids') j where t.data->>'$.meta."wintos:inbox"' = 1`).split("\n").filter(Boolean);
+const inboxPanesAtStart = sql(`select j.value from db_tab t, json_each(t.data->'blockids') j where t.${PRS_TAB}`).split("\n").filter(Boolean);
 
-await scenario("9 · the Inbox exists exactly once", async () => {
-    const n = sql(`select count(*) from db_tab where data->>'$.meta."wintos:inbox"' = 1`);
-    if (n !== "1") throw new Error(`${n} Inbox tabs`);
+await scenario("9 · the PRs and the On call tab exist, one of each", async () => {
+    const n = (kind) => sql(`select count(*) from db_tab where data->>'$.meta."wintos:inbox"' = '${kind}' or (${kind === "prs" ? "data->>'$.meta.\"wintos:inbox\"' = 1" : "0"})`);
+    if (n("prs") !== "1" || n("oncall") !== "1") throw new Error(`PRs tabs ${n("prs")}, On call tabs ${n("oncall")}`);
 });
 
 await scenario("1 · ⇧⌘G from a project shows the Inbox with its list focused, and no project renders a PR view", async () => {
@@ -153,7 +155,8 @@ await scenario("1 · ⇧⌘G from a project shows the Inbox with its list focuse
         return (await inboxIn(t)) && t;
     });
     await until("the list focused", () => evalIn(inbox, `document.activeElement?.dataset?.wintos === "inbox-list"`));
-    for (const t of await renderers()) if (t.id !== inbox.id && (await evalIn(t, `!!document.querySelector("[data-wintos=inbox-list]")`))) throw new Error(`renderer ${t.id.slice(0, 6)} renders a PR list`);
+    // Only the Inbox tabs (PRs, On call) show a list; a project never does.
+    for (const t of await renderers()) if (t.id !== inbox.id && (await evalIn(t, `!!document.querySelector("[data-wintos=inbox-list]") && !document.querySelector("[data-wintos=inbox]")`))) throw new Error(`renderer ${t.id.slice(0, 6)} renders a PR list`);
 });
 
 let prUrl;
@@ -211,12 +214,12 @@ await scenario("8 · ⇧⌘W in the Inbox leaves it open", async () => {
     await press(inbox, "w", { mods: ["meta", "shift"] });
     await sleep(1500);
     if (!(await inboxIn(await visible()))) throw new Error("the Inbox is no longer in front");
-    if (sql(`select count(*) from db_tab where data->>'$.meta."wintos:inbox"' = 1`) !== "1") throw new Error("the Inbox tab is gone");
+    if (sql(`select count(*) from db_tab where ${PRS_TAB}`) !== "1") throw new Error("the PRs tab is gone");
     // Wave's own ⇧⌘W once shadowed WintOS's and closed a project without asking.
     if (projects() !== before) throw new Error("a project was closed");
 });
 
-const inboxId = () => sql(`select oid from db_tab where data->>'$.meta."wintos:inbox"' = 1`);
+const inboxId = () => sql(`select oid from db_tab where ${PRS_TAB}`);
 const inboxPanes = () => Number(sql(`select json_array_length(data->'blockids') from db_tab where oid = '${inboxId()}'`));
 const selectedRow = (t) => evalIn(t, `document.querySelector("[data-selected]")?.dataset.pr`);
 const toInbox = async () => {

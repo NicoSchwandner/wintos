@@ -363,7 +363,7 @@ function getApi(): ElectronApi {
 // project. Every way of adding a pane (keys, menus, splits, a replace) ends in one of these.
 function refusedInInbox(blockDef: BlockDef): boolean {
     const tab = globalStore.get(WOS.getWaveObjectAtom<Tab>(WOS.makeORef("tab", globalStore.get(atoms.staticTabId))));
-    return tab?.meta?.["wintos:inbox"] === true && blockDef?.meta?.view !== "web";
+    return !!tab?.meta?.["wintos:inbox"] && blockDef?.meta?.view !== "web";
 }
 
 async function createBlockSplitHorizontally(

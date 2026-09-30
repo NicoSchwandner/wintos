@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { inboxTabId, isInboxTab, prProjects, projectTabIds, projectPrList, prsByTab, relTime, rowView, sidebarModel, withSnoozes, type WintosState } from "./view";
+import { inboxKind, inboxTabId, isInboxTab, prProjects, projectTabIds, projectPrList, prsByTab, relTime, rowView, sidebarModel, withSnoozes, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -107,8 +107,18 @@ describe("the Inbox tab", () => {
         expect(projectTabIds(["p1", "old", "used"], { ...tabs, old: { meta: { "wintos:blank": true } } as unknown as Tab, used: { meta: { "wintos:blank": true }, blockids: ["b1"] } as unknown as Tab })).toEqual(["p1", "used"]));
 
     test("is found among the tabs, or not at all", () => {
-        expect(inboxTabId(["p1", "ib"], tabs)).toBe("ib");
-        expect(inboxTabId(["p1"], tabs)).toBeUndefined();
+        expect(inboxTabId(["p1", "ib"], tabs, "prs")).toBe("ib");
+        expect(inboxTabId(["p1"], tabs, "prs")).toBeUndefined();
+    });
+
+    test("PRs and On call are two tabs, each found by its list; an Inbox from before the split is the PRs one", () => {
+        const two = { ...tabs, oc: tab({ "wintos:inbox": "oncall" }), pr: tab({ "wintos:inbox": "prs" }) };
+        expect(inboxKind(two.oc)).toBe("oncall");
+        expect(inboxKind(two.pr)).toBe("prs");
+        expect(inboxKind(two.ib)).toBe("prs");
+        expect(inboxKind(two.p1)).toBeUndefined();
+        expect(inboxTabId(["p1", "oc", "pr"], two, "oncall")).toBe("oc");
+        expect(projectTabIds(["p1", "oc", "pr"], two)).toEqual(["p1"]);
     });
 });
 

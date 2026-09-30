@@ -155,7 +155,8 @@ export function runAction(action: string): void {
         return void setProjectSnoozed(tabId, !isSnoozedProject(tabId));
     }
     if (action === "focus-left") return inInbox() ? void document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus() : focusArea("terminal");
-    if (action === "focus-right") return inInbox() ? focusArea("terminal") : (setRailCollapsed(false), focusArea("notes"));
+    // In an Inbox tab the right area is its page; with none open there is nowhere to go.
+    if (action === "focus-right") return inInbox() ? void (document.querySelector("[data-blockid]") && focusArea("terminal")) : (setRailCollapsed(false), focusArea("notes"));
     if (action.startsWith("focus-")) return focusArea(action.slice(6) as "terminal" | "notes");
     if (action.startsWith("open-page:")) return openPage(action.slice("open-page:".length));
     if (action.startsWith("open-url:")) return void createBlock({ meta: { view: "web", url: action.slice(9) } });

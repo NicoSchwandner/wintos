@@ -82,12 +82,18 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
 }
 
 // The Inbox is the one tab that is not a project (pkg/wcore/inbox.go); a tab not loaded yet is one.
-export const isInboxTab = (tab: Tab | undefined) => tab?.meta?.["wintos:inbox"] === true;
+// Two Inbox tabs, PRs and On call; true is an Inbox from before the split, which held the PRs.
+export type InboxList = "prs" | "oncall";
+export function inboxKind(tab: Tab | undefined): InboxList | undefined {
+    const v = tab?.meta?.["wintos:inbox"];
+    return v === true || v === "prs" ? "prs" : v === "oncall" ? "oncall" : undefined;
+}
+export const isInboxTab = (tab: Tab | undefined) => inboxKind(tab) !== undefined;
 // An empty placeholder saved by an earlier version (meta wintos:blank) is not a project either;
 // one that gained panes is.
 const oldPlaceholder = (tab: Tab | undefined) => tab?.meta?.["wintos:blank"] === true && !tab.blockids?.length;
 export const projectTabIds = (ids: string[], tabs: Record<string, Tab | undefined>) => ids.filter((id) => !isInboxTab(tabs[id]) && !oldPlaceholder(tabs[id]));
-export const inboxTabId = (ids: string[], tabs: Record<string, Tab | undefined>) => ids.find((id) => isInboxTab(tabs[id]));
+export const inboxTabId = (ids: string[], tabs: Record<string, Tab | undefined>, list: InboxList) => ids.find((id) => inboxKind(tabs[id]) === list);
 
 // The notes' Pull requests section: every PR of the project, snoozed ones included (marked,
 // last), most urgent group first, each with what it waits on.

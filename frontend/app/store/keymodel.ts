@@ -7,7 +7,7 @@ import { jumpToNextWaiting } from "@/wintos/ui/focus";
 import { sameChord } from "@/wintos/ui/keys";
 import { runKey, WINTOS_KEYS, wintosClose, wintosEscape } from "@/wintos/ui/menu";
 import { zoneKey } from "@/wintos/ui/zones";
-import { restoreFocus } from "@/wintos/ui/focusOwner";
+import { restoreFocus, wantPane } from "@/wintos/ui/focusOwner";
 import { flog, where } from "@/wintos/ui/focusLog";
 
 // WintOS: a key in the focus trail, never one typed into a terminal or a field.
@@ -381,6 +381,7 @@ async function handleCmdN() {
 }
 
 async function handleSplitHorizontal(position: "before" | "after") {
+    wantPane("split"); // WintOS: the new pane takes focus, from the notes too
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
     if (focusedNode == null) {
@@ -391,6 +392,7 @@ async function handleSplitHorizontal(position: "before" | "after") {
 }
 
 async function handleSplitVertical(position: "before" | "after") {
+    wantPane("split"); // WintOS: the new pane takes focus, from the notes too
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
     if (focusedNode == null) {

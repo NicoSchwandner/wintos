@@ -150,6 +150,7 @@ export function runKey(action: string): boolean {
 
 // The Inbox holds pages and nothing else: a terminal or a Claude session started there would
 // belong to no project and never show in the sidebar, Needs you or ⌃⇥.
+const PANE_MAKERS = new Set(["session", "terminal", "browser", "files", "sysinfo", "processes", "open-page"]);
 const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "snooze-project"]);
 export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
@@ -158,6 +159,9 @@ export function runAction(action: string): void {
     flog(`action ${action}`);
     if (action.startsWith("pane-")) return void runKey(action); // from the app menu
     if (!allowedInInbox(action) && inInbox()) return;
+    // A pane you create is where you want to be (from the notes too); in an Inbox tab a page
+    // opened from the list leaves you in the list.
+    if (!inInbox() && PANE_MAKERS.has(action.split(":")[0])) wantPane("new pane");
     if (action === "session") return newSession();
     if (action === "switch-next" || action === "switch-prev") return switchProject(action === "switch-next" ? 1 : -1, false);
     if (action === "project") return void createTab();

@@ -43,6 +43,17 @@ describe("normalize", () => {
         expect([p.lastReviewAt, p.changesRequestedBy, p.reviewedByMe]).toEqual(["2026-09-26T10:00:00Z", "bo.k", true]);
     });
 
+    test("changes requested, and everyone who asked has been asked again: re-requested", () => {
+        const cr = (latest: Node["latestReviews"]["nodes"], asked: string[]) =>
+            normalize(node({ reviewDecision: "CHANGES_REQUESTED", latestReviews: { nodes: latest }, reviewRequests: { nodes: asked.map((login) => ({ requestedReviewer: { __typename: "User", login } })) } }), "me", { requestedMe: false, requestedTeam: false }).changesRerequested;
+        const bo = { author: { login: "bo.k" }, state: "CHANGES_REQUESTED", submittedAt: "2026-09-26T10:00:00Z" };
+        expect(cr([bo], ["bo.k"])).toBe(true);
+        // GitHub can drop the old review from latestReviews once its author is asked again.
+        expect(cr([], ["bo.k"])).toBe(true);
+        expect(cr([bo], [])).toBeUndefined();
+        expect(cr([bo, { ...bo, author: { login: "cy" } }], ["bo.k"])).toBeUndefined();
+    });
+
     test("team review requests use the team name; conflicts and missing checks are read", () => {
         const p = normalize(node({
             mergeable: "CONFLICTING", commits: { nodes: [] },

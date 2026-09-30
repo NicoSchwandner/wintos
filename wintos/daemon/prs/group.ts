@@ -17,6 +17,7 @@ export type PR = {
     reviewedByMe: boolean;
     reviewers: string[]; // people and teams still asked, bots excluded
     changesRequestedBy?: string;
+    changesRerequested?: boolean; // everyone who asked for changes has been asked to review again
     approvedBy?: string[]; // people whose latest review approves
     additions: number;
     deletions: number;
@@ -79,7 +80,9 @@ export function groupOf(pr: PR, me: string, now: number): Group {
     const green = pr.checks === undefined || pr.checks === "SUCCESS";
     if (mine && approved && green && !pr.isDraft && !pr.conflict && pr.mergeState !== "BLOCKED" && !isStacked(pr)) return "merge";
     // Red CI on a draft is work in progress; the draft keeps its own, longer clock.
-    if (mine && (pr.reviewDecision === "CHANGES_REQUESTED" || (redChecks(pr) && !pr.isDraft) || pr.conflict)) return "fix";
+    // Changes requested stays GitHub's decision until the reviewer reviews again; once you have
+    // asked every one of them again, the next move is theirs.
+    if (mine && ((pr.reviewDecision === "CHANGES_REQUESTED" && !pr.changesRerequested) || (redChecks(pr) && !pr.isDraft) || pr.conflict)) return "fix";
     // GitHub drops a request when you review, so being asked means a review is owed, re-requests included.
     if (!mine && pr.requestedMe) return "review";
     // An approved PR that can't merge yet is waiting on checks or code owners, not on attention.

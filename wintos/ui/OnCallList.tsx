@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { Key } from "./Key";
+import { Key, KeyOr } from "./Key";
 import { runAction } from "./menu";
 import { pluginPanels } from "./panels";
 import { T } from "./tokens";
@@ -11,7 +11,8 @@ import { relTime } from "./view";
 
 // The Inbox's on-call list (⇧⌘O): every plugin panel's counts as rows. ⏎ or 1–9 opens a count's
 // page as a browser pane beside the list, like a PR.
-export const OnCallList = memo(() => {
+// pageOpen: a page is open beside the list, so Esc or ⌘2 has somewhere to go.
+export const OnCallList = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     const { state } = useWintos();
     const now = useNow();
@@ -62,11 +63,11 @@ export const OnCallList = memo(() => {
                     </div>
                 ))}
             </div>
-            <div style={{ flexShrink: 0, height: 30, padding: "0 26px", display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
+            <div style={{ flexShrink: 0, minHeight: 30, padding: "4px 26px", boxSizing: "border-box", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 14px", borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
                 <Key k="j k" label="row" />
                 <Key k="⏎ 1–9" label="open" />
                 <Key k="r" label="resync" />
-                <Key k="esc ⌘2" label="to the page" />
+                {pageOpen && <KeyOr keys={["esc", "⌘2"]} label="to the page" />}
             </div>
         </div>
     );

@@ -56,7 +56,7 @@ export const InboxArea = memo(({ tabId, empty, children }: { tabId: string; empt
                         </button>
                     ))}
                 </div>
-                {list === "prs" ? <PrQueue /> : <OnCallList />}
+                {list === "prs" ? <PrQueue pageOpen={!empty} /> : <OnCallList pageOpen={!empty} />}
             </div>
             {!empty && (
                 <div className="flex flex-col flex-grow min-w-0" style={{ minHeight: 0 }}>

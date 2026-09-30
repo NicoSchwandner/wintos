@@ -8,7 +8,7 @@ import { useOnResize } from "@/app/hook/useDimensions";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Group } from "../daemon/prs/group";
 import { runAction } from "./menu";
-import { Key } from "./Key";
+import { Key, KeyOr } from "./Key";
 import { initials, keepSelection, queueModel, reviewerChips, rowColumns, type QueueRow, type RowColumns } from "./prs";
 import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
@@ -27,7 +27,8 @@ export const HEADERS: Record<Group, { label: string; note: string; color: string
 
 // The Inbox's PR list (⇧⌘G): every PR that concerns you, grouped by the action it asks of you.
 // A PR opens as an ordinary browser pane beside it, in the Inbox's own layout.
-export const PrQueue = memo(() => {
+// pageOpen: a page is open beside the list, so Esc or ⌘2 has somewhere to go.
+export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     // The rows drop the author, size and full reviewer names only when there is no room for them:
     // the list alone, or a wide screen with a page beside it, shows everything.
@@ -126,12 +127,12 @@ export const PrQueue = memo(() => {
                 )}
                 {model && model.groups.length === 0 && <span style={{ color: T.muted, fontSize: 13, padding: "0 12px" }}>Nothing open that concerns you.</span>}
             </div>
-            <div style={{ flexShrink: 0, height: 30, padding: "0 26px", display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
+            <div style={{ flexShrink: 0, minHeight: 30, padding: "4px 26px", boxSizing: "border-box", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 14px", borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
                 <Key k="j k" label="row" />
                 <Key k="⏎" label="open" />
                 <Key k="o" label={flat[cursor] && !projectOf.has(flat[cursor].pr.url) ? "open as new project" : "go to project"} off={!flat[cursor]} />
                 <Key k="z" label="snooze" />
-                <Key k="esc ⌘2" label="to the page" />
+                {pageOpen && <KeyOr keys={["esc", "⌘2"]} label="to the page" />}
             </div>
         </div>
     );

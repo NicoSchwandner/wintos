@@ -32,6 +32,30 @@ export function restoreFocus(why: string): boolean {
     return true;
 }
 
+// Things opened on top of where you are (an overlay, the mine.md edit, the notes full width) hand
+// focus back to where it was when they close. Kept with its area as well as the element: the
+// element can be gone by then (the notes rail is not shown while the notes are full width).
+type Return = { el: HTMLElement | null; area: string | null };
+const returns: Return[] = [];
+
+export function rememberReturn(): void {
+    const el = document.activeElement === document.body ? null : (document.activeElement as HTMLElement | null);
+    returns.push({ el, area: el?.closest?.("[data-wintos]")?.getAttribute("data-wintos") ?? null });
+    if (returns.length > 8) returns.shift(); // a layer left another way (a project switch) never pops
+}
+
+// keepPlaced: an action run from the layer (the palette's) may already have put focus somewhere.
+export function returnFocus(fallback: () => void, keepPlaced = false): void {
+    const r = returns.pop();
+    requestAnimationFrame(() => {
+        if (keepPlaced && document.activeElement && document.activeElement !== document.body) return;
+        const el = r?.el?.isConnected ? r.el : r?.area ? document.querySelector<HTMLElement>(`[data-wintos="${r.area}"]`) : null;
+        flog(`back to ${el ? where(el) : "the terminals (nothing to go back to)"}`);
+        if (el) el.focus();
+        else fallback();
+    });
+}
+
 let pagePressedAt = 0;
 
 export function installFocusOwner(): void {

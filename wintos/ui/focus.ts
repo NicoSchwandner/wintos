@@ -4,7 +4,7 @@ import { getLayoutModelForStaticTab } from "@/layout/index";
 import type { Session } from "../daemon/sessions/reduce";
 import { nextNeedsYou, Target } from "./sessions";
 import { editingMineAtom, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
-import { wantPane } from "./focusOwner";
+import { rememberReturn, returnFocus, wantPane } from "./focusOwner";
 import { setProjectSnoozed } from "./useWintos";
 import { flog, where } from "./focusLog";
 
@@ -93,7 +93,6 @@ export function focusArea(area: "terminal" | "notes"): void {
 }
 
 // ⌘E edits mine.md from anywhere; save or esc hands focus back to where the edit started.
-let beforeEdit: HTMLElement | null = null;
 export function editMine(on: boolean): void {
     // ⌘E with the edit already open (focus went elsewhere) takes you back into it.
     if (on && globalStore.get(editingMineAtom)) return focusMineEditor();
@@ -101,34 +100,25 @@ export function editMine(on: boolean): void {
     // half-open to catch focus later.
     if (on && !document.querySelector("[data-wintos=mine-editable]")) return;
     if (on === globalStore.get(editingMineAtom)) return;
-    if (on) beforeEdit = document.activeElement as HTMLElement | null;
+    if (on) rememberReturn();
     globalStore.set(editingMineAtom, on);
-    if (on) return;
-    const el = beforeEdit;
-    beforeEdit = null;
-    requestAnimationFrame(() => (el?.isConnected ? el.focus() : focusArea("terminal")));
+    if (!on) returnFocus(() => focusArea("terminal"));
 }
 
 // Closing an overlay hands focus back to where it was, unless the chosen action moved it; an
 // unmounting input otherwise leaves it on <body>, where no key does anything.
-let beforeOverlay: HTMLElement | null = null;
 export function toggleOverlay(o: Exclude<Overlay, "">): void {
     const open = globalStore.get(overlayAtom);
     if (open === o) return closeOverlay();
     flog(`overlay ${o} opens`);
-    if (!open) beforeOverlay = document.activeElement as HTMLElement | null;
+    if (!open) rememberReturn();
     globalStore.set(overlayAtom, o);
 }
 
 export function closeOverlay(): void {
-    flog(`overlay closes, back to ${where(beforeOverlay)}`);
+    flog("overlay closes");
     globalStore.set(overlayAtom, "");
-    const el = beforeOverlay;
-    beforeOverlay = null;
-    requestAnimationFrame(() => {
-        if (document.activeElement && document.activeElement !== document.body) return; // the action placed focus itself
-        el?.isConnected ? el.focus() : focusArea("terminal");
-    });
+    returnFocus(() => focusArea("terminal"), true);
 }
 
 export function jumpToNextWaiting(): boolean {

@@ -15,7 +15,7 @@ import { paneOrder } from "./panes";
 import { installFocusRing } from "./focusRing";
 import { setProjectSnoozed } from "./useWintos";
 import { flog } from "./focusLog";
-import { installFocusOwner, wantPane } from "./focusOwner";
+import { installFocusOwner, rememberReturn, returnFocus, wantPane } from "./focusOwner";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
 // defines, so a user's widgets.json overrides still apply.
@@ -199,13 +199,15 @@ export function wintosClose(): boolean {
         paneHidden: !!magnified && magnified !== focused?.id,
     });
     if (action === "overlay") closeOverlay();
-    if (action === "view") focusArea("terminal");
+    if (action === "view") closeNotesView();
     return action !== "pane";
 }
 
 // Esc forwarded out of a page in the Inbox hands focus back to its list.
 export function wintosEscape(): boolean {
     const active = document.activeElement;
+    // The notes full width is a view opened on top: Esc closes it, back to where you were.
+    if (!globalStore.get(overlayAtom) && globalStore.get(mainViewAtom) === "notes" && zoneOf(active) === "list") return closeNotesView(), true;
     const action = escapeAction({ overlay: !!globalStore.get(overlayAtom), zone: zoneOf(active), inInbox: inInbox(), onPage: active?.tagName === "WEBVIEW" });
     if (action === "overlay") closeOverlay();
     if (action === "panes") focusArea("terminal"); // focusArea declares the pane wanted
@@ -256,8 +258,15 @@ function closeProject(): void {
 
 // ⇧⌘L opens the notes full width, and the same key again goes back to the terminals.
 export function toggleView(view: MainView): void {
-    if (globalStore.get(mainViewAtom) === view) return focusArea("terminal");
+    if (globalStore.get(mainViewAtom) === view) return closeNotesView();
+    rememberReturn();
     globalStore.set(mainViewAtom, view);
+}
+
+// Closing the notes full width (⇧⌘L again, Esc, ⌘W): back to where you opened it from.
+function closeNotesView(): void {
+    globalStore.set(mainViewAtom, "terminal");
+    returnFocus(() => focusArea("terminal"));
 }
 
 let registered = false;

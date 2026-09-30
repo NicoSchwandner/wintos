@@ -545,6 +545,10 @@ function getLocalHostDisplayNameAtom(): Atom<string> {
  * @param forceOpenInternally Force the link to open in a new web widget.
  */
 async function openLink(uri: string, forceOpenInternally = false) {
+    // WintOS: a web link opens as a WintOS page (reused if already open, in front in an Inbox
+    // tab); "Open URL in External Browser" still goes out, and so does anything not http(s).
+    const wintosOpenPage = (window as { wintosOpenPage?: (url: string) => void }).wintosOpenPage;
+    if (wintosOpenPage && /^https?:\/\//i.test(uri)) return wintosOpenPage(uri);
     if (forceOpenInternally || globalStore.get(atoms.settingsAtom)?.["web:openlinksinternally"]) {
         const blockDef: BlockDef = {
             meta: {

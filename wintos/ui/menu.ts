@@ -275,6 +275,8 @@ export function registerWintosMenu(): void {
     registered = true;
     installFocusRing();
     installFocusOwner();
+    // Wave's openLink (a ⌘-click on a url in a terminal) opens web links through here.
+    Object.assign(window, { wintosOpenPage: (url: string) => runAction(`open-page:${url}`) });
     getApi().onWintosMenu(runAction);
     // A link leaving a GitHub page (wintos/links.ts) opens beside it in this tab.
     getApi().onWintosOpenPane((url) => runAction(`open-page:${url}`));

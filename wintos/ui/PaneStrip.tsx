@@ -39,9 +39,16 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     if (chips.length < 2 && !chips.some((c) => c.kind === "session")) return null;
     const unread = new Set(unreadSessions(sessions, tabId, state?.seen?.[tabId]).map((s) => s.id));
     const on = magnified ?? focused?.id;
+    const inProject = !isInboxTab(tab);
     return (
         // The strip's empty space drags the window; the chips don't.
         <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 8px 0", fontFamily: T.mono, fontSize: 11, flexShrink: 0, overflowX: "auto", WebkitAppRegion: "drag" } as React.CSSProperties}>
+            {/* ⌘H / ⌘L step pane by pane in a project; in an Inbox tab they move between list and page. */}
+            {inProject && chips.length > 1 && (
+                <span style={{ marginRight: 6 }}>
+                    <Key k="⌘H" label="←" />
+                </span>
+            )}
             {chips.map((c) => {
                 const isOn = on != null && on === lm.getNodeByBlockId(c.blockId)?.id;
                 const s = c.session;
@@ -68,9 +75,18 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                     </button>
                 );
             })}
-            {chips.length > 1 && <span style={{ marginLeft: 6 }}><Key k="⌘H ⌘L" label="" /></span>}
+            {inProject && chips.length > 1 && (
+                <span style={{ marginLeft: 6 }}>
+                    <Key k="⌘L" label="→" />
+                </span>
+            )}
+            {inProject && chips.length > 1 && !magnified && (
+                <span style={{ marginLeft: 12 }}>
+                    <Key k="⌘M" label="magnify" />
+                </span>
+            )}
             {/* Magnify hides the other panes and has no header button here: say so, and offer the way back. */}
-            {magnified && !isInboxTab(tab) && (
+            {magnified && inProject && (
                 <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}

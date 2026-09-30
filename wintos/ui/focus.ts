@@ -54,8 +54,12 @@ function landOn(blockId: string): void {
     if (!blockId && mineEditor()) return focusMineEditor();
     globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
     wantPane(blockId ? "landing on a session" : "landing on the terminals");
-    if (blockId) magnifyBlock(blockId);
-    else focusArea("terminal");
+    if (!blockId) return focusArea("terminal");
+    // Magnify is a mode you choose (⌘M): landing on a session keeps it, never starts it. An
+    // Inbox tab is always in it (one page at a time).
+    const lm = getLayoutModelForStaticTab();
+    if (lm && globalStore.get(lm.magnifiedNodeIdAtom)) magnifyBlock(blockId);
+    else focusBlock(blockId);
 }
 
 const mineEditor = () => document.querySelector<HTMLElement>("[data-wintos=mine-editor]");

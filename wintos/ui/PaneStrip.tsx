@@ -9,7 +9,7 @@ import { liveSessions, unreadSessions } from "./sessions";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
-import { relTime } from "./view";
+import { isInboxTab, relTime } from "./view";
 
 const DOT = { working: T.moss, waiting: T.apricot, parked: T.muted, done: T.dim, idle: T.dim, ended: T.dim } as const;
 const GLYPH = { terminal: "›_", web: "◎", other: "□" } as const;
@@ -69,6 +69,20 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                 );
             })}
             {chips.length > 1 && <span style={{ marginLeft: 6 }}><Key k="⌘H ⌘L" label="" /></span>}
+            {/* Magnify hides the other panes and has no header button here: say so, and offer the way back. */}
+            {magnified && !isInboxTab(tab) && (
+                <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    tabIndex={-1}
+                    onClick={() => lm.magnifyNodeToggle(magnified)}
+                    title="Show all panes again"
+                    style={{ WebkitAppRegion: "no-drag", marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 7, padding: "3px 9px", borderRadius: 8, border: `1px solid ${T.apricot}`, background: "transparent", color: T.apricot, cursor: "pointer", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}
+                >
+                    magnified
+                    <Key k="⌘M" label="all panes" />
+                </button>
+            )}
         </div>
     );
 });

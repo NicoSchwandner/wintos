@@ -1,4 +1,7 @@
-import { useAtom } from "jotai";
+import { globalStore } from "@/app/store/jotaiStore";
+import { getLayoutModelForStaticTab } from "@/layout/index";
+import { useAtom, useAtomValue } from "jotai";
+import { magnifyBlock } from "./focus";
 import { memo, useEffect } from "react";
 import { takeInboxHandoff } from "./inbox";
 import { Key } from "./Key";
@@ -17,6 +20,15 @@ const LISTS: { list: InboxList; label: string; key: string }[] = [
 // right as ordinary panes in this tab's own layout, the same browser panes a project has.
 export const InboxArea = memo(({ tabId, empty, children }: { tabId: string; empty: boolean; children: React.ReactNode }) => {
     const [list, setList] = useAtom(inboxListAtom);
+    // The Inbox reads one page at a time, never tiled: whatever closed a page (⌘W, the page
+    // itself, a clean-up), the page left comes to the front.
+    const lm = getLayoutModelForStaticTab();
+    const magnified = useAtomValue(lm.magnifiedNodeIdAtom);
+    const pages = useAtomValue(lm.leafOrder);
+    useEffect(() => {
+        if (magnified || !pages.length) return;
+        magnifyBlock(globalStore.get(lm.focusedNode)?.data?.blockId ?? pages[pages.length - 1].blockid);
+    }, [magnified, pages.length]);
     useEffect(() => {
         takeInboxHandoff();
         window.addEventListener("storage", takeInboxHandoff);

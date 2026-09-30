@@ -75,13 +75,15 @@ function focusedBlockView(): string | undefined {
 
 export const focusedPageUrl = (block: Block | undefined): string | undefined => (block?.meta?.view === "web" ? block.meta.url : undefined);
 
-// ⌥⌘←/→ magnify the previous/next pane of this tab, in layout order, wrapping.
+// ⌥⌘←/→: the previous/next pane of this tab, in layout order, wrapping.
 function stepPane(delta: 1 | -1): boolean {
     const lm = getLayoutModelForStaticTab();
     const ids = paneOrder(globalStore.get(lm.leafOrder), globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))))?.blockids ?? []);
     wantPane("⌥⌘←/→");
     const next = stepProject(ids, globalStore.get(lm.focusedNode)?.data?.blockId ?? "", delta);
-    if (next) magnifyBlock(next);
+    // The Inbox reads one page at a time, and a magnified pane stays magnified; a split in a
+    // project stays side by side and only the focus moves.
+    if (next) inInbox() || globalStore.get(lm.magnifiedNodeIdAtom) ? magnifyBlock(next) : focusBlock(next);
     return true;
 }
 
@@ -155,13 +157,6 @@ export function wintosClose(): boolean {
     });
     if (action === "overlay") closeOverlay();
     if (action === "view") focusArea("terminal");
-    // The Inbox reads one page at a time, never tiled: the page left after a close comes to the front.
-    if (action === "pane" && inInbox()) {
-        setTimeout(() => {
-            const next = globalStore.get(lm.focusedNode)?.data?.blockId;
-            if (next) magnifyBlock(next);
-        }, 150);
-    }
     return action !== "pane";
 }
 

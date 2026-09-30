@@ -12,7 +12,7 @@ import { flog, where } from "@/wintos/ui/focusLog";
 
 // WintOS: a key in the focus trail, never one typed into a terminal or a field.
 function logKey(e: WaveKeyboardEvent, zone: "handled" | "typing" | false): void {
-    if (e.type !== "keydown" || ["Meta", "Shift", "Control", "Alt"].includes(e.key)) return;
+    if (e.type !== "keydown" || e.repeat || ["Meta", "Shift", "Control", "Alt"].includes(e.key)) return;
     const named = e.cmd || e.control || e.alt || e.option || !keyutil.isCharacterKeyEvent(e);
     if (!named && zone !== "handled") return;
     const mods = (e.control ? "⌃" : "") + (e.alt || e.option ? "⌥" : "") + (e.shift ? "⇧" : "") + (e.cmd ? "⌘" : "");

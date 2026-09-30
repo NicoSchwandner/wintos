@@ -8,9 +8,9 @@ import { T } from "./tokens";
 // Only keys that exist. KeymapC lists a few more from the spec that are not built yet.
 const SECTIONS: [string, [string, string][]][] = [
     ["Projects", [["⌘J / ⌘K", "hold ⌘, tap to walk all projects, release to switch"], ["⌘N", "new project"], ["⌘R", "rename this project"], ["⇧⌘W", "close this project (asks first while Claude runs)"], ["⌥⌘Z", "snooze this project: out of the sidebar and ⌘J/⌘K until it needs you or you open it"]]],
-    ["Sessions", [["⌃⇥", "next that needs you: a waiting session, else a project"], ["⌘T / ⇧⌘T", "new terminal · new Claude session"], ["⌥⌘H J K L", "the pane left · below · above · right (one page at a time: previous · next)"], ["⇧⌘C", "copy a browser pane's url"], ["⌘W / ⌘M", "close · magnify the focused pane"]]],
+    ["Sessions", [["⌃⇥", "next that needs you: a waiting session, else a project"], ["⌘T / ⇧⌘T", "new terminal · new Claude session"], ["⌥⌘J / ⌥⌘K", "the pane below · above (a ⇧⌘D split)"], ["⇧⌘C", "copy a browser pane's url"], ["⌘W / ⌘M", "close · magnify the focused pane"]]],
     ["Open", [["⇧⌘P", "everything, including dropped projects"], ["⇧⌘L", "notes, full width"], ["⇧⌘G / ⇧⌘O", "the PRs tab · the On call tab"], ["⇧⌘K", "this card"]]],
-    ["Focus", [["⌘H / ⌘L", "left · right: terminals · notes, in the Inbox list · page"], ["esc", "closes an overlay · a list back to its panes · an Inbox page back to its list"]]],
+    ["Focus", [["⌘H / ⌘L", "one step left · right: pane to pane, then the notes; in PRs and On call the list · the page"], ["esc", "closes an overlay · a list back to its panes · an Inbox page back to its list"]]],
     ["Notes", [["⌘E", "edit mine.md, the only file you write"], ["1–9", "notes focused: open that PR beside the terminals"], ["⌘⏎ / esc", "save · discard"]]],
     ["Queues", [["j / k", "row"], ["⏎ / o", "open the PR beside the list · its project, or a new one"], ["z", "snooze the PR until the next working day"], ["1–9", "on call: open that count's page"], ["r", "resync now"]]],
 ];

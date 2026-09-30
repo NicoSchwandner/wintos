@@ -15,7 +15,7 @@ const DOT = { working: T.moss, waiting: T.apricot, parked: T.muted, done: T.dim,
 const GLYPH = { terminal: "›_", web: "◎", other: "□" } as const;
 
 // One chip per pane of this tab (Claude sessions, terminals, browser pages), in projects and the
-// Inbox alike. A click or ⌥⌘H/⌥⌘L moves to a pane; ⌘W closes the focused one.
+// Inbox alike. A click or ⌘H/⌘L moves to a pane; ⌘W closes the focused one.
 export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     const { state } = useWintos();
     const tab = useAtomValue(getWaveObjectAtom<Tab>(makeORef("tab", tabId)));
@@ -68,7 +68,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                     </button>
                 );
             })}
-            {chips.length > 1 && <span style={{ marginLeft: 6 }}><Key k="⌥⌘H ⌥⌘L" label="" /></span>}
+            {chips.length > 1 && <span style={{ marginLeft: 6 }}><Key k="⌘H ⌘L" label="" /></span>}
         </div>
     );
 });

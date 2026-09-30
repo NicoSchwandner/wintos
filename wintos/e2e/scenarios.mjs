@@ -200,12 +200,11 @@ await scenario("3b · a new-window link in the Inbox opens a pane you can see", 
     await until("the new pane in front", () => evalIn(inbox, `(() => { const on = document.querySelector("[data-pane][data-on]")?.dataset.pane; return !!on && document.querySelector('[data-blockid="' + on + '"] webview')?.getAttribute("src") === ${JSON.stringify(url)}; })()`));
 });
 
-await scenario("4 · ⌥⌘L moves to the next pane", async () => {
+await scenario("4 · ⌘L from the list goes to the page", async () => {
     const inbox = await visible();
-    const on = () => evalIn(inbox, `document.querySelector("[data-pane][data-on]")?.dataset.pane`);
-    const first = await on();
-    await press(inbox, "l", { code: "KeyL", mods: ["alt", "meta"] });
-    await until("another pane", async () => (await on()) !== first);
+    await focusOut(inbox);
+    await press(inbox, "l", { mods: ["meta"] });
+    await until("the page focused", () => evalIn(inbox, `document.activeElement?.tagName === "WEBVIEW"`));
 });
 
 await scenario("8 · ⇧⌘W in the Inbox leaves it open", async () => {

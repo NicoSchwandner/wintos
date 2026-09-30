@@ -17,7 +17,7 @@ export function mayFocusPane(blockId: string): boolean {
     return false;
 }
 
-// WintOS moving focus into a pane on purpose (Esc to the panes, ⌘H/⌘L, ⌥⌘H/J/K/L, landing on a session).
+// WintOS moving focus into a pane on purpose (Esc to the panes, ⌘H/⌘L, ⌥⌘J/K, landing on a session).
 export function wantPane(why = "wintos"): void {
     if (intent.zone !== "pane") flog(`intent → pane (${why})`);
     intent = { zone: "pane", el: null };

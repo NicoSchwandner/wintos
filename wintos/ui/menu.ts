@@ -63,12 +63,10 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:o", "panel"],
     ["Shift:Cmd:b", "browser"],
     ["Shift:Cmd:e", "files"],
-    // ⌥ turns a letter into another character on macOS (⌥H is ª), so these match the key's
-    // place; h j k l sit in the same place on QWERTY and QWERTZ.
-    ["Option:Cmd:c{KeyH}", "pane-left"],
+    // ⌥ turns a letter into another character on macOS (⌥J is º), so these match the key's
+    // place; j and k sit in the same place on QWERTY and QWERTZ.
     ["Option:Cmd:c{KeyJ}", "pane-down"],
     ["Option:Cmd:c{KeyK}", "pane-up"],
-    ["Option:Cmd:c{KeyL}", "pane-right"],
     ["Shift:Cmd:c", "copy-url"],
     ["Option:Cmd:z", "snooze-project"],
     ["Cmd:h", "focus-left"],
@@ -82,14 +80,36 @@ function focusedBlockView(): string | undefined {
 
 export const focusedPageUrl = (block: Block | undefined): string | undefined => (block?.meta?.view === "web" ? block.meta.url : undefined);
 
-// ⌥⌘H/J/K/L: the pane in that direction. The Inbox and a magnified pane show one pane at a
-// time, so there ⌥⌘H/K and ⌥⌘L/J step to the previous and next pane in strip order instead.
+// ⌥⌘J/K: the pane below / above, in a split stacked with ⇧⌘D. Where one pane shows at a time (an
+// Inbox tab, a magnified pane) they step to the next / previous pane in strip order instead.
 function movePane(dir: NavigateDirection): boolean {
     const lm = getLayoutModelForStaticTab();
     if (inInbox() || globalStore.get(lm.magnifiedNodeIdAtom)) return stepPane(dir === NavigateDirection.Left || dir === NavigateDirection.Up ? -1 : 1);
-    wantPane("⌥⌘ hjkl");
+    wantPane("⌥⌘J/K");
     lm.switchNodeFocusInDirection(dir, false); // at the edge nothing moves
     return true;
+}
+
+// ⌘H / ⌘L: one step left or right in what you see. In a project from pane to pane, and past the
+// rightmost pane into the notes (opening the rail if it is folded away); in an Inbox tab between
+// the list and its page.
+function stepSideways(right: boolean): void {
+    if (inInbox()) {
+        if (right) return void (document.querySelector("[data-blockid]") && focusArea("terminal"));
+        return void document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus();
+    }
+    const zone = zoneOf(document.activeElement);
+    // The notes are the rightmost thing: ⌘H goes back to the terminals, ⌘L stays.
+    if (zone === "list" || globalStore.get(mainViewAtom) === "notes") return right ? undefined : focusArea("terminal");
+    const lm = getLayoutModelForStaticTab();
+    const before = globalStore.get(lm.focusedNode)?.id;
+    if (zone === "pane" && !globalStore.get(lm.magnifiedNodeIdAtom)) {
+        wantPane("⌘H/⌘L");
+        lm.switchNodeFocusInDirection(right ? NavigateDirection.Right : NavigateDirection.Left, false);
+        if (globalStore.get(lm.focusedNode)?.id !== before) return; // a neighbour pane took it
+    }
+    if (right) return void (setRailCollapsed(false), focusArea("notes"));
+    if (zone !== "pane") focusArea("terminal");
 }
 
 // The previous/next pane of this tab, in layout order, wrapping.
@@ -154,9 +174,7 @@ export function runAction(action: string): void {
         const tabId = globalStore.get(atoms.staticTabId);
         return void setProjectSnoozed(tabId, !isSnoozedProject(tabId));
     }
-    if (action === "focus-left") return inInbox() ? void document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus() : focusArea("terminal");
-    // In an Inbox tab the right area is its page; with none open there is nowhere to go.
-    if (action === "focus-right") return inInbox() ? void (document.querySelector("[data-blockid]") && focusArea("terminal")) : (setRailCollapsed(false), focusArea("notes"));
+    if (action === "focus-left" || action === "focus-right") return stepSideways(action === "focus-right");
     if (action.startsWith("focus-")) return focusArea(action.slice(6) as "terminal" | "notes");
     if (action.startsWith("open-page:")) return openPage(action.slice("open-page:".length));
     if (action.startsWith("open-url:")) return void createBlock({ meta: { view: "web", url: action.slice(9) } });

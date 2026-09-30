@@ -9,6 +9,7 @@ import { runKey, WINTOS_KEYS, wintosClose, wintosEscape } from "@/wintos/ui/menu
 import { zoneKey } from "@/wintos/ui/zones";
 import { restoreFocus, wantPane } from "@/wintos/ui/focusOwner";
 import { flog, where } from "@/wintos/ui/focusLog";
+import { walkKey } from "@/wintos/ui/switcher";
 
 // WintOS: a key in the focus trail, never one typed into a terminal or a field.
 function logKey(e: WaveKeyboardEvent, zone: "handled" | "typing" | false): void {
@@ -424,6 +425,8 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
         return false;
     }
     lastHandledEvent = nativeEvent;
+    // WintOS: a ⌘J/⌘K walk owns the keyboard until it ends, over any zone.
+    if (walkKey(waveEvent)) return true;
     // WintOS: the focused zone's own keys (a list's j/k, a field's Enter) come first, before any
     // Wave chord can start or finish: a text field keeps Ctrl+Shift+S and what follows it.
     const zone = zoneKey(waveEvent, document.activeElement);

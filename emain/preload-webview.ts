@@ -46,4 +46,14 @@ document.addEventListener(
     true
 );
 
+// WintOS: a page never passes the ⌘ release to the host, which ends a ⌘J/⌘K walk
+// (wintos/ui/switcher.ts).
+window.addEventListener(
+    "keyup",
+    (event) => {
+        if (event.isTrusted && event.key === "Meta") ipcRenderer.sendToHost("wintos-meta-up");
+    },
+    true
+);
+
 console.log("loaded wave preload-webview.ts");

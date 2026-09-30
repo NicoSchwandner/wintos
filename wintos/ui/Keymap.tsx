@@ -11,7 +11,7 @@ const SECTIONS: [string, [string, string][]][] = [
     ["Sessions", [["⌃⇥", "next that needs you: a waiting session, else a project"], ["⌘T / ⇧⌘T", "new terminal · new Claude session"], ["⌥⌘J / ⌥⌘K", "the pane below · above (a ⇧⌘D split)"], ["⇧⌘C", "copy a browser pane's url"], ["⌘W / ⌘M", "close · magnify the focused pane"]]],
     ["Open", [["⇧⌘P", "everything, including dropped projects"], ["⇧⌘L", "notes, full width"], ["⇧⌘G / ⇧⌘O", "the PRs tab · the On call tab"], ["⇧⌘K", "this card"]]],
     ["Focus", [["⌘H / ⌘L", "one step left · right: pane to pane, then the notes; in PRs and On call the list · the page"], ["esc", "closes an overlay · a list back to its panes · an Inbox page back to its list"]]],
-    ["Notes", [["⌘E", "edit mine.md, the only file you write"], ["1–9", "notes focused: open that PR beside the terminals"], ["⌘⏎ / esc", "save · discard"]]],
+    ["Notes", [["⌘E", "edit mine.md, the only file you write"], ["⏎", "notes focused: full width"], ["1–9", "notes focused: open that PR beside the terminals"], ["⌘⏎ / esc", "save · discard"]]],
     ["Queues", [["j / k", "row"], ["⏎ / o", "open the PR beside the list · its project, or a new one"], ["z", "snooze the PR until the next working day"], ["1–9", "on call: open that count's page"], ["r", "resync now"]]],
 ];
 

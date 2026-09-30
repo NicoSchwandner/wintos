@@ -1,6 +1,7 @@
 import { useAtomValue } from "jotai";
 import { memo, useEffect, useRef } from "react";
 import { useZoneKeys } from "../zones";
+import { toggleView } from "../menu";
 import { railCollapsedAtom, setRailCollapsed, syncRailCollapsed, useRailWidth } from "./railWidth";
 import { Key } from "../Key";
 import { T } from "../tokens";
@@ -17,7 +18,8 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
     const editing = useAtomValue(editingMineAtom);
     const { state } = useWintos();
     const ref = useRef<HTMLDivElement>(null);
-    useZoneKeys(ref, notesKeys(tabId, state, !editing && !!notes));
+    // ⏎ on the rail opens the notes full width (as ⇧⌘L).
+    useZoneKeys(ref, { ...notesKeys(tabId, state, !editing && !!notes), Enter: () => !editing && (toggleView("notes"), true) });
     const [width, setWidth, saveWidth] = useRailWidth();
     const collapsed = useAtomValue(railCollapsedAtom);
     useEffect(() => (window.addEventListener("storage", syncRailCollapsed), () => window.removeEventListener("storage", syncRailCollapsed)), []);

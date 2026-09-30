@@ -82,20 +82,25 @@ function focusedBlockView(): string | undefined {
 export const focusedPageUrl = (block: Block | undefined): string | undefined => (block?.meta?.view === "web" ? block.meta.url : undefined);
 
 function stepInbox(right: boolean): void {
-    const list = document.querySelector<HTMLElement>("[data-wintos=inbox-list]");
+    if (zoneOf(document.activeElement) !== "pane") return right && tabPanes().length ? focusArea("terminal") : undefined;
+    if (!stepShown(right) && !right) document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus(); // left of the first page is the list
+}
+
+const tabPanes = () =>
+    paneOrder(globalStore.get(getLayoutModelForStaticTab().leafOrder), globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))))?.blockids ?? []);
+
+// Where one pane shows at a time (an Inbox tab, a magnified pane), ⌘H/⌘L show the previous / next
+// one in strip order; false at either end.
+function stepShown(right: boolean): boolean {
     const lm = getLayoutModelForStaticTab();
-    const tab = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))));
-    const pages = paneOrder(globalStore.get(lm.leafOrder), tab?.blockids ?? []);
-    if (zoneOf(document.activeElement) !== "pane") return right && pages.length ? focusArea("terminal") : undefined;
+    const pages = tabPanes();
     const magnified = globalStore.get(lm.magnifiedNodeIdAtom);
     const shown = pages.find((id) => lm.getNodeByBlockId(id)?.id === magnified) ?? globalStore.get(lm.focusedNode)?.data?.blockId;
-    const i = pages.indexOf(shown ?? "");
-    const next = pages[i + (right ? 1 : -1)];
-    if (next) {
-        wantPane("⌘H/⌘L");
-        return void magnifyBlock(next);
-    }
-    if (!right) list?.focus(); // left of the first page is the list
+    const next = pages[pages.indexOf(shown ?? "") + (right ? 1 : -1)];
+    if (!next) return false;
+    wantPane("⌘H/⌘L");
+    magnifyBlock(next);
+    return true;
 }
 
 // ⌥⌘J/K: the pane below / above, in a split stacked with ⇧⌘D. Where one pane shows at a time (an
@@ -118,7 +123,9 @@ function stepSideways(right: boolean): void {
     if (zone === "list" || globalStore.get(mainViewAtom) === "notes") return right ? undefined : focusArea("terminal");
     const lm = getLayoutModelForStaticTab();
     const before = globalStore.get(lm.focusedNode)?.id;
-    if (zone === "pane" && !globalStore.get(lm.magnifiedNodeIdAtom)) {
+    if (zone === "pane" && globalStore.get(lm.magnifiedNodeIdAtom)) {
+        if (stepShown(right)) return;
+    } else if (zone === "pane") {
         wantPane("⌘H/⌘L");
         lm.switchNodeFocusInDirection(right ? NavigateDirection.Right : NavigateDirection.Left, false);
         if (globalStore.get(lm.focusedNode)?.id !== before) return; // a neighbour pane took it

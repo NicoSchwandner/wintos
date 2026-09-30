@@ -1,7 +1,10 @@
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atom, useAtomValue } from "jotai";
+import { getSettingsKeyAtom } from "@/app/store/global";
 import { memo, useEffect, useMemo } from "react";
+
+const STRIP_GAP = 6; // above the chips, and (with the tile gap) below them
 import { focusSession, takeHandoff } from "./focus";
 import { Key } from "./Key";
 import { paneOrder, stripPanes } from "./panes";
@@ -19,6 +22,7 @@ const GLYPH = { terminal: "›_", web: "◎", other: "□" } as const;
 export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     const { state } = useWintos();
     const tab = useAtomValue(getWaveObjectAtom<Tab>(makeORef("tab", tabId)));
+    const tileGapSetting = useAtomValue(getSettingsKeyAtom("window:tilegapsize"));
     const lm = getLayoutModelForStaticTab();
     const ids = paneOrder(useAtomValue(lm.leafOrder), tab?.blockids ?? []);
     const blocks = useAtomValue(useMemo(() => atom((get) => ids.map((id) => get(getWaveObjectAtom<Block>(makeORef("block", id))))), [ids.join(",")]));
@@ -40,9 +44,12 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     const unread = new Set(unreadSessions(sessions, tabId, state?.seen?.[tabId]).map((s) => s.id));
     const on = magnified ?? focused?.id;
     const inProject = !isInboxTab(tab);
+    // As much room under the chips as above them: the panes below already sit half the tile
+    // gap (window:tilegapsize) down, so the strip adds only the rest.
+    const tileGap = Number(tileGapSetting ?? 3);
     return (
         // The strip's empty space drags the window; the chips don't.
-        <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 8px 0", fontFamily: T.mono, fontSize: 11, flexShrink: 0, overflowX: "auto", WebkitAppRegion: "drag" } as React.CSSProperties}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, padding: `${STRIP_GAP}px 8px ${Math.max(0, STRIP_GAP - tileGap / 2)}px`, fontFamily: T.mono, fontSize: 11, flexShrink: 0, overflowX: "auto", WebkitAppRegion: "drag" } as React.CSSProperties}>
             {/* ⌘H / ⌘L step pane by pane (in an Inbox tab from the list through its pages). */}
             {(chips.length > 1 || !inProject) && (
                 <span style={{ marginRight: 6 }}>

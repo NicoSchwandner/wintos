@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { runAction } from "../menu";
 import { T } from "../tokens";
 import { checkbox, type CheckState } from "./checkbox";
 import { parseNotes, spans } from "./parse";
@@ -18,6 +19,19 @@ export function Rich({ text, size }: { text: string; size: Size }) {
                     <span key={i} style={{ fontFamily: T.mono, fontSize: SIZES[size].code, color: T.emphasis, background: T.cardActive, borderRadius: 4, padding: "0 4px", overflowWrap: "anywhere" }}>
                         {s.text}
                     </span>
+                ) : s.url ? (
+                    // Mouse only, like every link: it opens in WintOS, as the PR rows do.
+                    <a
+                        key={i}
+                        href={s.url}
+                        title={s.url}
+                        tabIndex={-1}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={(e) => (e.preventDefault(), e.stopPropagation(), void runAction(`open-page:${s.url}`))}
+                        style={{ color: T.emphasis, textDecoration: "underline", textDecorationColor: T.muted, textUnderlineOffset: 2, overflowWrap: "anywhere", cursor: "pointer" }}
+                    >
+                        {s.text}
+                    </a>
                 ) : (
                     <span key={i}>{s.text}</span>
                 )

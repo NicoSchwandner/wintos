@@ -63,4 +63,25 @@ describe("spans", () => {
             { text: " or " },
             { text: "ocr_result", code: true },
         ]));
+
+    test("a markdown link shows its text and keeps its url", () =>
+        expect(spans("see [the PR](https://github.com/acme/api/pull/7) first")).toEqual([
+            { text: "see " },
+            { text: "the PR", url: "https://github.com/acme/api/pull/7" },
+            { text: " first" },
+        ]));
+
+    test("a bare url shows as host and path, without the sentence's full stop", () =>
+        expect(spans("Deployed to https://www.example.com/runs/42.")).toEqual([
+            { text: "Deployed to " },
+            { text: "example.com/runs/42", url: "https://www.example.com/runs/42" },
+            { text: "." },
+        ]));
+
+    test("a url inside backticks stays code", () => expect(spans("`https://example.com`")).toEqual([{ text: "https://example.com", code: true }]));
+
+    test("a long bare url is shortened", () => {
+        const url = `https://example.com/${"a".repeat(80)}`;
+        expect(spans(url)).toEqual([{ text: `example.com/${"a".repeat(35)}…`, url }]);
+    });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { inboxTabId, isInboxTab, prProjects, projectTabIds, projectPrList, prsByTab, relTime, rowView, sidebarModel, type WintosState } from "./view";
+import { inboxTabId, isInboxTab, prProjects, projectTabIds, projectPrList, prsByTab, relTime, rowView, sidebarModel, withSnoozes, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -174,4 +174,24 @@ describe("prProjects", () => {
         const state = { now: 0, sessions: [], projects: [{ id: "t1", title: "X", titleLocked: false, pr: ["acme/api#5"], dir: "/d", mtime: 0 }], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs: [pr, other] } } }, snoozes: { [pr.url]: { until: 1e15, movedAt: pr.createdAt } } } as unknown as WintosState;
         expect([...prProjects(["t1"], state)]).toEqual([[pr.url, "t1"]]);
     });
+});
+
+describe("withSnoozes", () => {
+    const r = (tabId: string, band: Row["band"]) => row(band, { tabId });
+    const model = { needs: [r("a", "needs")], running: [r("b", "running")], quiet: [r("c", "quiet"), r("d", "quiet")], quietMore: [], quietStale: [r("e", "quiet")] };
+
+    test("a snoozed project leaves every band and the walk, into its own group", () => {
+        const s = withSnoozes(model, { c: 1, e: 1, b: 1 });
+        expect([...s.running, ...s.quiet, ...s.quietMore, ...s.quietStale].map((x) => x.tabId)).toEqual(["d"]);
+        expect(s.snoozed.map((x) => x.tabId)).toEqual(["b", "c", "e"]);
+    });
+
+    test("one that needs you comes back on its own, and is marked to wake", () => {
+        const s = withSnoozes(model, { a: 1 });
+        expect(s.needs.map((x) => x.tabId)).toEqual(["a"]);
+        expect(s.wake).toEqual(["a"]);
+        expect(s.snoozed).toEqual([]);
+    });
+
+    test("nothing snoozed changes nothing", () => expect(withSnoozes(model, {})).toEqual({ ...model, snoozed: [], wake: [] }));
 });

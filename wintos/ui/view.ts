@@ -4,7 +4,7 @@ import type { Project } from "../daemon/projects/store";
 import { GROUPS, isSnoozed, isStacked, lastMovement, projectPrs, qualifier, type Group, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
 import type { Session } from "../daemon/sessions/reduce";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number> };
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; projectSnoozes?: Record<string, number>; seen?: Record<string, number> };
 export type Tone = "apricot" | "brick" | "secondary";
 export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
 
@@ -37,6 +37,24 @@ export function sidebarModel(tabIds: string[], state: WintosState): Ranking {
     const byTab = prsByTab(tabIds, state);
     const blocked = Object.fromEntries(Object.entries(byTab).filter(([, v]) => v.blocked).map(([k, v]) => [k, v.blocked!.since]));
     return rank(tabIds, state.sessions, state.now, touched, blocked, state.seen);
+}
+
+// Snoozed projects (done, but may need re-work) leave the bands and the ⌘J/⌘K walk for their own
+// group; one that needs you (a waiting session, a PR in Fix, a new reply) comes back, and is
+// marked to be woken for good.
+export type SidebarSplit = Ranking & { snoozed: Row[]; wake: string[] };
+export function withSnoozes(model: Ranking, snoozed: Record<string, number> = {}): SidebarSplit {
+    const is = (r: Row) => r.tabId in snoozed;
+    const out = (rows: Row[]) => rows.filter((r) => !is(r));
+    return {
+        needs: model.needs,
+        running: out(model.running),
+        quiet: out(model.quiet),
+        quietMore: out(model.quietMore),
+        quietStale: out(model.quietStale),
+        snoozed: [...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].filter(is),
+        wake: model.needs.filter(is).map((r) => r.tabId),
+    };
 }
 
 export function rowView(row: Row, project: Project | undefined, tabName: string | undefined, now: number, prs?: ProjectPrs): RowView {

@@ -2,7 +2,7 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, isDev } from "@/store/global";
-import { closeOverlay, editMine, focusArea, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
+import { closeOverlay, editMine, focusArea, focusBlock, isSnoozedProject, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
 import { closeWarning } from "./sessions";
 import { goToInbox } from "./inbox";
 import { mainViewAtom, overlayAtom, renamingAtom, type MainView } from "./notes/state";
@@ -12,6 +12,7 @@ import { isInboxTab } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
 import { installFocusRing } from "./focusRing";
+import { setProjectSnoozed } from "./useWintos";
 import { flog } from "./focusLog";
 import { installFocusOwner, wantPane } from "./focusOwner";
 
@@ -64,6 +65,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:ArrowLeft", "pane-prev"],
     ["Option:Cmd:ArrowRight", "pane-next"],
     ["Shift:Cmd:c", "copy-url"],
+    ["Option:Cmd:z", "snooze-project"],
     ["Cmd:1", "focus-left"],
     ["Cmd:2", "focus-right"],
 ];
@@ -112,7 +114,7 @@ export function runKey(action: string): boolean {
 
 // The Inbox holds pages and nothing else: a terminal or a Claude session started there would
 // belong to no project and never show in the sidebar, Needs you or ⌃⇥.
-const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes"]);
+const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "snooze-project"]);
 export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
 
@@ -130,6 +132,11 @@ export function runAction(action: string): void {
     if (action === "palette" || action === "keymap") return toggleOverlay(action);
     // ⌘1 / ⌘2: the left and the right area, the same in every tab (the sidebar never takes
     // focus): the Inbox's list and its page, a project's terminals and its notes.
+    // ⌥⌘Z: this project is done for now; the same key, or opening it, brings it back.
+    if (action === "snooze-project") {
+        const tabId = globalStore.get(atoms.staticTabId);
+        return void setProjectSnoozed(tabId, !isSnoozedProject(tabId));
+    }
     if (action === "focus-left") return inInbox() ? void document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus() : focusArea("terminal");
     if (action === "focus-right") return focusArea(inInbox() ? "terminal" : "notes");
     if (action.startsWith("focus-")) return focusArea(action.slice(6) as "terminal" | "notes");

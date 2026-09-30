@@ -43,6 +43,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         pluginNames: runner.names,
         pluginsRunning: runner.running,
         snoozes,
+        projectSnoozes,
         seen,
     });
     const broadcast = () => {
@@ -53,6 +54,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // Kept next to the projects: a file there is not a project (those are folders).
     const snoozeFile = join(opts.root, ".snoozes.json");
     let snoozes = readJson<Snoozes>(snoozeFile, {});
+    // Projects you think are done: hidden until they need you or you open them (tab id → since).
+    const projectSnoozeFile = join(opts.root, ".project-snoozes.json");
+    let projectSnoozes = readJson<Record<string, number>>(projectSnoozeFile, {});
     const runner = new PluginRunner(opts.plugins ?? [], () => broadcast());
 
     let watcher: FSWatcher | undefined;
@@ -66,7 +70,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         }
     };
     try {
-        // The daemon's own files (.sessions.json, .snoozes.json, .bindings.json) are not notes.
+        // The daemon's own files (.sessions.json, .snoozes.json, .project-snoozes.json, .bindings.json) are not notes.
         watcher = watch(opts.root, { recursive: true }, (_e, file) => {
             if (file && !file.includes("/") && file.startsWith(".")) return;
             clearTimeout(pending);
@@ -148,6 +152,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const now = Date.now();
                 snoozes = Object.fromEntries(Object.entries(snoozes).filter(([, s]) => s.until > now));
                 writeFileSync(snoozeFile, JSON.stringify(snoozes));
+                broadcast();
+                return send(res, 200, "");
+            }
+            const snoozeTab = /^\/projects\/([^/]+)\/snooze$/.exec(url.pathname);
+            if (req.method === "POST" && snoozeTab) {
+                const b = (await body(req)) as { on?: unknown };
+                if (typeof b?.on !== "boolean") return send(res, 400, "need on: true or false");
+                const tabId = decodeURIComponent(snoozeTab[1]);
+                if (b.on) projectSnoozes = { ...projectSnoozes, [tabId]: Date.now() };
+                else projectSnoozes = Object.fromEntries(Object.entries(projectSnoozes).filter(([id]) => id !== tabId));
+                writeFileSync(projectSnoozeFile, JSON.stringify(projectSnoozes));
                 broadcast();
                 return send(res, 200, "");
             }

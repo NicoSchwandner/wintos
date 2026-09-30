@@ -15,8 +15,8 @@ import { setSwitchOrder, switchTargetAtom } from "./switcher";
 import { registerWintosMenu } from "./menu";
 import { inboxListAtom, renamingAtom, type InboxList } from "./notes/state";
 import { liveSessions } from "./sessions";
-import { instance, setProjectTitle, useWintos } from "./useWintos";
-import { ghPrs, isInboxTab, prsByTab, projectTabIds, rowView, RowView, sidebarModel } from "./view";
+import { instance, setProjectSnoozed, setProjectTitle, useWintos } from "./useWintos";
+import { ghPrs, isInboxTab, prsByTab, projectTabIds, rowView, RowView, sidebarModel, withSnoozes } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
@@ -26,6 +26,7 @@ const BAND_STYLE = {
     needs: { label: "Needs you", color: T.apricot },
     running: { label: "Running", color: T.moss },
     quiet: { label: "Quiet", color: T.muted },
+    snoozed: { label: "Snoozed", color: T.faint },
 } as const;
 
 function useTabs(tabIds: string[]): Record<string, Tab | undefined> {
@@ -52,7 +53,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
-    const model = state ? sidebarModel(tabIds, state) : null;
+    const model = state ? withSnoozes(sidebarModel(tabIds, state), state.projectSnoozes) : null;
     const prsTab = state ? prsByTab(tabIds, state) : {};
     const gh = state ? ghPrs(state) : undefined;
     const queue = gh ? queueModel(gh.prs, gh.me, now, state?.snoozes) : null;
@@ -66,6 +67,10 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const activeStale = model?.quietStale.filter((r) => r.tabId === activeTabId && !expanded) ?? [];
     const quiet = model ? (expanded ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
     const switchOrder = model ? [...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId) : [];
+    // Snoozed rows show on "Show all" or while renaming one; the open one always, to find it again.
+    const snoozedShown = model ? (showAll || renaming != null ? model.snoozed : model.snoozed.filter((r) => r.tabId === activeTabId)) : [];
+    // A snoozed project that needs you is back for good, not only while it needs you.
+    useEffect(() => model?.wake.forEach((id) => void setProjectSnoozed(id, false)), [model?.wake.join(",")]);
 
     useEffect(registerWintosMenu, []);
 
@@ -73,7 +78,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-tabid="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
 
     useEffect(() => {
-        if (state) setLatestSessions(state.sessions, tabIds, model?.needs.map((r) => r.tabId) ?? []);
+        if (state) setLatestSessions(state.sessions, tabIds, model?.needs.map((r) => r.tabId) ?? [], model?.snoozed.map((r) => r.tabId) ?? []);
     }, [state, tabIds.join(",")]);
 
     // The project title is the source of truth; the tab name follows it.
@@ -178,6 +183,18 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                                     {!showAll && model.quietStale.length > 0 && (
                                         <span style={{ color: T.faint }}> · includes {model.quietStale.length} untouched over two weeks</span>
                                     )}
+                                </button>
+                            )}
+                        </Band>
+                        <Band kind="snoozed" count={model.snoozed.length} shown={snoozedShown.length}>
+                            {snoozedShown.map(renderRow)}
+                            {!showAll && snoozedShown.length < model.snoozed.length && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAll(true)}
+                                    style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.faint, cursor: "pointer" }}
+                                >
+                                    Show {model.snoozed.length} snoozed · opening one wakes it
                                 </button>
                             )}
                         </Band>

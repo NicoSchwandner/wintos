@@ -10,7 +10,7 @@ import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
 import { useZoneKeys } from "./zones";
-import { projectPrList, projectTabIds, relTime, sidebarModel } from "./view";
+import { projectPrList, projectTabIds, relTime, sidebarModel, withSnoozes } from "./view";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 
 const KIND_LABEL = { project: "Projects", session: "Sessions", action: "Do" } as const;
@@ -29,13 +29,14 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
         const activeTab = globalStore.get(atoms.staticTabId);
         const ids = ws?.tabids ?? [];
         const tabIds = projectTabIds(ids, Object.fromEntries(ids.map((id) => [id, globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))])));
-        const model = sidebarModel(tabIds, state);
+        const model = withSnoozes(sidebarModel(tabIds, state), state.projectSnoozes);
         const title = (id: string) => state.projects.find((p) => p.id === id)?.title ?? names[id] ?? "Untitled";
         const band: Record<string, string> = {};
         for (const r of model.needs) band[r.tabId] = "needs you";
         for (const r of model.running) band[r.tabId] = "running";
         for (const r of [...model.quiet, ...model.quietMore]) band[r.tabId] = "quiet";
         for (const r of model.quietStale) band[r.tabId] = `out of the sidebar · last touched ${relTime(now - r.lastAt)} ago`;
+        for (const r of model.snoozed) band[r.tabId] = "snoozed · opening it wakes it";
         const out: PaletteItem[] = tabIds.map((id) => ({
             id: `p:${id}`, kind: "project", title: title(id),
             subtitle: [band[id], state.projects.find((p) => p.id === id)?.next].filter(Boolean).join(" · "),

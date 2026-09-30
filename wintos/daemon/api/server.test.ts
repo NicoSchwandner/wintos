@@ -271,6 +271,27 @@ describe("PR snoozes", () => {
     });
 });
 
+describe("project snoozes", () => {
+    test("a snoozed project is in state and survives a restart", async () => {
+        expect((await post("/projects/tab-1/snooze", { on: true })).status).toBe(200);
+        expect(Object.keys((await (await fetch(base + "/state")).json()).projectSnoozes)).toEqual(["tab-1"]);
+        await srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect((await (await fetch(base + "/state")).json()).projectSnoozes["tab-1"]).toBeDefined();
+    });
+
+    test("on false wakes it", async () => {
+        await post("/projects/tab-1/snooze", { on: true });
+        await post("/projects/tab-1/snooze", { on: false });
+        expect((await (await fetch(base + "/state")).json()).projectSnoozes).toEqual({});
+    });
+
+    test("anything but on true or false is refused", async () => {
+        expect((await post("/projects/tab-1/snooze", { on: "yes" })).status).toBe(400);
+    });
+});
+
 describe("sessions across a restart", () => {
     test("a session waiting on you at quit is still shown waiting, marked not started", async () => {
         await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { hook_event_name: "Stop", session_id: "s-1" } });

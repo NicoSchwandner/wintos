@@ -20,6 +20,7 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         item("New Project", "project", "Cmd+N"),
         item("Rename Project", "rename", "Cmd+R"),
         item("Close Project", "close-project", "Shift+Cmd+W"),
+        item("Snooze Project", "snooze-project", "Alt+Cmd+Z"),
         { type: "separator" },
         item("Focus Left (terminals · Inbox list)", "focus-left", "Cmd+1"),
         item("Focus Right (notes · Inbox page)", "focus-right", "Cmd+2"),

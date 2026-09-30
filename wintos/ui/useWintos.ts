@@ -62,6 +62,11 @@ export function useWintos(): Snapshot {
     return s;
 }
 
+// ⌥⌘Z, opening a project, or it needing you: in or out of the sidebar's Snoozed group.
+export function setProjectSnoozed(tabId: string, on: boolean): Promise<Response> {
+    return daemonFetch(`/projects/${encodeURIComponent(tabId)}/snooze`, { method: "POST", body: { on } });
+}
+
 export function setProjectTitle(tabId: string, title: string, manual: boolean): Promise<Response> {
     return daemonFetch(`/projects/${encodeURIComponent(tabId)}/title`, { method: "POST", body: { title, manual } });
 }

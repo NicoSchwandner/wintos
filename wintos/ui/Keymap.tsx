@@ -7,7 +7,7 @@ import { T } from "./tokens";
 
 // Only keys that exist. KeymapC lists a few more from the spec that are not built yet.
 const SECTIONS: [string, [string, string][]][] = [
-    ["Projects", [["⌘J / ⌘K", "hold ⌘, tap to walk all projects, release to switch"], ["⌘N", "new project"], ["⌘R", "rename this project"], ["⇧⌘W", "close this project (asks first while Claude runs)"]]],
+    ["Projects", [["⌘J / ⌘K", "hold ⌘, tap to walk all projects, release to switch"], ["⌘N", "new project"], ["⌘R", "rename this project"], ["⇧⌘W", "close this project (asks first while Claude runs)"], ["⌥⌘Z", "snooze this project: out of the sidebar and ⌘J/⌘K until it needs you or you open it"]]],
     ["Sessions", [["⌃⇥", "next that needs you: a waiting session, else a project"], ["⌘T / ⇧⌘T", "new terminal · new Claude session"], ["⌥⌘← → / ⌃⇧←→↑↓", "previous · next pane (the strip) / the pane in that direction"], ["⇧⌘C", "copy a browser pane's url"], ["⌘W / ⌘M", "close · magnify the focused pane"]]],
     ["Open", [["⇧⌘P", "everything, including dropped projects"], ["⇧⌘J", "notes, full width"], ["⇧⌘G / ⇧⌘O", "the Inbox: PRs · on call"], ["⇧⌘K", "this card"]]],
     ["Focus", [["⌘1 / ⌘2", "left · right: terminals · notes, in the Inbox list · page"], ["esc", "closes an overlay · a list back to its panes · an Inbox page back to its list"]]],

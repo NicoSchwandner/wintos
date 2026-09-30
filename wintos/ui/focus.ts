@@ -5,6 +5,7 @@ import type { Session } from "../daemon/sessions/reduce";
 import { nextNeedsYou, Target } from "./sessions";
 import { editingMineAtom, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
 import { wantPane } from "./focusOwner";
+import { setProjectSnoozed } from "./useWintos";
 import { flog, where } from "./focusLog";
 
 // Every Wave tab runs in its own renderer, so a renderer can only magnify blocks of its own
@@ -13,8 +14,9 @@ import { flog, where } from "./focusLog";
 const HANDOFF = "wintos:focus";
 const HANDOFF_TTL_MS = 5000;
 
-let latest: { sessions: Session[]; tabIds: string[]; needs: string[] } = { sessions: [], tabIds: [], needs: [] };
-export const setLatestSessions = (sessions: Session[], tabIds: string[], needs: string[]) => (latest = { sessions, tabIds, needs });
+let latest: { sessions: Session[]; tabIds: string[]; needs: string[]; snoozed: string[] } = { sessions: [], tabIds: [], needs: [], snoozed: [] };
+export const setLatestSessions = (sessions: Session[], tabIds: string[], needs: string[], snoozed: string[] = []) => (latest = { sessions, tabIds, needs, snoozed });
+export const isSnoozedProject = (tabId: string) => latest.snoozed.includes(tabId);
 export const latestSessions = () => latest.sessions;
 
 export function magnifyBlock(blockId: string): boolean {
@@ -34,7 +36,11 @@ export function focusBlock(blockId: string): void {
 
 // Every project switch: the project opens on its terminals. Views are per renderer, so a PR
 // view left open in a project would otherwise greet you there later.
-export const enterProject = (tabId: string) => focusSession({ tabId, blockId: "" });
+// Opening a snoozed project (from its PR, the palette, the Snoozed group) wakes it.
+export function enterProject(tabId: string): void {
+    if (isSnoozedProject(tabId)) void setProjectSnoozed(tabId, false);
+    focusSession({ tabId, blockId: "" });
+}
 
 export function focusSession(t: Target): void {
     if (t.tabId === globalStore.get(atoms.staticTabId)) return landOn(t.blockId);

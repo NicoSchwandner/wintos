@@ -48,7 +48,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const { state: raw, offline } = useWintos();
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
     const now = useNow();
-    const [showAll, setShowAll] = useState(false);
+    const [showAll, setShowAll] = useStoredFlag("wintos:show-all-quiet");
+    const [showSnoozed, setShowSnoozed] = useStoredFlag("wintos:show-snoozed");
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
@@ -66,9 +67,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const activeStale = model?.quietStale.filter((r) => r.tabId === activeTabId && !expanded) ?? [];
     const quiet = model ? (expanded ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
     const switchOrder = model ? [...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId) : [];
-    // Snoozed rows show on "Show all" or while renaming one; the open one always, to find it again.
+    // Snoozed rows show on their own toggle or while renaming one; the open one always, to find it again.
     const isSnoozedHere = !!model?.snoozed.some((r) => r.tabId === activeTabId);
-    const snoozedShown = model ? (showAll || renaming != null ? model.snoozed : model.snoozed.filter((r) => r.tabId === activeTabId)) : [];
+    const snoozedShown = model ? (showSnoozed || renaming != null ? model.snoozed : model.snoozed.filter((r) => r.tabId === activeTabId)) : [];
     // A snoozed project that needs you is back for good, not only while it needs you.
     useEffect(() => model?.wake.forEach((id) => void setProjectSnoozed(id, false)), [model?.wake.join(",")]);
 
@@ -176,7 +177,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                             {(model.quietMore.length > 0 || model.quietStale.length > 0) && (
                                 <button
                                     type="button"
-                                    onClick={() => setShowAll((s) => !s)}
+                                    onClick={() => setShowAll(!showAll)}
                                     style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", borderTop: `1px solid #32302f`, textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}
                                 >
                                     {showAll ? "Show fewer" : `Show all ${model.quiet.length + model.quietMore.length + model.quietStale.length}`}
@@ -188,13 +189,13 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         </Band>
                         <Band kind="snoozed" count={model.snoozed.length} shown={snoozedShown.length}>
                             {snoozedShown.map(renderRow)}
-                            {!showAll && snoozedShown.length < model.snoozed.length && (
+                            {(showSnoozed || snoozedShown.length < model.snoozed.length) && (
                                 <button
                                     type="button"
-                                    onClick={() => setShowAll(true)}
+                                    onClick={() => setShowSnoozed(!showSnoozed)}
                                     style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.faint, cursor: "pointer" }}
                                 >
-                                    Show {model.snoozed.length} snoozed · opening one wakes it
+                                    {showSnoozed ? "Hide snoozed" : `Show ${model.snoozed.length} snoozed · opening one wakes it`}
                                 </button>
                             )}
                         </Band>
@@ -396,4 +397,32 @@ function SummaryCard({ label, keys, stats, note, noteColor, busy, active, onClic
             )}
         </div>
     );
+}
+
+// A sidebar toggle kept in localStorage, which every project's renderer shares: one setting for
+// all projects, like the notes rail's width.
+function useStoredFlag(key: string): [boolean, (on: boolean) => void] {
+    const read = () => {
+        try {
+            return localStorage.getItem(key) === "1";
+        } catch {
+            return false;
+        }
+    };
+    const [on, setOn] = useState(read);
+    useEffect(() => {
+        const sync = () => setOn(read());
+        window.addEventListener("storage", sync);
+        document.addEventListener("visibilitychange", sync);
+        return () => (window.removeEventListener("storage", sync), document.removeEventListener("visibilitychange", sync));
+    }, []);
+    return [
+        on,
+        (next) => {
+            setOn(next);
+            try {
+                localStorage.setItem(key, next ? "1" : "0");
+            } catch {}
+        },
+    ];
 }

@@ -80,6 +80,23 @@ function focusedBlockView(): string | undefined {
 
 export const focusedPageUrl = (block: Block | undefined): string | undefined => (block?.meta?.view === "web" ? block.meta.url : undefined);
 
+function stepInbox(right: boolean): void {
+    const list = document.querySelector<HTMLElement>("[data-wintos=inbox-list]");
+    const lm = getLayoutModelForStaticTab();
+    const tab = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))));
+    const pages = paneOrder(globalStore.get(lm.leafOrder), tab?.blockids ?? []);
+    if (zoneOf(document.activeElement) !== "pane") return right && pages.length ? focusArea("terminal") : undefined;
+    const magnified = globalStore.get(lm.magnifiedNodeIdAtom);
+    const shown = pages.find((id) => lm.getNodeByBlockId(id)?.id === magnified) ?? globalStore.get(lm.focusedNode)?.data?.blockId;
+    const i = pages.indexOf(shown ?? "");
+    const next = pages[i + (right ? 1 : -1)];
+    if (next) {
+        wantPane("⌘H/⌘L");
+        return void magnifyBlock(next);
+    }
+    if (!right) list?.focus(); // left of the first page is the list
+}
+
 // ⌥⌘J/K: the pane below / above, in a split stacked with ⇧⌘D. Where one pane shows at a time (an
 // Inbox tab, a magnified pane) they step to the next / previous pane in strip order instead.
 function movePane(dir: NavigateDirection): boolean {
@@ -91,13 +108,10 @@ function movePane(dir: NavigateDirection): boolean {
 }
 
 // ⌘H / ⌘L: one step left or right in what you see. In a project from pane to pane, and past the
-// rightmost pane into the notes (opening the rail if it is folded away); in an Inbox tab between
-// the list and its page.
+// rightmost pane into the notes (opening the rail if it is folded away). In an Inbox tab the
+// list, then its pages in strip order, each brought to the front: list ← page ← page.
 function stepSideways(right: boolean): void {
-    if (inInbox()) {
-        if (right) return void (document.querySelector("[data-blockid]") && focusArea("terminal"));
-        return void document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus();
-    }
+    if (inInbox()) return stepInbox(right);
     const zone = zoneOf(document.activeElement);
     // The notes are the rightmost thing: ⌘H goes back to the terminals, ⌘L stays.
     if (zone === "list" || globalStore.get(mainViewAtom) === "notes") return right ? undefined : focusArea("terminal");

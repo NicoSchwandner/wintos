@@ -43,8 +43,8 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     return (
         // The strip's empty space drags the window; the chips don't.
         <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 8px 0", fontFamily: T.mono, fontSize: 11, flexShrink: 0, overflowX: "auto", WebkitAppRegion: "drag" } as React.CSSProperties}>
-            {/* ⌘H / ⌘L step pane by pane in a project; in an Inbox tab they move between list and page. */}
-            {inProject && chips.length > 1 && (
+            {/* ⌘H / ⌘L step pane by pane (in an Inbox tab from the list through its pages). */}
+            {(chips.length > 1 || !inProject) && (
                 <span style={{ marginRight: 6 }}>
                     <Key k="⌘H" label="←" />
                 </span>
@@ -75,7 +75,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                     </button>
                 );
             })}
-            {inProject && chips.length > 1 && (
+            {(chips.length > 1 || !inProject) && (
                 <span style={{ marginLeft: 6 }}>
                     <Key k="⌘L" label="→" />
                 </span>

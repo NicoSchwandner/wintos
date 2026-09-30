@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { T } from "../tokens";
 import { checkbox, type CheckState } from "./checkbox";
 import { parseNotes, spans } from "./parse";
@@ -64,8 +65,24 @@ function Line({ lead, size, children }: { lead: React.ReactNode; size: Size; chi
     );
 }
 
+// Long lists stay short: past this many, the rest (later decisions, ticked Built items) wait behind a button.
+const LONG = 4;
+
+function More({ open, label, onClick }: { open: boolean; label: string; onClick: () => void }) {
+    return (
+        <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{ alignSelf: "flex-start", padding: 0, background: "transparent", border: "none", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}>
+            {open ? "Show fewer" : label}
+        </button>
+    );
+}
+
 export function ProjectNotes({ md, size }: { md: string; size: Size }) {
     const n = parseNotes(md);
+    const [allDecisions, setAllDecisions] = useState(false);
+    const [allBuilt, setAllBuilt] = useState(false);
+    const decisions = allDecisions ? n.decisions : n.decisions.slice(0, LONG);
+    const checked = n.built.length > LONG ? n.built.filter((b) => b.state === "done").length : 0;
+    const built = allBuilt || !checked ? n.built : n.built.filter((b) => b.state !== "done");
     const z = SIZES[size];
     const dot = (color: string) => (
         <span style={{ width: size === "rail" ? 6 : 7, height: size === "rail" ? 6 : 7, borderRadius: "50%", background: color, flexShrink: 0, marginTop: size === "rail" ? 6 : 8 }} />
@@ -83,7 +100,7 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
             )}
             {n.decisions.length > 0 && (
                 <Section label="Decisions" size={size}>
-                    {n.decisions.map((d, i) => (
+                    {decisions.map((d, i) => (
                         <Line
                             key={i}
                             size={size}
@@ -92,15 +109,17 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
                             <Rich text={d.text} size={size} />
                         </Line>
                     ))}
+                    {n.decisions.length > LONG && <More open={allDecisions} label={`Show ${n.decisions.length - LONG} more`} onClick={() => setAllDecisions(!allDecisions)} />}
                 </Section>
             )}
             {n.built.length > 0 && (
                 <Section label="Built" size={size}>
-                    {n.built.map((b, i) => (
+                    {built.map((b, i) => (
                         <Line key={i} size={size} lead={b.state ? <Box state={b.state} size={size} /> : dot(T.dim)}>
                             <Rich text={b.text} size={size} />
                         </Line>
                     ))}
+                    {checked > 0 && <More open={allBuilt} label={`Show ${checked} checked`} onClick={() => setAllBuilt(!allBuilt)} />}
                 </Section>
             )}
             {n.questions.length > 0 && (

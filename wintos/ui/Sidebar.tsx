@@ -207,6 +207,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 <Key k="⌃⇥" label="waiting" />
                 {!isInboxTab(tabs[activeTabId]) && <Key k="⌘R" label="rename" />}
                 {!isInboxTab(tabs[activeTabId]) && <Key k="⌥⌘Z" label={isSnoozedHere ? "wake" : "snooze"} />}
+                {state?.sessions.some((x) => x.tabId === activeTabId && x.state === "waiting") && <Key k="⌥⌘P" label="park" />}
             </div>
         </div>
     );

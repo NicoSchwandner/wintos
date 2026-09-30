@@ -62,6 +62,11 @@ describe("reduceSession", () => {
 describe("parkSession (`wintos wait`)", () => {
     const park = (m: Map<string, Session>, reason = "CI on #1479") => parkSession(m, "blk-1", reason, 5000);
 
+    test("a turn that already ended waiting on you parks at once (you parked it: nothing for you)", () => {
+        const m = run([ev(start), ev(prompt), ev(stop)]);
+        expect(only(park(m, "parked by you"))).toMatchObject({ state: "parked", parkedOn: "parked by you", since: 5000 });
+    });
+
     test("a turn that ends after `wintos wait` is parked, not waiting on the developer", () => {
         const m = run([ev(start), ev(prompt)]);
         const s = only(reduceSession(park(m), ev(stop), 6000));

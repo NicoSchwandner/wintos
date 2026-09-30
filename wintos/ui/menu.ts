@@ -14,7 +14,7 @@ import { isInboxTab } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
 import { installFocusRing } from "./focusRing";
-import { setProjectSnoozed } from "./useWintos";
+import { parkBlock, setProjectSnoozed } from "./useWintos";
 import { flog } from "./focusLog";
 import { installFocusOwner, rememberReturn, returnFocus, wantPane } from "./focusOwner";
 
@@ -70,6 +70,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:c{KeyK}", "pane-up"],
     ["Shift:Cmd:c", "copy-url"],
     ["Option:Cmd:z", "snooze-project"],
+    ["Option:Cmd:p", "park-session"],
     ["Cmd:h", "focus-left"],
     ["Cmd:l", "focus-right"],
 ];
@@ -176,7 +177,7 @@ export function runKey(action: string): boolean {
 // The Inbox holds pages and nothing else: a terminal or a Claude session started there would
 // belong to no project and never show in the sidebar, Needs you or ⌃⇥.
 const PANE_MAKERS = new Set(["session", "terminal", "browser", "files", "sysinfo", "processes", "open-page"]);
-const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "snooze-project"]);
+const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "snooze-project", "park-session"]);
 export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
 
@@ -199,6 +200,15 @@ export function runAction(action: string): void {
     // ⌘H / ⌘L: the left and the right area, the same in every tab (the sidebar never takes
     // focus): the Inbox's list and its page, a project's terminals and its notes.
     // ⌥⌘Z: this project is done for now; the same key, or opening it, brings it back.
+    // You read the turn and nothing is yours: it waits on something outside, as with `wintos wait`.
+    // The focused session if it waits on you, else every one in this project that does.
+    if (action === "park-session") {
+        const tabId = globalStore.get(atoms.staticTabId);
+        const waiting = latestSessions().filter((s) => s.tabId === tabId && s.state === "waiting");
+        const focused = focusedSession();
+        for (const s of focused?.state === "waiting" ? [focused] : waiting) void parkBlock(s.blockId);
+        return;
+    }
     if (action === "snooze-project") {
         const tabId = globalStore.get(atoms.staticTabId);
         return void setProjectSnoozed(tabId, !isSnoozedProject(tabId));

@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useZoneKeys } from "../zones";
 import { toggleView } from "../menu";
 import { railCollapsedAtom, setRailCollapsed, syncRailCollapsed, useRailWidth } from "./railWidth";
@@ -30,19 +30,18 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
         handle.onpointermove = (m) => setWidth(right - m.clientX);
         handle.onpointerup = () => ((handle.onpointermove = handle.onpointerup = null), saveWidth());
     };
+    // Folded, the rail takes no room: a button floats over the terminals' right edge.
     if (collapsed)
         return (
-            <div onClick={() => setRailCollapsed(false)} title="Show the notes (⌘L)" style={{ width: 20, flexShrink: 0, cursor: "pointer", borderLeft: `1px solid ${T.hairline}`, display: "flex", justifyContent: "center", paddingTop: 12, color: T.faint, fontSize: 13 }}>
-                ‹
+            <div style={{ position: "relative", width: 0, flexShrink: 0 }}>
+                <RailToggle open={false} />
             </div>
         );
     return (
         <>
-        {/* The rail's left edge: drag to resize, as the sidebar's right edge; › at its top folds it away. */}
-        <div onPointerDown={drag} style={{ width: 9, flexShrink: 0, cursor: "col-resize", borderLeft: `1px solid ${T.hairline}`, display: "flex", justifyContent: "center" }}>
-            <span onPointerDown={(e) => e.stopPropagation()} onClick={() => setRailCollapsed(true)} title="Hide the notes" style={{ marginTop: 10, cursor: "pointer", color: T.faint, fontSize: 13, lineHeight: 1 }}>
-                ›
-            </span>
+        {/* The rail's left edge: drag to resize, as the sidebar's right edge; the button on it folds the rail away. */}
+        <div onPointerDown={drag} style={{ position: "relative", width: 9, flexShrink: 0, cursor: "col-resize", borderLeft: `1px solid ${T.hairline}` }}>
+            <RailToggle open />
         </div>
         <div
             data-wintos="notes-rail"
@@ -83,3 +82,26 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
     );
 });
 NotesRail.displayName = "NotesRail";
+
+// Fold or unfold the rail: a real button, 24px (WCAG 2.2 target size), named and stating whether
+// the rail is open, sitting on the divider. It never takes focus (⌘L is the keyboard way).
+function RailToggle({ open }: { open: boolean }) {
+    const [hover, setHover] = useState(false);
+    return (
+        <button
+            type="button"
+            aria-label={open ? "Hide the notes" : "Show the notes"}
+            aria-expanded={open}
+            title={open ? "Hide the notes" : "Show the notes (⌘L)"}
+            tabIndex={-1}
+            onPointerDown={(e) => (e.stopPropagation(), e.preventDefault())}
+            onClick={(e) => (e.stopPropagation(), setRailCollapsed(open))}
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => setHover(false)}
+            // Open: on the divider. Folded: floating over the terminals, dimmed until pointed at.
+            style={{ position: "absolute", top: 10, left: open ? -12 : -34, zIndex: 20, width: 24, height: 24, borderRadius: 12, border: `1px solid ${hover ? T.borderActive : T.border}`, background: T.ground, color: hover ? T.title : T.muted, opacity: open || hover ? 1 : 0.55, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, boxShadow: open ? "none" : "0 2px 8px rgba(0,0,0,0.4)" }}
+        >
+            <i className={`fa-solid ${open ? "fa-chevron-right" : "fa-chevron-left"}`} style={{ fontSize: 10 }} />
+        </button>
+    );
+}

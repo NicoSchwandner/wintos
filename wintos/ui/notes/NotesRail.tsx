@@ -50,6 +50,12 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
             ref={ref}
             style={{ width, flexShrink: 0, boxSizing: "border-box", padding: "12px 22px 12px 17px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", overflowX: "hidden", outline: "none", fontFamily: T.ui }}
         >
+            {project?.next && (
+                <div style={{ padding: "10px 12px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 5 }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.muted }}>Next action</span>
+                    <span style={{ fontSize: 12.5, lineHeight: 1.55, color: T.secondary }}>{project.next}</span>
+                </div>
+            )}
             <div style={{ padding: "12px 14px", background: "#282828", border: `1px solid ${editing ? T.borderActive : T.keycapBorder}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>mine.md</span>
@@ -57,12 +63,6 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
                 </div>
                 <Mine text={notes?.mine ?? ""} mtime={notes?.mineMtime ?? 0} canEdit={!!notes} save={save} size="rail" />
             </div>
-            {project?.next && (
-                <div style={{ padding: "10px 12px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 5 }}>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.muted }}>Next action</span>
-                    <span style={{ fontSize: 12.5, lineHeight: 1.55, color: T.secondary }}>{project.next}</span>
-                </div>
-            )}
             <PrList tabId={tabId} size="rail" />
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

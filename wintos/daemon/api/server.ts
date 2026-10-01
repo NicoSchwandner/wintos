@@ -129,6 +129,16 @@ export async function startServer(opts: { root: string; port: number; host?: str
             if (req.method === "POST" && plugin) {
                 return (await runner.run(decodeURIComponent(plugin[1]))) ? send(res, 200, "") : send(res, 404, "no such plugin");
             }
+            if (req.method === "GET" && url.pathname === "/projects/texts") return json(res, store.texts());
+            const reopen = /^\/projects\/([^/]+)\/reopen$/.exec(url.pathname);
+            if (req.method === "POST" && reopen) {
+                const b = (await body(req)) as { tabId?: unknown };
+                if (!isSafe(b?.tabId)) return send(res, 400, "need the new tab's id");
+                const r = store.reopen(decodeURIComponent(reopen[1]), b.tabId);
+                if (r !== "ok") return send(res, r === "taken" ? 409 : 404, r);
+                broadcast();
+                return send(res, 200, "");
+            }
             const notes = /^\/projects\/([^/]+)\/notes$/.exec(url.pathname);
             if (req.method === "GET" && notes) {
                 const n = store.notes(decodeURIComponent(notes[1]));

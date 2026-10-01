@@ -87,6 +87,28 @@ export class ProjectStore {
         return { dir: p.dir, projectMd: p.error ? null : (p.body ?? ""), mine: existsSync(mineFile) ? readFileSync(mineFile, "utf8") : "", mineMtime: mtimeOf(mineFile) };
     }
 
+    // Every project's notes for the palette's search, closed projects included.
+    texts(): Record<string, { body: string; mine: string }> {
+        const out: Record<string, { body: string; mine: string }> = {};
+        for (const p of this.projects) {
+            if (!p.id) continue;
+            const mineFile = join(p.dir, "mine.md");
+            out[p.id] = { body: p.body ?? "", mine: existsSync(mineFile) ? readFileSync(mineFile, "utf8") : "" };
+        }
+        return out;
+    }
+
+    // A closed project's folder taken up by a new tab: the binding moves, and read() rewrites the
+    // file's id to match.
+    reopen(fromId: string, tabId: string): "ok" | "no project" | "taken" {
+        const p = this.byTab(fromId);
+        if (!p) return "no project";
+        if (this.byTab(tabId)) return "taken";
+        this.bind(p.dir, tabId);
+        this.reload();
+        return "ok";
+    }
+
     // The only file WintOS writes on the developer's behalf; always inside the project folder.
     // baseMtime is the version the edit started from: if the file changed since (the developer's
     // own editor), the save is refused rather than overwriting that edit.

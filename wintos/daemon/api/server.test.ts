@@ -105,6 +105,32 @@ describe("wintosd API", () => {
     });
 });
 
+describe("search and reopen", () => {
+    test("GET texts gives every project's notes and mine.md, for the palette's search", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        await post("/projects/tab-2/title", { title: "Y", manual: false });
+        writeFileSync(join(root, "x", "mine.md"), "rules\n");
+        const t = await (await fetch(base + "/projects/texts")).json();
+        expect(t).toEqual({ "tab-1": { body: "", mine: "rules\n" }, "tab-2": { body: "", mine: "" } });
+    });
+
+    test("reopening a closed project binds its folder to the new tab", async () => {
+        await post("/projects/tab-old/title", { title: "X", manual: false });
+        expect((await post("/projects/tab-old/reopen", { tabId: "tab-new" })).status).toBe(200);
+        const n = await (await fetch(base + "/projects/tab-new/notes")).json();
+        expect(n.dir).toBe(join(root, "x"));
+        expect(require("fs").readFileSync(join(root, "x", "project.md"), "utf8")).toContain("id: tab-new");
+        expect((await fetch(base + "/projects/tab-old/notes")).status).toBe(404);
+    });
+
+    test("reopen refuses an unknown project, and a tab that already has one", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        await post("/projects/tab-2/title", { title: "Y", manual: false });
+        expect((await post("/projects/nope/reopen", { tabId: "tab-3" })).status).toBe(404);
+        expect((await post("/projects/tab-1/reopen", { tabId: "tab-2" })).status).toBe(409);
+    });
+});
+
 describe("notes", () => {
     test("GET notes returns project.md's body and mine.md", async () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });

@@ -17,3 +17,10 @@ export function toggleCheckbox(md: string, lineIndex: number): string {
     lines[lineIndex] = `${m[1]}${ticked ? " " : "x"}${m[3]}${m[4]}`;
     return lines.join("\n");
 }
+
+// A plain markdown bullet (`- x`, `* x`, `+ x`), nested two spaces a level; task lines are checkbox().
+export function bullet(line: string): { depth: number; text: string } | undefined {
+    if (TASK.test(line)) return undefined;
+    const m = /^(\s*)[-*+] (.*)$/.exec(line);
+    return m ? { depth: Math.floor(m[1].replace(/\t/g, "  ").length / 2), text: m[2] } : undefined;
+}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { runAction } from "../menu";
 import { T } from "../tokens";
-import { checkbox, type CheckState } from "./checkbox";
+import { bullet, checkbox, type CheckState } from "./checkbox";
 import { parseNotes, spans } from "./parse";
 
 
@@ -56,6 +56,16 @@ export function Box({ state, size, onToggle }: { state: CheckState; size: Size; 
         <button type="button" onClick={onToggle} title={state === "done" ? "Untick" : "Tick"} aria-label={state === "done" ? "Untick" : "Tick"} style={style}>
             {mark}
         </button>
+    );
+}
+
+// A markdown bullet line: a small dot, indented by its nesting.
+export function Bullet({ depth, text, size }: { depth: number; text: string; size: Size }) {
+    return (
+        <span style={{ display: "flex", gap: 8, minWidth: 0, marginLeft: depth * 14 }}>
+            <span style={{ width: 4, height: 4, borderRadius: "50%", background: T.muted, flexShrink: 0, marginTop: size === "rail" ? 8 : 9 }} />
+            <span style={{ minWidth: 0, overflowWrap: "anywhere" }}><Rich text={text} size={size} /></span>
+        </span>
     );
 }
 
@@ -150,6 +160,8 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
                 <Section key={i} label={o.heading || "Notes"} size={size}>
                     {o.text.split("\n").map((line, j) => {
                         const cb = checkbox(line);
+                        const b = !cb && bullet(line);
+                        if (b) return <span key={j} style={{ fontSize: z.text, lineHeight: z.line, color: z.textColor }}><Bullet depth={b.depth} text={b.text} size={size} /></span>;
                         return cb ? (
                             <Line key={j} size={size} lead={<Box state={cb.state} size={size} />}>
                                 <Rich text={cb.text} size={size} />

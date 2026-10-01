@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
+import { Mine } from "./Mine";
 import { ProjectNotes } from "./ProjectNotes";
 
 const md = (decisions: number, done: number, todo: number) =>
@@ -20,4 +21,14 @@ describe("ProjectNotes long lists", () => {
     });
 
     test("4 Built items show whole, ticked ones too", () => expect(html(md(1, 3, 1)).includes("done 1")).toBe(true));
+
+    test("bullets in other sections show as a list, without their dash", () => {
+        const h = html("## Notes\n- first\n  - nested");
+        expect([h.includes("- first"), h.includes("first"), h.includes("margin-left:14px")]).toEqual([false, true, true]);
+    });
+});
+
+test("mine.md bullets show as a list too", () => {
+    const h = renderToStaticMarkup(<Mine text={"- respect this\n- [ ] a task"} mtime={0} canEdit={false} save={async () => "ok"} size="rail" />);
+    expect([h.includes("- respect"), h.includes("respect this"), h.includes("a task")]).toEqual([false, true, true]);
 });

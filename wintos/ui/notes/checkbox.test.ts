@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { checkbox, toggleCheckbox } from "./checkbox";
+import { bullet, checkbox, toggleCheckbox } from "./checkbox";
 
 describe("checkbox", () => {
     test("reads a task line, any bullet, any indent", () => {
@@ -26,5 +26,15 @@ describe("toggleCheckbox", () => {
     test("a partial one becomes done; a non-checkbox line is left alone", () => {
         expect(toggleCheckbox("- [~] half", 0)).toBe("- [x] half");
         expect(toggleCheckbox(md, 3)).toBe(md);
+    });
+});
+
+describe("bullet", () => {
+    test("a markdown bullet gives its text and how deep it is nested", () => {
+        expect([bullet("- top"), bullet("  * nested"), bullet("    + deeper")]).toEqual([{ depth: 0, text: "top" }, { depth: 1, text: "nested" }, { depth: 2, text: "deeper" }]);
+    });
+
+    test("a task line or plain text is not a bullet", () => {
+        expect([bullet("- [ ] task"), bullet("plain - text"), bullet("-nospace")]).toEqual([undefined, undefined, undefined]);
     });
 });

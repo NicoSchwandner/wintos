@@ -67,7 +67,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const expanded = showAll || switchTarget != null || renaming != null;
     const activeStale = model?.quietStale.filter((r) => r.tabId === activeTabId && !expanded) ?? [];
     const quiet = model ? (expanded ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
-    const switchOrder = model ? [...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId) : [];
+    // Snoozed projects join the walk while their group is shown; landing on one wakes it.
+    const switchOrder = model ? [...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale, ...(showSnoozed ? model.snoozed : [])].map((r) => r.tabId) : [];
     // Snoozed rows show on their own toggle or while renaming one; the open one always, to find it again.
     const isSnoozedHere = !!model?.snoozed.some((r) => r.tabId === activeTabId);
     const snoozedShown = model ? (showSnoozed || renaming != null ? model.snoozed : model.snoozed.filter((r) => r.tabId === activeTabId)) : [];

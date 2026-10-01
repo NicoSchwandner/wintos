@@ -47,32 +47,3 @@ function sections(md: string): { heading: string; lines: string[] }[] {
     }
     return out;
 }
-
-export type Span = { text: string; code?: boolean; url?: string };
-
-// A markdown link, or a bare url up to the sentence's closing punctuation.
-const LINK = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>()\[\]]*[^\s<>()\[\].,;:!?'"])/g;
-
-// A bare url reads as host and path; the scheme and www. say nothing.
-const shortUrl = (url: string) => {
-    const s = url.replace(/^https?:\/\/(www\.)?/, "");
-    return s.length > 47 ? `${s.slice(0, 47)}…` : s;
-};
-
-export function spans(text: string): Span[] {
-    return text
-        .split(/(`[^`]+`)/)
-        .filter(Boolean)
-        .flatMap((s): Span[] => {
-            if (s.startsWith("`") && s.endsWith("`")) return [{ text: s.slice(1, -1), code: true }];
-            const out: Span[] = [];
-            let at = 0;
-            for (const m of s.matchAll(LINK)) {
-                if (m.index! > at) out.push({ text: s.slice(at, m.index) });
-                out.push(m[3] ? { text: shortUrl(m[3]), url: m[3] } : { text: m[1], url: m[2] });
-                at = m.index! + m[0].length;
-            }
-            if (at < s.length) out.push({ text: s.slice(at) });
-            return out;
-        });
-}

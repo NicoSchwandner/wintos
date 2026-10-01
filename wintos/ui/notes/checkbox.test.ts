@@ -1,19 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { bullet, checkbox, toggleCheckbox } from "./checkbox";
-
-describe("checkbox", () => {
-    test("reads a task line, any bullet, any indent", () => {
-        expect(checkbox("- [ ] Test-run with Anton")).toEqual({ state: "todo", text: "Test-run with Anton" });
-        expect(checkbox("  * [x] done")).toEqual({ state: "done", text: "done" });
-        expect(checkbox("- [X] done")).toEqual({ state: "done", text: "done" });
-        expect(checkbox("- [~] half")).toEqual({ state: "partial", text: "half" });
-    });
-
-    test("anything else is not a checkbox", () => {
-        expect(checkbox("- a bullet")).toBeUndefined();
-        expect(checkbox("[ ] no bullet")).toBeUndefined();
-    });
-});
+import { toggleCheckbox } from "./checkbox";
 
 describe("toggleCheckbox", () => {
     const md = "# Mine\n- [ ] one\n- [x] two\nplain";
@@ -26,15 +12,5 @@ describe("toggleCheckbox", () => {
     test("a partial one becomes done; a non-checkbox line is left alone", () => {
         expect(toggleCheckbox("- [~] half", 0)).toBe("- [x] half");
         expect(toggleCheckbox(md, 3)).toBe(md);
-    });
-});
-
-describe("bullet", () => {
-    test("a markdown bullet gives its text and how deep it is nested", () => {
-        expect([bullet("- top"), bullet("  * nested"), bullet("    + deeper")]).toEqual([{ depth: 0, text: "top" }, { depth: 1, text: "nested" }, { depth: 2, text: "deeper" }]);
-    });
-
-    test("a task line or plain text is not a bullet", () => {
-        expect([bullet("- [ ] task"), bullet("plain - text"), bullet("-nospace")]).toEqual([undefined, undefined, undefined]);
     });
 });

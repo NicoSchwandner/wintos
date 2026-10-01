@@ -1,7 +1,7 @@
 import { useAtomValue } from "jotai";
 import { editMine } from "../focus";
-import { bullet, checkbox, toggleCheckbox } from "./checkbox";
-import { Box, Bullet, Rich } from "./ProjectNotes";
+import { toggleCheckbox } from "./checkbox";
+import { Md } from "./Md";
 import { useEffect, useRef, useState } from "react";
 import { T } from "../tokens";
 import { editingMineAtom } from "./state";
@@ -73,9 +73,8 @@ export function Mine({
             </>
         );
     }
-    // Line by line (a blank line is a gap), so a task line can be ticked in place: one line of the
-    // file flips and is saved like an edit, refused if mine.md changed on disk meanwhile.
-    const lines = text.split("\n");
+    // A task box ticks in place: its line of the file flips and is saved like an edit, refused if
+    // mine.md changed on disk meanwhile.
     const tick = async (i: number) => {
         const r = await save(toggleCheckbox(text, i), mtime);
         setError(r === "ok" ? null : r === "conflict" ? "mine.md changed on disk; it reloads, then tick again." : "could not save: wintosd refused or is offline");
@@ -88,20 +87,7 @@ export function Mine({
                     {canEdit ? "Empty. Press ⌘E to write what the sessions must respect." : "Available once the project has a title."}
                 </span>
             )}
-            {lines.map((line, i) => {
-                if (!line.trim()) return i > 0 && lines[i - 1].trim() ? <span key={i} style={{ height: size === "rail" ? 4 : 8 }} /> : null;
-                const cb = checkbox(line);
-                const style = { fontFamily: size === "full" ? T.mono : T.ui, fontSize: 12.5, lineHeight: 1.6, color: /^#+ /.test(line) ? T.apricot : T.secondary };
-                const b = !cb && bullet(line);
-                if (b) return <span key={i} style={style}><Bullet depth={b.depth} text={b.text} size={size} /></span>;
-                if (!cb) return <span key={i} style={{ ...style, overflowWrap: "anywhere" }}><Rich text={line} size={size} /></span>;
-                return (
-                    <span key={i} style={{ ...style, display: "flex", gap: 8, minWidth: 0, overflowWrap: "anywhere", color: cb.state === "done" ? T.muted : T.secondary, textDecoration: cb.state === "done" ? "line-through" : undefined }}>
-                        <Box state={cb.state} size={size} onToggle={canEdit ? () => void tick(i) : undefined} />
-                        <span style={{ minWidth: 0 }}><Rich text={cb.text} size={size} /></span>
-                    </span>
-                );
-            })}
+            {text.trim() && <Md text={text} size={size} onTick={canEdit ? (i) => void tick(i) : undefined} />}
         </div>
     );
 }

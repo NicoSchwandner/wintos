@@ -1,44 +1,18 @@
 import { useState } from "react";
-import { runAction } from "../menu";
 import { T } from "../tokens";
-import { bullet, checkbox, type CheckState } from "./checkbox";
-import { parseNotes, spans } from "./parse";
+import { type CheckState } from "./checkbox";
+import { Md } from "./Md";
+import { parseNotes } from "./parse";
 
 
 export type Size = "rail" | "full";
-const SIZES = {
+export const SIZES = {
     rail: { label: 10.5, text: 12.5, line: 1.55, gap: 6, textColor: T.quietTitle, code: 11.5 },
     full: { label: 11, text: 13.5, line: 1.6, gap: 9, textColor: T.secondary, code: 12.5 },
 };
 
-// links: false where a click already means something else (a sidebar row switches project).
 export function Rich({ text, size, links = true }: { text: string; size: Size; links?: boolean }) {
-    return (
-        <>
-            {spans(text).map((s, i) =>
-                s.code ? (
-                    <span key={i} style={{ fontFamily: T.mono, fontSize: SIZES[size].code, color: T.emphasis, background: T.cardActive, borderRadius: 4, padding: "0 4px", overflowWrap: "anywhere" }}>
-                        {s.text}
-                    </span>
-                ) : s.url && links ? (
-                    // Mouse only, like every link: it opens in WintOS, as the PR rows do.
-                    <a
-                        key={i}
-                        href={s.url}
-                        title={s.url}
-                        tabIndex={-1}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={(e) => (e.preventDefault(), e.stopPropagation(), void runAction(`open-page:${s.url}`))}
-                        style={{ color: T.emphasis, textDecoration: "underline", textDecorationColor: T.muted, textUnderlineOffset: 2, overflowWrap: "anywhere", cursor: "pointer" }}
-                    >
-                        {s.text}
-                    </a>
-                ) : (
-                    <span key={i}>{s.text}</span>
-                )
-            )}
-        </>
-    );
+    return <Md text={text} size={size} inline links={links} />;
 }
 
 // A task box: done filled green with a tick, partial half-filled, todo empty. Clickable only
@@ -57,16 +31,6 @@ export function Box({ state, size, onToggle }: { state: CheckState; size: Size; 
         <button type="button" onClick={onToggle} title={state === "done" ? "Untick" : "Tick"} aria-label={state === "done" ? "Untick" : "Tick"} style={style}>
             {mark}
         </button>
-    );
-}
-
-// A markdown bullet line: a small dot, indented by its nesting.
-export function Bullet({ depth, text, size }: { depth: number; text: string; size: Size }) {
-    return (
-        <span style={{ display: "flex", gap: 8, minWidth: 0, marginLeft: depth * 14 }}>
-            <span style={{ width: 4, height: 4, borderRadius: "50%", background: T.muted, flexShrink: 0, marginTop: size === "rail" ? 8 : 9 }} />
-            <span style={{ minWidth: 0, overflowWrap: "anywhere" }}><Rich text={text} size={size} /></span>
-        </span>
     );
 }
 
@@ -118,9 +82,7 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
         <div style={{ display: "flex", flexDirection: "column", gap: size === "rail" ? 12 : 20 }}>
             {n.goal && (
                 <Section label="Goal" size={size}>
-                    <p style={{ margin: 0, fontSize: size === "rail" ? 12.5 : 14, lineHeight: size === "rail" ? 1.6 : 1.65, color: z.textColor }}>
-                        <Rich text={n.goal} size={size} />
-                    </p>
+                    <Md text={n.goal} size={size} />
                 </Section>
             )}
             {n.decisions.length > 0 && (
@@ -159,20 +121,7 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
             )}
             {n.other.map((o, i) => (
                 <Section key={i} label={o.heading || "Notes"} size={size}>
-                    {o.text.split("\n").map((line, j) => {
-                        const cb = checkbox(line);
-                        const b = !cb && bullet(line);
-                        if (b) return <span key={j} style={{ fontSize: z.text, lineHeight: z.line, color: z.textColor }}><Bullet depth={b.depth} text={b.text} size={size} /></span>;
-                        return cb ? (
-                            <Line key={j} size={size} lead={<Box state={cb.state} size={size} />}>
-                                <Rich text={cb.text} size={size} />
-                            </Line>
-                        ) : (
-                            <p key={j} style={{ margin: 0, fontSize: z.text, lineHeight: z.line, color: z.textColor, whiteSpace: "pre-wrap" }}>
-                                <Rich text={line} size={size} />
-                            </p>
-                        );
-                    })}
+                    <Md text={o.text} size={size} />
                 </Section>
             ))}
         </div>

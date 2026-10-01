@@ -12,7 +12,7 @@ import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
 import { setSwitchOrder, switchTargetAtom } from "./switcher";
-import { registerWintosMenu } from "./menu";
+import { closeProjectTab, registerWintosMenu } from "./menu";
 import { renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
 import { instance, setProjectSnoozed, setProjectTitle, useWintos } from "./useWintos";
@@ -103,7 +103,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     click: () => editMine(true),
                 },
                 { type: "separator" },
-                { label: "Close tab", click: () => fireAndForget(() => getApi().closeTab(workspace.oid, tabId, true)) },
+                { label: "Close tab", click: () => closeProjectTab(tabId, true) },
             ],
             e
         );

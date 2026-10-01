@@ -4,7 +4,7 @@ vi.mock("@/store/global", async () => ({ atoms: { staticTabId: (await import("jo
 vi.mock("./focusLog", () => ({ flog: vi.fn() }));
 vi.mock("./focus", () => ({ enterProject: vi.fn(), focusArea: vi.fn() }));
 import { enterProject } from "./focus";
-import { stepProject, switchTargetAtom, walkKey, walking } from "./switcher";
+import { setSwitchOrder, stepProject, switchTargetAtom, topProject, walkKey, walking } from "./switcher";
 
 describe("stepProject", () => {
     const order = ["a", "b", "c"];
@@ -58,5 +58,17 @@ describe("walkKey", () => {
         globalStore.set(switchTargetAtom, "b");
         expect(walkKey(key("Escape", false))).toBe(true);
         expect(walking()).toBe(false);
+    });
+});
+
+describe("topProject", () => {
+    test("the uppermost project in the sidebar, other than the one closing", () => {
+        setSwitchOrder(["a", "b", "c"]);
+        expect([topProject("a"), topProject("b")]).toEqual(["b", "a"]);
+    });
+
+    test("none left: undefined", () => {
+        setSwitchOrder(["a"]);
+        expect(topProject("a")).toBeUndefined();
     });
 });

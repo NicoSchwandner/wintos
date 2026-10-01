@@ -11,6 +11,8 @@ export const switchTargetAtom = atom(null as string | null);
 
 let order: string[] = [];
 export const setSwitchOrder = (tabIds: string[]) => (order = tabIds);
+// Where closing a project lands: the uppermost project in the sidebar.
+export const topProject = (closing: string) => order.find((id) => id !== closing);
 
 export function stepProject(order: string[], current: string, delta: 1 | -1): string | undefined {
     if (!order.length) return undefined;

@@ -3,11 +3,11 @@ import { atom } from "jotai";
 import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, isDev } from "@/store/global";
-import { closeOverlay, editMine, focusArea, focusBlock, isSnoozedProject, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
+import { closeOverlay, editMine, enterProject, focusArea, focusBlock, isSnoozedProject, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
 import { closeWarning } from "./sessions";
 import { goToInbox } from "./inbox";
 import { mainViewAtom, overlayAtom, renamingAtom, type MainView } from "./notes/state";
-import { stepProject, switchProject } from "./switcher";
+import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
 import { setRailCollapsed } from "./notes/railWidth";
 import { isInboxTab } from "./view";
@@ -292,7 +292,14 @@ function closeProject(): void {
     if (isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId))))) return; // the Inbox is never closed
     if (globalStore.get(overlayAtom) !== "confirm-close" && closeWarning(latestSessions(), tabId)) return toggleOverlay("confirm-close");
     globalStore.set(overlayAtom, "");
-    void getApi().closeTab(globalStore.get(atoms.workspace).oid, tabId, false);
+    closeProjectTab(tabId, false);
+}
+
+// Closing the open project lands on the uppermost one in the sidebar, not on Wave's neighbour tab.
+export function closeProjectTab(tabId: string, confirm: boolean): void {
+    const top = tabId === globalStore.get(atoms.staticTabId) ? topProject(tabId) : undefined;
+    if (top) enterProject(top);
+    void getApi().closeTab(globalStore.get(atoms.workspace).oid, tabId, confirm);
 }
 
 // ⇧⌘L opens the notes full width, and the same key again goes back to the terminals.

@@ -3,7 +3,9 @@
 #   wintos title <words…>              name this tab's project (used by Claude)
 #   wintos wait <what…>                end this turn parked on something outside (used by Claude)
 #   wintos done                        end this turn done: nothing waits on the developer (used by Claude)
-#   wintos hooks install|uninstall     wire the hook into Claude Code settings
+#   wintos hooks install|uninstall [<claude config dir>]
+#                                      wire the hook into that Claude Code config (default ~/.claude);
+#                                      one account each, named explicitly
 set -eu
 PORT="${WINTOS_PORT:-7730}"
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -52,6 +54,10 @@ done)
     echo "done: nothing waits on the developer"
     ;;
 hooks)
+    if [ -n "${3:-}" ]; then
+        [ -d "$3" ] || die "no such Claude config dir: $3"
+        SETTINGS="$3/settings.json"
+    fi
     [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
     [ -f "$SETTINGS.wintos-bak" ] || cp "$SETTINGS" "$SETTINGS.wintos-bak"
     # Ours are recognised by the hook path, so the user's own hooks are never touched.
@@ -65,11 +71,11 @@ hooks)
         echo "wintos: hooks installed in $SETTINGS ($EVENTS)"
         ;;
     uninstall)
-        rewrite_settings "$strip"' | .hooks |= with_entries(select(.value | length > 0))'
+        rewrite_settings "$strip"' | .hooks |= with_entries(select(.value | length > 0)) | if .hooks == {} then del(.hooks) else . end'
         echo "wintos: hooks removed from $SETTINGS"
         ;;
-    *) die "usage: wintos hooks install|uninstall" ;;
+    *) die "usage: wintos hooks install|uninstall [<claude config dir>]" ;;
     esac
     ;;
-*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos hooks install|uninstall" ;;
+*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos hooks install|uninstall [<claude config dir>]" ;;
 esac

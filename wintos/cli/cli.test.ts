@@ -147,6 +147,21 @@ describe("wintos hooks", () => {
             expect(s.hooks[e].filter((h: any) => h.hooks[0].command.endsWith("wintos-hook.sh"))).toHaveLength(1);
     });
 
+    test("a Claude config dir given names where they go; another account's settings stay as they were", () => {
+        const { settings, read } = setup();
+        const other = tmp();
+        execFileSync(CLI, ["hooks", "install", other], { env: { ...process.env, WINTOS_CLAUDE_SETTINGS: settings } });
+        const s = JSON.parse(readFileSync(join(other, "settings.json"), "utf8"));
+        expect(s.hooks.Stop[0].hooks[0].command).toMatch(/wintos-hook\.sh$/);
+        expect(read().hooks.Stop).toHaveLength(1);
+        execFileSync(CLI, ["hooks", "uninstall", other]);
+        expect(JSON.parse(readFileSync(join(other, "settings.json"), "utf8"))).toEqual({});
+    });
+
+    test("a config dir that does not exist is refused", () => {
+        expect(() => execFileSync(CLI, ["hooks", "install", join(tmp(), "nope")], { stdio: "pipe" })).toThrow(/no such Claude config dir/);
+    });
+
     test("hooks without a command (prompt/agent types) survive install and uninstall", () => {
         const { settings, run, read } = setup();
         writeFileSync(settings, JSON.stringify({ model: "x", hooks: { Stop: [{ hooks: [{ type: "prompt", prompt: "check" }] }] } }));

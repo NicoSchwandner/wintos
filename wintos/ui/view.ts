@@ -1,4 +1,4 @@
-import { rank, Ranking, Row } from "../daemon/ranking/rank";
+import { QUIET_CAP, rank, Ranking, Row } from "../daemon/ranking/rank";
 import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
 import { GROUPS, isSnoozed, isStacked, lastMovement, projectPrs, qualifier, type Group, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
@@ -52,8 +52,9 @@ export function withSnoozes(model: Ranking, snoozed: Record<string, number> = {}
     return {
         needs,
         running: out(model.running),
-        quiet: out(model.quiet),
-        quietMore: out(model.quietMore),
+        // The cap counts shown projects: a snoozed one gives its slot to the next.
+        quiet: out([...model.quiet, ...model.quietMore]).slice(0, QUIET_CAP),
+        quietMore: out([...model.quiet, ...model.quietMore]).slice(QUIET_CAP),
         quietStale: out(model.quietStale),
         snoozed: [...model.needs.filter((r) => is(r) && !woken(r)), ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].filter(is),
         wake: needs.filter(woken).map((r) => r.tabId),

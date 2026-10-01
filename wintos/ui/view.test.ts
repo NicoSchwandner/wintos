@@ -213,5 +213,11 @@ describe("withSnoozes", () => {
         expect([s.needs, s.wake, s.snoozed.map((x) => x.tabId)]).toEqual([[], [], ["a"]]);
     });
 
+    test("a snoozed quiet project frees its slot: the next one moves up from the overflow", () => {
+        const quiet = ["q1", "q2", "q3", "q4", "q5", "q6"].map((id) => r(id, "quiet"));
+        const s = withSnoozes({ needs: [], running: [], quiet, quietMore: [r("q7", "quiet")], quietStale: [] }, { q2: 1 });
+        expect([s.quiet.map((x) => x.tabId), s.quietMore]).toEqual([["q1", "q3", "q4", "q5", "q6", "q7"], []]);
+    });
+
     test("nothing snoozed changes nothing", () => expect(withSnoozes(model, {})).toEqual({ ...model, snoozed: [], wake: [] }));
 });

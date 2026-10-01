@@ -15,7 +15,7 @@ const KEYS = {
 export const StatusBar = memo(() => {
     const view = useAtomValue(mainViewAtom);
     return (
-        <div style={{ flexShrink: 0, height: 30, padding: "0 16px", display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${T.hairline}`, background: T.sidebar, fontFamily: T.ui }}>
+        <div style={{ flexShrink: 0, minHeight: 30, boxSizing: "border-box", padding: "5px 16px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 14px", borderTop: `1px solid ${T.hairline}`, background: T.sidebar, fontFamily: T.ui }}>
             {KEYS[view].map(([k, label]) => (
                 <Key key={k} k={k} label={label} />
             ))}

@@ -203,7 +203,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     </>
                 )}
             </div>
-            <div style={{ flexShrink: 0, height: 34, padding: "0 14px", display: "flex", alignItems: "center", gap: 16, borderTop: `1px solid ${T.hairline}`, fontSize: 11, color: T.faint }}>
+            <div style={{ flexShrink: 0, minHeight: 34, boxSizing: "border-box", padding: "6px 14px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 16px", borderTop: `1px solid ${T.hairline}`, fontSize: 11, color: T.faint }}>
                 {/* ⌘J/⌘K sit on the open project's row. */}
                 <Key k="⌃⇥" label="waiting" />
                 {!isInboxTab(tabs[activeTabId]) && <Key k="⌘R" label="rename" />}

@@ -8,6 +8,7 @@ import { atom, useAtom, useAtomValue } from "jotai";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Row } from "../daemon/ranking/rank";
 import { Key } from "./Key";
+import { Rich } from "./notes/ProjectNotes";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
@@ -296,7 +297,7 @@ function CardRow(p: RowProps) {
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{v.age}</span>
                 </span>
             </div>
-            {v.next && <div style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty" } as React.CSSProperties}>{v.next}</div>}
+            {v.next && <div style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty" } as React.CSSProperties}><Rich text={v.next} size="rail" links={false} /></div>}
             {v.meta && <div style={{ fontFamily: T.mono, fontSize: 9.5, color: T.muted }}>{v.meta}</div>}
         </div>
     );

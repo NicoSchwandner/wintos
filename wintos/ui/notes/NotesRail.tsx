@@ -6,7 +6,7 @@ import { railCollapsedAtom, setRailCollapsed, syncRailCollapsed, useRailWidth } 
 import { Key } from "../Key";
 import { T } from "../tokens";
 import { Mine } from "./Mine";
-import { ProjectNotes } from "./ProjectNotes";
+import { ProjectNotes, Rich } from "./ProjectNotes";
 import { editingMineAtom } from "./state";
 import { useNotes } from "./useNotes";
 import { notesKeys, PrList } from "./PrList";
@@ -53,7 +53,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
             {project?.next && (
                 <div style={{ padding: "10px 12px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 5 }}>
                     <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.muted }}>Next action</span>
-                    <span style={{ fontSize: 12.5, lineHeight: 1.55, color: T.secondary }}>{project.next}</span>
+                    <span style={{ fontSize: 12.5, lineHeight: 1.55, color: T.secondary }}><Rich text={project.next} size="rail" /></span>
                 </div>
             )}
             <div style={{ padding: "12px 14px", background: "#282828", border: `1px solid ${editing ? T.borderActive : T.keycapBorder}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>

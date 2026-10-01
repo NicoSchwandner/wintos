@@ -11,7 +11,8 @@ const SIZES = {
     full: { label: 11, text: 13.5, line: 1.6, gap: 9, textColor: T.secondary, code: 12.5 },
 };
 
-export function Rich({ text, size }: { text: string; size: Size }) {
+// links: false where a click already means something else (a sidebar row switches project).
+export function Rich({ text, size, links = true }: { text: string; size: Size; links?: boolean }) {
     return (
         <>
             {spans(text).map((s, i) =>
@@ -19,7 +20,7 @@ export function Rich({ text, size }: { text: string; size: Size }) {
                     <span key={i} style={{ fontFamily: T.mono, fontSize: SIZES[size].code, color: T.emphasis, background: T.cardActive, borderRadius: 4, padding: "0 4px", overflowWrap: "anywhere" }}>
                         {s.text}
                     </span>
-                ) : s.url ? (
+                ) : s.url && links ? (
                     // Mouse only, like every link: it opens in WintOS, as the PR rows do.
                     <a
                         key={i}

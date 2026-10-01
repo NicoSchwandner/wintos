@@ -51,6 +51,8 @@ export function returnFocus(fallback: () => void, keepPlaced = false): void {
         if (keepPlaced && document.activeElement && document.activeElement !== document.body) return;
         const el = r?.el?.isConnected ? r.el : r?.area ? document.querySelector<HTMLElement>(`[data-wintos="${r.area}"]`) : null;
         flog(`back to ${el ? where(el) : "the terminals (nothing to go back to)"}`);
+        // Back into a pane (a page, a terminal) is a pane wanted, or the page guard sends it away.
+        if (el && zoneOf(el) === "pane") wantPane("back to where it was");
         if (el) el.focus();
         else fallback();
     });

@@ -56,7 +56,8 @@ export function withSnoozes(model: Ranking, snoozed: Record<string, number> = {}
         quiet: out([...model.quiet, ...model.quietMore]).slice(0, QUIET_CAP),
         quietMore: out([...model.quiet, ...model.quietMore]).slice(QUIET_CAP),
         quietStale: out(model.quietStale),
-        snoozed: [...model.needs.filter((r) => is(r) && !woken(r)), ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].filter(is),
+        // Put away: a snoozed project reads as quiet, whether a session there waits or works.
+        snoozed: [...model.needs.filter((r) => is(r) && !woken(r)), ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].filter(is).map((r) => ({ ...r, band: "quiet" as const })),
         wake: needs.filter(woken).map((r) => r.tabId),
     };
 }

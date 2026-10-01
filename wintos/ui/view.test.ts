@@ -219,5 +219,10 @@ describe("withSnoozes", () => {
         expect([s.quiet.map((x) => x.tabId), s.quietMore]).toEqual([["q1", "q3", "q4", "q5", "q6", "q7"], []]);
     });
 
+    test("snoozed rows all read as quiet, whatever their project is doing", () => {
+        const s = withSnoozes({ ...model, needs: [row("needs", { tabId: "a", waitingSince: NOW - 10 })] }, { a: NOW, b: NOW });
+        expect(s.snoozed.map((x) => [x.tabId, x.band])).toEqual([["a", "quiet"], ["b", "quiet"]]);
+    });
+
     test("nothing snoozed changes nothing", () => expect(withSnoozes(model, {})).toEqual({ ...model, snoozed: [], wake: [] }));
 });

@@ -179,6 +179,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                             {(model.quietMore.length > 0 || model.quietStale.length > 0) && (
                                 <button
                                     type="button"
+                                    tabIndex={-1}
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => setShowAll(!showAll)}
                                     style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", borderTop: `1px solid #32302f`, textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}
                                 >
@@ -194,6 +196,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                             {(showSnoozed || snoozedShown.length < model.snoozed.length) && (
                                 <button
                                     type="button"
+                                    tabIndex={-1}
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => setShowSnoozed(!showSnoozed)}
                                     style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.faint, cursor: "pointer" }}
                                 >

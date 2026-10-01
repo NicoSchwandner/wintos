@@ -3,9 +3,9 @@ import { atoms, getApi } from "@/store/global";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import type { Session } from "../daemon/sessions/reduce";
 import { nextNeedsYou, Target } from "./sessions";
-import { editingMineAtom, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
+import { editingMineAtom, findInNotesAtom, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
 import { rememberReturn, returnFocus, wantPane } from "./focusOwner";
-import { setProjectSnoozed } from "./useWintos";
+import { daemonFetch, setProjectSnoozed } from "./useWintos";
 import { flog, where } from "./focusLog";
 
 // Every Wave tab runs in its own renderer, so a renderer can only magnify blocks of its own
@@ -37,20 +37,43 @@ export function focusBlock(blockId: string): void {
 // Every project switch: the project opens on its terminals. Views are per renderer, so a PR
 // view left open in a project would otherwise greet you there later.
 // Opening a snoozed project (from its PR, the palette, the Snoozed group) wakes it.
-export function enterProject(tabId: string): void {
+export function enterProject(tabId: string, find?: string): void {
     if (isSnoozedProject(tabId)) void setProjectSnoozed(tabId, false);
-    focusSession({ tabId, blockId: "" });
+    focusSession({ tabId, blockId: "", ...(find ? { find } : {}) });
+}
+
+// A closed project comes back in a new tab: the tab is created here, and its renderer, the
+// only one starting up just then, takes the project's folder over (takeReopen).
+const REOPEN = "wintos:reopen";
+export function reopenProject(projectId: string): void {
+    localStorage.setItem(REOPEN, JSON.stringify({ projectId, at: Date.now() }));
+    getApi().createTab();
+}
+export function takeReopen(): void {
+    const raw = localStorage.getItem(REOPEN);
+    if (!raw) return;
+    localStorage.removeItem(REOPEN);
+    const r = JSON.parse(raw) as { projectId: string; at: number };
+    if (Date.now() - r.at >= HANDOFF_TTL_MS) return;
+    const tabId = globalStore.get(atoms.staticTabId);
+    flog(`reopen project ${r.projectId.slice(0, 6)} in this tab`);
+    void daemonFetch(`/projects/${encodeURIComponent(r.projectId)}/reopen`, { method: "POST", body: { tabId } });
 }
 
 export function focusSession(t: Target): void {
-    if (t.tabId === globalStore.get(atoms.staticTabId)) return landOn(t.blockId);
+    if (t.tabId === globalStore.get(atoms.staticTabId)) return landOn(t);
     localStorage.setItem(HANDOFF, JSON.stringify({ ...t, at: Date.now() }));
     getApi().setActiveTab(t.tabId);
 }
 
 // Arriving in a project: on the session asked for, else back in an unsaved mine.md edit (its
 // view left as it was, so the draft stays), else on the terminals.
-function landOn(blockId: string): void {
+function landOn({ blockId, find }: Target): void {
+    if (find) {
+        rememberReturn();
+        globalStore.set(findInNotesAtom, find);
+        return globalStore.set(mainViewAtom, "notes");
+    }
     if (!blockId && mineEditor()) return focusMineEditor();
     globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
     wantPane(blockId ? "landing on a session" : "landing on the terminals");
@@ -72,7 +95,7 @@ export function takeHandoff(): void {
     if (t.tabId !== globalStore.get(atoms.staticTabId)) return;
     localStorage.removeItem(HANDOFF);
     if (Date.now() - t.at >= HANDOFF_TTL_MS) return;
-    landOn(t.blockId);
+    landOn(t);
 }
 
 export function focusedSession(): Session | undefined {

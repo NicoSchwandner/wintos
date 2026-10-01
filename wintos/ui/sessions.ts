@@ -1,7 +1,7 @@
 import { isUnread } from "../daemon/ranking/rank";
 import type { Session } from "../daemon/sessions/reduce";
 
-export type Target = { tabId: string; blockId: string };
+export type Target = { tabId: string; blockId: string; find?: string }; // find: open the notes at this text
 
 // The daemon only hears about a session ending if Claude says so; a closed block or a killed
 // Claude sends nothing. The UI knows which blocks still exist, so it drops the rest.

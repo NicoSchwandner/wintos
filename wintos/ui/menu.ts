@@ -3,7 +3,7 @@ import { atom } from "jotai";
 import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, isDev } from "@/store/global";
-import { closeOverlay, editMine, enterProject, focusArea, focusBlock, isSnoozedProject, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
+import { closeOverlay, editMine, enterProject, focusArea, takeReopen, focusBlock, isSnoozedProject, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
 import { closeWarning } from "./sessions";
 import { goToInbox } from "./inbox";
 import { mainViewAtom, overlayAtom, renamingAtom, type MainView } from "./notes/state";
@@ -319,6 +319,7 @@ let registered = false;
 export function registerWintosMenu(): void {
     if (registered) return;
     registered = true;
+    takeReopen();
     installFocusRing();
     installFocusOwner();
     // Wave's openLink (a ⌘-click on a url in a terminal) opens web links through here.

@@ -1,12 +1,13 @@
 import { useFocusOnMount } from "../useFocusOnMount";
 import { useZoneKeys } from "../zones";
+import { globalStore } from "@/app/store/jotaiStore";
 import { useAtomValue } from "jotai";
-import { memo } from "react";
+import { memo, useEffect } from "react";
 import { T } from "../tokens";
 import { Mine } from "./Mine";
 import { Key } from "../Key";
 import { ProjectNotes } from "./ProjectNotes";
-import { editingMineAtom } from "./state";
+import { editingMineAtom, findInNotesAtom } from "./state";
 import { useNotes } from "./useNotes";
 import { notesKeys, PrList } from "./PrList";
 import { useWintos } from "../useWintos";
@@ -18,6 +19,15 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
     const editing = useAtomValue(editingMineAtom);
     const { state } = useWintos();
     useZoneKeys(focusRef, notesKeys(tabId, state, !editing && !!notes));
+    const find = useAtomValue(findInNotesAtom);
+    useEffect(() => {
+        if (!find || !notes) return;
+        globalStore.set(findInNotesAtom, null);
+        const el = textElement(focusRef.current, find);
+        if (!el) return;
+        el.scrollIntoView({ block: "center" });
+        el.animate([{ background: "rgba(214,153,92,0.35)" }, { background: "transparent" }], { duration: 1800 });
+    }, [find, notes]);
     return (
         <div
             data-wintos="notes-full"
@@ -78,4 +88,13 @@ function Header({ name, note }: { name: string; note: string }) {
             <span style={{ fontSize: 11, color: T.faint }}>{note}</span>
         </div>
     );
+}
+
+// The innermost element showing this text (a palette hit), to scroll to and mark.
+function textElement(root: HTMLElement | null, text: string): HTMLElement | null {
+    if (!root) return null;
+    const want = text.toLowerCase();
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) if (n.textContent?.toLowerCase().includes(want)) return n.parentElement;
+    return null;
 }

@@ -1,3 +1,4 @@
+import { useAtomValue } from "jotai";
 import { memo, useMemo, useState } from "react";
 import { carryToToday, leftFromYesterday, markPlanned, saveFocus } from "./day";
 import { dayTimeline, DEFAULT_WORKDAY, focusList, parseSpan, type Block } from "./dayplan";
@@ -5,6 +6,7 @@ import { editMine } from "./focus";
 import { Key } from "./Key";
 import { meetingsFrom } from "./meetings";
 import { Mine } from "./notes/Mine";
+import { editingMineAtom } from "./notes/state";
 import { T } from "./tokens";
 import { useFocusOnMount } from "./useFocusOnMount";
 import { useNow } from "./useNow";
@@ -25,6 +27,7 @@ export const TodayPage = memo(() => {
     const { state } = useWintos();
     const now = useNow(30_000);
     const day = state?.day;
+    const editing = useAtomValue(editingMineAtom);
     const left = day ? leftFromYesterday(day) : [];
     const [cursor, setCursor] = useState(0);
     const carry = () => day && left[cursor] && void carryToToday(day, left[cursor]).then(() => setCursor((c) => Math.max(0, Math.min(c, left.length - 2))));
@@ -56,11 +59,11 @@ export const TodayPage = memo(() => {
                 </div>
                 <Key k="esc" label="back" />
             </div>
-            <div style={{ flexGrow: 1, minHeight: 0, display: "grid", gridTemplateColumns: "minmax(200px, 260px) minmax(0, 1fr)", gap: 20, paddingBottom: 14 }}>
+            <div style={{ flexGrow: 1, minHeight: 0, display: "grid", gridTemplateColumns: "clamp(220px, 26vw, 400px) minmax(0, 760px)", gap: 20, paddingBottom: 18 }}>
                 <Timeline now={now} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflowY: "auto" }}>
                     {y && (
-                        <Panel label="Yesterday" note={day.planned ? `${yItems.filter((i) => i.done).length} done · ${yItems.filter((i) => todayTexts.has(i.text)).length} carried` : undefined}>
+                        <Panel label="Yesterday" note={day.planned ? `${yItems.filter((i) => i.done).length} done · ${yItems.filter((i) => todayTexts.has(i.text)).length} carried` : undefined} keys={!day.planned && left.length > 0 && <Key k="j k · c" label="carry" />}>
                             {!day.planned && (
                                 <>
                                     {yItems.filter((i) => i.done).map((i) => (
@@ -74,28 +77,31 @@ export const TodayPage = memo(() => {
                             )}
                         </Panel>
                     )}
-                    <Panel label="Today's focus" note={day.planned ? undefined : "not planned yet"} warn={!day.planned}>
+                    <Panel
+                        label="Today's focus"
+                        note={day.planned ? undefined : "not planned yet"}
+                        warn={!day.planned}
+                        keys={editing ? <><Key k="⌘⏎" label="save" /><Key k="esc" label="discard" /></> : <><Key k="⌘E" label="edit" />{!day.planned && <Key k="⌘⏎" label="plan done" />}</>}
+                    >
                         <Mine text={day.focus} mtime={day.mtime} canEdit save={save} size="full" file="today's journal file" empty={left.length ? `Nothing planned yet. ⌘E starts from the ${left.length} things yesterday left open.` : "Nothing planned yet. Press ⌘E and write one to three things that matter today."} start={left.map((t) => `- [ ] ${t}`).join("\n")} />
                     </Panel>
                 </div>
-            </div>
-            <div style={{ margin: "0 -26px", borderTop: `1px solid ${T.hairline}`, background: T.sidebar, padding: "6px 16px", display: "flex", flexWrap: "wrap", gap: "6px 14px" }}>
-                <Key k="⌘E" label="edit" />
-                {left.length > 0 && !day.planned && <Key k="j k · c" label="carry from yesterday" />}
-                {!day.planned && <Key k="⌘⏎" label="plan done" />}
-                <Key k="esc" label="back" />
             </div>
         </div>
     );
 });
 TodayPage.displayName = "TodayPage";
 
-function Panel({ label, note, warn, children }: { label: string; note?: string; warn?: boolean; children: React.ReactNode }) {
+// keys: the panel's own shortcuts, shown on it rather than in a footer.
+function Panel({ label, note, warn, keys, children }: { label: string; note?: string; warn?: boolean; keys?: React.ReactNode; children: React.ReactNode }) {
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", background: T.card, border: `1px solid ${warn ? T.apricot : T.border}`, borderRadius: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint, textTransform: "uppercase" }}>{label}</span>
-                {note && <span style={{ fontFamily: T.mono, fontSize: 10.5, color: warn ? T.apricot : T.muted }}>{note}</span>}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px 14px" }}>
+                <span style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint, textTransform: "uppercase" }}>{label}</span>
+                    {note && <span style={{ fontFamily: T.mono, fontSize: 10.5, color: warn ? T.apricot : T.muted }}>{note}</span>}
+                </span>
+                {keys && <span style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>{keys}</span>}
             </div>
             {children}
         </div>

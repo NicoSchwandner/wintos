@@ -28,5 +28,5 @@ export const T = {
     mono: "'JetBrains Mono', ui-monospace, monospace",
 } as const;
 
-// What is happening now: the open project's row, the meeting you are in.
+// The open project's row in the sidebar.
 export const ACTIVE: React.CSSProperties = { background: T.borderActive, boxShadow: `inset 3px 0 0 ${T.emphasis}` };

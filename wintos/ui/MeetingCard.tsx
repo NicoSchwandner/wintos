@@ -1,13 +1,12 @@
 import { memo, useEffect } from "react";
 import { Key } from "./Key";
 import { clock, countdown, nextMeetings, setLatestMeetings, WARN_MS, type Meeting } from "./meetings";
-import { ACTIVE, T } from "./tokens";
+import { T } from "./tokens";
 import { useNow } from "./useNow";
 
 // The next meeting, with the other cards (design A). Two minutes before it starts, the border
 // turns apricot and breathes and the countdown runs in seconds; never a popup. While one is on,
-// it looks like the open project's row (what is happening now) and fills a bar towards its end;
-// the next one's warning takes over from it.
+// it says when it ends and fills a bar towards that; the next one's warning takes over from it.
 export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
     useEffect(() => void setLatestMeetings(meetings), [meetings]);
     const now = useNow(1000);
@@ -22,7 +21,6 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
             style={{
                 position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", gap: 3, padding: "9px 11px", borderRadius: 10, background: T.card,
                 border: `1px solid ${n.soon ? T.apricot : T.border}`, animation: n.soon ? "wintos-breathe 2.4s ease-in-out infinite" : undefined,
-                ...(on ? ACTIVE : {}),
             }}
         >
             <style>{`@keyframes wintos-breathe { 0%,100% { box-shadow: 0 0 0 0 #fe801900 } 50% { box-shadow: 0 0 0 3px #fe801955 } } @media (prefers-reduced-motion: reduce) { [data-wintos=meeting-card] { animation: none !important } }`}</style>

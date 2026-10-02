@@ -1,10 +1,10 @@
 import { describe, expect, test, vi } from "vitest";
 import { globalStore } from "@/app/store/jotaiStore";
-vi.mock("@/store/global", async () => ({ atoms: { staticTabId: (await import("jotai")).atom("a") } }));
 vi.mock("./focusLog", () => ({ flog: vi.fn() }));
-vi.mock("./focus", () => ({ enterProject: vi.fn(), focusArea: vi.fn() }));
+const here = { tab: "a" };
+vi.mock("./focus", () => ({ enterProject: vi.fn(), focusArea: vi.fn(), whereYouAre: () => here.tab }));
 import { enterProject } from "./focus";
-import { setSwitchOrder, stepProject, switchTargetAtom, topProject, walkKey, walking } from "./switcher";
+import { setSwitchOrder, stepProject, switchProject, switchTargetAtom, topProject, walkKey, walking } from "./switcher";
 
 describe("stepProject", () => {
     const order = ["a", "b", "c"];
@@ -70,5 +70,25 @@ describe("topProject", () => {
     test("none left: undefined", () => {
         setSwitchOrder(["a"]);
         expect(topProject("a")).toBeUndefined();
+    });
+});
+
+describe("switchProject starts from where you are", () => {
+    test("in a project, the next one after it", () => {
+        setSwitchOrder(["a", "b", "c"]);
+        here.tab = "b";
+        globalStore.set(switchTargetAtom, null);
+        switchProject(1, false);
+        expect(enterProject).toHaveBeenLastCalledWith("c");
+    });
+
+    test("on a page over the project (Today), from outside the list: ⌘J the first, ⌘K the last", () => {
+        setSwitchOrder(["a", "b", "c"]);
+        here.tab = "";
+        globalStore.set(switchTargetAtom, null);
+        switchProject(1, false);
+        expect(enterProject).toHaveBeenLastCalledWith("a");
+        switchProject(-1, false);
+        expect(enterProject).toHaveBeenLastCalledWith("c");
     });
 });

@@ -37,6 +37,10 @@ export function focusBlock(blockId: string): void {
 // Every project switch: the project opens on its terminals. Views are per renderer, so a PR
 // view left open in a project would otherwise greet you there later.
 // Opening a snoozed project (from its PR, the palette, the Snoozed group) wakes it.
+// Where the walks (⌘J/⌘K, ⌃⇥) start: the project you are in, unless a page that is not that
+// project (the Today page) covers it; then you are outside the list, as in an Inbox tab.
+export const whereYouAre = () => (globalStore.get(mainViewAtom) === "day" ? "" : globalStore.get(atoms.staticTabId));
+
 export function enterProject(tabId: string, find?: string): void {
     if (isSnoozedProject(tabId)) void setProjectSnoozed(tabId, false);
     focusSession({ tabId, blockId: "", ...(find ? { find } : {}) });
@@ -151,8 +155,7 @@ export function closeOverlay(): void {
 export function jumpToNextWaiting(): boolean {
     const lm = getLayoutModelForStaticTab();
     const current = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
-    const active = globalStore.get(atoms.staticTabId);
-    const t = nextNeedsYou(latest.sessions, latest.tabIds, active, current, latest.needs);
+    const t = nextNeedsYou(latest.sessions, latest.tabIds, whereYouAre(), current, latest.needs);
     // A project in Needs you for its PR has no session to magnify: just its terminals.
     if (t) focusSession("blockId" in t ? t : { tabId: t.tabId, blockId: "" });
     return true;

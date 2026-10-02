@@ -1,7 +1,6 @@
 import { globalStore } from "@/app/store/jotaiStore";
-import { atoms } from "@/store/global";
 import { atom } from "jotai";
-import { enterProject, focusArea } from "./focus";
+import { enterProject, focusArea, whereYouAre } from "./focus";
 import { flog } from "./focusLog";
 
 // ⌘J / ⌘K work like ⌘⇥: hold ⌘ and tap to walk the ranked projects in this renderer's
@@ -22,7 +21,7 @@ export function stepProject(order: string[], current: string, delta: 1 | -1): st
 }
 
 export function switchProject(delta: 1 | -1, cmdHeld: boolean): void {
-    const next = stepProject(order, globalStore.get(switchTargetAtom) ?? globalStore.get(atoms.staticTabId), delta);
+    const next = stepProject(order, globalStore.get(switchTargetAtom) ?? whereYouAre(), delta);
     if (!next) return;
     globalStore.set(switchTargetAtom, next);
     if (!cmdHeld) return commit("menu");
@@ -33,7 +32,8 @@ export function switchProject(delta: 1 | -1, cmdHeld: boolean): void {
 function commit(why = "⌘ released"): void {
     const target = globalStore.get(switchTargetAtom);
     end(why);
-    if (target && target !== globalStore.get(atoms.staticTabId)) enterProject(target);
+    // Landing on the project you're in still lands: a page over it (Today) goes away.
+    if (target) enterProject(target);
     else focusArea("terminal");
 }
 

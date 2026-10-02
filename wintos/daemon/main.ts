@@ -10,6 +10,8 @@ const { port } = wintosInstance(process.env);
 // Core plugins are bundled next to this file and run on the same Node as the daemon.
 const core: Plugin[] = [
     { name: "gh-prs", cmd: [process.execPath, join(__dirname, "plugins", "gh-prs.cjs")], env: { ELECTRON_RUN_AS_NODE: "1" }, everyMs: 2 * 60_000 },
+    // Only with a calendar to read: WINTOS_CALENDAR_ICS in ~/.config/wintos/env.
+    ...(process.env.WINTOS_CALENDAR_ICS ? [{ name: "calendar", cmd: [process.execPath, join(__dirname, "plugins", "calendar.cjs")], env: { ELECTRON_RUN_AS_NODE: "1" }, everyMs: 5 * 60_000 }] : []),
 ];
 const plugins = [...core, ...discoverPlugins(join(homedir(), ".config/wintos/plugins"))];
 

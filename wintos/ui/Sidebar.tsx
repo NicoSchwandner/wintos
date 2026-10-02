@@ -9,6 +9,8 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Row } from "../daemon/ranking/rank";
 import { Key } from "./Key";
 import { Rich } from "./notes/ProjectNotes";
+import { MeetingCard, MeetingEdge } from "./MeetingCard";
+import { meetingsFrom } from "./meetings";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
@@ -61,6 +63,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const panels = state ? pluginPanels(state) : [];
     const loading = state ? loadingPanels(state, lastPanelTitles(panels)) : [];
     const running = new Set(state?.pluginsRunning ?? []);
+    const meetings = useMemo(() => meetingsFrom(state?.plugins), [state?.plugins]);
     const project = (tabId: string) => state?.projects.find((p) => p.id === tabId);
     // The open tab is always visible even when it is stale; walking with ⌘J/⌘K or renaming
     // (the row must exist to hold the input) shows them all.
@@ -166,6 +169,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         {loading.map((p) => <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
+                {meetings.length > 0 && <MeetingCard meetings={meetings} />}
+                <MeetingEdge meetings={meetings} />
                 {offline || !model ? (
                     <div style={{ fontFamily: T.mono, fontSize: 11, color: offline ? T.brick : T.muted, padding: "0 4px" }}>
                         {offline ? "daemon offline: bands hidden until wintosd is back" : "connecting to wintosd…"}

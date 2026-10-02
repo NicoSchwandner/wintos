@@ -16,6 +16,7 @@ import { paneOrder } from "./panes";
 import { installFocusRing } from "./focusRing";
 import { parkBlock, setProjectSnoozed } from "./useWintos";
 import { flog } from "./focusLog";
+import { meetingToJoin } from "./meetings";
 import { installFocusOwner, rememberReturn, returnFocus, wantPane } from "./focusOwner";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
@@ -71,6 +72,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:c", "copy-url"],
     ["Option:Cmd:z", "snooze-project"],
     ["Option:Cmd:p", "park-session"],
+    ["Shift:Cmd:m", "join-meeting"],
     ["Cmd:h", "focus-left"],
     ["Cmd:l", "focus-right"],
 ];
@@ -202,6 +204,13 @@ export function runAction(action: string): void {
     // ⌥⌘Z: this project is done for now; the same key, or opening it, brings it back.
     // You read the turn and nothing is yours: it waits on something outside, as with `wintos wait`.
     // The focused session if it waits on you, else every one in this project that does.
+    // The meeting on now, else the next one, in the system browser: a call wants the camera.
+    if (action === "join-meeting") {
+        const m = meetingToJoin(Date.now());
+        flog(m ? `join meeting ${m.title}` : "join meeting: none with a link today");
+        if (m?.url) getApi().openExternal(m.url);
+        return;
+    }
     if (action === "park-session") {
         const tabId = globalStore.get(atoms.staticTabId);
         const waiting = latestSessions().filter((s) => s.tabId === tabId && s.state === "waiting");

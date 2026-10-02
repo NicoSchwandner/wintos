@@ -5,7 +5,7 @@ import type { Project } from "../daemon/projects/store";
 import { GROUPS, isSnoozed, isStacked, lastMovement, projectPrs, qualifier, type Group, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
 import type { Session } from "../daemon/sessions/reduce";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; projectSnoozes?: Record<string, number>; seen?: Record<string, number>; day?: Day; lunch?: string };
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; projectSnoozes?: Record<string, number>; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string };
 export type Tone = "apricot" | "brick" | "secondary";
 export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
 

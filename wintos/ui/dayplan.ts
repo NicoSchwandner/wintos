@@ -1,12 +1,12 @@
 import type { Meeting } from "./meetings";
 
-// The Today page's day, from FROM_H to TO_H: meetings, the lunch break (WINTOS_LUNCH), and the
-// free time left between them, which is what a plan has to fit in.
-const FROM_H = 8;
-const TO_H = 18;
+// The Today page's day, the workday (WINTOS_WORKDAY, else 08:00-17:00): meetings, the lunch break
+// (WINTOS_LUNCH), and the free time left between them, which is what a plan has to fit in.
+export const DEFAULT_WORKDAY: [number, number] = [8 * 60, 17 * 60];
 const MIN_FREE_MS = 15 * 60_000;
 
-export function parseLunch(v: string | undefined): [number, number] | undefined {
+// "HH:MM-HH:MM" as minutes since midnight: the lunch break, the workday.
+export function parseSpan(v: string | undefined): [number, number] | undefined {
     const m = /^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/.exec(v?.trim() ?? "");
     if (!m) return undefined;
     const [a, b] = [Number(m[1]) * 60 + Number(m[2]), Number(m[3]) * 60 + Number(m[4])];
@@ -28,10 +28,10 @@ function gaps(spans: { start: number; end: number }[], from: number, to: number)
     return out.filter((g) => g.end > g.start);
 }
 
-export function dayTimeline(meetings: Meeting[], lunch: [number, number] | undefined, day: Date): { blocks: Block[]; freeMs: number; from: number; to: number } {
+export function dayTimeline(meetings: Meeting[], lunch: [number, number] | undefined, day: Date, workday = DEFAULT_WORKDAY): { blocks: Block[]; freeMs: number; from: number; to: number } {
     const at = (min: number) => new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, min).getTime();
-    const from = at(FROM_H * 60);
-    const to = at(TO_H * 60);
+    const from = at(workday[0]);
+    const to = at(workday[1]);
     const today = meetings.filter((m) => m.end > from && m.start < to).map((m): Block => ({ kind: "meeting", start: Math.max(m.start, from), end: Math.min(m.end, to), title: m.title }));
     // Lunch is what meetings leave of it; free time is what meetings and lunch leave of the day.
     const lunchBlocks = lunch ? gaps(today, at(lunch[0]), at(lunch[1])).map((g): Block => ({ kind: "lunch", ...g })) : [];

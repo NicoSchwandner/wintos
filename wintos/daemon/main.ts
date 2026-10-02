@@ -30,7 +30,7 @@ const journal = journalDir
     ? new Journal(journalDir, home(process.env.WINTOS_JOURNAL_TEMPLATE) ?? join(journalDir, "..", "templates", "daily_template.md"), join(root, ".day-planned.json"), newDay ? () => void execFileSync("/bin/sh", ["-c", newDay], { cwd: dirname(journalDir), timeout: 20_000, stdio: "ignore" }) : undefined)
     : undefined;
 
-startServer({ root, port, plugins, token: process.env.WINTOS_TOKEN, journal, lunch: process.env.WINTOS_LUNCH })
+startServer({ root, port, plugins, token: process.env.WINTOS_TOKEN, journal, lunch: process.env.WINTOS_LUNCH, workday: process.env.WINTOS_WORKDAY })
     .then(() => console.log(`[wintosd] listening on 127.0.0.1:${port}, projects in ${root}`))
     .catch((e) => {
         console.error(`[wintosd] failed to start: ${e}`);

@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from "react";
 import { carryToToday, leftFromYesterday, markPlanned, saveFocus } from "./day";
-import { dayTimeline, focusList, parseLunch, type Block } from "./dayplan";
+import { dayTimeline, DEFAULT_WORKDAY, focusList, parseSpan, type Block } from "./dayplan";
 import { editMine } from "./focus";
 import { Key } from "./Key";
 import { meetingsFrom } from "./meetings";
@@ -75,7 +75,7 @@ export const TodayPage = memo(() => {
                         </Panel>
                     )}
                     <Panel label="Today's focus" note={day.planned ? undefined : "not planned yet"} warn={!day.planned}>
-                        <Mine text={day.focus} mtime={day.mtime} canEdit save={save} size="full" file="today's journal file" empty="Nothing planned yet. Press ⌘E and write one to three things that matter today." />
+                        <Mine text={day.focus} mtime={day.mtime} canEdit save={save} size="full" file="today's journal file" empty={left.length ? `Nothing planned yet. ⌘E starts from the ${left.length} things yesterday left open.` : "Nothing planned yet. Press ⌘E and write one to three things that matter today."} start={left.map((t) => `- [ ] ${t}`).join("\n")} />
                     </Panel>
                 </div>
             </div>
@@ -116,11 +116,11 @@ function Item({ text, done, on, carry }: { text: string; done?: boolean; on?: bo
     );
 }
 
-// The day from 08 to 18 to scale: meetings, lunch, and the free time between, with now marked.
+// The workday to scale: meetings, lunch, and the free time between, with now marked.
 function Timeline({ now }: { now: number }) {
     const { state } = useWintos();
     const meetings = useMemo(() => meetingsFrom(state?.plugins), [state?.plugins]);
-    const { blocks, freeMs, from, to } = dayTimeline(meetings, parseLunch(state?.lunch), new Date(now));
+    const { blocks, freeMs, from, to } = dayTimeline(meetings, parseSpan(state?.lunch), new Date(now), parseSpan(state?.workday) ?? DEFAULT_WORKDAY);
     const pct = (t: number) => `${((t - from) / (to - from)) * 100}%`;
     const hours = Array.from({ length: (to - from) / 3_600_000 + 1 }, (_, i) => from + i * 3_600_000);
     return (

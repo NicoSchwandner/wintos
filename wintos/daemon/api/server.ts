@@ -23,7 +23,7 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     const uiOrigins = new Set(opts.uiOrigins ?? [...DEFAULT_UI_ORIGINS, ...(process.env.WINTOS_UI_ORIGINS?.split(",") ?? [])]);
     // Saved on every change and restored at start, so a restart doesn't forget who waits on you.
@@ -49,6 +49,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         seen,
         ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
         ...(opts.lunch ? { lunch: opts.lunch } : {}),
+        ...(opts.workday ? { workday: opts.workday } : {}),
     });
     const broadcast = () => {
         const frame = JSON.stringify(state());

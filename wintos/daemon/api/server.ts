@@ -7,6 +7,7 @@ import { injection } from "../inject";
 import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
+import type { Journal } from "../journal/journal";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
@@ -21,7 +22,8 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // token: a per-launch secret Electron hands to both wintosd and the UI. Any request that comes
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string }): Promise<WintosServer> {
+// journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     const uiOrigins = new Set(opts.uiOrigins ?? [...DEFAULT_UI_ORIGINS, ...(process.env.WINTOS_UI_ORIGINS?.split(",") ?? [])]);
     // Saved on every change and restored at start, so a restart doesn't forget who waits on you.
@@ -45,6 +47,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         snoozes,
         projectSnoozes,
         seen,
+        ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
+        ...(opts.lunch ? { lunch: opts.lunch } : {}),
     });
     const broadcast = () => {
         const frame = JSON.stringify(state());
@@ -130,6 +134,20 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 return (await runner.run(decodeURIComponent(plugin[1]))) ? send(res, 200, "") : send(res, 404, "no such plugin");
             }
             if (req.method === "GET" && url.pathname === "/projects/texts") return json(res, store.texts());
+            if (url.pathname.startsWith("/day/") && !opts.journal) return send(res, 404, "no journal: set WINTOS_JOURNAL_DIR");
+            if (req.method === "POST" && url.pathname === "/day/focus") {
+                const b = (await body(req)) as { text?: unknown; baseMtime?: unknown };
+                if (typeof b?.text !== "string" || b.text.length > 20_000) return send(res, 400, "need the focus text");
+                const r = opts.journal!.saveFocus(new Date(), b.text, typeof b.baseMtime === "number" ? b.baseMtime : undefined);
+                if (r === "conflict") return send(res, 409, "the day's file changed on disk");
+                broadcast();
+                return send(res, 200, "");
+            }
+            if (req.method === "POST" && url.pathname === "/day/planned") {
+                opts.journal!.markPlanned(new Date());
+                broadcast();
+                return send(res, 200, "");
+            }
             const reopen = /^\/projects\/([^/]+)\/reopen$/.exec(url.pathname);
             if (req.method === "POST" && reopen) {
                 const b = (await body(req)) as { tabId?: unknown };

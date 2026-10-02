@@ -2,6 +2,7 @@ import { homedir } from "os";
 import { join } from "path";
 import { wintosInstance } from "../instance";
 import { startServer } from "./api/server";
+import { Journal } from "./journal/journal";
 import { discoverPlugins, type Plugin } from "./plugins/runner";
 
 const root = process.env.WINTOS_ROOT?.replace(/^~/, homedir()) ?? join(homedir(), ".local/share/wintos/projects");
@@ -17,7 +18,13 @@ const plugins = [...core, ...discoverPlugins(join(homedir(), ".config/wintos/plu
 
 if (process.env.ELECTRON_RUN_AS_NODE) process.stdin.on("end", () => process.exit(0)).resume();
 
-startServer({ root, port, plugins, token: process.env.WINTOS_TOKEN })
+// A daily journal behind the Today page: WINTOS_JOURNAL_DIR holds YYYY/MM/YYYY-MM-DD.md, made from
+// WINTOS_JOURNAL_TEMPLATE. Which days were planned is WintOS's own, kept beside the projects.
+const home = (p?: string) => p?.replace(/^~/, homedir());
+const journalDir = home(process.env.WINTOS_JOURNAL_DIR);
+const journal = journalDir ? new Journal(journalDir, home(process.env.WINTOS_JOURNAL_TEMPLATE) ?? join(journalDir, "..", "templates", "daily_template.md"), join(root, ".day-planned.json")) : undefined;
+
+startServer({ root, port, plugins, token: process.env.WINTOS_TOKEN, journal, lunch: process.env.WINTOS_LUNCH })
     .then(() => console.log(`[wintosd] listening on 127.0.0.1:${port}, projects in ${root}`))
     .catch((e) => {
         console.error(`[wintosd] failed to start: ${e}`);

@@ -131,6 +131,29 @@ describe("search and reopen", () => {
     });
 });
 
+describe("the day", () => {
+    const withJournal = async () => {
+        srv.close();
+        const dir = join(root, "journal");
+        mkdirSync(dir);
+        writeFileSync(join(root, "tpl.md"), "# $date\n\n## Today's focus (1-3 items)\n\n- [ ] ...\n");
+        const { Journal } = await import("../journal/journal");
+        srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")), lunch: "11:30-13:00" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+    };
+
+    test("the state carries today's plan and the lunch break; saving and planning update it", async () => {
+        await withJournal();
+        const day = async () => (await (await fetch(base + "/state")).json()) as { day: { focus: string; planned: boolean }; lunch: string };
+        expect([(await day()).day.focus, (await day()).day.planned, (await day()).lunch]).toEqual(["", false, "11:30-13:00"]);
+        expect((await post("/day/focus", { text: "- [ ] Pair on the flaky test" })).status).toBe(200);
+        expect((await post("/day/planned", {})).status).toBe(200);
+        expect([(await day()).day.focus, (await day()).day.planned]).toEqual(["- [ ] Pair on the flaky test", true]);
+    });
+
+    test("without a journal the day endpoints say how to get one", async () => expect((await post("/day/focus", { text: "x" })).status).toBe(404));
+});
+
 describe("notes", () => {
     test("GET notes returns project.md's body and mine.md", async () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });

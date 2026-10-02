@@ -18,6 +18,7 @@ export function Mine({
     size,
     file = "mine.md",
     empty = "Empty. Press ⌘E to write what the sessions must respect.",
+    start = "",
 }: {
     text: string;
     mtime: number;
@@ -26,6 +27,7 @@ export function Mine({
     size: "rail" | "full";
     file?: string;
     empty?: string;
+    start?: string; // what an edit of an empty file begins with (the Today page: yesterday's leftovers)
 }) {
     const editing = useAtomValue(editingMineAtom);
     const [draft, setDraft] = useState(text);
@@ -34,7 +36,7 @@ export function Mine({
     const [base, setBase] = useState(mtime);
     const ref = useRef<HTMLTextAreaElement>(null);
     useEffect(() => {
-        if (editing) (setDraft(text), setBase(mtime), setError(null), setTimeout(() => ref.current?.focus(), 0));
+        if (editing) (setDraft(text.trim() ? text : start), setBase(mtime), setError(null), setTimeout(() => ref.current?.focus(), 0));
     }, [editing]);
 
     useZoneKeys(ref, {

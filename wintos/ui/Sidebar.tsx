@@ -51,6 +51,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const { state: raw, offline } = useWintos();
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
     const now = useNow();
+    const fullScreen = useAtomValue(atoms.isFullScreen);
     const [showAll, setShowAll] = useStoredFlag("wintos:show-all-quiet");
     const [showSnoozed, setShowSnoozed] = useStoredFlag("wintos:show-snoozed");
     const switchTarget = useAtomValue(switchTargetAtom);
@@ -136,12 +137,13 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     return (
         <div style={{ height: "100%", display: "flex", flexDirection: "column", background: T.sidebar, borderRight: `1px solid ${T.border}`, fontFamily: T.ui, color: T.text }}>
             {instance().label && (
-                <div style={{ padding: "30px 12px 6px", background: T.brick, color: T.ground, fontFamily: T.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", textAlign: "center", WebkitAppRegion: "drag" } as React.CSSProperties}>
+                <div style={{ padding: `${fullScreen ? 6 : 30}px 12px 6px`, background: T.brick, color: T.ground, fontFamily: T.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", textAlign: "center", WebkitAppRegion: "drag" } as React.CSSProperties}>
                     {instance().label.toUpperCase()} INSTANCE · NOT YOUR WINTOS
                 </div>
             )}
-            {/* The header drags the window, as a macOS title bar would; nothing in it is clickable. */}
-            <div style={{ padding: "36px 16px 13px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", WebkitAppRegion: "drag" } as React.CSSProperties}>
+            {/* The header drags the window, as a macOS title bar would; nothing in it is clickable. Its
+                top clears the window buttons, which sit over the sidebar; full screen has none. */}
+            <div style={{ padding: `${fullScreen ? 12 : 36}px 16px 13px`, display: "flex", alignItems: "flex-end", justifyContent: "space-between", WebkitAppRegion: "drag" } as React.CSSProperties}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                     <span style={{ fontFamily: T.display, fontSize: 21, lineHeight: 1 }}>WintOS</span>
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>

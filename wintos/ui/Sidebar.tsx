@@ -10,13 +10,14 @@ import type { Row } from "../daemon/ranking/rank";
 import { Key } from "./Key";
 import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
+import { TodayCard } from "./TodayCard";
 import { meetingsFrom } from "./meetings";
 import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
 import { setSwitchOrder, switchTargetAtom } from "./switcher";
 import { closeProjectTab, registerWintosMenu } from "./menu";
-import { renamingAtom } from "./notes/state";
+import { mainViewAtom, renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
 import { instance, setProjectSnoozed, setProjectTitle, useWintos } from "./useWintos";
 import { ghPrs, inboxKind, isInboxTab, prsByTab, type InboxList, projectTabIds, rowView, RowView, sidebarModel, withSnoozes } from "./view";
@@ -52,6 +53,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
     const now = useNow();
     const fullScreen = useAtomValue(atoms.isFullScreen);
+    const mainView = useAtomValue(mainViewAtom);
     const [showAll, setShowAll] = useStoredFlag("wintos:show-all-quiet");
     const [showSnoozed, setShowSnoozed] = useStoredFlag("wintos:show-snoozed");
     const switchTarget = useAtomValue(switchTargetAtom);
@@ -171,6 +173,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         {loading.map((p) => <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
+                {state?.day && <TodayCard day={state.day} active={mainView === "day"} />}
                 {meetings.length > 0 && <MeetingCard meetings={meetings} />}
                 <MeetingEdge meetings={meetings} />
                 {offline || !model ? (

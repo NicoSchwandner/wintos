@@ -8,19 +8,24 @@ import { editingMineAtom } from "./state";
 import type { SaveResult } from "./useNotes";
 import { useZoneKeys } from "../zones";
 
-// mine.md: rendered as paragraphs, edited in place. ⌘⏎ saves, esc discards.
+// mine.md: rendered as paragraphs, edited in place. ⌘⏎ saves, esc discards. The Today page edits
+// the day's focus with it too: file names it in errors, empty says what to write.
 export function Mine({
     text,
     mtime,
     canEdit,
     save,
     size,
+    file = "mine.md",
+    empty = "Empty. Press ⌘E to write what the sessions must respect.",
 }: {
     text: string;
     mtime: number;
     canEdit: boolean;
     save: (t: string, baseMtime: number) => Promise<SaveResult>;
     size: "rail" | "full";
+    file?: string;
+    empty?: string;
 }) {
     const editing = useAtomValue(editingMineAtom);
     const [draft, setDraft] = useState(text);
@@ -37,7 +42,7 @@ export function Mine({
         "Cmd:Enter": () =>
             void save(draft, base).then((r) => {
                 if (r === "ok") editMine(false);
-                else if (r === "conflict") setError("mine.md changed on disk while you edited. Copy your text, press esc and edit again.");
+                else if (r === "conflict") setError(`${file} changed on disk while you edited. Copy your text, press esc and edit again.`);
                 else setError("could not save: wintosd refused or is offline");
             }),
     });
@@ -77,14 +82,14 @@ export function Mine({
     // mine.md changed on disk meanwhile.
     const tick = async (i: number) => {
         const r = await save(toggleCheckbox(text, i), mtime);
-        setError(r === "ok" ? null : r === "conflict" ? "mine.md changed on disk; it reloads, then tick again." : "could not save: wintosd refused or is offline");
+        setError(r === "ok" ? null : r === "conflict" ? `${file} changed on disk; it reloads, then tick again.` : "could not save: wintosd refused or is offline");
     };
     return (
         <div data-wintos={canEdit ? "mine-editable" : undefined} style={{ display: "flex", flexDirection: "column", gap: size === "rail" ? 4 : 6 }}>
             {error && <span style={{ color: T.brick, fontSize: 11 }}>{error}</span>}
             {!text.trim() && (
                 <span style={{ fontSize: 12.5, color: T.faint }}>
-                    {canEdit ? "Empty. Press ⌘E to write what the sessions must respect." : "Available once the project has a title."}
+                    {canEdit ? empty : "Available once the project has a title."}
                 </span>
             )}
             {text.trim() && <Md text={text} size={size} onTick={canEdit ? (i) => void tick(i) : undefined} />}

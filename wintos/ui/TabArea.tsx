@@ -18,6 +18,7 @@ import { inboxKind, isInboxTab } from "./view";
 import { PaneStrip } from "./PaneStrip";
 import { StatusBar } from "./StatusBar";
 import { T } from "./tokens";
+import { TodayPage } from "./TodayPage";
 
 // The project area: session strip over the terminals, the notes rail beside them, and ⇧⌘L
 // swapping the terminals for both notes files. Terminals stay mounted underneath.
@@ -34,6 +35,9 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
     useNewProjectPaste(tabId, inbox ? undefined : tab?.blockids, state ?? undefined);
     return (
         <div className="flex flex-col flex-grow min-w-0" style={{ position: "relative" }}>
+            {/* ⇧⌘Y's page covers a project and an Inbox tab alike; what is under it stays mounted. */}
+            {view === "day" && <TodayPage />}
+            <div className="flex flex-col flex-grow min-w-0" style={{ minHeight: 0, display: view === "day" ? "none" : "flex" }}>
             {inbox ? (
                 <InboxArea tabId={tabId} list={inboxKind(tab)!} empty={empty}>
                     {children}
@@ -56,6 +60,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
             <StatusBar />
             </>
             )}
+            </div>
             {overlay === "palette" && <Palette names={names} />}
             {overlay === "keymap" && <Keymap />}
             {overlay === "confirm-close" && <ConfirmClose />}

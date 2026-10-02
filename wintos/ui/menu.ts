@@ -73,6 +73,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:z", "snooze-project"],
     ["Option:Cmd:p", "park-session"],
     ["Shift:Cmd:m", "join-meeting"],
+    ["Shift:Cmd:y", "day"],
     ["Cmd:h", "focus-left"],
     ["Cmd:l", "focus-right"],
 ];
@@ -123,7 +124,7 @@ function stepSideways(right: boolean): void {
     if (inInbox()) return stepInbox(right);
     const zone = zoneOf(document.activeElement);
     // The notes are the rightmost thing: ⌘H goes back to the terminals, ⌘L stays.
-    if (zone === "list" || globalStore.get(mainViewAtom) === "notes") return right ? undefined : focusArea("terminal");
+    if (zone === "list" || globalStore.get(mainViewAtom) !== "terminal") return right ? undefined : focusArea("terminal");
     const lm = getLayoutModelForStaticTab();
     const before = globalStore.get(lm.focusedNode)?.id;
     if (zone === "pane" && globalStore.get(lm.magnifiedNodeIdAtom)) {
@@ -230,6 +231,7 @@ export function runAction(action: string): void {
     if (action === "prs") return goToInbox("prs");
     if (action === "panel" || action.startsWith("panel:")) return goToInbox("oncall");
     if (action === "notes") return toggleView("notes");
+    if (action === "day") return toggleView("day");
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);
     if (b) createBlock(b.def, false, b.ephemeral);
 }
@@ -255,7 +257,7 @@ export function wintosClose(): boolean {
 export function wintosEscape(): boolean {
     const active = document.activeElement;
     // The notes full width is a view opened on top: Esc closes it, back to where you were.
-    if (!globalStore.get(overlayAtom) && globalStore.get(mainViewAtom) === "notes" && zoneOf(active) === "list") return closeNotesView(), true;
+    if (!globalStore.get(overlayAtom) && globalStore.get(mainViewAtom) !== "terminal" && zoneOf(active) === "list") return closeNotesView(), true;
     const action = escapeAction({ overlay: !!globalStore.get(overlayAtom), zone: zoneOf(active), inInbox: inInbox(), onPage: active?.tagName === "WEBVIEW" });
     if (action === "overlay") closeOverlay();
     if (action === "panes") focusArea("terminal"); // focusArea declares the pane wanted

@@ -11,7 +11,7 @@ import { Key } from "./Key";
 import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
 import { meetingsFrom } from "./meetings";
-import { T } from "./tokens";
+import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
 import { setSwitchOrder, switchTargetAtom } from "./switcher";
@@ -271,7 +271,6 @@ function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming"
 
 // The open project: a brighter row with a bar on its left, unmistakable at a glance (green is
 // taken by the focus frame), and the keys that walk away from it.
-const ACTIVE_ROW: React.CSSProperties = { background: T.borderActive, boxShadow: `inset 3px 0 0 ${T.emphasis}` };
 const WalkKeys = () => (
     <span style={{ display: "inline-flex", gap: 8 }}>
         <Key k="⌘K" label="↑" />
@@ -297,7 +296,7 @@ function CardRow(p: RowProps) {
                 borderRadius: 10,
                 background: T.card,
                 border: `1px solid ${p.cursor ? T.apricot : p.active ? T.borderActive : T.border}`,
-                ...(p.active ? ACTIVE_ROW : {}),
+                ...(p.active ? ACTIVE : {}),
             }}
         >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -331,7 +330,7 @@ function QuietRow(p: RowProps) {
                 borderRadius: 8,
                 background: "transparent",
                 border: `1px solid ${p.cursor ? T.apricot : "transparent"}`,
-                ...(p.active ? ACTIVE_ROW : {}),
+                ...(p.active ? ACTIVE : {}),
             }}
         >
             {/* The title gets the room; the note is capped and cut, so neither wraps. */}
@@ -384,7 +383,7 @@ function Drumming() {
 // the numbers can't say (late, updating, loading).
 function SummaryCard({ label, keys, stats, note, noteColor, busy, active, onClick }: { label: string; keys: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; active?: boolean; onClick: () => void }) {
     return (
-        <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#32302f", border: `1px solid ${active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", ...(active ? ACTIVE_ROW : {}) }}>
+        <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#32302f", border: `1px solid ${active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", ...(active ? ACTIVE : {}) }}>
             <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, fontWeight: 600, color: T.secondary }}>
                 {label}
                 {busy && <Drumming />}

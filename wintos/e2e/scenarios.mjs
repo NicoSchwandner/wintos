@@ -292,6 +292,16 @@ await scenario("10 · ⌘D in the Inbox makes no terminal", async () => {
     if (inboxPanes() !== panes) throw new Error("a pane was added to the Inbox");
 });
 
+await scenario("11 · ⇧⌘Y in a project and in the Inbox shows the Today page, and again goes back", async () => {
+    for (const t of [await toProject(), await toInbox()]) {
+        await press(t, "y", { mods: ["meta", "shift"] });
+        await until("the Today page", () => evalIn(t, `!!document.querySelector("[data-wintos=today]")`));
+        if (await evalIn(t, `document.body.innerText.includes("Cannot read properties")`)) throw new Error("the page crashed");
+        await press(t, "y", { mods: ["meta", "shift"] });
+        await until("the page gone", async () => !(await evalIn(t, `!!document.querySelector("[data-wintos=today]")`)));
+    }
+});
+
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
 // must not cost the run its results.
 await scenario("clean-up · the panes this run opened are closed", async () => {

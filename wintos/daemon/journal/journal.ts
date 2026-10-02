@@ -55,7 +55,9 @@ export type Day = { date: string; exists: boolean; mtime: number; focus: string;
 
 export class Journal {
     // plannedFile: which days were planned (⌘⏎ on the Today page); kept by WintOS, not in the journal.
-    constructor(readonly dir: string, readonly template: string, readonly plannedFile = join(dir, ".wintos-planned.json")) {}
+    // create: how the journal makes a missing day itself (its own tool knows the weekly and monthly
+    // sections); without it, or when it makes nothing, the day comes from the template.
+    constructor(readonly dir: string, readonly template: string, readonly plannedFile = join(dir, ".wintos-planned.json"), readonly create?: () => void) {}
 
     private file(d: Date): string {
         const iso = isoDay(d);
@@ -98,8 +100,13 @@ export class Journal {
     // never overwritten. A missing day is made from the template first.
     saveFocus(d: Date, text: string, baseMtime?: number): "ok" | "conflict" {
         const file = this.file(d);
+        if (baseMtime !== undefined && (existsSync(file) ? statSync(file).mtimeMs : 0) !== baseMtime) return "conflict";
+        if (!existsSync(file) && this.create) {
+            try {
+                this.create();
+            } catch {} // falls back to the template below
+        }
         const exists = existsSync(file);
-        if (baseMtime !== undefined && (exists ? statSync(file).mtimeMs : 0) !== baseMtime) return "conflict";
         const base = exists ? readFileSync(file, "utf8") : readFileSync(this.template, "utf8").replace(/\$date/g, longDate(d)).replace(/\$week/g, String(isoWeek(d)));
         mkdirSync(dirname(file), { recursive: true });
         writeFileSync(file, withFocus(base, text));

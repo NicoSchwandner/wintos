@@ -55,6 +55,23 @@ describe("Journal", () => {
         expect(focusOf(text)).toBe("- [ ] Pair on the flaky test");
     });
 
+    test("a missing day is made by the journal's own tool when there is one, and the focus written into it", () => {
+        const { dir } = setup();
+        const tpl = join(dir, "daily_template.md");
+        const file = join(dir, "2026", "10", "2026-10-02.md");
+        const j = new Journal(dir, tpl, join(dir, ".planned.json"), () => (mkdirSync(join(dir, "2026", "10"), { recursive: true }), writeFileSync(file, "# Made by the tool\n\n## Today's focus (1-3 items)\n\n- [ ] ...\n\n## Weekly reflection\n")));
+        expect(j.saveFocus(new Date(2026, 9, 2), "- [ ] Plan")).toBe("ok");
+        const text = readFileSync(file, "utf8");
+        expect([text.startsWith("# Made by the tool"), focusOf(text), text.includes("## Weekly reflection")]).toEqual([true, "- [ ] Plan", true]);
+    });
+
+    test("a tool that fails or makes nothing leaves the template to make the day", () => {
+        const { dir } = setup();
+        const j = new Journal(dir, join(dir, "daily_template.md"), join(dir, ".planned.json"), () => { throw new Error("not installed"); });
+        expect(j.saveFocus(new Date(2026, 9, 2), "- [ ] Plan")).toBe("ok");
+        expect(readFileSync(join(dir, "2026", "10", "2026-10-02.md"), "utf8").startsWith("# Friday, October 2nd 2026 (Week 40)")).toBe(true);
+    });
+
     test("a save based on an older file is refused", () => {
         const { j, put } = setup();
         put("2026-10-02", DAY("- [ ] a"));

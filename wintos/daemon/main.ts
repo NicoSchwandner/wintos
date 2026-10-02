@@ -1,5 +1,6 @@
 import { homedir } from "os";
-import { join } from "path";
+import { execFileSync } from "child_process";
+import { dirname, join } from "path";
 import { wintosInstance } from "../instance";
 import { startServer } from "./api/server";
 import { Journal } from "./journal/journal";
@@ -22,7 +23,12 @@ if (process.env.ELECTRON_RUN_AS_NODE) process.stdin.on("end", () => process.exit
 // WINTOS_JOURNAL_TEMPLATE. Which days were planned is WintOS's own, kept beside the projects.
 const home = (p?: string) => p?.replace(/^~/, homedir());
 const journalDir = home(process.env.WINTOS_JOURNAL_DIR);
-const journal = journalDir ? new Journal(journalDir, home(process.env.WINTOS_JOURNAL_TEMPLATE) ?? join(journalDir, "..", "templates", "daily_template.md"), join(root, ".day-planned.json")) : undefined;
+// WINTOS_JOURNAL_NEW: the journal's own command that makes today's file, run from the journal's
+// parent folder (e.g. `work-journal new`); it must leave an existing day alone.
+const newDay = process.env.WINTOS_JOURNAL_NEW;
+const journal = journalDir
+    ? new Journal(journalDir, home(process.env.WINTOS_JOURNAL_TEMPLATE) ?? join(journalDir, "..", "templates", "daily_template.md"), join(root, ".day-planned.json"), newDay ? () => void execFileSync("/bin/sh", ["-c", newDay], { cwd: dirname(journalDir), timeout: 20_000, stdio: "ignore" }) : undefined)
+    : undefined;
 
 startServer({ root, port, plugins, token: process.env.WINTOS_TOKEN, journal, lunch: process.env.WINTOS_LUNCH })
     .then(() => console.log(`[wintosd] listening on 127.0.0.1:${port}, projects in ${root}`))

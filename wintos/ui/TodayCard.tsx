@@ -12,7 +12,8 @@ const SHOWN = 3;
 // Today's plan, with the other cards so it is in view everywhere. Until the day is planned it
 // pulses apricot, as a meeting about to start does; then it lists what's still open, and a click
 // on a box ticks it in the day's file.
-export const TodayCard = memo(({ day, active }: { day: Day; active: boolean }) => {
+// walk: the ⌘J/⌘K keys, which sit on whatever is marked as showing.
+export const TodayCard = memo(({ day, active, walk }: { day: Day; active: boolean; walk?: React.ReactNode }) => {
     const items = focusList(day.focus);
     const open = items.filter((i) => !i.done);
     const done = items.length - open.length;
@@ -51,6 +52,7 @@ export const TodayCard = memo(({ day, active }: { day: Day; active: boolean }) =
                     </span>
                 </>
             )}
+            {active && walk}
         </div>
     );
 });

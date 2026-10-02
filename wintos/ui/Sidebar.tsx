@@ -47,7 +47,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const tabs = useTabs(allTabIds);
     const tabIds = projectTabIds(allTabIds, tabs);
     // In the PRs or On call tab its card is marked, as the current project's row is.
-    const shows = (list: InboxList) => inboxKind(tabs[activeTabId]) === list;
+    // What fills the window right now is marked, and only that: the Today page covers the tab
+    // under it, so neither that project's row nor an Inbox card is marked while it shows.
+    const shows = (list: InboxList) => mainView !== "day" && inboxKind(tabs[activeTabId]) === list;
     const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
     const { state: raw, offline } = useWintos();
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
@@ -122,7 +124,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             key: row.tabId,
             tabId: row.tabId,
             v,
-            active: row.tabId === activeTabId,
+            active: row.tabId === activeTabId && mainView !== "day",
             cursor: switchTarget === row.tabId,
             renaming: renaming === row.tabId,
             onOpen: () => open(row.tabId),
@@ -173,7 +175,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         {loading.map((p) => <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
-                {state?.day && <TodayCard day={state.day} active={mainView === "day"} />}
+                {state?.day && <TodayCard day={state.day} active={mainView === "day"} walk={<WalkKeys />} />}
                 {meetings.length > 0 && <MeetingCard meetings={meetings} />}
                 <MeetingEdge meetings={meetings} />
                 {offline || !model ? (

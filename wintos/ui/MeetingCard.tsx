@@ -5,7 +5,8 @@ import { T } from "./tokens";
 import { useNow } from "./useNow";
 
 // The next meeting, with the other cards (design A). Two minutes before it starts, the border
-// turns apricot and breathes and the countdown runs in seconds; never a popup.
+// turns apricot and breathes and the countdown runs in seconds; never a popup. While one is on,
+// a moss border; the next one's warning takes over from it.
 export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
     useEffect(() => void setLatestMeetings(meetings), [meetings]);
     const now = useNow(1000);
@@ -19,7 +20,7 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
             data-wintos="meeting-card"
             style={{
                 display: "flex", flexDirection: "column", gap: 3, padding: "9px 11px", borderRadius: 10, background: T.card,
-                border: `1px solid ${n.soon ? T.apricot : T.border}`, animation: n.soon ? "wintos-breathe 2.4s ease-in-out infinite" : undefined,
+                border: `1px solid ${n.soon ? T.apricot : on ? T.moss : T.border}`, animation: n.soon ? "wintos-breathe 2.4s ease-in-out infinite" : undefined,
             }}
         >
             <style>{`@keyframes wintos-breathe { 0%,100% { box-shadow: 0 0 0 0 #fe801900 } 50% { box-shadow: 0 0 0 3px #fe801955 } } @media (prefers-reduced-motion: reduce) { [data-wintos=meeting-card] { animation: none !important } }`}</style>

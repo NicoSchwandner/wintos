@@ -1,7 +1,8 @@
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms } from "@/store/global";
+import { getLayoutModelForStaticTab } from "@/layout/index";
 import { atom, useAtomValue } from "jotai";
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo } from "react";
 import { ConfirmClose } from "./ConfirmClose";
 import "./theme.css";
 import { Key } from "./Key";
@@ -34,6 +35,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
     const { state } = useWintos();
     const inbox = isInboxTab(tab);
     useNewProjectPaste(tabId, inbox ? undefined : tab?.blockids, state ?? undefined);
+    useMagnifyFollowsFocus();
     return (
         <div className="flex flex-col flex-grow min-w-0" style={{ position: "relative" }}>
             {/* ⇧⌘Y's page covers a project and an Inbox tab alike; what is under it stays mounted. */}
@@ -70,6 +72,18 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
     );
 });
 WintosTabArea.displayName = "WintosTabArea";
+
+// Magnify shows one pane at a time, and that pane is always the focused one: a new terminal,
+// a page a link opened, a session another key moved to. Otherwise focus lands in a pane hidden
+// behind the magnified one, and keys go somewhere you can't see. ⌘M still turns magnify off.
+function useMagnifyFollowsFocus(): void {
+    const lm = getLayoutModelForStaticTab();
+    const magnified = useAtomValue(lm.magnifiedNodeIdAtom);
+    const focused = useAtomValue(lm.focusedNode);
+    useEffect(() => {
+        if (magnified && focused && focused.id !== magnified) lm.magnifyNodeToggle(focused.id);
+    }, [magnified, focused?.id]);
+}
 
 // Closing the last pane leaves the project open; say what to do next.
 function EmptyProject() {

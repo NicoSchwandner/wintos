@@ -21,7 +21,7 @@ export const TodayCard = memo(({ day, active, walk }: { day: Day; active: boolea
     return (
         <div
             data-wintos="today-card"
-            data-key="⇧⌘Y"
+            data-key={active ? "" : "⇧⌘Y"}
             onClick={() => openView("day")}
             style={{
                 display: "flex", flexDirection: "column", gap: 5, padding: "9px 11px", borderRadius: 10, cursor: "pointer",

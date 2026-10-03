@@ -5,6 +5,7 @@ import { Key } from "./Key";
 import { noticeAtom, setLatestStreak, showNotice } from "./keyGame";
 import { progress } from "./keyStats";
 import { openView } from "./menu";
+import { mainViewAtom } from "./notes/state";
 import { T } from "./tokens";
 
 const SEEN = "wintos:badge-seen";
@@ -14,6 +15,7 @@ const SEEN = "wintos:badge-seen";
 // or rank, that, in green and hard to miss.
 export const GameLine = memo(({ stats }: { stats: KeyStats }) => {
     const notice = useAtomValue(noticeAtom);
+    const pageOpen = useAtomValue(mainViewAtom) === "keyboard";
     useEffect(() => void setLatestStreak(stats.streak), [stats.streak]);
     // A badge or a new rank is announced once, by the window you're looking at (every project has
     // its own), whichever is newest.
@@ -64,7 +66,7 @@ export const GameLine = memo(({ stats }: { stats: KeyStats }) => {
             <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                 <button
                     type="button"
-                    data-key="⇧⌘I"
+                    data-key={pageOpen ? "" : "⇧⌘I"}
                     tabIndex={-1}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => openView("keyboard")}

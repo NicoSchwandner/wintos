@@ -3,7 +3,8 @@ import { atom } from "jotai";
 import { daemonFetch } from "./useWintos";
 
 // The keyboard game's window side: a WintOS action done by key is reported as a key, a click on
-// an element marked with data-key (something that has a shortcut) as a slip. Clicks inside a page
+// an element marked with data-key (something that has a shortcut) as a slip. An element whose
+// click would change nothing (the card of what is already open) carries an empty data-key. Clicks inside a page
 // never reach this document, and elements without a key aren't marked, so neither counts.
 
 type KeyEvent = { key: string; code?: string; cmd?: boolean; shift?: boolean; option?: boolean; alt?: boolean; control?: boolean; repeat?: boolean };

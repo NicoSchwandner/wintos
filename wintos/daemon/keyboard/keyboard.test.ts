@@ -36,6 +36,12 @@ describe("ranks", () => {
         expect(rankOf(s)).toBe("Commuter");
     });
 
+    test("reaching a new rank is announced, with when", () => {
+        const s = keys({ ...emptyStats(), points: 99 }, 1);
+        expect(s.levelUp).toEqual({ rank: 1, at: day(5) });
+        expect(keys(s, 1).levelUp).toEqual({ rank: 1, at: day(5) }); // not again until the next
+    });
+
     test("one slip never drops a rank; a week ending below it does", () => {
         const fluent = { ...keys(emptyStats(), 1, "⌘J", day(5)), points: 302, rank: 2 };
         const slipped = recordClick(fluent, "⌘J", day(5));

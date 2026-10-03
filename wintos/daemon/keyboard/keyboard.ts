@@ -18,6 +18,7 @@ export type KeyStats = {
     days: Record<string, { keys: number; clicks: number }>;
     lastDay?: string;
     badge?: Badge; // the newest, for the sidebar to announce once
+    levelUp?: { rank: number; at: number }; // the newest rank reached, announced the same way
 };
 
 export const emptyStats = (): KeyStats => ({ points: 0, rank: 0, streak: 0, best: 0, keys: {}, clicks: {}, days: {} });
@@ -53,10 +54,12 @@ export function recordKey(stats: KeyStats, key: string, now: number): KeyStats {
     const used = (s.keys[key] ?? 0) + 1;
     const points = s.points + 1;
     const tier = TIERS.find(([n]) => n === used)?.[1];
+    const rank = Math.max(s.rank, rankFor(points));
     return {
         ...s,
         points,
-        rank: Math.max(s.rank, rankFor(points)),
+        rank,
+        ...(rank > s.rank ? { levelUp: { rank, at: now } } : {}),
         streak: s.streak + 1,
         best: Math.max(s.best, s.streak + 1),
         keys: { ...s.keys, [key]: used },

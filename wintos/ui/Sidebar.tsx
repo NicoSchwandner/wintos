@@ -11,7 +11,7 @@ import { Key } from "./Key";
 import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
 import { TodayCard } from "./TodayCard";
-import { GameChip, GameLine } from "./GameIndicator";
+import { GameLine } from "./GameIndicator";
 import { meetingsFrom } from "./meetings";
 import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
@@ -155,10 +155,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         <DateTime />
                     </span>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-                    {state?.keyboard && <GameChip stats={state.keyboard} />}
-                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{tabIds.length} {tabIds.length === 1 ? "project" : "projects"}</span>
-                </div>
+                <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{tabIds.length} {tabIds.length === 1 ? "project" : "projects"}</span>
             </div>
             <div
                 data-wintos="sidebar-list"

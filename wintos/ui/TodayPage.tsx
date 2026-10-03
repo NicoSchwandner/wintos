@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo } from "react";
 import { carryToToday, leftFromYesterday, markPlanned, saveFocus } from "./day";
 import { dayTimeline, DEFAULT_WORKDAY, focusList, parseSpan, type Block } from "./dayplan";
 import { editMine } from "./focus";
@@ -12,6 +12,7 @@ import { useFocusOnMount } from "./useFocusOnMount";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
 import { useZoneKeys } from "./zones";
+import { cursorKeys } from "./itemCursor";
 
 const hm = (t: number) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 const span = (ms: number) => {
@@ -29,12 +30,8 @@ export const TodayPage = memo(() => {
     const day = state?.day;
     const editing = useAtomValue(editingMineAtom);
     const left = day ? leftFromYesterday(day) : [];
-    const [cursor, setCursor] = useState(0);
-    const carry = () => day && left[cursor] && void carryToToday(day, left[cursor]).then(() => setCursor((c) => Math.max(0, Math.min(c, left.length - 2))));
     useZoneKeys(ref, day ? {
-        j: () => setCursor((c) => Math.min(c + 1, left.length - 1)),
-        k: () => setCursor((c) => Math.max(c - 1, 0)),
-        c: carry,
+        ...cursorKeys(() => ref.current),
         "Cmd:e": () => editMine(true),
         "Cmd:Enter": () => void markPlanned(),
     } : {});
@@ -69,8 +66,8 @@ export const TodayPage = memo(() => {
                                     {yItems.filter((i) => i.done).map((i) => (
                                         <Item key={`d${i.line}`} text={i.text} done />
                                     ))}
-                                    {left.map((t, n) => (
-                                        <Item key={t} text={t} on={n === cursor} carry={() => (setCursor(n), void carryToToday(day, t))} />
+                                    {left.map((t) => (
+                                        <Item key={t} text={t} carry={() => void carryToToday(day, t)} />
                                     ))}
                                     {!yItems.length && !left.length && <span style={{ fontSize: 12, color: T.faint }}>Nothing planned yesterday.</span>}
                                 </>
@@ -108,13 +105,13 @@ function Panel({ label, note, warn, keys, children }: { label: string; note?: st
     );
 }
 
-function Item({ text, done, on, carry }: { text: string; done?: boolean; on?: boolean; carry?: () => void }) {
+function Item({ text, done, carry }: { text: string; done?: boolean; carry?: () => void }) {
     return (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "3px 6px", margin: "0 -6px", borderRadius: 6, background: on ? T.cardActive : "transparent", fontSize: 13, lineHeight: 1.5, color: done ? T.muted : T.secondary, textDecoration: done ? "line-through" : undefined }}>
+        <div data-item={carry ? "carry" : undefined} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "3px 6px", margin: "0 -6px", borderRadius: 6, fontSize: 13, lineHeight: 1.5, color: done ? T.muted : T.secondary, textDecoration: done ? "line-through" : undefined }}>
             <span style={{ width: 12, height: 12, marginTop: 4, flexShrink: 0, borderRadius: 3, border: `1.5px solid ${done ? T.moss : T.muted}`, background: done ? T.moss : "transparent" }} />
             <span style={{ flexGrow: 1, minWidth: 0, overflowWrap: "anywhere" }}>{text}</span>
             {carry && (
-                <button type="button" data-key="c" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={carry} title="Carry into today" style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                <button type="button" data-key="c" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={carry} title="Carry into today" style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                     <Key k="c" label="today" />
                 </button>
             )}

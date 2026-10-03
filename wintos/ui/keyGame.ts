@@ -66,6 +66,8 @@ export function installKeyGame(): void {
     document.addEventListener(
         "click",
         (e) => {
+            // A key's own action sometimes clicks the element (x ticks a box): that's no mouse.
+            if (!e.isTrusted) return;
             const el = (e.target as Element | null)?.closest?.<HTMLElement>("[data-key]");
             const key = el?.dataset.key;
             if (!el || !key) return;

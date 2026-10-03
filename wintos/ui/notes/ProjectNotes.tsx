@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Key } from "../Key";
 import { T } from "../tokens";
 import { type CheckState } from "./checkbox";
 import { Md } from "./Md";
@@ -59,8 +60,9 @@ const LONG = 4;
 
 function More({ open, label, onClick }: { open: boolean; label: string; onClick: () => void }) {
     return (
-        <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{ alignSelf: "flex-start", padding: 0, background: "transparent", border: "none", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}>
+        <button type="button" data-more={open ? "open" : "closed"} data-key="m" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 8, padding: 0, background: "transparent", border: "none", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}>
             {open ? "Show fewer" : label}
+            <Key k="m" label="" />
         </button>
     );
 }

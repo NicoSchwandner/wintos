@@ -9,6 +9,7 @@ const CSS = `
 :root:not([data-wintos-focus="pane"]) .block.block-focused .block-mask { border-color: transparent !important; }
 :root[data-wintos-focus="list"] [data-zone="list"]:focus-within { box-shadow: inset 0 0 0 2px var(--accent-color); }
 :root[data-wintos-focus="overlay"] :is(textarea, input)[data-zone="overlay"]:focus { outline: 2px solid var(--accent-color) !important; outline-offset: -2px; }
+[data-zone="list"]:focus-within [data-cursor] { outline: 1px solid var(--accent-color); outline-offset: 2px; border-radius: 4px; }
 `;
 
 export function installFocusRing(): void {

@@ -1,5 +1,6 @@
 import { useFocusOnMount } from "../useFocusOnMount";
 import { useZoneKeys } from "../zones";
+import { cursorKeys } from "../itemCursor";
 import { globalStore } from "@/app/store/jotaiStore";
 import { useAtomValue } from "jotai";
 import { memo, useEffect } from "react";
@@ -18,7 +19,7 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
     const { notes, project, save } = useNotes(tabId);
     const editing = useAtomValue(editingMineAtom);
     const { state } = useWintos();
-    useZoneKeys(focusRef, notesKeys(tabId, state, !editing && !!notes));
+    useZoneKeys(focusRef, { ...notesKeys(tabId, state, !editing && !!notes), ...cursorKeys(() => focusRef.current) });
     const find = useAtomValue(findInNotesAtom);
     useEffect(() => {
         if (!find || !notes) return;

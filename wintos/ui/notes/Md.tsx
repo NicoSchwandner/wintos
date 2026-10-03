@@ -41,8 +41,10 @@ export function Md({ text, size, inline, links = true, onTick }: { text: string;
             const done = !!(node?.children[0] as { properties?: { checked?: boolean } } | undefined)?.properties?.checked;
             const line = (node?.position?.start.line ?? 1) - 1;
             return (
-                <li style={{ display: "flex", gap: 8, alignItems: "flex-start", minWidth: 0, overflowWrap: "anywhere", color: done ? T.muted : undefined, textDecoration: done ? "line-through" : undefined }}>
-                    <Box state={done ? "done" : "todo"} size={size} onToggle={onTick ? () => onTick(line) : undefined} />
+                <li data-item={onTick ? "check" : undefined} style={{ display: "flex", gap: 8, alignItems: "flex-start", minWidth: 0, overflowWrap: "anywhere", color: done ? T.muted : undefined, textDecoration: done ? "line-through" : undefined }}>
+                    <span data-act data-key={onTick ? "x" : undefined} style={{ display: "contents" }}>
+                        <Box state={done ? "done" : "todo"} size={size} onToggle={onTick ? () => onTick(line) : undefined} />
+                    </span>
                     <span style={{ minWidth: 0 }}>{children}</span>
                 </li>
             );
@@ -72,6 +74,8 @@ export function Md({ text, size, inline, links = true, onTick }: { text: string;
             // Mouse only, like every link: it opens in WintOS, as the PR rows do.
             return (
                 <a
+                    data-item="link"
+                    data-key="⏎"
                     href={href}
                     title={href}
                     tabIndex={-1}

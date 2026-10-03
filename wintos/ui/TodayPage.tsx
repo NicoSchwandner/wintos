@@ -114,7 +114,7 @@ function Item({ text, done, on, carry }: { text: string; done?: boolean; on?: bo
             <span style={{ width: 12, height: 12, marginTop: 4, flexShrink: 0, borderRadius: 3, border: `1.5px solid ${done ? T.moss : T.muted}`, background: done ? T.moss : "transparent" }} />
             <span style={{ flexGrow: 1, minWidth: 0, overflowWrap: "anywhere" }}>{text}</span>
             {carry && (
-                <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={carry} title="Carry into today" style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                <button type="button" data-key="c" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={carry} title="Carry into today" style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                     <Key k="c" label="today" />
                 </button>
             )}

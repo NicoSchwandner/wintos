@@ -12,6 +12,7 @@ const KEYS: Record<MainView, readonly (readonly [string, string])[]> = {
     terminal: [["⇧⌘P", "everything"], ["⇧⌘T", "new session"], ["⇧⌘L", "notes"], ["⇧⌘K", "keys"]],
     notes: [],
     day: [],
+    keyboard: [],
 };
 
 export const StatusBar = memo(() => {

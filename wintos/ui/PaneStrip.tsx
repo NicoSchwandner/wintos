@@ -69,6 +69,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                         // Neither a click nor Tab leaves focus on the chip, outside every zone.
                         onMouseDown={(e) => e.preventDefault()}
                         tabIndex={-1}
+                        data-key="⌘H / ⌘L"
                         onClick={() => focusSession({ tabId, blockId: c.blockId })}
                         style={{ WebkitAppRegion: "no-drag", display: "inline-flex", alignItems: "center", gap: 7, maxWidth: 240, padding: "5px 10px", borderRadius: 8, border: `1px solid ${isOn ? T.borderActive : T.border}`, background: isOn ? T.cardActive : "transparent", color: isOn ? T.emphasis : T.secondary, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}
                     >
@@ -98,6 +99,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     tabIndex={-1}
+                    data-key="⌘M"
                     onClick={() => lm.magnifyNodeToggle(magnified)}
                     title="Show all panes again"
                     style={{ WebkitAppRegion: "no-drag", marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 7, padding: "3px 9px", borderRadius: 8, border: `1px solid ${T.apricot}`, background: "transparent", color: T.apricot, cursor: "pointer", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}
@@ -130,6 +132,7 @@ function StripAction({ k, label, onClick }: { k: string; label: string; onClick:
             type="button"
             onMouseDown={(e) => e.preventDefault()}
             tabIndex={-1}
+            data-key={k}
             onClick={onClick}
             style={{ WebkitAppRegion: "no-drag", marginLeft: 10, padding: 0, background: "transparent", border: "none", cursor: "pointer" } as React.CSSProperties}
         >

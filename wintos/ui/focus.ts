@@ -3,7 +3,7 @@ import { atoms, getApi } from "@/store/global";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import type { Session } from "../daemon/sessions/reduce";
 import { nextNeedsYou, Target } from "./sessions";
-import { editingMineAtom, findInNotesAtom, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
+import { editingMineAtom, findInNotesAtom, isPage, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
 import { rememberReturn, returnFocus, wantPane } from "./focusOwner";
 import { daemonFetch, setProjectSnoozed } from "./useWintos";
 import { flog, where } from "./focusLog";
@@ -39,7 +39,7 @@ export function focusBlock(blockId: string): void {
 // Opening a snoozed project (from its PR, the palette, the Snoozed group) wakes it.
 // Where the walks (⌘J/⌘K, ⌃⇥) start: the project you are in, unless a page that is not that
 // project (the Today page) covers it; then you are outside the list, as in an Inbox tab.
-export const whereYouAre = () => (globalStore.get(mainViewAtom) === "day" ? "" : globalStore.get(atoms.staticTabId));
+export const whereYouAre = () => (isPage(globalStore.get(mainViewAtom)) ? "" : globalStore.get(atoms.staticTabId));
 
 export function enterProject(tabId: string, find?: string): void {
     if (isSnoozedProject(tabId)) void setProjectSnoozed(tabId, false);

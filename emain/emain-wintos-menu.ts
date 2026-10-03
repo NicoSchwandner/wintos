@@ -28,6 +28,7 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         item("Park Session (nothing for me)", "park-session", "Alt+Cmd+P"),
         item("Join Meeting", "join-meeting", "Shift+Cmd+M"),
         item("Today", "day", "Shift+Cmd+Y"),
+        item("Keyboard", "keyboard", "Shift+Cmd+I"),
         { type: "separator" },
         item("Focus Left", "focus-left", "Cmd+H"),
         item("Focus Right", "focus-right", "Cmd+L"),

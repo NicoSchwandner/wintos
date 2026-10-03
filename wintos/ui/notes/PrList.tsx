@@ -33,6 +33,7 @@ export const PrList = memo(({ tabId, size }: { tabId: string; size: "rail" | "fu
             {rows.map((r, i) => (
                 <div
                     key={r.pr.url}
+                    data-key="1–9"
                     onClick={() => runAction(`open-page:${r.pr.url}`)}
                     title={r.pr.url}
                     style={{ display: "flex", alignItems: "baseline", gap: 8, cursor: "pointer", opacity: r.snoozed ? 0.55 : 1, fontSize: size === "rail" ? 12 : 13, lineHeight: 1.4 }}

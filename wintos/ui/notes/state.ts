@@ -1,7 +1,10 @@
 import { atom } from "jotai";
 
 // Per renderer: what fills the project area, and whether mine.md is being edited.
-export type MainView = "terminal" | "notes" | "day";
+export type MainView = "terminal" | "notes" | "day" | "keyboard";
+// A page that is not the tab's own (Today, Keyboard): it covers the tab, which then isn't
+// "where you are" — not marked in the sidebar, not where a walk starts.
+export const isPage = (v: MainView) => v === "day" || v === "keyboard";
 export const mainViewAtom = atom<MainView>("terminal");
 export const editingMineAtom = atom(false);
 export type Overlay = "" | "palette" | "keymap" | "confirm-close";

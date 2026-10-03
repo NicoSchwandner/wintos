@@ -50,6 +50,7 @@ export const OnCallList = memo(({ pageOpen }: { pageOpen: boolean }) => {
                             return (
                                 <div
                                     key={c.label}
+                                    data-key="j k ⏎"
                                     onClick={() => (setCursor(i), open(i))}
                                     style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 12px", borderRadius: 10, cursor: c.url ? "pointer" : "default", background: i === cursor ? T.cardActive : "transparent", border: `1px solid ${i === cursor ? T.borderActive : "transparent"}` }}
                                 >

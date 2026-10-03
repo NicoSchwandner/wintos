@@ -11,13 +11,14 @@ import { Key } from "./Key";
 import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
 import { TodayCard } from "./TodayCard";
+import { GameChip, GameLine } from "./GameIndicator";
 import { meetingsFrom } from "./meetings";
 import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
 import { setSwitchOrder, switchTargetAtom } from "./switcher";
 import { closeProjectTab, registerWintosMenu } from "./menu";
-import { mainViewAtom, renamingAtom } from "./notes/state";
+import { isPage, mainViewAtom, renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
 import { instance, setProjectSnoozed, setProjectTitle, useWintos } from "./useWintos";
 import { ghPrs, inboxKind, isInboxTab, prsByTab, type InboxList, projectTabIds, rowView, RowView, sidebarModel, withSnoozes } from "./view";
@@ -49,7 +50,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     // In the PRs or On call tab its card is marked, as the current project's row is.
     // What fills the window right now is marked, and only that: the Today page covers the tab
     // under it, so neither that project's row nor an Inbox card is marked while it shows.
-    const shows = (list: InboxList) => mainView !== "day" && inboxKind(tabs[activeTabId]) === list;
+    const shows = (list: InboxList) => !isPage(mainView) && inboxKind(tabs[activeTabId]) === list;
     const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
     const { state: raw, offline } = useWintos();
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
@@ -124,7 +125,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             key: row.tabId,
             tabId: row.tabId,
             v,
-            active: row.tabId === activeTabId && mainView !== "day",
+            active: row.tabId === activeTabId && !isPage(mainView),
             cursor: switchTarget === row.tabId,
             renaming: renaming === row.tabId,
             onOpen: () => open(row.tabId),
@@ -154,7 +155,10 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         <DateTime />
                     </span>
                 </div>
-                <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{tabIds.length} {tabIds.length === 1 ? "project" : "projects"}</span>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                    {state?.keyboard && <GameChip stats={state.keyboard} />}
+                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{tabIds.length} {tabIds.length === 1 ? "project" : "projects"}</span>
+                </div>
             </div>
             <div
                 data-wintos="sidebar-list"
@@ -220,6 +224,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     </>
                 )}
             </div>
+            {state?.keyboard && <GameLine stats={state.keyboard} />}
             <div style={{ flexShrink: 0, minHeight: 34, boxSizing: "border-box", padding: "6px 14px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 16px", borderTop: `1px solid ${T.hairline}`, fontSize: 11, color: T.faint }}>
                 {/* ⌘J/⌘K sit on the open project's row. */}
                 <Key k="⌃⇥" label="waiting" />
@@ -292,6 +297,7 @@ function CardRow(p: RowProps) {
         <div
             data-tabid={p.tabId}
             data-band="card"
+            data-key="⌘J / ⌘K"
             onClick={p.onOpen}
             onContextMenu={p.onMenu}
             style={{
@@ -325,6 +331,7 @@ function QuietRow(p: RowProps) {
         <div
             data-tabid={p.tabId}
             data-band="quiet"
+            data-key="⌘J / ⌘K"
             onClick={p.onOpen}
             onContextMenu={p.onMenu}
             style={{
@@ -390,7 +397,7 @@ function Drumming() {
 // the numbers can't say (late, updating, loading).
 function SummaryCard({ label, keys, stats, note, noteColor, busy, active, onClick }: { label: string; keys: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; active?: boolean; onClick: () => void }) {
     return (
-        <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#32302f", border: `1px solid ${active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", ...(active ? ACTIVE : {}) }}>
+        <div data-key={keys} onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#32302f", border: `1px solid ${active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", ...(active ? ACTIVE : {}) }}>
             <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, fontWeight: 600, color: T.secondary }}>
                 {label}
                 {busy && <Drumming />}

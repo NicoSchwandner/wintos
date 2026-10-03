@@ -21,6 +21,7 @@ export const TodayCard = memo(({ day, active, walk }: { day: Day; active: boolea
     return (
         <div
             data-wintos="today-card"
+            data-key="⇧⌘Y"
             onClick={() => toggleView("day")}
             style={{
                 display: "flex", flexDirection: "column", gap: 5, padding: "9px 11px", borderRadius: 10, cursor: "pointer",
@@ -41,7 +42,7 @@ export const TodayCard = memo(({ day, active, walk }: { day: Day; active: boolea
                 <>
                     {open.slice(0, SHOWN).map((i) => (
                         <div key={i.line} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: T.secondary, minWidth: 0 }}>
-                            <span onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()} style={{ display: "contents" }}>
+                            <span data-key="" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()} style={{ display: "contents" }}>
                                 <Box state="todo" size="rail" onToggle={() => void tickFocus(day, i.line)} />
                             </span>
                             <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{i.text}</span>

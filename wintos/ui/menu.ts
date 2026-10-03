@@ -17,6 +17,7 @@ import { installFocusRing } from "./focusRing";
 import { parkBlock, setProjectSnoozed } from "./useWintos";
 import { flog } from "./focusLog";
 import { meetingToJoin } from "./meetings";
+import { installKeyGame } from "./keyGame";
 import { installFocusOwner, rememberReturn, returnFocus, wantPane } from "./focusOwner";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
@@ -74,6 +75,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:p", "park-session"],
     ["Shift:Cmd:m", "join-meeting"],
     ["Shift:Cmd:y", "day"],
+    ["Shift:Cmd:i", "keyboard"],
     ["Cmd:h", "focus-left"],
     ["Cmd:l", "focus-right"],
 ];
@@ -232,6 +234,7 @@ export function runAction(action: string): void {
     if (action === "panel" || action.startsWith("panel:")) return goToInbox("oncall");
     if (action === "notes") return toggleView("notes");
     if (action === "day") return toggleView("day");
+    if (action === "keyboard") return toggleView("keyboard");
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);
     if (b) createBlock(b.def, false, b.ephemeral);
 }
@@ -331,6 +334,7 @@ export function registerWintosMenu(): void {
     if (registered) return;
     registered = true;
     takeReopen();
+    installKeyGame();
     installFocusRing();
     installFocusOwner();
     // Wave's openLink (a ⌘-click on a url in a terminal) opens web links through here.

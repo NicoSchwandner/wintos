@@ -78,6 +78,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                                 <div
                                     ref={on ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
                                     onMouseEnter={() => setCursor(n)}
+                                    data-key="↑ ↓ ⏎"
                                     onClick={() => run(n)}
                                     style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: row.type === "hit" ? "8px 10px" : "5px 10px", borderRadius: 8, cursor: "pointer", background: on ? "#3c3836" : "transparent" }}
                                 >

@@ -95,6 +95,7 @@ function RailToggle({ open }: { open: boolean }) {
             title={open ? "Hide the notes" : "Show the notes (⌘L)"}
             tabIndex={-1}
             onPointerDown={(e) => (e.stopPropagation(), e.preventDefault())}
+            data-key={open ? "" : "⌘L"}
             onClick={(e) => (e.stopPropagation(), setRailCollapsed(open))}
             onMouseEnter={() => setHover(true)}
             onMouseLeave={() => setHover(false)}

@@ -9,6 +9,7 @@ import { runKey, WINTOS_KEYS, wintosClose, wintosEscape } from "@/wintos/ui/menu
 import { zoneKey } from "@/wintos/ui/zones";
 import { restoreFocus, wantPane } from "@/wintos/ui/focusOwner";
 import { flog, where } from "@/wintos/ui/focusLog";
+import { reportKey } from "@/wintos/ui/keyGame";
 import { walkKey } from "@/wintos/ui/switcher";
 
 // WintOS: a key in the focus trail, never one typed into a terminal or a field.
@@ -432,7 +433,8 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
     const zone = zoneKey(waveEvent, document.activeElement);
     logKey(waveEvent, zone);
     if (zone !== false && activeChord) resetChord();
-    if (zone === "handled") return true;
+    // WintOS: every key WintOS or a zone acts on scores in the keyboard game (keyGame.ts).
+    if (zone === "handled") return reportKey(waveEvent), true;
     if (zone === "typing") return false;
     if (activeChord) {
         console.log("handle activeChord", activeChord);
@@ -467,6 +469,7 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
             return true;
         }
         if (handled) {
+            reportKey(waveEvent);
             return true;
         }
     }

@@ -131,6 +131,19 @@ describe("search and reopen", () => {
     });
 });
 
+describe("the keyboard game", () => {
+    test("keys and clicks are scored, kept across a restart, and in the state", async () => {
+        for (const kind of ["key", "key", "click"]) expect((await post("/keyboard", { kind, key: "⌘J" })).status).toBe(200);
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        const k = (await (await fetch(base + "/state")).json()).keyboard;
+        expect([k.points, k.streak, k.keys["⌘J"], k.clicks["⌘J"]]).toEqual([1, 0, 2, 1]);
+    });
+
+    test("anything else is refused", async () => expect((await post("/keyboard", { kind: "scroll", key: "x" })).status).toBe(400));
+});
+
 describe("the day", () => {
     const withJournal = async () => {
         srv.close();

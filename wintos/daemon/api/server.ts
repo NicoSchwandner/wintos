@@ -8,6 +8,7 @@ import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
 import type { Journal } from "../journal/journal";
+import { emptyStats, recordClick, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
@@ -34,6 +35,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const seenFile = join(opts.root, ".seen.json");
     const seen = readJson<Record<string, number>>(seenFile, {});
     const markSeen = (tabId: string) => ((seen[tabId] = Date.now()), writeFileSync(seenFile, JSON.stringify(seen)));
+    // The keyboard game's score, per instance like the rest of this folder.
+    const keyboardFile = join(opts.root, ".keyboard.json");
+    let keyboard = readJson<KeyStats>(keyboardFile, emptyStats());
     const sockets = new Set<WebSocket>();
     let port = opts.port;
 
@@ -48,6 +52,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         projectSnoozes,
         seen,
         ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
+        keyboard,
         ...(opts.lunch ? { lunch: opts.lunch } : {}),
         ...(opts.workday ? { workday: opts.workday } : {}),
     });
@@ -135,6 +140,14 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 return (await runner.run(decodeURIComponent(plugin[1]))) ? send(res, 200, "") : send(res, 404, "no such plugin");
             }
             if (req.method === "GET" && url.pathname === "/projects/texts") return json(res, store.texts());
+            if (req.method === "POST" && url.pathname === "/keyboard") {
+                const b = (await body(req)) as { kind?: unknown; key?: unknown };
+                if ((b?.kind !== "key" && b?.kind !== "click") || typeof b.key !== "string" || !b.key || b.key.length > 24) return send(res, 400, "need kind key|click and the key");
+                keyboard = (b.kind === "key" ? recordKey : recordClick)(keyboard, b.key, Date.now());
+                writeFileSync(keyboardFile, JSON.stringify(keyboard));
+                broadcast();
+                return send(res, 200, "");
+            }
             if (url.pathname.startsWith("/day/") && !opts.journal) return send(res, 404, "no journal: set WINTOS_JOURNAL_DIR");
             if (req.method === "POST" && url.pathname === "/day/focus") {
                 const b = (await body(req)) as { text?: unknown; baseMtime?: unknown };

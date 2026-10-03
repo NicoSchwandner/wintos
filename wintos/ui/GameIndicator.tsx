@@ -4,7 +4,7 @@ import { RANKS, type KeyStats } from "../daemon/keyboard/keyboard";
 import { Key } from "./Key";
 import { noticeAtom, setLatestStreak, showNotice } from "./keyGame";
 import { progress } from "./keyStats";
-import { toggleView } from "./menu";
+import { openView } from "./menu";
 import { T } from "./tokens";
 
 const SEEN = "wintos:badge-seen";
@@ -67,7 +67,7 @@ export const GameLine = memo(({ stats }: { stats: KeyStats }) => {
                     data-key="⇧⌘I"
                     tabIndex={-1}
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => toggleView("keyboard")}
+                    onClick={() => openView("keyboard")}
                     title="Your keyboard rank, streak and badges"
                     style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10.5, color: T.faint }}
                 >

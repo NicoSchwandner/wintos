@@ -319,6 +319,13 @@ export function closeProjectTab(tabId: string, confirm: boolean): void {
 // ⇧⌘L opens the notes full width, and the same key again goes back to the terminals.
 export function toggleView(view: MainView): void {
     if (globalStore.get(mainViewAtom) === view) return closeNotesView();
+    openView(view);
+}
+
+// A click on a card opens its page and never closes it: a second click on what is already open
+// does nothing. Only the key, pressed again, goes back.
+export function openView(view: MainView): void {
+    if (globalStore.get(mainViewAtom) === view) return;
     rememberReturn();
     globalStore.set(mainViewAtom, view);
 }

@@ -3,7 +3,7 @@ import type { Day } from "../daemon/journal/journal";
 import { leftFromYesterday, tickFocus } from "./day";
 import { focusList } from "./dayplan";
 import { Key } from "./Key";
-import { toggleView } from "./menu";
+import { openView } from "./menu";
 import { Box } from "./notes/ProjectNotes";
 import { T } from "./tokens";
 
@@ -22,7 +22,7 @@ export const TodayCard = memo(({ day, active, walk }: { day: Day; active: boolea
         <div
             data-wintos="today-card"
             data-key="⇧⌘Y"
-            onClick={() => toggleView("day")}
+            onClick={() => openView("day")}
             style={{
                 display: "flex", flexDirection: "column", gap: 5, padding: "9px 11px", borderRadius: 10, cursor: "pointer",
                 background: active ? T.borderActive : T.card, boxShadow: active ? `inset 3px 0 0 ${T.emphasis}` : undefined,

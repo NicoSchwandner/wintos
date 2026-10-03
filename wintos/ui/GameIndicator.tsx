@@ -54,7 +54,7 @@ export const GameLine = memo(({ stats }: { stats: KeyStats }) => {
         );
     if (notice?.kind === "slip")
         return (
-            <div data-wintos="game-line" style={{ ...box, color: T.muted }}>
+            <div data-wintos="game-line" style={{ ...box, color: T.brick }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
                     that was <Key k={notice.key} label="" /> {notice.streak > 0 ? `· streak ${notice.streak} → 0` : ""}
                 </span>

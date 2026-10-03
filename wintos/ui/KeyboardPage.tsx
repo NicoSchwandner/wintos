@@ -54,7 +54,7 @@ export const KeyboardPage = memo(() => {
                     <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 70 }}>
                         {days.map((d) => (
                             <div key={d.date} title={`${d.date}: ${d.keys} keys, ${d.clicks} clicks`} style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%", gap: 1 }}>
-                                <div style={{ height: `${(d.clicks / top) * 100}%`, background: T.apricot, borderRadius: "2px 2px 0 0" }} />
+                                <div style={{ height: `${(d.clicks / top) * 100}%`, background: T.brick, borderRadius: "2px 2px 0 0" }} />
                                 <div style={{ height: `${(d.keys / top) * 100}%`, background: T.moss, borderRadius: d.clicks ? 0 : "2px 2px 0 0" }} />
                             </div>
                         ))}

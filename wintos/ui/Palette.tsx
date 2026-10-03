@@ -2,7 +2,7 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { atoms } from "@/store/global";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { closeOverlay, enterProject, focusSession, reopenProject } from "./focus";
-import { runAction } from "./menu";
+import { runAction, runKey } from "./menu";
 import { groupHits, searchPalette, type Field, type Hit, type Kind, type PaletteItem } from "./palette-search";
 import { pluginPanels } from "./panels";
 import { Key } from "./Key";
@@ -196,7 +196,8 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     for (const s of state.sessions.filter((s) => s.state !== "ended" && tabIds.includes(s.tabId)))
         out.push({ id: `s:${s.id}`, kind: "session", title: s.label ?? "session", subtitle: `${s.state} · ${title(s.tabId)}`, run: () => focusSession({ tabId: s.tabId, blockId: s.blockId }) });
     const here = title(activeTab);
-    const action = (id: string, t: string, hint: string, a: string): PaletteItem => ({ id: `a:${id}`, kind: "action", title: t, hint, run: () => runAction(a) });
+    // The key's own path (runKey), so an action does from here exactly what its key does.
+    const action = (id: string, t: string, hint: string, a: string): PaletteItem => ({ id: `a:${id}`, kind: "action", title: t, hint, run: () => void runKey(a) });
     out.push(action("session", `New Claude session in ${here}`, "⇧⌘T", "session"));
     out.push(action("terminal", `New terminal in ${here}`, "⌘T", "terminal"));
     out.push(action("project", "New project", "⌘N", "project"));
@@ -205,6 +206,16 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     out.push(action("prs", "PRs need attention", "⇧⌘G", "prs"));
     for (const p of pluginPanels(state)) out.push(action(`panel:${p.name}`, p.title, "⇧⌘O", `panel:${p.name}`));
     out.push(action("close", `Close ${here}`, "⇧⌘W", "close-project"));
+    out.push(action("day", "Today: plan the day", "⇧⌘Y", "day"));
+    out.push(action("keyboard", "Keyboard: rank, streak, badges", "⇧⌘I", "keyboard"));
+    out.push(action("join", "Join the meeting", "⇧⌘M", "join-meeting"));
+    out.push(action("mine", `Edit mine.md of ${here}`, "⌘E", "edit-mine"));
+    out.push(action("snooze", `Snooze or wake ${here}`, "⌥⌘Z", "snooze-project"));
+    out.push(action("park", "Park the waiting session: nothing for you", "⌥⌘P", "park-session"));
+    out.push(action("snoozed", "Show or hide the snoozed projects", "⌥⌘S", "show-snoozed"));
+    out.push(action("copy-url", "Copy the focused page's url", "⇧⌘C", "copy-url"));
+    out.push(action("external", "Open the focused page in your browser", "⇧⌘U", "open-external"));
+    out.push(action("restart", "Restart the focused terminal", "⌥⌘R", "restart-terminal"));
     out.push(action("keys", "Keyboard shortcuts", "⇧⌘K", "keymap"));
     return out;
 }

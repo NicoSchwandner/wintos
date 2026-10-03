@@ -11,4 +11,6 @@ export type Overlay = "" | "palette" | "keymap" | "confirm-close";
 export const overlayAtom = atom<Overlay>("");
 export const renamingAtom = atom(null as string | null); // the tab whose title is being edited
 // Text the notes view scrolls to and marks once it shows (a palette hit in the notes).
+// Fired when a key flips a sidebar toggle kept in localStorage, so this window re-reads it.
+export const FLAG_EVENT = "wintos-flag";
 export const findInNotesAtom = atom(null as string | null);

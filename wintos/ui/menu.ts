@@ -2,11 +2,11 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { atom } from "jotai";
 import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
-import { atoms, createBlock, createTab, getApi, isDev } from "@/store/global";
+import { atoms, createBlock, createTab, getApi, getBlockComponentModel, isDev } from "@/store/global";
 import { closeOverlay, editMine, enterProject, focusArea, takeReopen, focusBlock, isSnoozedProject, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
 import { closeWarning } from "./sessions";
 import { goToInbox } from "./inbox";
-import { mainViewAtom, overlayAtom, renamingAtom, type MainView } from "./notes/state";
+import { FLAG_EVENT, mainViewAtom, overlayAtom, renamingAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
 import { setRailCollapsed } from "./notes/railWidth";
@@ -76,6 +76,9 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:m", "join-meeting"],
     ["Shift:Cmd:y", "day"],
     ["Shift:Cmd:i", "keyboard"],
+    ["Shift:Cmd:u", "open-external"],
+    ["Option:Cmd:s", "show-snoozed"],
+    ["Option:Cmd:r", "restart-terminal"],
     ["Cmd:h", "focus-left"],
     ["Cmd:l", "focus-right"],
 ];
@@ -235,6 +238,9 @@ export function runAction(action: string): void {
     if (action === "notes") return toggleView("notes");
     if (action === "day") return toggleView("day");
     if (action === "keyboard") return toggleView("keyboard");
+    if (action === "open-external") return openExternal();
+    if (action === "show-snoozed") return toggleStoredFlag("wintos:show-snoozed");
+    if (action === "restart-terminal") return restartTerminal();
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);
     if (b) createBlock(b.def, false, b.ephemeral);
 }
@@ -317,6 +323,29 @@ export function closeProjectTab(tabId: string, confirm: boolean): void {
 }
 
 // ⇧⌘L opens the notes full width, and the same key again goes back to the terminals.
+// ⇧⌘U: the focused page in the system browser (a sign-in, a call that wants the camera).
+function openExternal(): void {
+    const blockId = globalStore.get(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
+    const url = blockId && focusedPageUrl(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId))));
+    if (url) getApi().openExternal(url);
+}
+
+// A sidebar toggle kept in localStorage (Sidebar's useStoredFlag), flipped by a key.
+function toggleStoredFlag(key: string): void {
+    try {
+        localStorage.setItem(key, localStorage.getItem(key) === "1" ? "0" : "1");
+    } catch {}
+    window.dispatchEvent(new Event(FLAG_EVENT));
+}
+
+// ⌥⌘R: the focused terminal's shell started again, for one that hangs (Wave's Force Restart).
+function restartTerminal(): void {
+    const blockId = globalStore.get(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
+    const vm = blockId ? (getBlockComponentModel(blockId)?.viewModel as { forceRestartController?: () => Promise<void> } | undefined) : undefined;
+    flog(vm?.forceRestartController ? `restart terminal ${blockId!.slice(0, 6)}` : "restart terminal: the focused pane is not a terminal");
+    void vm?.forceRestartController?.();
+}
+
 export function toggleView(view: MainView): void {
     if (globalStore.get(mainViewAtom) === view) return closeNotesView();
     openView(view);

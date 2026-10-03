@@ -92,6 +92,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
             {/* The focused pane's controls, the same for a terminal and a page. */}
             {inProject && chips.length > 1 && !magnified && focused && <StripAction k="⌘M" label="magnify" onClick={() => lm.magnifyNodeToggle(focused.id)} />}
             {focused && focusedPageUrl(blocks[ids.indexOf(focused.data?.blockId)]) && <CopyUrl />}
+            {focused && focusedPageUrl(blocks[ids.indexOf(focused.data?.blockId)]) && <StripAction k="⇧⌘U" label="browser" onClick={() => runKey("open-external")} />}
             {focused && <StripAction k="⌘W" label="close" onClick={() => void lm.closeNode(focused.id)} />}
             {/* Magnify hides the other panes and has no header button here: say so, and offer the way back. */}
             {magnified && inProject && (

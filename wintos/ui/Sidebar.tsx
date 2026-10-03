@@ -18,7 +18,7 @@ import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
 import { setSwitchOrder, switchTargetAtom } from "./switcher";
 import { closeProjectTab, registerWintosMenu } from "./menu";
-import { isPage, mainViewAtom, renamingAtom } from "./notes/state";
+import { FLAG_EVENT, isPage, mainViewAtom, renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
 import { instance, setProjectSnoozed, setProjectTitle, useWintos } from "./useWintos";
 import { ghPrs, inboxKind, isInboxTab, prsByTab, type InboxList, projectTabIds, rowView, RowView, sidebarModel, withSnoozes } from "./view";
@@ -208,13 +208,14 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                             {snoozedShown.map(renderRow)}
                             {(showSnoozed || snoozedShown.length < model.snoozed.length) && (
                                 <button
+                                    data-key="⌥⌘S"
                                     type="button"
                                     tabIndex={-1}
                                     onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => setShowSnoozed(!showSnoozed)}
                                     style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.faint, cursor: "pointer" }}
                                 >
-                                    {showSnoozed ? "Hide snoozed" : `Show ${model.snoozed.length} snoozed · opening one wakes it`}
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>{showSnoozed ? "Hide snoozed" : `Show ${model.snoozed.length} snoozed · opening one wakes it`}<Key k="⌥⌘S" label="" /></span>
                                 </button>
                             )}
                         </Band>
@@ -435,8 +436,9 @@ function useStoredFlag(key: string): [boolean, (on: boolean) => void] {
     useEffect(() => {
         const sync = () => setOn(read());
         window.addEventListener("storage", sync);
+        window.addEventListener(FLAG_EVENT, sync); // a key in this window (⌥⌘S) set it
         document.addEventListener("visibilitychange", sync);
-        return () => (window.removeEventListener("storage", sync), document.removeEventListener("visibilitychange", sync));
+        return () => (window.removeEventListener("storage", sync), window.removeEventListener(FLAG_EVENT, sync), document.removeEventListener("visibilitychange", sync));
     }, []);
     return [
         on,

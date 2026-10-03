@@ -84,7 +84,8 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
         const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
         return { title, next: parkedOn ? `Waiting on ${parkedOn}` : (project?.next ?? "Claude is working"), tone: "secondary", age, meta };
     }
-    return { title, age, reason: prs?.reason ?? meta ?? age };
+    const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
+    return { title, age, reason: parkedOn ? `waiting on ${parkedOn}` : (prs?.reason ?? meta ?? age) };
 }
 
 // The Inbox is the one tab that is not a project (pkg/wcore/inbox.go); a tab not loaded yet is one.

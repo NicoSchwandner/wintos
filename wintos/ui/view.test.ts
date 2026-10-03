@@ -25,6 +25,11 @@ describe("rowView", () => {
         expect(rowView(row("needs", { waitingSince: NOW }), undefined, "T1", NOW)).toMatchObject({ title: "T1", next: "Your turn", tone: "apricot" });
     });
 
+    test("quiet on a parked session says what it waits on, in place of the PR reason", () => {
+        const parked = { id: "s", tabId: "t", blockId: "b", state: "parked", since: NOW, lastAt: NOW, parkedOn: "review on #1479" } as const;
+        expect(rowView(row("quiet", { sessions: [parked] }), { dir: "/p", mtime: 0, title: "X", pr: [] }, "T", NOW)).toMatchObject({ reason: "waiting on review on #1479" });
+    });
+
     test("running on a parked session says what it waits on", () => {
         const parked = { id: "s", tabId: "t", blockId: "b", state: "parked", since: NOW, lastAt: NOW, parkedOn: "CI on #1479" } as const;
         expect(rowView(row("running", { sessions: [parked] }), { dir: "/p", mtime: 0, title: "X", next: "Mark #1479 ready", pr: [] }, "T", NOW)).toMatchObject({ next: "Waiting on CI on #1479", tone: "secondary" });

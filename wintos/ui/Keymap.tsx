@@ -1,28 +1,30 @@
 import { useFocusOnMount } from "./useFocusOnMount";
 import { memo } from "react";
 import { closeOverlay } from "./focus";
+import { useZoneKeys } from "./zones";
 import { KEYCAP_FONT } from "./Key";
 import { T } from "./tokens";
 
 // Only keys that exist. KeymapC lists a few more from the spec that are not built yet.
-const SECTIONS: [string, [string, string][]][] = [
-    ["Projects", [["⌘J / ⌘K", "hold ⌘, tap to walk all projects, release to switch"], ["⌘N", "new project"], ["⌘R", "rename this project"], ["⇧⌘W", "close this project (asks first while Claude runs)"]]],
-    ["Sessions", [["⌃⇥", "next that needs you: a waiting session, else a project"], ["⌘T / ⇧⌘T", "new terminal · new Claude session"], ["⌥⌘← →", "previous · next pane (the strip)"], ["⇧⌘C", "copy a browser pane's url"], ["⌘W / ⌘M", "close · magnify the focused pane"]]],
-    ["Open", [["⇧⌘P", "everything, including dropped projects"], ["⇧⌘J", "notes, full width"], ["⇧⌘G / ⇧⌘O", "the Inbox: PRs · on call"], ["⇧⌘K", "this card"]]],
-    ["Focus", [["⌘2 / ⌘3", "terminal · notes rail"], ["esc", "out of a view, back to the terminal"]]],
-    ["Notes", [["⌘E", "edit mine.md, the only file you write"], ["1–9", "notes focused: open that PR beside the terminals"], ["⌘⏎ / esc", "save · discard"]]],
+export const SECTIONS: [string, [string, string][]][] = [
+    ["Projects", [["⌘J / ⌘K", "hold ⌘, tap to walk all projects, release to switch"], ["⌘N", "new project"], ["⌘R", "rename this project"], ["⇧⌘W", "close this project (asks first while Claude runs)"], ["⌥⌘Z", "snooze this project: out of the sidebar and ⌘J/⌘K until it needs you or you open it"], ["⌥⌘P", "park: you read the turn and nothing is yours, it waits on something outside"], ["⇧⌘M", "join the meeting on now, else the next one (in the browser)"], ["⇧⌘Y", "today: plan the day, tick off its focus, in your daily journal"], ["⇧⌘I", "keyboard: your rank, streak, badges and the keys you haven't used"]]],
+    ["Sessions", [["⌃⇥", "next that needs you: a waiting session, else a project"], ["⌘T / ⇧⌘T", "new terminal · new Claude session"], ["⌥⌘J / ⌥⌘K", "the pane below · above (a ⇧⌘D split)"], ["⇧⌘C", "copy a browser pane's url"], ["⌘W / ⌘M", "close · magnify the focused pane"]]],
+    ["Open", [["⇧⌘P", "everything, including dropped projects"], ["⇧⌘L", "notes, full width"], ["⇧⌘G / ⇧⌘O", "the PRs tab · the On call tab"], ["⇧⌘K", "this card"], ["⇧⌘U", "the focused page in your browser"], ["⌥⌘S", "show or hide the snoozed projects"], ["⌥⌘R", "restart the focused terminal (when it hangs)"]]],
+    ["Focus", [["⌘H / ⌘L", "one step left · right: pane to pane, then the notes; in PRs and On call the list, then its pages"], ["esc", "closes an overlay · a list back to its panes · an Inbox page back to its list"]]],
+    ["Notes", [["⌘E", "edit mine.md, the only file you write"], ["⏎", "notes focused: full width, or the link under the cursor"], ["j / k", "notes focused: move over boxes and links"], ["x", "tick the box under the cursor (mine.md, today's focus)"], ["m", "show more decisions · the ticked Built items"], ["1–9", "notes focused: open that PR beside the terminals"], ["⌘⏎ / esc", "save · discard"]]],
     ["Queues", [["j / k", "row"], ["⏎ / o", "open the PR beside the list · its project, or a new one"], ["z", "snooze the PR until the next working day"], ["1–9", "on call: open that count's page"], ["r", "resync now"]]],
 ];
 
 export const Keymap = memo(() => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
+    useZoneKeys(focusRef, { "Shift:?": closeOverlay });
     return (
         <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(15,16,17,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={closeOverlay}>
             <div
                 data-wintos="keymap"
                 tabIndex={0}
                 ref={focusRef}
-                onKeyDown={(e) => (e.key === "Escape" || e.key === "?") && (e.preventDefault(), closeOverlay())}
+                data-zone="overlay"
                 onClick={(e) => e.stopPropagation()}
                 style={{ width: 640, padding: "22px 26px", background: "#1d2021", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px 32px" }}
             >

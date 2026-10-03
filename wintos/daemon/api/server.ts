@@ -7,6 +7,8 @@ import { injection } from "../inject";
 import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
+import type { Journal } from "../journal/journal";
+import { emptyStats, recordClick, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
@@ -21,7 +23,8 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // token: a per-launch secret Electron hands to both wintosd and the UI. Any request that comes
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string }): Promise<WintosServer> {
+// journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     const uiOrigins = new Set(opts.uiOrigins ?? [...DEFAULT_UI_ORIGINS, ...(process.env.WINTOS_UI_ORIGINS?.split(",") ?? [])]);
     // Saved on every change and restored at start, so a restart doesn't forget who waits on you.
@@ -32,6 +35,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const seenFile = join(opts.root, ".seen.json");
     const seen = readJson<Record<string, number>>(seenFile, {});
     const markSeen = (tabId: string) => ((seen[tabId] = Date.now()), writeFileSync(seenFile, JSON.stringify(seen)));
+    // The keyboard game's score, per instance like the rest of this folder.
+    const keyboardFile = join(opts.root, ".keyboard.json");
+    let keyboard = readJson<KeyStats>(keyboardFile, emptyStats());
     const sockets = new Set<WebSocket>();
     let port = opts.port;
 
@@ -43,7 +49,12 @@ export async function startServer(opts: { root: string; port: number; host?: str
         pluginNames: runner.names,
         pluginsRunning: runner.running,
         snoozes,
+        projectSnoozes,
         seen,
+        ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
+        keyboard,
+        ...(opts.lunch ? { lunch: opts.lunch } : {}),
+        ...(opts.workday ? { workday: opts.workday } : {}),
     });
     const broadcast = () => {
         const frame = JSON.stringify(state());
@@ -53,6 +64,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // Kept next to the projects: a file there is not a project (those are folders).
     const snoozeFile = join(opts.root, ".snoozes.json");
     let snoozes = readJson<Snoozes>(snoozeFile, {});
+    // Projects you think are done: hidden until they need you or you open them (tab id → since).
+    const projectSnoozeFile = join(opts.root, ".project-snoozes.json");
+    let projectSnoozes = readJson<Record<string, number>>(projectSnoozeFile, {});
     const runner = new PluginRunner(opts.plugins ?? [], () => broadcast());
 
     let watcher: FSWatcher | undefined;
@@ -66,7 +80,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         }
     };
     try {
-        // The daemon's own files (.sessions.json, .snoozes.json, .bindings.json) are not notes.
+        // The daemon's own files (.sessions.json, .snoozes.json, .project-snoozes.json, .bindings.json) are not notes.
         watcher = watch(opts.root, { recursive: true }, (_e, file) => {
             if (file && !file.includes("/") && file.startsWith(".")) return;
             clearTimeout(pending);
@@ -125,6 +139,38 @@ export async function startServer(opts: { root: string; port: number; host?: str
             if (req.method === "POST" && plugin) {
                 return (await runner.run(decodeURIComponent(plugin[1]))) ? send(res, 200, "") : send(res, 404, "no such plugin");
             }
+            if (req.method === "GET" && url.pathname === "/projects/texts") return json(res, store.texts());
+            if (req.method === "POST" && url.pathname === "/keyboard") {
+                const b = (await body(req)) as { kind?: unknown; key?: unknown };
+                if ((b?.kind !== "key" && b?.kind !== "click") || typeof b.key !== "string" || !b.key || b.key.length > 24) return send(res, 400, "need kind key|click and the key");
+                keyboard = (b.kind === "key" ? recordKey : recordClick)(keyboard, b.key, Date.now());
+                writeFileSync(keyboardFile, JSON.stringify(keyboard));
+                broadcast();
+                return send(res, 200, "");
+            }
+            if (url.pathname.startsWith("/day/") && !opts.journal) return send(res, 404, "no journal: set WINTOS_JOURNAL_DIR");
+            if (req.method === "POST" && url.pathname === "/day/focus") {
+                const b = (await body(req)) as { text?: unknown; baseMtime?: unknown };
+                if (typeof b?.text !== "string" || b.text.length > 20_000) return send(res, 400, "need the focus text");
+                const r = opts.journal!.saveFocus(new Date(), b.text, typeof b.baseMtime === "number" ? b.baseMtime : undefined);
+                if (r === "conflict") return send(res, 409, "the day's file changed on disk");
+                broadcast();
+                return send(res, 200, "");
+            }
+            if (req.method === "POST" && url.pathname === "/day/planned") {
+                opts.journal!.markPlanned(new Date());
+                broadcast();
+                return send(res, 200, "");
+            }
+            const reopen = /^\/projects\/([^/]+)\/reopen$/.exec(url.pathname);
+            if (req.method === "POST" && reopen) {
+                const b = (await body(req)) as { tabId?: unknown };
+                if (!isSafe(b?.tabId)) return send(res, 400, "need the new tab's id");
+                const r = store.reopen(decodeURIComponent(reopen[1]), b.tabId);
+                if (r !== "ok") return send(res, r === "taken" ? 409 : 404, r);
+                broadcast();
+                return send(res, 200, "");
+            }
             const notes = /^\/projects\/([^/]+)\/notes$/.exec(url.pathname);
             if (req.method === "GET" && notes) {
                 const n = store.notes(decodeURIComponent(notes[1]));
@@ -148,6 +194,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const now = Date.now();
                 snoozes = Object.fromEntries(Object.entries(snoozes).filter(([, s]) => s.until > now));
                 writeFileSync(snoozeFile, JSON.stringify(snoozes));
+                broadcast();
+                return send(res, 200, "");
+            }
+            const snoozeTab = /^\/projects\/([^/]+)\/snooze$/.exec(url.pathname);
+            if (req.method === "POST" && snoozeTab) {
+                const b = (await body(req)) as { on?: unknown };
+                if (typeof b?.on !== "boolean") return send(res, 400, "need on: true or false");
+                const tabId = decodeURIComponent(snoozeTab[1]);
+                if (b.on) projectSnoozes = { ...projectSnoozes, [tabId]: Date.now() };
+                else projectSnoozes = Object.fromEntries(Object.entries(projectSnoozes).filter(([id]) => id !== tabId));
+                writeFileSync(projectSnoozeFile, JSON.stringify(projectSnoozes));
                 broadcast();
                 return send(res, 200, "");
             }

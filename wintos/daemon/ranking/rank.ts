@@ -33,6 +33,8 @@ function rowOf(tabId: string, sessions: Session[], touchedAt: number, prBlockedS
     const unreadAt = sessions.filter((s) => isUnread(s, seenAt)).map((s) => s.turnEndedAt!);
     const since = [...sessions.filter((s) => s.state === "waiting").map((s) => s.since), ...(prBlockedSince !== undefined ? [prBlockedSince] : []), ...unreadAt];
     if (since.length) return { tabId, band: "needs", lastAt, sessions, waitingSince: Math.min(...since), ...(unreadAt.length ? { unread: true } : {}) };
-    if (sessions.some((s) => s.state === "working" || s.state === "parked")) return { tabId, band: "running", lastAt, sessions };
+    // Running is Claude at work. Parked waits on something outside (a review, CI): nothing for you
+    // and nothing running, so it is quiet, its row saying what it waits on.
+    if (sessions.some((s) => s.state === "working")) return { tabId, band: "running", lastAt, sessions };
     return { tabId, band: "quiet", lastAt, sessions };
 }

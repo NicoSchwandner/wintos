@@ -1,18 +1,18 @@
 import { memo, useState } from "react";
-import { focusArea } from "./focus";
-import { Key } from "./Key";
-import { isPlainKey } from "./keys";
+import { Key, KeyOr } from "./Key";
 import { runAction } from "./menu";
 import { pluginPanels } from "./panels";
 import { T } from "./tokens";
 import { useFocusOnMount } from "./useFocusOnMount";
+import { useZoneKeys } from "./zones";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { relTime } from "./view";
 
 // The Inbox's on-call list (⇧⌘O): every plugin panel's counts as rows. ⏎ or 1–9 opens a count's
 // page as a browser pane beside the list, like a PR.
-export const OnCallList = memo(() => {
+// pageOpen: a page is open beside the list, so Esc or ⌘L has somewhere to go.
+export const OnCallList = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     const { state } = useWintos();
     const now = useNow();
@@ -21,23 +21,19 @@ export const OnCallList = memo(() => {
     const rows = panels.flatMap((p) => p.counts.map((c) => ({ panel: p, count: c })));
     const open = (i: number) => rows[i]?.count.url && runAction(`open-page:${rows[i].count.url}`);
     const resync = () => panels.forEach((p) => void daemonFetch(`/plugins/${encodeURIComponent(p.name)}/run`, { method: "POST", body: {} }).catch(() => {}));
+    useZoneKeys(focusRef, {
+        j: () => setCursor((c) => Math.min(c + 1, rows.length - 1)),
+        k: () => setCursor((c) => Math.max(c - 1, 0)),
+        Enter: () => void open(cursor),
+        ...Object.fromEntries(["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => [d, () => void open(Number(d) - 1)])),
+        r: (e) => void (e.repeat || resync()),
+    });
     return (
         <div
             data-wintos="inbox-list"
             tabIndex={0}
             ref={focusRef}
-            onKeyDown={(e) => {
-                if (!isPlainKey(e) && e.key !== "Escape") return;
-                const n = Number(e.key);
-                if (e.key === "j") setCursor((c) => Math.min(c + 1, rows.length - 1));
-                else if (e.key === "k") setCursor((c) => Math.max(c - 1, 0));
-                else if (e.key === "Enter") open(cursor);
-                else if (n >= 1 && n <= 9) open(n - 1);
-                else if (e.key === "r" && !e.repeat) resync();
-                else if (e.key === "Escape") focusArea("terminal");
-                else return;
-                e.preventDefault();
-            }}
+            data-zone="list"
             style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
         >
             <div style={{ flexGrow: 1, overflowY: "auto", padding: "18px 26px", display: "flex", flexDirection: "column", gap: 18 }}>
@@ -54,6 +50,7 @@ export const OnCallList = memo(() => {
                             return (
                                 <div
                                     key={c.label}
+                                    data-key="j k ⏎"
                                     onClick={() => (setCursor(i), open(i))}
                                     style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 12px", borderRadius: 10, cursor: c.url ? "pointer" : "default", background: i === cursor ? T.cardActive : "transparent", border: `1px solid ${i === cursor ? T.borderActive : "transparent"}` }}
                                 >
@@ -67,11 +64,11 @@ export const OnCallList = memo(() => {
                     </div>
                 ))}
             </div>
-            <div style={{ flexShrink: 0, height: 30, padding: "0 26px", display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
+            <div style={{ flexShrink: 0, minHeight: 30, padding: "4px 26px", boxSizing: "border-box", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 14px", borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
                 <Key k="j k" label="row" />
                 <Key k="⏎ 1–9" label="open" />
                 <Key k="r" label="resync" />
-                <Key k="esc" label="to the panes" />
+                {pageOpen && <KeyOr keys={["esc", "⌘L"]} label="to the page" />}
             </div>
         </div>
     );

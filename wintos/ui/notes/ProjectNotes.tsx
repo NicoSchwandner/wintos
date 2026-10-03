@@ -1,28 +1,19 @@
+import { useState } from "react";
+import { Key } from "../Key";
 import { T } from "../tokens";
-import { checkbox, type CheckState } from "./checkbox";
-import { parseNotes, spans } from "./parse";
+import { type CheckState } from "./checkbox";
+import { Md } from "./Md";
+import { parseNotes } from "./parse";
 
 
 export type Size = "rail" | "full";
-const SIZES = {
+export const SIZES = {
     rail: { label: 10.5, text: 12.5, line: 1.55, gap: 6, textColor: T.quietTitle, code: 11.5 },
     full: { label: 11, text: 13.5, line: 1.6, gap: 9, textColor: T.secondary, code: 12.5 },
 };
 
-export function Rich({ text, size }: { text: string; size: Size }) {
-    return (
-        <>
-            {spans(text).map((s, i) =>
-                s.code ? (
-                    <span key={i} style={{ fontFamily: T.mono, fontSize: SIZES[size].code, color: T.emphasis, background: T.cardActive, borderRadius: 4, padding: "0 4px", overflowWrap: "anywhere" }}>
-                        {s.text}
-                    </span>
-                ) : (
-                    <span key={i}>{s.text}</span>
-                )
-            )}
-        </>
-    );
+export function Rich({ text, size, links = true }: { text: string; size: Size; links?: boolean }) {
+    return <Md text={text} size={size} inline links={links} />;
 }
 
 // A task box: done filled green with a tick, partial half-filled, todo empty. Clickable only
@@ -64,8 +55,25 @@ function Line({ lead, size, children }: { lead: React.ReactNode; size: Size; chi
     );
 }
 
+// Long lists stay short: past this many, the rest (later decisions, ticked Built items) wait behind a button.
+const LONG = 4;
+
+function More({ open, label, onClick }: { open: boolean; label: string; onClick: () => void }) {
+    return (
+        <button type="button" data-more={open ? "open" : "closed"} data-key="m" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 8, padding: 0, background: "transparent", border: "none", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}>
+            {open ? "Show fewer" : label}
+            <Key k="m" label="" />
+        </button>
+    );
+}
+
 export function ProjectNotes({ md, size }: { md: string; size: Size }) {
     const n = parseNotes(md);
+    const [allDecisions, setAllDecisions] = useState(false);
+    const [allBuilt, setAllBuilt] = useState(false);
+    const decisions = allDecisions ? n.decisions : n.decisions.slice(0, LONG);
+    const checked = n.built.length > LONG ? n.built.filter((b) => b.state === "done").length : 0;
+    const built = allBuilt || !checked ? n.built : n.built.filter((b) => b.state !== "done");
     const z = SIZES[size];
     const dot = (color: string) => (
         <span style={{ width: size === "rail" ? 6 : 7, height: size === "rail" ? 6 : 7, borderRadius: "50%", background: color, flexShrink: 0, marginTop: size === "rail" ? 6 : 8 }} />
@@ -76,14 +84,12 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
         <div style={{ display: "flex", flexDirection: "column", gap: size === "rail" ? 12 : 20 }}>
             {n.goal && (
                 <Section label="Goal" size={size}>
-                    <p style={{ margin: 0, fontSize: size === "rail" ? 12.5 : 14, lineHeight: size === "rail" ? 1.6 : 1.65, color: z.textColor }}>
-                        <Rich text={n.goal} size={size} />
-                    </p>
+                    <Md text={n.goal} size={size} />
                 </Section>
             )}
             {n.decisions.length > 0 && (
                 <Section label="Decisions" size={size}>
-                    {n.decisions.map((d, i) => (
+                    {decisions.map((d, i) => (
                         <Line
                             key={i}
                             size={size}
@@ -92,15 +98,17 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
                             <Rich text={d.text} size={size} />
                         </Line>
                     ))}
+                    {n.decisions.length > LONG && <More open={allDecisions} label={`Show ${n.decisions.length - LONG} more`} onClick={() => setAllDecisions(!allDecisions)} />}
                 </Section>
             )}
             {n.built.length > 0 && (
                 <Section label="Built" size={size}>
-                    {n.built.map((b, i) => (
+                    {built.map((b, i) => (
                         <Line key={i} size={size} lead={b.state ? <Box state={b.state} size={size} /> : dot(T.dim)}>
                             <Rich text={b.text} size={size} />
                         </Line>
                     ))}
+                    {checked > 0 && <More open={allBuilt} label={`Show ${checked} checked`} onClick={() => setAllBuilt(!allBuilt)} />}
                 </Section>
             )}
             {n.questions.length > 0 && (
@@ -115,18 +123,7 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
             )}
             {n.other.map((o, i) => (
                 <Section key={i} label={o.heading || "Notes"} size={size}>
-                    {o.text.split("\n").map((line, j) => {
-                        const cb = checkbox(line);
-                        return cb ? (
-                            <Line key={j} size={size} lead={<Box state={cb.state} size={size} />}>
-                                <Rich text={cb.text} size={size} />
-                            </Line>
-                        ) : (
-                            <p key={j} style={{ margin: 0, fontSize: z.text, lineHeight: z.line, color: z.textColor, whiteSpace: "pre-wrap" }}>
-                                <Rich text={line} size={size} />
-                            </p>
-                        );
-                    })}
+                    <Md text={o.text} size={size} />
                 </Section>
             ))}
         </div>

@@ -83,6 +83,18 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/tmp/it'\\''s here' && claude --resume 's-1'\n`);
     });
 
+    test("a session of another Claude account resumes in that account", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir, { CLAUDE_CONFIG_DIR: "/Users/n/.claude-private" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/Users/n/personal" }));
+        expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/Users/n/personal' && CLAUDE_CONFIG_DIR='/Users/n/.claude-private' claude --resume 's-1'\n`);
+    });
+
+    test("without one set, the resume sets none: setting it, even to the default, changes the account's keychain item", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir, { CLAUDE_CONFIG_DIR: "" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/Users/n/work" }));
+        expect(w.calls()).not.toContain("CLAUDE_CONFIG_DIR");
+    });
+
     test("quitting WintOS (SessionEnd reason other) keeps the resume command", () => {
         const w = fakeWsh();
         runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionEnd", session_id: "s-1", reason: "other" }));
@@ -145,6 +157,21 @@ describe("wintos hooks", () => {
         expect(s.hooks.Stop[0].hooks[0].command).toBe("mine.sh");
         for (const e of ["SessionStart", "UserPromptSubmit", "Stop", "SubagentStop", "Notification", "SessionEnd"])
             expect(s.hooks[e].filter((h: any) => h.hooks[0].command.endsWith("wintos-hook.sh"))).toHaveLength(1);
+    });
+
+    test("a Claude config dir given names where they go; another account's settings stay as they were", () => {
+        const { settings, read } = setup();
+        const other = tmp();
+        execFileSync(CLI, ["hooks", "install", other], { env: { ...process.env, WINTOS_CLAUDE_SETTINGS: settings } });
+        const s = JSON.parse(readFileSync(join(other, "settings.json"), "utf8"));
+        expect(s.hooks.Stop[0].hooks[0].command).toMatch(/wintos-hook\.sh$/);
+        expect(read().hooks.Stop).toHaveLength(1);
+        execFileSync(CLI, ["hooks", "uninstall", other]);
+        expect(JSON.parse(readFileSync(join(other, "settings.json"), "utf8"))).toEqual({});
+    });
+
+    test("a config dir that does not exist is refused", () => {
+        expect(() => execFileSync(CLI, ["hooks", "install", join(tmp(), "nope")], { stdio: "pipe" })).toThrow(/no such Claude config dir/);
     });
 
     test("hooks without a command (prompt/agent types) survive install and uninstall", () => {

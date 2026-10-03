@@ -140,6 +140,9 @@ export class WaveTabView extends WebContentsView {
             webPreferences: {
                 preload: path.join(getElectronAppBasePath(), "preload", "index.cjs"),
                 webviewTag: true,
+                // WintOS: the dev instance is driven by the e2e scenarios while it sits behind the
+                // developer's own windows; throttled, its focus handoffs (requestAnimationFrame) stall.
+                backgroundThrottling: process.env.WINTOS_INSTANCE !== "dev",
             },
         });
         this.createdTs = Date.now();

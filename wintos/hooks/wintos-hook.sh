@@ -18,7 +18,9 @@ if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" != "sdk-cli" ];
     case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.reason // "")' 2>/dev/null)" in
     UserPromptSubmit:*)
         # Transcripts are keyed by the launch directory; the payload's cwd follows the session.
-        resume="$(printf '%s' "$payload" | jq -r --arg dir "${CLAUDE_PROJECT_DIR:-}" '@sh "cd \(if $dir != "" then $dir else .cwd end) && claude --resume \(.session_id)"' 2>/dev/null)"
+        # A session of another Claude account (its own CLAUDE_CONFIG_DIR) resumes in that
+        # account; without one, none is set, as setting it even to the default switches keychains.
+        resume="$(printf '%s' "$payload" | jq -r --arg dir "${CLAUDE_PROJECT_DIR:-}" --arg cfg "${CLAUDE_CONFIG_DIR:-}" '(@sh "cd \(if $dir != "" then $dir else .cwd end)") + " && " + (if $cfg != "" then (@sh "CLAUDE_CONFIG_DIR=\($cfg)") + " " else "" end) + (@sh "claude --resume \(.session_id)")' 2>/dev/null)"
         [ -n "$resume" ] && "$wsh" setmeta -b "$WAVETERM_BLOCKID" "cmd:initscript=$resume" >/dev/null 2>&1
         ;;
     SessionEnd:prompt_input_exit | SessionEnd:logout)

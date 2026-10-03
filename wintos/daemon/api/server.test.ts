@@ -105,6 +105,68 @@ describe("wintosd API", () => {
     });
 });
 
+describe("search and reopen", () => {
+    test("GET texts gives every project's notes and mine.md, for the palette's search", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        await post("/projects/tab-2/title", { title: "Y", manual: false });
+        writeFileSync(join(root, "x", "mine.md"), "rules\n");
+        const t = await (await fetch(base + "/projects/texts")).json();
+        expect(t).toEqual({ "tab-1": { body: "", mine: "rules\n" }, "tab-2": { body: "", mine: "" } });
+    });
+
+    test("reopening a closed project binds its folder to the new tab", async () => {
+        await post("/projects/tab-old/title", { title: "X", manual: false });
+        expect((await post("/projects/tab-old/reopen", { tabId: "tab-new" })).status).toBe(200);
+        const n = await (await fetch(base + "/projects/tab-new/notes")).json();
+        expect(n.dir).toBe(join(root, "x"));
+        expect(require("fs").readFileSync(join(root, "x", "project.md"), "utf8")).toContain("id: tab-new");
+        expect((await fetch(base + "/projects/tab-old/notes")).status).toBe(404);
+    });
+
+    test("reopen refuses an unknown project, and a tab that already has one", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        await post("/projects/tab-2/title", { title: "Y", manual: false });
+        expect((await post("/projects/nope/reopen", { tabId: "tab-3" })).status).toBe(404);
+        expect((await post("/projects/tab-1/reopen", { tabId: "tab-2" })).status).toBe(409);
+    });
+});
+
+describe("the keyboard game", () => {
+    test("keys and clicks are scored, kept across a restart, and in the state", async () => {
+        for (const kind of ["key", "key", "click"]) expect((await post("/keyboard", { kind, key: "⌘J" })).status).toBe(200);
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        const k = (await (await fetch(base + "/state")).json()).keyboard;
+        expect([k.points, k.streak, k.keys["⌘J"], k.clicks["⌘J"]]).toEqual([1, 0, 2, 1]);
+    });
+
+    test("anything else is refused", async () => expect((await post("/keyboard", { kind: "scroll", key: "x" })).status).toBe(400));
+});
+
+describe("the day", () => {
+    const withJournal = async () => {
+        srv.close();
+        const dir = join(root, "journal");
+        mkdirSync(dir);
+        writeFileSync(join(root, "tpl.md"), "# $date\n\n## Today's focus (1-3 items)\n\n- [ ] ...\n");
+        const { Journal } = await import("../journal/journal");
+        srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")), lunch: "11:30-13:00" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+    };
+
+    test("the state carries today's plan and the lunch break; saving and planning update it", async () => {
+        await withJournal();
+        const day = async () => (await (await fetch(base + "/state")).json()) as { day: { focus: string; planned: boolean }; lunch: string };
+        expect([(await day()).day.focus, (await day()).day.planned, (await day()).lunch]).toEqual(["", false, "11:30-13:00"]);
+        expect((await post("/day/focus", { text: "- [ ] Pair on the flaky test" })).status).toBe(200);
+        expect((await post("/day/planned", {})).status).toBe(200);
+        expect([(await day()).day.focus, (await day()).day.planned]).toEqual(["- [ ] Pair on the flaky test", true]);
+    });
+
+    test("without a journal the day endpoints say how to get one", async () => expect((await post("/day/focus", { text: "x" })).status).toBe(404));
+});
+
 describe("notes", () => {
     test("GET notes returns project.md's body and mine.md", async () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });
@@ -268,6 +330,27 @@ describe("PR snoozes", () => {
     test("anything but a PR url and a time is refused", async () => {
         expect((await post("/prs/snooze", { url: "javascript:alert(1)", until: 2e12, movedAt: "x" })).status).toBe(400);
         expect((await post("/prs/snooze", { url: U, until: "tomorrow", movedAt: "x" })).status).toBe(400);
+    });
+});
+
+describe("project snoozes", () => {
+    test("a snoozed project is in state and survives a restart", async () => {
+        expect((await post("/projects/tab-1/snooze", { on: true })).status).toBe(200);
+        expect(Object.keys((await (await fetch(base + "/state")).json()).projectSnoozes)).toEqual(["tab-1"]);
+        await srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect((await (await fetch(base + "/state")).json()).projectSnoozes["tab-1"]).toBeDefined();
+    });
+
+    test("on false wakes it", async () => {
+        await post("/projects/tab-1/snooze", { on: true });
+        await post("/projects/tab-1/snooze", { on: false });
+        expect((await (await fetch(base + "/state")).json()).projectSnoozes).toEqual({});
+    });
+
+    test("anything but on true or false is refused", async () => {
+        expect((await post("/projects/tab-1/snooze", { on: "yes" })).status).toBe(400);
     });
 });
 

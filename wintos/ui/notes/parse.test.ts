@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { parseNotes, spans } from "./parse";
+import { parseNotes } from "./parse";
 
 const body = `## Goal
 Keep invoice ingestion above 99% page coverage.
@@ -53,14 +53,4 @@ describe("parseNotes", () => {
     });
 
     test("CRLF parses like LF", () => expect(parseNotes("## Goal\r\nX\r\n").goal).toBe("X"));
-});
-
-describe("spans", () => {
-    test("backticks become code spans", () =>
-        expect(spans("use `invoice_page` or `ocr_result`")).toEqual([
-            { text: "use " },
-            { text: "invoice_page", code: true },
-            { text: " or " },
-            { text: "ocr_result", code: true },
-        ]));
 });

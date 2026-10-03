@@ -1,25 +1,33 @@
 import { useAtomValue } from "jotai";
 import { editMine } from "../focus";
-import { checkbox, toggleCheckbox } from "./checkbox";
-import { Box, Rich } from "./ProjectNotes";
+import { toggleCheckbox } from "./checkbox";
+import { Md } from "./Md";
 import { useEffect, useRef, useState } from "react";
 import { T } from "../tokens";
 import { editingMineAtom } from "./state";
 import type { SaveResult } from "./useNotes";
+import { useZoneKeys } from "../zones";
 
-// mine.md: rendered as paragraphs, edited in place. ⌘⏎ saves, esc discards.
+// mine.md: rendered as paragraphs, edited in place. ⌘⏎ saves, esc discards. The Today page edits
+// the day's focus with it too: file names it in errors, empty says what to write.
 export function Mine({
     text,
     mtime,
     canEdit,
     save,
     size,
+    file = "mine.md",
+    empty = "Empty. Press ⌘E to write what the sessions must respect.",
+    start = "",
 }: {
     text: string;
     mtime: number;
     canEdit: boolean;
     save: (t: string, baseMtime: number) => Promise<SaveResult>;
     size: "rail" | "full";
+    file?: string;
+    empty?: string;
+    start?: string; // what an edit of an empty file begins with (the Today page: yesterday's leftovers)
 }) {
     const editing = useAtomValue(editingMineAtom);
     const [draft, setDraft] = useState(text);
@@ -28,8 +36,18 @@ export function Mine({
     const [base, setBase] = useState(mtime);
     const ref = useRef<HTMLTextAreaElement>(null);
     useEffect(() => {
-        if (editing) (setDraft(text), setBase(mtime), setError(null), setTimeout(() => ref.current?.focus(), 0));
+        if (editing) (setDraft(text.trim() ? text : start), setBase(mtime), setError(null), setTimeout(() => ref.current?.focus(), 0));
     }, [editing]);
+
+    useZoneKeys(ref, {
+        Escape: () => editMine(false),
+        "Cmd:Enter": () =>
+            void save(draft, base).then((r) => {
+                if (r === "ok") editMine(false);
+                else if (r === "conflict") setError(`${file} changed on disk while you edited. Copy your text, press esc and edit again.`);
+                else setError("could not save: wintosd refused or is offline");
+            }),
+    });
 
     if (editing && canEdit) {
         return (
@@ -39,20 +57,8 @@ export function Mine({
                     ref={ref}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={async (e) => {
-                        e.stopPropagation();
-                        if (e.key === "Escape") editMine(false);
-                        if (e.key === "Enter" && e.metaKey) {
-                            e.preventDefault();
-                            const r = await save(draft, base);
-                            if (r === "ok") editMine(false);
-                            else if (r === "conflict")
-                                setError(
-                                    "mine.md changed on disk while you edited. Copy your text, press esc and edit again."
-                                );
-                            else setError("could not save: wintosd refused or is offline");
-                        }
-                    }}
+                    data-zone="overlay"
+                    data-wintos="mine-editor"
                     spellCheck={false}
                     style={{
                         flexGrow: 1,
@@ -74,33 +80,21 @@ export function Mine({
             </>
         );
     }
-    // Line by line (a blank line is a gap), so a task line can be ticked in place: one line of the
-    // file flips and is saved like an edit, refused if mine.md changed on disk meanwhile.
-    const lines = text.split("\n");
+    // A task box ticks in place: its line of the file flips and is saved like an edit, refused if
+    // mine.md changed on disk meanwhile.
     const tick = async (i: number) => {
         const r = await save(toggleCheckbox(text, i), mtime);
-        setError(r === "ok" ? null : r === "conflict" ? "mine.md changed on disk; it reloads, then tick again." : "could not save: wintosd refused or is offline");
+        setError(r === "ok" ? null : r === "conflict" ? `${file} changed on disk; it reloads, then tick again.` : "could not save: wintosd refused or is offline");
     };
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: size === "rail" ? 4 : 6 }}>
+        <div data-wintos={canEdit ? "mine-editable" : undefined} style={{ display: "flex", flexDirection: "column", gap: size === "rail" ? 4 : 6 }}>
             {error && <span style={{ color: T.brick, fontSize: 11 }}>{error}</span>}
             {!text.trim() && (
                 <span style={{ fontSize: 12.5, color: T.faint }}>
-                    {canEdit ? "Empty. Press ⌘E to write what the sessions must respect." : "Available once the project has a title."}
+                    {canEdit ? empty : "Available once the project has a title."}
                 </span>
             )}
-            {lines.map((line, i) => {
-                if (!line.trim()) return i > 0 && lines[i - 1].trim() ? <span key={i} style={{ height: size === "rail" ? 4 : 8 }} /> : null;
-                const cb = checkbox(line);
-                const style = { fontFamily: size === "full" ? T.mono : T.ui, fontSize: 12.5, lineHeight: 1.6, color: /^#+ /.test(line) ? T.apricot : T.secondary };
-                if (!cb) return <span key={i} style={{ ...style, overflowWrap: "anywhere" }}><Rich text={line} size={size} /></span>;
-                return (
-                    <span key={i} style={{ ...style, display: "flex", gap: 8, minWidth: 0, overflowWrap: "anywhere", color: cb.state === "done" ? T.muted : T.secondary, textDecoration: cb.state === "done" ? "line-through" : undefined }}>
-                        <Box state={cb.state} size={size} onToggle={canEdit ? () => void tick(i) : undefined} />
-                        <span style={{ minWidth: 0 }}><Rich text={cb.text} size={size} /></span>
-                    </span>
-                );
-            })}
+            {text.trim() && <Md text={text} size={size} onTick={canEdit ? (i) => void tick(i) : undefined} />}
         </div>
     );
 }

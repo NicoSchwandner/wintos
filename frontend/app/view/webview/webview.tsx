@@ -563,7 +563,8 @@ export class WebViewModel implements ViewModel {
     }
 
     keyDownHandler(e: WaveKeyboardEvent): boolean {
-        if (checkKeyPressed(e, "Cmd:l")) {
+        // WintOS: ⌘U, as ⌘L is the notes (the right area).
+        if (checkKeyPressed(e, "Cmd:u")) {
             this.urlInputRef?.current?.focus();
             this.urlInputRef?.current?.select();
             return true;

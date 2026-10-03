@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { inboxTabId, isInboxTab, prProjects, projectTabIds, projectPrList, prsByTab, relTime, rowView, sidebarModel, type WintosState } from "./view";
+import { inboxKind, inboxTabId, isInboxTab, prProjects, projectTabIds, projectPrList, prsByTab, relTime, rowView, sidebarModel, withSnoozes, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -23,6 +23,11 @@ describe("rowView", () => {
 
     test("needs without a next action still says whose turn it is", () => {
         expect(rowView(row("needs", { waitingSince: NOW }), undefined, "T1", NOW)).toMatchObject({ title: "T1", next: "Your turn", tone: "apricot" });
+    });
+
+    test("quiet on a parked session says what it waits on, in place of the PR reason", () => {
+        const parked = { id: "s", tabId: "t", blockId: "b", state: "parked", since: NOW, lastAt: NOW, parkedOn: "review on #1479" } as const;
+        expect(rowView(row("quiet", { sessions: [parked] }), { dir: "/p", mtime: 0, title: "X", pr: [] }, "T", NOW)).toMatchObject({ reason: "waiting on review on #1479" });
     });
 
     test("running on a parked session says what it waits on", () => {
@@ -107,8 +112,18 @@ describe("the Inbox tab", () => {
         expect(projectTabIds(["p1", "old", "used"], { ...tabs, old: { meta: { "wintos:blank": true } } as unknown as Tab, used: { meta: { "wintos:blank": true }, blockids: ["b1"] } as unknown as Tab })).toEqual(["p1", "used"]));
 
     test("is found among the tabs, or not at all", () => {
-        expect(inboxTabId(["p1", "ib"], tabs)).toBe("ib");
-        expect(inboxTabId(["p1"], tabs)).toBeUndefined();
+        expect(inboxTabId(["p1", "ib"], tabs, "prs")).toBe("ib");
+        expect(inboxTabId(["p1"], tabs, "prs")).toBeUndefined();
+    });
+
+    test("PRs and On call are two tabs, each found by its list; an Inbox from before the split is the PRs one", () => {
+        const two = { ...tabs, oc: tab({ "wintos:inbox": "oncall" }), pr: tab({ "wintos:inbox": "prs" }) };
+        expect(inboxKind(two.oc)).toBe("oncall");
+        expect(inboxKind(two.pr)).toBe("prs");
+        expect(inboxKind(two.ib)).toBe("prs");
+        expect(inboxKind(two.p1)).toBeUndefined();
+        expect(inboxTabId(["p1", "oc", "pr"], two, "oncall")).toBe("oc");
+        expect(projectTabIds(["p1", "oc", "pr"], two)).toEqual(["p1"]);
     });
 });
 
@@ -174,4 +189,45 @@ describe("prProjects", () => {
         const state = { now: 0, sessions: [], projects: [{ id: "t1", title: "X", titleLocked: false, pr: ["acme/api#5"], dir: "/d", mtime: 0 }], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs: [pr, other] } } }, snoozes: { [pr.url]: { until: 1e15, movedAt: pr.createdAt } } } as unknown as WintosState;
         expect([...prProjects(["t1"], state)]).toEqual([[pr.url, "t1"]]);
     });
+});
+
+describe("withSnoozes", () => {
+    const r = (tabId: string, band: Row["band"]) => row(band, { tabId });
+    const model = { needs: [r("a", "needs")], running: [r("b", "running")], quiet: [r("c", "quiet"), r("d", "quiet")], quietMore: [], quietStale: [r("e", "quiet")] };
+
+    test("a snoozed project leaves every band and the walk, into its own group", () => {
+        const s = withSnoozes(model, { c: 1, e: 1, b: 1 });
+        expect([...s.running, ...s.quiet, ...s.quietMore, ...s.quietStale].map((x) => x.tabId)).toEqual(["d"]);
+        expect(s.snoozed.map((x) => x.tabId)).toEqual(["b", "c", "e"]);
+    });
+
+    test("one that needs you after the snooze comes back on its own, and is marked to wake", () => {
+        const s = withSnoozes({ ...model, needs: [row("needs", { tabId: "a", waitingSince: NOW })] }, { a: NOW - 1 });
+        expect(s.needs.map((x) => x.tabId)).toEqual(["a"]);
+        expect(s.wake).toEqual(["a"]);
+        expect(s.snoozed).toEqual([]);
+    });
+
+    test("a need that was already there when you snoozed stays snoozed", () => {
+        const s = withSnoozes({ ...model, needs: [row("needs", { tabId: "a", waitingSince: NOW - 10 })] }, { a: NOW });
+        expect([s.needs, s.wake, s.snoozed.map((x) => x.tabId)]).toEqual([[], [], ["a"]]);
+    });
+
+    test("a need with no start time counts as already there", () => {
+        const s = withSnoozes(model, { a: NOW });
+        expect([s.needs, s.wake, s.snoozed.map((x) => x.tabId)]).toEqual([[], [], ["a"]]);
+    });
+
+    test("a snoozed quiet project frees its slot: the next one moves up from the overflow", () => {
+        const quiet = ["q1", "q2", "q3", "q4", "q5", "q6"].map((id) => r(id, "quiet"));
+        const s = withSnoozes({ needs: [], running: [], quiet, quietMore: [r("q7", "quiet")], quietStale: [] }, { q2: 1 });
+        expect([s.quiet.map((x) => x.tabId), s.quietMore]).toEqual([["q1", "q3", "q4", "q5", "q6", "q7"], []]);
+    });
+
+    test("snoozed rows all read as quiet, whatever their project is doing", () => {
+        const s = withSnoozes({ ...model, needs: [row("needs", { tabId: "a", waitingSince: NOW - 10 })] }, { a: NOW, b: NOW });
+        expect(s.snoozed.map((x) => [x.tabId, x.band])).toEqual([["a", "quiet"], ["b", "quiet"]]);
+    });
+
+    test("nothing snoozed changes nothing", () => expect(withSnoozes(model, {})).toEqual({ ...model, snoozed: [], wake: [] }));
 });

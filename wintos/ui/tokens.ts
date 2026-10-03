@@ -27,3 +27,6 @@ export const T = {
     ui: "'Schibsted Grotesk', ui-sans-serif, system-ui, sans-serif",
     mono: "'JetBrains Mono', ui-monospace, monospace",
 } as const;
+
+// The open project's row in the sidebar.
+export const ACTIVE: React.CSSProperties = { background: T.borderActive, boxShadow: `inset 3px 0 0 ${T.emphasis}` };

@@ -73,9 +73,13 @@ export function restoreSessions(saved: Session[]): Map<string, Session> {
 }
 
 // `wintos wait "<what>"` from inside a session: the block's live session ends this turn parked.
+// `wintos wait` from inside a session (the turn's Stop parks), or the developer parking a turn
+// that already ended (⌥⌘P).
 export function parkSession(sessions: Map<string, Session>, blockId: string, reason: string, now: number): Map<string, Session> {
     const live = liveIn(sessions, blockId);
     if (!live) return sessions;
+    // A turn that already ended waiting on the developer parks now: they parked it from WintOS.
+    if (live.state === "waiting") return new Map(sessions).set(live.id, { ...live, state: "parked", since: now, parkedOn: reason, parkPending: undefined, donePending: undefined, lastAt: now });
     return new Map(sessions).set(live.id, { ...live, parkedOn: reason, parkPending: true, donePending: undefined, lastAt: now });
 }
 

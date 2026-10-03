@@ -1,10 +1,12 @@
-import { rank, Ranking, Row } from "../daemon/ranking/rank";
+import { QUIET_CAP, rank, Ranking, Row } from "../daemon/ranking/rank";
+import type { Day } from "../daemon/journal/journal";
+import type { KeyStats } from "../daemon/keyboard/keyboard";
 import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
 import { GROUPS, isSnoozed, isStacked, lastMovement, projectPrs, qualifier, type Group, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
 import type { Session } from "../daemon/sessions/reduce";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number> };
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; projectSnoozes?: Record<string, number>; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats };
 export type Tone = "apricot" | "brick" | "secondary";
 export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
 
@@ -39,6 +41,29 @@ export function sidebarModel(tabIds: string[], state: WintosState): Ranking {
     return rank(tabIds, state.sessions, state.now, touched, blocked, state.seen);
 }
 
+// Snoozed projects (done, but may need re-work) leave the bands and the ⌘J/⌘K walk for their own
+// group; one that needs you anew (a waiting session, a PR in Fix, a new reply, begun after the
+// snooze) comes back, and is marked to be woken for good. A need already there when you snoozed
+// is what you chose to put away.
+export type SidebarSplit = Ranking & { snoozed: Row[]; wake: string[] };
+export function withSnoozes(model: Ranking, snoozed: Record<string, number> = {}): SidebarSplit {
+    const is = (r: Row) => r.tabId in snoozed;
+    const out = (rows: Row[]) => rows.filter((r) => !is(r));
+    const woken = (r: Row) => is(r) && (r.waitingSince ?? 0) > snoozed[r.tabId];
+    const needs = model.needs.filter((r) => !is(r) || woken(r));
+    return {
+        needs,
+        running: out(model.running),
+        // The cap counts shown projects: a snoozed one gives its slot to the next.
+        quiet: out([...model.quiet, ...model.quietMore]).slice(0, QUIET_CAP),
+        quietMore: out([...model.quiet, ...model.quietMore]).slice(QUIET_CAP),
+        quietStale: out(model.quietStale),
+        // Put away: a snoozed project reads as quiet, whether a session there waits or works.
+        snoozed: [...model.needs.filter((r) => is(r) && !woken(r)), ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].filter(is).map((r) => ({ ...r, band: "quiet" as const })),
+        wake: needs.filter(woken).map((r) => r.tabId),
+    };
+}
+
 export function rowView(row: Row, project: Project | undefined, tabName: string | undefined, now: number, prs?: ProjectPrs): RowView {
     const title = project?.title ?? tabName ?? "Untitled";
     const since = row.band === "needs" ? row.waitingSince! : row.lastAt;
@@ -60,16 +85,23 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
         const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
         return { title, next: parkedOn ? `Waiting on ${parkedOn}` : (project?.next ?? "Claude is working"), tone: "secondary", age, meta };
     }
-    return { title, age, reason: prs?.reason ?? meta ?? age };
+    const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
+    return { title, age, reason: parkedOn ? `waiting on ${parkedOn}` : (prs?.reason ?? meta ?? age) };
 }
 
 // The Inbox is the one tab that is not a project (pkg/wcore/inbox.go); a tab not loaded yet is one.
-export const isInboxTab = (tab: Tab | undefined) => tab?.meta?.["wintos:inbox"] === true;
+// Two Inbox tabs, PRs and On call; true is an Inbox from before the split, which held the PRs.
+export type InboxList = "prs" | "oncall";
+export function inboxKind(tab: Tab | undefined): InboxList | undefined {
+    const v = tab?.meta?.["wintos:inbox"];
+    return v === true || v === "prs" ? "prs" : v === "oncall" ? "oncall" : undefined;
+}
+export const isInboxTab = (tab: Tab | undefined) => inboxKind(tab) !== undefined;
 // An empty placeholder saved by an earlier version (meta wintos:blank) is not a project either;
 // one that gained panes is.
 const oldPlaceholder = (tab: Tab | undefined) => tab?.meta?.["wintos:blank"] === true && !tab.blockids?.length;
 export const projectTabIds = (ids: string[], tabs: Record<string, Tab | undefined>) => ids.filter((id) => !isInboxTab(tabs[id]) && !oldPlaceholder(tabs[id]));
-export const inboxTabId = (ids: string[], tabs: Record<string, Tab | undefined>) => ids.find((id) => isInboxTab(tabs[id]));
+export const inboxTabId = (ids: string[], tabs: Record<string, Tab | undefined>, list: InboxList) => ids.find((id) => inboxKind(tabs[id]) === list);
 
 // The notes' Pull requests section: every PR of the project, snoozed ones included (marked,
 // last), most urgent group first, each with what it waits on.

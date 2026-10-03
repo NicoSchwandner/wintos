@@ -25,6 +25,8 @@ describe("groupOf (spec §4, first match wins)", () => {
     test("red CI on a draft is work in progress, not a fix", () =>
         expect(groupOf(pr({ isDraft: true, checks: "FAILURE" }), "me", MON)).toBe("waiting"));
     test("fix: changes requested", () => expect(groupOf(pr({ reviewDecision: "CHANGES_REQUESTED" }), "me", MON)).toBe("fix"));
+    test("changes requested, all asked again: waiting on them, not yours", () =>
+        expect(groupOf(pr({ reviewDecision: "CHANGES_REQUESTED", changesRerequested: true, reviewers: ["ana.b"], lastReviewAt: "2026-09-28T09:00:00Z" }), "me", MON)).toBe("waiting"));
     test("fix: CI red", () => expect(groupOf(pr({ checks: "FAILURE" }), "me", MON)).toBe("fix"));
     test("fix beats chase", () =>
         expect(groupOf(pr({ checks: "FAILURE", createdAt: "2026-09-01T00:00:00Z" }), "me", MON)).toBe("fix"));

@@ -36,4 +36,24 @@ document.addEventListener("mouseup", (event) => {
     }
 });
 
+// WintOS: a press in the page, so the host can tell your click from the page taking focus by
+// itself (wintos/ui/focusOwner.ts).
+document.addEventListener(
+    "pointerdown",
+    (event) => {
+        if (event.isTrusted) ipcRenderer.sendToHost("wintos-page-pressed");
+    },
+    true
+);
+
+// WintOS: a page never passes the ⌘ release to the host, which ends a ⌘J/⌘K walk
+// (wintos/ui/switcher.ts).
+window.addEventListener(
+    "keyup",
+    (event) => {
+        if (event.isTrusted && event.key === "Meta") ipcRenderer.sendToHost("wintos-meta-up");
+    },
+    true
+);
+
 console.log("loaded wave preload-webview.ts");

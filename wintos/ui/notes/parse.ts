@@ -47,10 +47,3 @@ function sections(md: string): { heading: string; lines: string[] }[] {
     }
     return out;
 }
-
-export function spans(text: string): { text: string; code?: boolean }[] {
-    return text
-        .split(/(`[^`]+`)/)
-        .filter(Boolean)
-        .map((s) => (s.startsWith("`") && s.endsWith("`") ? { text: s.slice(1, -1), code: true } : { text: s }));
-}

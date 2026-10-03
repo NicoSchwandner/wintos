@@ -1,7 +1,5 @@
-import { describe, expect, test, vi } from "vitest";
-import { globalStore } from "@/app/store/jotaiStore";
-import { allowedInInbox, blockDefFor, focusedPageUrl, newSessionScript, paneShowing, wintosClose } from "./menu";
-import { mainViewAtom } from "./notes/state";
+import { describe, expect, test } from "vitest";
+import { allowedInInbox, blockDefFor, focusedPageUrl, newSessionScript, paneShowing } from "./menu";
 
 const widgets = {
     "defwidget@terminal": { blockdef: { meta: { view: "term", controller: "shell" } } },
@@ -38,21 +36,6 @@ describe("newSessionScript", () => {
     });
 });
 
-describe("wintosClose", () => {
-    test("⌘W in the notes view goes back to the terminals and closes nothing hidden", () => {
-        vi.stubGlobal("requestAnimationFrame", () => 0);
-        globalStore.set(mainViewAtom, "notes");
-        expect(wintosClose()).toBe(true);
-        expect(globalStore.get(mainViewAtom)).toBe("terminal");
-    });
-
-    test("in the terminals ⌘W stays Wave's close", () => {
-        globalStore.set(mainViewAtom, "terminal");
-        expect(wintosClose()).toBe(false);
-    });
-});
-
-
 describe("paneShowing", () => {
     const blocks = [{ oid: "b1", meta: { view: "term" } }, { oid: "b2", meta: { view: "web", url: "https://github.com/acme/api/pull/9" } }] as unknown as Block[];
 
@@ -62,6 +45,10 @@ describe("paneShowing", () => {
         const moved = [{ oid: "b3", meta: { view: "web", url: "https://github.com/acme/api/pull/9/files#diff-1" } }] as unknown as Block[];
         expect(paneShowing(moved, "https://github.com/acme/api/pull/9")).toBe("b3");
         expect(paneShowing(moved, "https://github.com/acme/api/pull/90")).toBeUndefined();
+    });
+    test("a page that redirected (a sign-in, a viewer's own address) is still the page it was opened for", () => {
+        const moved = [{ oid: "b5", meta: { view: "web", url: "https://accounts.example.com/signin?x=1", "wintos:opened": "https://errors.example.com/team/x" } }] as unknown as Block[];
+        expect(paneShowing(moved, "https://errors.example.com/team/x")).toBe("b5");
     });
     test("other pages match only exactly", () =>
         expect(paneShowing([{ oid: "b4", meta: { view: "web", url: "https://example.com/a/b" } }] as unknown as Block[], "https://example.com/a")).toBeUndefined());
@@ -77,7 +64,7 @@ describe("focusedPageUrl", () => {
 
 describe("allowedInInbox", () => {
     test("the Inbox opens pages and moves between them; it starts no terminals or Claude sessions", () => {
-        for (const a of ["palette", "keymap", "prs", "panel", "open-page:https://github.com/acme/api/pull/1", "switch-next", "project", "copy-url", "pane-next", "browser"]) expect([a, allowedInInbox(a)]).toEqual([a, true]);
-        for (const a of ["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "focus-notes"]) expect([a, allowedInInbox(a)]).toEqual([a, false]);
+        for (const a of ["palette", "keymap", "prs", "panel", "open-page:https://github.com/acme/api/pull/1", "switch-next", "project", "copy-url", "pane-next", "browser", "focus-left", "focus-right"]) expect([a, allowedInInbox(a)]).toEqual([a, true]);
+        for (const a of ["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes"]) expect([a, allowedInInbox(a)]).toEqual([a, false]);
     });
 });

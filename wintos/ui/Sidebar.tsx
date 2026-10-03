@@ -5,26 +5,33 @@ import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, getApi } from "@/store/global";
 import { fireAndForget } from "@/util/util";
 import { atom, useAtom, useAtomValue } from "jotai";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Row } from "../daemon/ranking/rank";
 import { Key } from "./Key";
-import { T } from "./tokens";
+import { Rich } from "./notes/ProjectNotes";
+import { MeetingCard, MeetingEdge } from "./MeetingCard";
+import { TodayCard } from "./TodayCard";
+import { GameLine } from "./GameIndicator";
+import { meetingsFrom } from "./meetings";
+import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
 import { setSwitchOrder, switchTargetAtom } from "./switcher";
-import { registerWintosMenu } from "./menu";
-import { inboxListAtom, renamingAtom, type InboxList } from "./notes/state";
+import { closeProjectTab, registerWintosMenu } from "./menu";
+import { FLAG_EVENT, isPage, mainViewAtom, renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
-import { instance, setProjectTitle, useWintos } from "./useWintos";
-import { ghPrs, isInboxTab, prsByTab, projectTabIds, rowView, RowView, sidebarModel } from "./view";
+import { instance, setProjectSnoozed, setProjectTitle, useWintos } from "./useWintos";
+import { ghPrs, inboxKind, isInboxTab, prsByTab, type InboxList, projectTabIds, rowView, RowView, sidebarModel, withSnoozes } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
+import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 
 const BAND_STYLE = {
     needs: { label: "Needs you", color: T.apricot },
     running: { label: "Running", color: T.moss },
     quiet: { label: "Quiet", color: T.muted },
+    snoozed: { label: "Snoozed", color: T.faint },
 } as const;
 
 function useTabs(tabIds: string[]): Record<string, Tab | undefined> {
@@ -40,31 +47,42 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const activeTabId = useAtomValue(atoms.staticTabId);
     const tabs = useTabs(allTabIds);
     const tabIds = projectTabIds(allTabIds, tabs);
-    // In the Inbox the card of the list it shows is marked, as the current project's row is.
-    const inboxList = useAtomValue(inboxListAtom);
-    const shows = (list: InboxList) => isInboxTab(tabs[activeTabId]) && inboxList === list;
+    // In the PRs or On call tab its card is marked, as the current project's row is.
+    // What fills the window right now is marked, and only that: the Today page covers the tab
+    // under it, so neither that project's row nor an Inbox card is marked while it shows.
+    const shows = (list: InboxList) => !isPage(mainView) && inboxKind(tabs[activeTabId]) === list;
     const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
     const { state: raw, offline } = useWintos();
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
     const now = useNow();
-    const [showAll, setShowAll] = useState(false);
+    const fullScreen = useAtomValue(atoms.isFullScreen);
+    const mainView = useAtomValue(mainViewAtom);
+    const [showAll, setShowAll] = useStoredFlag("wintos:show-all-quiet");
+    const [showSnoozed, setShowSnoozed] = useStoredFlag("wintos:show-snoozed");
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
-    const model = state ? sidebarModel(tabIds, state) : null;
+    const model = state ? withSnoozes(sidebarModel(tabIds, state), state.projectSnoozes) : null;
     const prsTab = state ? prsByTab(tabIds, state) : {};
     const gh = state ? ghPrs(state) : undefined;
     const queue = gh ? queueModel(gh.prs, gh.me, now, state?.snoozes) : null;
     const panels = state ? pluginPanels(state) : [];
     const loading = state ? loadingPanels(state, lastPanelTitles(panels)) : [];
     const running = new Set(state?.pluginsRunning ?? []);
+    const meetings = useMemo(() => meetingsFrom(state?.plugins), [state?.plugins]);
     const project = (tabId: string) => state?.projects.find((p) => p.id === tabId);
     // The open tab is always visible even when it is stale; walking with ⌘J/⌘K or renaming
     // (the row must exist to hold the input) shows them all.
     const expanded = showAll || switchTarget != null || renaming != null;
     const activeStale = model?.quietStale.filter((r) => r.tabId === activeTabId && !expanded) ?? [];
     const quiet = model ? (expanded ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
-    const switchOrder = model ? [...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId) : [];
+    // Snoozed projects join the walk while their group is shown; landing on one wakes it.
+    const switchOrder = model ? [...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale, ...(showSnoozed ? model.snoozed : [])].map((r) => r.tabId) : [];
+    // Snoozed rows show on their own toggle or while renaming one; the open one always, to find it again.
+    const isSnoozedHere = !!model?.snoozed.some((r) => r.tabId === activeTabId);
+    const snoozedShown = model ? (showSnoozed || renaming != null ? model.snoozed : model.snoozed.filter((r) => r.tabId === activeTabId)) : [];
+    // A snoozed project that needs you is back for good, not only while it needs you.
+    useEffect(() => model?.wake.forEach((id) => void setProjectSnoozed(id, false)), [model?.wake.join(",")]);
 
     useEffect(registerWintosMenu, []);
 
@@ -72,7 +90,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-tabid="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
 
     useEffect(() => {
-        if (state) setLatestSessions(state.sessions, tabIds, model?.needs.map((r) => r.tabId) ?? []);
+        if (state) setLatestSessions(state.sessions, tabIds, model?.needs.map((r) => r.tabId) ?? [], model?.snoozed.map((r) => r.tabId) ?? []);
     }, [state, tabIds.join(",")]);
 
     // The project title is the source of truth; the tab name follows it.
@@ -96,7 +114,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     click: () => editMine(true),
                 },
                 { type: "separator" },
-                { label: "Close tab", click: () => fireAndForget(() => getApi().closeTab(workspace.oid, tabId, true)) },
+                { label: "Close tab", click: () => closeProjectTab(tabId, true) },
             ],
             e
         );
@@ -107,7 +125,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             key: row.tabId,
             tabId: row.tabId,
             v,
-            active: row.tabId === activeTabId,
+            active: row.tabId === activeTabId && !isPage(mainView),
             cursor: switchTarget === row.tabId,
             renaming: renaming === row.tabId,
             onOpen: () => open(row.tabId),
@@ -124,12 +142,13 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     return (
         <div style={{ height: "100%", display: "flex", flexDirection: "column", background: T.sidebar, borderRight: `1px solid ${T.border}`, fontFamily: T.ui, color: T.text }}>
             {instance().label && (
-                <div style={{ padding: "30px 12px 6px", background: T.brick, color: T.ground, fontFamily: T.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", textAlign: "center", WebkitAppRegion: "drag" } as React.CSSProperties}>
+                <div style={{ padding: `${fullScreen ? 6 : 30}px 12px 6px`, background: T.brick, color: T.ground, fontFamily: T.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", textAlign: "center", WebkitAppRegion: "drag" } as React.CSSProperties}>
                     {instance().label.toUpperCase()} INSTANCE · NOT YOUR WINTOS
                 </div>
             )}
-            {/* The header drags the window, as a macOS title bar would; nothing in it is clickable. */}
-            <div style={{ padding: "36px 16px 13px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", WebkitAppRegion: "drag" } as React.CSSProperties}>
+            {/* The header drags the window, as a macOS title bar would; nothing in it is clickable. Its
+                top clears the window buttons, which sit over the sidebar; full screen has none. */}
+            <div style={{ padding: `${fullScreen ? 12 : 36}px 16px 13px`, display: "flex", alignItems: "flex-end", justifyContent: "space-between", WebkitAppRegion: "drag" } as React.CSSProperties}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                     <span style={{ fontFamily: T.display, fontSize: 21, lineHeight: 1 }}>WintOS</span>
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>
@@ -145,18 +164,21 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 {state && (
                     <div style={{ display: "flex", gap: 8 }}>
                         {queue ? (
-                            <SummaryCard label="PRs" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={T.brick} active={shows("prs")} onClick={() => goToInbox("prs")} />
+                            <SummaryCard label="PRs" keys="⇧⌘G" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={T.brick} active={shows("prs")} onClick={() => goToInbox("prs")} />
                         ) : (
-                            <SummaryCard label="PRs" stats={[]} note="loading from GitHub" noteColor={T.faint} active={shows("prs")} onClick={() => goToInbox("prs")} />
+                            <SummaryCard label="PRs" keys="⇧⌘G" stats={[]} note="loading from GitHub" noteColor={T.faint} active={shows("prs")} onClick={() => goToInbox("prs")} />
                         )}
                         {panels.map((p) => {
                             const c = cardValue(p.counts);
                             const failed = p.error || p.counts.some((x) => x.count == null);
-                            return <SummaryCard key={p.name} label={p.title} busy={running.has(p.name)} stats={c} note={failed ? "couldn't fetch everything" : undefined} noteColor={T.brick} active={shows("oncall")} onClick={() => goToInbox("oncall")} />;
+                            return <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" busy={running.has(p.name)} stats={c} note={failed ? "couldn't fetch everything" : undefined} noteColor={T.brick} active={shows("oncall")} onClick={() => goToInbox("oncall")} />;
                         })}
-                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} onClick={() => goToInbox("oncall")} />)}
+                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
+                {state?.day && <TodayCard day={state.day} active={mainView === "day"} walk={<WalkKeys />} />}
+                {meetings.length > 0 && <MeetingCard meetings={meetings} />}
+                <MeetingEdge meetings={meetings} />
                 {offline || !model ? (
                     <div style={{ fontFamily: T.mono, fontSize: 11, color: offline ? T.brick : T.muted, padding: "0 4px" }}>
                         {offline ? "daemon offline: bands hidden until wintosd is back" : "connecting to wintosd…"}
@@ -170,7 +192,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                             {(model.quietMore.length > 0 || model.quietStale.length > 0) && (
                                 <button
                                     type="button"
-                                    onClick={() => setShowAll((s) => !s)}
+                                    tabIndex={-1}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => setShowAll(!showAll)}
                                     style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", borderTop: `1px solid #32302f`, textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}
                                 >
                                     {showAll ? "Show fewer" : `Show all ${model.quiet.length + model.quietMore.length + model.quietStale.length}`}
@@ -180,13 +204,31 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                                 </button>
                             )}
                         </Band>
+                        <Band kind="snoozed" count={model.snoozed.length} shown={snoozedShown.length}>
+                            {snoozedShown.map(renderRow)}
+                            {(showSnoozed || snoozedShown.length < model.snoozed.length) && (
+                                <button
+                                    data-key="⌥⌘S"
+                                    type="button"
+                                    tabIndex={-1}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => setShowSnoozed(!showSnoozed)}
+                                    style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.faint, cursor: "pointer" }}
+                                >
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>{showSnoozed ? "Hide snoozed" : `Show ${model.snoozed.length} snoozed · opening one wakes it`}<Key k="⌥⌘S" label="" /></span>
+                                </button>
+                            )}
+                        </Band>
                     </>
                 )}
             </div>
-            <div style={{ flexShrink: 0, height: 34, padding: "0 14px", display: "flex", alignItems: "center", gap: 16, borderTop: `1px solid ${T.hairline}`, fontSize: 11, color: T.faint }}>
-                <Key k="⌘J ⌘K" label="switch" />
+            {state?.keyboard && <GameLine stats={state.keyboard} />}
+            <div style={{ flexShrink: 0, minHeight: 34, boxSizing: "border-box", padding: "6px 14px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 16px", borderTop: `1px solid ${T.hairline}`, fontSize: 11, color: T.faint }}>
+                {/* ⌘J/⌘K sit on the open project's row. */}
                 <Key k="⌃⇥" label="waiting" />
                 {!isInboxTab(tabs[activeTabId]) && <Key k="⌘R" label="rename" />}
+                {!isInboxTab(tabs[activeTabId]) && <Key k="⌥⌘Z" label={isSnoozedHere ? "wake" : "snooze"} />}
+                {state?.sessions.some((x) => x.tabId === activeTabId && x.state === "waiting") && <Key k="⌥⌘P" label="park" />}
             </div>
         </div>
     );
@@ -221,22 +263,30 @@ type RowProps = {
 };
 
 function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming" | "onRename"> & { style: React.CSSProperties }) {
+    const ref = useRef<HTMLInputElement>(null);
+    useZoneKeys(ref, { Enter: () => onRename(ref.current?.value ?? null), Escape: () => onRename(null) });
     if (!renaming) return <span style={style}>{v.title}</span>;
     return (
         <input
             autoFocus
+            ref={ref}
+            data-zone="overlay"
             defaultValue={v.title}
             onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-                e.stopPropagation();
-                if (e.key === "Enter") onRename(e.currentTarget.value);
-                if (e.key === "Escape") onRename(null);
-            }}
             onBlur={(e) => onRename(e.currentTarget.value)}
             style={{ ...style, background: T.ground, border: `1px solid ${T.borderActive}`, borderRadius: 5, padding: "1px 4px", outline: "none", width: "100%" }}
         />
     );
 }
+
+// The open project: a brighter row with a bar on its left, unmistakable at a glance (green is
+// taken by the focus frame), and the keys that walk away from it.
+const WalkKeys = () => (
+    <span style={{ display: "inline-flex", gap: 8 }}>
+        <Key k="⌘K" label="↑" />
+        <Key k="⌘J" label="↓" />
+    </span>
+);
 
 function CardRow(p: RowProps) {
     const { v } = p;
@@ -245,6 +295,7 @@ function CardRow(p: RowProps) {
         <div
             data-tabid={p.tabId}
             data-band="card"
+            data-key="⌘J / ⌘K"
             onClick={p.onOpen}
             onContextMenu={p.onMenu}
             style={{
@@ -254,18 +305,19 @@ function CardRow(p: RowProps) {
                 padding: "12px 13px",
                 cursor: "pointer",
                 borderRadius: 10,
-                background: p.active ? T.cardActive : T.card,
+                background: T.card,
                 border: `1px solid ${p.cursor ? T.apricot : p.active ? T.borderActive : T.border}`,
+                ...(p.active ? ACTIVE : {}),
             }}
         >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                 <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.005em", color: p.active ? T.emphasis : T.title, fontFamily: T.ui }} />
                 <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                    {p.active && <span style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: "0.06em", color: T.muted }}>open</span>}
+                    {p.active && <WalkKeys />}
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{v.age}</span>
                 </span>
             </div>
-            {v.next && <div style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty" } as React.CSSProperties}>{v.next}</div>}
+            {v.next && <div style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty" } as React.CSSProperties}><Rich text={v.next} size="rail" links={false} /></div>}
             {v.meta && <div style={{ fontFamily: T.mono, fontSize: 9.5, color: T.muted }}>{v.meta}</div>}
         </div>
     );
@@ -277,6 +329,7 @@ function QuietRow(p: RowProps) {
         <div
             data-tabid={p.tabId}
             data-band="quiet"
+            data-key="⌘J / ⌘K"
             onClick={p.onOpen}
             onContextMenu={p.onMenu}
             style={{
@@ -287,13 +340,14 @@ function QuietRow(p: RowProps) {
                 padding: "8px 13px",
                 cursor: "pointer",
                 borderRadius: 8,
-                background: p.active ? T.cardActive : "transparent",
+                background: "transparent",
                 border: `1px solid ${p.cursor ? T.apricot : "transparent"}`,
+                ...(p.active ? ACTIVE : {}),
             }}
         >
             {/* The title gets the room; the note is capped and cut, so neither wraps. */}
             <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} />
-            <span title={v.reason} style={{ maxWidth: "48%", fontSize: 10.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>
+            {p.active ? <WalkKeys /> : <span title={v.reason} style={{ maxWidth: "48%", fontSize: 10.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>}
         </div>
     );
 }
@@ -339,12 +393,15 @@ function Drumming() {
 
 // A title over its numbers, each number stacked on its own label; the note is only for what
 // the numbers can't say (late, updating, loading).
-function SummaryCard({ label, stats, note, noteColor, busy, active, onClick }: { label: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; active?: boolean; onClick: () => void }) {
+function SummaryCard({ label, keys, stats, note, noteColor, busy, active, onClick }: { label: string; keys: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; active?: boolean; onClick: () => void }) {
     return (
-        <div onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: active ? T.cardActive : "#32302f", border: `1px solid ${active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer" }}>
+        <div data-key={active ? "" : keys} onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#32302f", border: `1px solid ${active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", ...(active ? ACTIVE : {}) }}>
             <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, fontWeight: 600, color: T.secondary }}>
                 {label}
                 {busy && <Drumming />}
+                <span style={{ marginLeft: "auto" }}>
+                    <Key k={keys} label="" />
+                </span>
             </span>
             <span style={{ display: "flex", gap: 18 }}>
                 {stats.map((s) => (
@@ -355,6 +412,41 @@ function SummaryCard({ label, stats, note, noteColor, busy, active, onClick }: {
                 ))}
             </span>
             {note && <span style={{ fontFamily: T.mono, fontSize: 9.5, color: noteColor }}>{note}</span>}
+            {/* In PRs or On call no project row is open: the walk keys sit on this card instead. */}
+            {active && (
+                <span style={{ alignSelf: "flex-start" }}>
+                    <WalkKeys />
+                </span>
+            )}
         </div>
     );
+}
+
+// A sidebar toggle kept in localStorage, which every project's renderer shares: one setting for
+// all projects, like the notes rail's width.
+function useStoredFlag(key: string): [boolean, (on: boolean) => void] {
+    const read = () => {
+        try {
+            return localStorage.getItem(key) === "1";
+        } catch {
+            return false;
+        }
+    };
+    const [on, setOn] = useState(read);
+    useEffect(() => {
+        const sync = () => setOn(read());
+        window.addEventListener("storage", sync);
+        window.addEventListener(FLAG_EVENT, sync); // a key in this window (⌥⌘S) set it
+        document.addEventListener("visibilitychange", sync);
+        return () => (window.removeEventListener("storage", sync), window.removeEventListener(FLAG_EVENT, sync), document.removeEventListener("visibilitychange", sync));
+    }, []);
+    return [
+        on,
+        (next) => {
+            setOn(next);
+            try {
+                localStorage.setItem(key, next ? "1" : "0");
+            } catch {}
+        },
+    ];
 }

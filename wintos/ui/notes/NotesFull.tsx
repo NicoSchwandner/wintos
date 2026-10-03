@@ -1,35 +1,41 @@
 import { useFocusOnMount } from "../useFocusOnMount";
-import { isPlainKey } from "../keys";
-import { editMine, focusArea } from "../focus";
+import { useZoneKeys } from "../zones";
+import { cursorKeys } from "../itemCursor";
+import { globalStore } from "@/app/store/jotaiStore";
 import { useAtomValue } from "jotai";
-import { memo } from "react";
+import { memo, useEffect } from "react";
 import { T } from "../tokens";
 import { Mine } from "./Mine";
 import { Key } from "../Key";
 import { ProjectNotes } from "./ProjectNotes";
-import { editingMineAtom } from "./state";
+import { editingMineAtom, findInNotesAtom } from "./state";
 import { useNotes } from "./useNotes";
-import { openProjectPr, PrList } from "./PrList";
+import { notesKeys, PrList } from "./PrList";
 import { useWintos } from "../useWintos";
 
-// ⇧⌘J: both files full width, side by side (NotesC).
+// ⇧⌘L: both files full width, side by side (NotesC).
 export const NotesFull = memo(({ tabId }: { tabId: string }) => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     const { notes, project, save } = useNotes(tabId);
     const editing = useAtomValue(editingMineAtom);
     const { state } = useWintos();
+    useZoneKeys(focusRef, { ...notesKeys(tabId, state, !editing && !!notes), ...cursorKeys(() => focusRef.current) });
+    const find = useAtomValue(findInNotesAtom);
+    useEffect(() => {
+        if (!find || !notes) return;
+        globalStore.set(findInNotesAtom, null);
+        const el = textElement(focusRef.current, find);
+        if (!el) return;
+        el.scrollIntoView({ block: "center" });
+        el.animate([{ background: "rgba(214,153,92,0.35)" }, { background: "transparent" }], { duration: 1800 });
+    }, [find, notes]);
     return (
         <div
             data-wintos="notes-full"
             tabIndex={0}
             ref={focusRef}
-            onKeyDown={(e) => {
-                if (!isPlainKey(e) && e.key !== "Escape") return;
-                if (e.key === "e" && !editing && notes) (e.preventDefault(), editMine(true));
-                if (e.key === "Escape" && !editing) focusArea("terminal");
-                if (!editing && /^[1-9]$/.test(e.key) && openProjectPr(tabId, state, Number(e.key))) e.preventDefault();
-            }}
-            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#1d2021", outline: "none", fontFamily: T.ui, minWidth: 0 }}
+            data-zone="list"
+            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#1d2021", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
         >
             <div style={{ padding: "18px 26px 16px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
@@ -38,7 +44,8 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
                 </div>
                 <Key k="esc" label="back to the terminal" />
             </div>
-            <div style={{ flexGrow: 1, padding: "0 26px 20px", display: "flex", gap: 20, overflow: "hidden" }}>
+            {/* Each column scrolls on its own; minHeight 0 all the way down, or it grows past the window. */}
+            <div style={{ flexGrow: 1, minHeight: 0, padding: "0 26px 20px", display: "flex", gap: 20, overflow: "hidden" }}>
                 <div style={{ flexGrow: 1, flexBasis: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
                     <Header name="project.md" note="the sessions write this · rendered, not editable here" />
                     <div style={{ paddingTop: 18, overflowY: "auto", display: "flex", flexDirection: "column", gap: 18 }}>
@@ -82,4 +89,13 @@ function Header({ name, note }: { name: string; note: string }) {
             <span style={{ fontSize: 11, color: T.faint }}>{note}</span>
         </div>
     );
+}
+
+// The innermost element showing this text (a palette hit), to scroll to and mark.
+function textElement(root: HTMLElement | null, text: string): HTMLElement | null {
+    if (!root) return null;
+    const want = text.toLowerCase();
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) if (n.textContent?.toLowerCase().includes(want)) return n.parentElement;
+    return null;
 }

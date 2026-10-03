@@ -13,3 +13,19 @@ export function Key({ k, label, off }: { k: string; label: string; off?: boolean
         </span>
     );
 }
+
+// Two keys that do the same thing, shown as two caps with "or" between: "esc" "⌘L" read as one
+// combination otherwise.
+export function KeyOr({ keys, label }: { keys: string[]; label: string }) {
+    return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontFamily: T.mono, fontSize: 11, color: T.muted, whiteSpace: "nowrap" }}>
+            {keys.map((k, i) => (
+                <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    {i > 0 && "or"}
+                    <Key k={k} label="" />
+                </span>
+            ))}
+            {label}
+        </span>
+    );
+}

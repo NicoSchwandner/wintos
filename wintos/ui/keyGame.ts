@@ -71,7 +71,7 @@ export function installKeyGame(): void {
             if (!el || !key) return;
             report("click", key);
             showNotice({ kind: "slip", key, streak, at: Date.now() });
-            el.animate([{ boxShadow: "0 0 0 2px #fe8019aa" }, { boxShadow: "0 0 0 2px #fe801900" }], { duration: 3000 });
+            el.animate([{ boxShadow: "0 0 0 2px #fb4934aa" }, { boxShadow: "0 0 0 2px #fb493400" }], { duration: 3000 });
         },
         true
     );

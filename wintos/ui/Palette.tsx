@@ -43,7 +43,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
     };
     const down = () => setCursor((c) => Math.min(c + 1, rows.length - 1));
     const up = () => setCursor((c) => Math.max(c - 1, 0));
-    useZoneKeys(ref, { ArrowDown: down, "Ctrl:n": down, ArrowUp: up, "Ctrl:p": up, Enter: () => run(cursor) });
+    useZoneKeys(ref, { ArrowDown: down, "Ctrl:n": down, ArrowUp: up, "Ctrl:p": up, Enter: () => run(cursor), "Shift:Cmd:p": closeOverlay });
     let lastKind = "";
     return (
         <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(15,16,17,0.6)", display: "flex", justifyContent: "center", paddingTop: "12vh" }} onClick={closeOverlay}>

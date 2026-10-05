@@ -43,7 +43,10 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
             <style>{`@keyframes wintos-breathe { 0%,100% { box-shadow: 0 0 0 0 #fe801900 } 50% { box-shadow: 0 0 0 3px #fe801955 } } @media (prefers-reduced-motion: reduce) { [data-wintos=today-card] { animation: none !important } }`}</style>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>Today</span>
-                <Key k="⇧⌘Y" label="" />
+                <span style={{ display: "flex", gap: 8 }}>
+                    {day.planned && open.length > 0 && <Key k="⌥⌘X" label="tick" />}
+                    <Key k="⇧⌘Y" label="" />
+                </span>
             </div>
             {!day.planned ? (
                 <span style={{ fontSize: 11.5, color: T.apricot }}>Plan your day{left && day.yesterday ? ` · ${left} left from ${since(day.yesterday.date, day.date)}` : ""}</span>

@@ -3,7 +3,8 @@ import { editMine } from "../focus";
 import { toggleCheckbox } from "./checkbox";
 import { continueList, indentLines, toggleBox } from "./listEdit";
 import { Md } from "./Md";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { fitHeight, revealCaret } from "./caret";
 import { T } from "../tokens";
 import { editingMineAtom } from "./state";
 import type { SaveResult } from "./useNotes";
@@ -44,6 +45,12 @@ export function Mine({
         if (editing) (setDraft(first), setInitial(first), setWarned(false), setBase(mtime), setError(null), setTimeout(() => ref.current?.focus(), 0));
     }, [editing]);
 
+    useLayoutEffect(() => {
+        if (!ref.current) return;
+        fitHeight(ref.current, size === "rail" ? 160 : 260);
+        if (document.activeElement === ref.current) revealCaret(ref.current);
+    }, [draft, editing]);
+
     useZoneKeys(ref, {
         // Esc with unsaved changes warns first; a second Esc discards them.
         Escape: () => (draft === initial || warned ? editMine(false) : setWarned(true)),
@@ -65,13 +72,14 @@ export function Mine({
                     value={draft}
                     onChange={(e) => (setDraft(e.target.value), setWarned(false))}
                     onKeyDown={(e) => listKeys(e, setDraft)}
+                    onSelect={(e) => revealCaret(e.currentTarget)}
                     data-zone="overlay"
                     data-wintos="mine-editor"
                     spellCheck={false}
                     style={{
-                        flexGrow: 1,
-                        minHeight: size === "rail" ? 160 : undefined,
+                        flexShrink: 0,
                         resize: "none",
+                        overflow: "hidden",
                         boxSizing: "border-box",
                         padding: "16px 18px",
                         background: T.terminal,

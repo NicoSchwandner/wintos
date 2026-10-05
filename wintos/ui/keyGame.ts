@@ -1,5 +1,6 @@
 import { globalStore } from "@/app/store/jotaiStore";
 import { atom } from "jotai";
+import { flog, where } from "./focusLog";
 import { daemonFetch } from "./useWintos";
 
 // The keyboard game's window side: a WintOS action done by key is reported as a key, a click on
@@ -71,6 +72,13 @@ export function installKeyGame(): void {
             if (!e.isTrusted) return;
             const el = (e.target as Element | null)?.closest?.<HTMLElement>("[data-key]");
             const key = el?.dataset.key;
+            // Every click in the trail, so a lost streak can be traced to what was clicked and
+            // the clicks with no key show what still wants one.
+            const t = e.target as HTMLElement | null;
+            // Never what is written: a field's text or a terminal's lines stay out of the log.
+            const private_ = !t || t === document.body || t === document.documentElement || t.closest("input, textarea, [contenteditable], .xterm");
+            const text = private_ ? "" : (t.innerText ?? "").trim().split("\n")[0].slice(0, 40);
+            flog(`click ${where(e.target as Element | null)} "${text}" ${key ? `slip ${key}, streak ${streak} lost` : el ? "no slip" : "no key"}`);
             if (!el || !key) return;
             report("click", key);
             showNotice({ kind: "slip", key, streak, at: Date.now() });

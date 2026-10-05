@@ -64,6 +64,8 @@ export function walkKey(e: { cmd?: boolean; key: string }): boolean {
 const onKeyUp = (e: KeyboardEvent) => e.key === "Meta" && commit();
 const onPageMetaUp = (e: Event) => (e as Event & { channel?: string }).channel === "wintos-meta-up" && commit("⌘ released in the page");
 const onKeyDown = (e: KeyboardEvent) => {
+    // Every key the walk sees, so an Esc that never arrives shows as missing from the trail.
+    if (e.key !== "Meta") flog(`walk saw ${e.metaKey ? "⌘" : ""}${e.key}`);
     if (e.key !== "Escape") return;
     e.preventDefault();
     e.stopPropagation(); // the Esc cancels the switch; it must not also interrupt Claude

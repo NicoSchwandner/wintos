@@ -1,6 +1,7 @@
 import { globalStore } from "@/app/store/jotaiStore";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, getApi } from "@/store/global";
+import { mainViewAtom } from "./notes/state";
 import { inboxTabId, type InboxList } from "./view";
 
 // ⇧⌘G / ⇧⌘O: switch to the PRs or the On call tab, its list focused. That tab is another
@@ -20,7 +21,11 @@ export function readInboxHandoff(raw: string | null, now: number): InboxList | u
     }
 }
 
-const focusList = () => void requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus());
+// The list itself, even when a page (Today, the notes) was left open over it in this tab.
+const focusList = () => {
+    globalStore.set(mainViewAtom, "terminal");
+    requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus());
+};
 
 export function goToInbox(list: InboxList): void {
     const ids = globalStore.get(atoms.workspace)?.tabids ?? [];
@@ -42,7 +47,8 @@ export function toggleInbox(list: InboxList): void {
     const ids = globalStore.get(atoms.workspace)?.tabids ?? [];
     const tabs = Object.fromEntries(ids.map((id) => [id, globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))]));
     const back = localStorage.getItem(BACK);
-    if (inboxTabId(ids, tabs, list) === globalStore.get(atoms.staticTabId) && back && ids.includes(back)) return getApi().setActiveTab(back);
+    const showing = inboxTabId(ids, tabs, list) === globalStore.get(atoms.staticTabId) && globalStore.get(mainViewAtom) === "terminal";
+    if (showing && back && ids.includes(back)) return getApi().setActiveTab(back);
     goToInbox(list);
 }
 

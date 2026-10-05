@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { emptyStats, rankOf, recordClick, recordKey, RANKS, type KeyStats } from "./keyboard";
+import { emptyStats, rankOf, recordClick, recordDayDone, recordKey, RANKS, type KeyStats } from "./keyboard";
 
 const day = (d: number, h = 10) => new Date(2026, 9, d, h).getTime(); // October 2026; the 5th is a Monday
 const keys = (s: KeyStats, n: number, key = "⌘J", at = day(5)) => Array.from({ length: n }).reduce<KeyStats>((x) => recordKey(x, key, at), s);
@@ -59,4 +59,13 @@ describe("badges", () => {
     });
 
     test("other keys don't announce anything", () => expect(keys(keys(emptyStats(), 10), 3, "⌘K").badge?.key).toBe("⌘J"));
+});
+
+describe("a day's focus all ticked", () => {
+    test("earns 10 once a day, announced with when", () => {
+        const s = recordDayDone(keys(emptyStats(), 2), day(5, 15));
+        expect([s.points, s.dayDone]).toEqual([12, { date: "2026-10-05", at: day(5, 15) }]);
+        expect(recordDayDone(s, day(5, 16)).points).toBe(12);
+        expect(recordDayDone(s, day(6, 15)).points).toBe(12 + 20 + 10); // the next day: a clean day's 20, then this
+    });
 });

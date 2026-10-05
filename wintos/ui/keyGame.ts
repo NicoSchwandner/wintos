@@ -30,7 +30,8 @@ export function reportKey(e: KeyEvent): void {
 export type Notice =
     | { kind: "slip"; key: string; streak: number; at: number }
     | { kind: "badge"; key: string; tier: string; at: number }
-    | { kind: "rank"; rank: string; at: number };
+    | { kind: "rank"; rank: string; at: number }
+    | { kind: "done"; at: number };
 export const noticeAtom = atom(null as Notice | null);
 // A notice stays at least this long, then goes with the next key press (or at once, if a key was
 // pressed meanwhile): long enough to be read after the click, gone once you're back on the keys.

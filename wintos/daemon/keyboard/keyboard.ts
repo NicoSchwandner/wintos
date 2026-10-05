@@ -4,6 +4,7 @@
 export const RANKS: [string, number][] = [["Tourist", 0], ["Commuter", 100], ["Fluent", 300], ["Mouse-free", 600], ["Monk", 1500]];
 const SLIP_COST = [1, 3, 8, 15, 25]; // by rank: a slip costs more the further you've come
 const CLEAN_DAY = 20;
+const DAY_DONE = 10; // every item of the day's focus ticked
 const TIERS: [number, Badge["tier"]][] = [[200, "gold"], [50, "silver"], [10, "bronze"]];
 const DAYS_KEPT = 60;
 
@@ -19,6 +20,7 @@ export type KeyStats = {
     lastDay?: string;
     badge?: Badge; // the newest, for the sidebar to announce once
     levelUp?: { rank: number; at: number }; // the newest rank reached, announced the same way
+    dayDone?: { date: string; at: number }; // the last day whose focus was all ticked, announced too
 };
 
 export const emptyStats = (): KeyStats => ({ points: 0, rank: 0, streak: 0, best: 0, keys: {}, clicks: {}, days: {} });
@@ -78,4 +80,13 @@ export function recordClick(stats: KeyStats, key: string, now: number): KeyStats
         clicks: { ...s.clicks, [key]: (s.clicks[key] ?? 0) + 1 },
         days: { ...s.days, [day]: { ...s.days[day], clicks: s.days[day].clicks + 1 } },
     };
+}
+
+// Everything on the day's focus ticked: a bonus, once a day.
+export function recordDayDone(stats: KeyStats, now: number): KeyStats {
+    const s = rollOver(stats, now);
+    if (s.dayDone?.date === s.lastDay) return s;
+    const points = s.points + DAY_DONE;
+    const rank = Math.max(s.rank, rankFor(points));
+    return { ...s, points, rank, dayDone: { date: s.lastDay!, at: now }, ...(rank > s.rank ? { levelUp: { rank, at: now } } : {}) };
 }

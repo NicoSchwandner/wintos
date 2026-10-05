@@ -8,7 +8,7 @@ import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
 import type { Journal } from "../journal/journal";
-import { emptyStats, recordClick, recordKey, type KeyStats } from "../keyboard/keyboard";
+import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
@@ -154,6 +154,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (typeof b?.text !== "string" || b.text.length > 20_000) return send(res, 400, "need the focus text");
                 const r = opts.journal!.saveFocus(new Date(), b.text, typeof b.baseMtime === "number" ? b.baseMtime : undefined);
                 if (r === "conflict") return send(res, 409, "the day's file changed on disk");
+                // All of today's focus ticked: the keyboard game's day-done bonus (once a day).
+                if (/\[[xX]\]/.test(b.text) && !/^\s*[-*] \[[ ~]\]/m.test(b.text)) {
+                    keyboard = recordDayDone(keyboard, Date.now());
+                    writeFileSync(keyboardFile, JSON.stringify(keyboard));
+                }
                 broadcast();
                 return send(res, 200, "");
             }

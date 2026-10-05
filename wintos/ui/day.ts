@@ -18,12 +18,31 @@ export const markPlanned = () => daemonFetch("/day/planned", { method: "POST", b
 export const tickFocus = (day: Day, line: number) => saveFocus(toggleCheckbox(day.focus, line), day.mtime);
 export const carryToToday = (day: Day, item: string) => saveFocus(`${day.focus}\n- [ ] ${item}`.trim(), day.mtime);
 
-// What yesterday left open: its unticked focus items, then its goals for tomorrow.
-export function leftFromYesterday(day: Day): string[] {
+// Everything the earlier day planned: its focus items, ticked or not, then its goals for
+// tomorrow; each marked carried once it is in today's focus. Carrying copies, so nothing leaves.
+export function yesterdayItems(day: Day): { text: string; done: boolean; carried: boolean }[] {
     const y = day.yesterday;
     if (!y) return [];
-    const open = focusList(y.focus).filter((i) => !i.done).map((i) => i.text);
-    const goals = focusList(y.tomorrow.join("\n")).filter((i) => !i.done).map((i) => i.text);
     const today = new Set(focusList(day.focus).map((i) => i.text));
-    return [...new Set([...open, ...goals])].filter((t) => !today.has(t));
+    const seen = new Set<string>();
+    return [...focusList(y.focus), ...focusList(y.tomorrow.join("\n"))]
+        .filter((i) => !seen.has(i.text) && seen.add(i.text))
+        .map((i) => ({ text: i.text, done: i.done, carried: today.has(i.text) }));
+}
+
+// What it left open and today doesn't have yet.
+export const leftFromYesterday = (day: Day): string[] => yesterdayItems(day).filter((i) => !i.done && !i.carried).map((i) => i.text);
+
+// What to call the day the plan builds on: "Yesterday" only when it was, its weekday within the
+// week, "Last Friday" across a weekend, else its date.
+export function lastDayName(lastIso: string, todayIso: string): string {
+    const last = new Date(`${lastIso}T12:00:00`);
+    const today = new Date(`${todayIso}T12:00:00`);
+    const days = Math.round((today.getTime() - last.getTime()) / 86_400_000);
+    const weekday = last.toLocaleDateString("en-GB", { weekday: "long" });
+    const monday = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)).getTime();
+    if (days === 1) return "Yesterday";
+    if (monday(last) === monday(today)) return weekday;
+    if (days < 7) return `Last ${weekday}`;
+    return last.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
 }

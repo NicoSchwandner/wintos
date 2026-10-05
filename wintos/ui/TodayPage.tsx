@@ -1,6 +1,6 @@
 import { useAtomValue } from "jotai";
 import { memo, useMemo } from "react";
-import { carryToToday, leftFromYesterday, markPlanned, saveFocus } from "./day";
+import { carryToToday, lastDayName, leftFromYesterday, markPlanned, saveFocus, yesterdayItems } from "./day";
 import { dayTimeline, DEFAULT_WORKDAY, focusList, parseSpan, type Block } from "./dayplan";
 import { editMine } from "./focus";
 import { Key } from "./Key";
@@ -60,16 +60,13 @@ export const TodayPage = memo(() => {
                 <Timeline now={now} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflowY: "auto" }}>
                     {y && (
-                        <Panel label="Yesterday" note={day.planned ? `${yItems.filter((i) => i.done).length} done · ${yItems.filter((i) => todayTexts.has(i.text)).length} carried` : undefined} keys={!day.planned && left.length > 0 && <Key k="j k · c" label="carry" />}>
+                        <Panel label={lastDayName(y.date, day.date)} note={day.planned ? `${yItems.filter((i) => i.done).length} done · ${yesterdayItems(day).filter((i) => i.carried).length} carried` : undefined} keys={!day.planned && yesterdayItems(day).some((i) => !i.carried) && <Key k="j k · c" label="carry" />}>
                             {!day.planned && (
                                 <>
-                                    {yItems.filter((i) => i.done).map((i) => (
-                                        <Item key={`d${i.line}`} text={i.text} done />
+                                    {yesterdayItems(day).map((i) => (
+                                        <Item key={i.text} text={i.text} done={i.done} carried={i.carried} carry={i.carried ? undefined : () => void carryToToday(day, i.text)} />
                                     ))}
-                                    {left.map((t) => (
-                                        <Item key={t} text={t} carry={() => void carryToToday(day, t)} />
-                                    ))}
-                                    {!yItems.length && !left.length && <span style={{ fontSize: 12, color: T.faint }}>Nothing planned yesterday.</span>}
+                                    {!yesterdayItems(day).length && <span style={{ fontSize: 12, color: T.faint }}>Nothing was planned.</span>}
                                 </>
                             )}
                         </Panel>
@@ -105,11 +102,12 @@ function Panel({ label, note, warn, keys, children }: { label: string; note?: st
     );
 }
 
-function Item({ text, done, carry }: { text: string; done?: boolean; carry?: () => void }) {
+function Item({ text, done, carried, carry }: { text: string; done?: boolean; carried?: boolean; carry?: () => void }) {
     return (
         <div data-item={carry ? "carry" : undefined} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "3px 6px", margin: "0 -6px", borderRadius: 6, fontSize: 13, lineHeight: 1.5, color: done ? T.muted : T.secondary, textDecoration: done ? "line-through" : undefined }}>
             <span style={{ width: 12, height: 12, marginTop: 4, flexShrink: 0, borderRadius: 3, border: `1.5px solid ${done ? T.moss : T.muted}`, background: done ? T.moss : "transparent" }} />
             <span style={{ flexGrow: 1, minWidth: 0, overflowWrap: "anywhere" }}>{text}</span>
+            {carried && <span style={{ display: "inline-block", flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.moss }}>carried</span>}
             {carry && (
                 <button type="button" data-key="c" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={carry} title="Carry into today" style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                     <Key k="c" label="today" />

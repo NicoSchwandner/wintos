@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { Day } from "../daemon/journal/journal";
-import { leftFromYesterday, tickFocus } from "./day";
+import { lastDayName, leftFromYesterday, tickFocus } from "./day";
 import { focusList } from "./dayplan";
 import { Key } from "./Key";
 import { openView } from "./menu";
@@ -8,6 +8,7 @@ import { Box } from "./notes/ProjectNotes";
 import { T } from "./tokens";
 
 const SHOWN = 3;
+const since = (last: string, today: string) => lastDayName(last, today).replace(/^(Yesterday|Last)/, (w) => w.toLowerCase());
 
 // Today's plan, with the other cards so it is in view everywhere. Until the day is planned it
 // pulses apricot, as a meeting about to start does; then it lists what's still open, and a click
@@ -35,7 +36,7 @@ export const TodayCard = memo(({ day, active, walk }: { day: Day; active: boolea
                 <Key k="⇧⌘Y" label="" />
             </div>
             {!day.planned ? (
-                <span style={{ fontSize: 11.5, color: T.apricot }}>Plan your day{left ? ` · ${left} left from yesterday` : ""}</span>
+                <span style={{ fontSize: 11.5, color: T.apricot }}>Plan your day{left && day.yesterday ? ` · ${left} left from ${since(day.yesterday.date, day.date)}` : ""}</span>
             ) : open.length === 0 ? (
                 <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>{items.length ? `all ${items.length} done` : "nothing planned"}</span>
             ) : (

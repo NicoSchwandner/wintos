@@ -31,7 +31,7 @@ export function nextMeetings(list: Meeting[], now: number): { now?: Meeting; nex
     return { now: today.find((m) => m.start <= now && now < m.end), next, after: upcoming[1], msLeft, soon: msLeft !== undefined && msLeft <= WARN_MS };
 }
 
-// The renderer's latest list, for ⇧⌘M: join the one on now, else the next.
+// The renderer's latest list, for ⇧⌘J: join the one on now, else the next.
 let latest: Meeting[] = [];
 export const setLatestMeetings = (list: Meeting[]) => (latest = list);
 export function meetingToJoin(now: number): Meeting | undefined {

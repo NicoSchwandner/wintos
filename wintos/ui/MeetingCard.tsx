@@ -32,7 +32,7 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
             {(then || shown.url) && (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 11, color: T.faint }}>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{then ? `then ${clock(then.start)} ${then.title}` : ""}</span>
-                    {shown.url && <Key k="⇧⌘M" label="join" />}
+                    {shown.url && <Key k="⇧⌘J" label="join" />}
                 </div>
             )}
             {on && <div aria-hidden style={{ position: "absolute", left: 0, bottom: 0, height: 2, width: `${Math.min(100, ((now - shown.start) / (shown.end - shown.start)) * 100)}%`, background: T.emphasis, opacity: 0.5 }} />}

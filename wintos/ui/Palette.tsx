@@ -208,7 +208,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     out.push(action("close", `Close ${here}`, "⇧⌘W", "close-project"));
     out.push(action("day", "Today: plan the day", "⇧⌘Y", "day"));
     out.push(action("keyboard", "Keyboard: rank, streak, badges", "⇧⌘I", "keyboard"));
-    out.push(action("join", "Join the meeting", "⇧⌘M", "join-meeting"));
+    out.push(action("join", "Join the meeting", "⇧⌘J", "join-meeting"));
     out.push(action("mine", `Edit mine.md of ${here}`, "⌘E", "edit-mine"));
     out.push(action("snooze", `Snooze or wake ${here}`, "⌥⌘Z", "snooze-project"));
     out.push(action("park", "Park the waiting session: nothing for you", "⌥⌘P", "park-session"));

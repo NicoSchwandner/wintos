@@ -11,7 +11,7 @@ import { lastDayName, leftFromYesterday, tickFocus } from "./day";
 import { focusList } from "./dayplan";
 import { Key } from "./Key";
 import { openView } from "./menu";
-import { Box } from "./notes/ProjectNotes";
+import { Box, Rich } from "./notes/ProjectNotes";
 import { T } from "./tokens";
 
 const SHOWN = 3;
@@ -59,7 +59,7 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
                             <span data-key="" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()} style={{ display: "contents" }}>
                                 <Box state="todo" size="rail" onToggle={() => void tickFocus(day, i.line)} />
                             </span>
-                            <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{i.text}</span>
+                            <span style={{ minWidth: 0, overflowWrap: "anywhere" }}><Rich text={i.text} size="rail" /></span>
                         </div>
                     ))}
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>
@@ -100,7 +100,7 @@ function TickList({ day }: { day: Day }) {
                     <span data-act data-key="x" onMouseDown={(e) => e.preventDefault()} style={{ display: "contents" }}>
                         <Box state="todo" size="rail" onToggle={() => void tickFocus(day, i.line)} />
                     </span>
-                    <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{i.text}</span>
+                    <span style={{ minWidth: 0, overflowWrap: "anywhere" }}><Rich text={i.text} size="rail" /></span>
                 </div>
             ))}
             {open.length > SHOWN_TICKING && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>+{open.length - SHOWN_TICKING} more on the Today page</span>}

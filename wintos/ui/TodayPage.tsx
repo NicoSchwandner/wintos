@@ -6,6 +6,7 @@ import { editMine } from "./focus";
 import { Key } from "./Key";
 import { meetingsFrom } from "./meetings";
 import { Mine } from "./notes/Mine";
+import { Rich } from "./notes/ProjectNotes";
 import { editingMineAtom } from "./notes/state";
 import { T } from "./tokens";
 import { useFocusOnMount } from "./useFocusOnMount";
@@ -111,7 +112,7 @@ function Item({ text, done, carried, carry }: { text: string; done?: boolean; ca
     return (
         <div data-item={carry ? "carry" : undefined} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "3px 6px", margin: "0 -6px", borderRadius: 6, fontSize: 13, lineHeight: 1.5, color: done ? T.muted : T.secondary, textDecoration: done ? "line-through" : undefined }}>
             <span style={{ width: 12, height: 12, marginTop: 4, flexShrink: 0, borderRadius: 3, border: `1.5px solid ${done ? T.moss : T.muted}`, background: done ? T.moss : "transparent" }} />
-            <span style={{ flexGrow: 1, minWidth: 0, overflowWrap: "anywhere" }}>{text}</span>
+            <span style={{ flexGrow: 1, minWidth: 0, overflowWrap: "anywhere" }}><Rich text={text} size="full" /></span>
             {carried && <span style={{ display: "inline-block", flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.moss }}>carried</span>}
             {carry && (
                 <button type="button" data-key="c" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={carry} title="Carry into today" style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>

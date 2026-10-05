@@ -8,10 +8,10 @@ const m = (title: string, start: string, end: string, extra = {}) => ({ title, s
 describe("meetingsFrom", () => {
     test("collects every plugin's meetings, drops malformed and all-day ones, sorted by start", () => {
         const plugins = {
-            cal: { ok: true, at: 0, data: { meetings: [m("B", "15:00", "15:30"), m("A", "13:30", "14:15", { url: "https://meet.google.com/abc" }), { title: "broken" }, m("Holiday", "00:00", "23:59", { allDay: true })] } },
+            cal: { ok: true, at: 0, data: { meetings: [m("B", "15:00", "15:30", { room: "Kitchen" }), m("A", "13:30", "14:15", { url: "https://meet.google.com/abc" }), { title: "broken" }, m("Holiday", "00:00", "23:59", { allDay: true })] } },
             other: { ok: true, at: 0, data: { panel: {} } },
         };
-        expect(meetingsFrom(plugins).map((x) => [x.title, x.url])).toEqual([["A", "https://meet.google.com/abc"], ["B", undefined]]);
+        expect(meetingsFrom(plugins).map((x) => [x.title, x.url, x.room])).toEqual([["A", "https://meet.google.com/abc", undefined], ["B", undefined, "Kitchen"]]);
     });
 
     test("a link that is not http(s) is dropped", () => expect(meetingsFrom({ c: { ok: true, at: 0, data: { meetings: [m("A", "13:30", "14:00", { url: "javascript:x" })] } } })[0].url).toBeUndefined());

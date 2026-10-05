@@ -34,6 +34,7 @@ RECURRENCE-ID;TZID=Europe/Stockholm:20261002T100000
 SUMMARY:Daily (moved)
 DTSTART;TZID=Europe/Stockholm:20261002T110000
 DTEND;TZID=Europe/Stockholm:20261002T111500
+LOCATION:Kitchen
 END:VEVENT
 BEGIN:VEVENT
 UID:refinement
@@ -41,6 +42,9 @@ SUMMARY:Refinement
 DTSTART:20261002T113000Z
 DTEND:20261002T121500Z
 DESCRIPTION:Join with Google Meet: https://meet.google.com/xyz-uvwx-rst\\nAgenda
+LOCATION:https://meet.google.com/xyz-uvwx-rst
+ATTENDEE;CN=ana.b;PARTSTAT=ACCEPTED:mailto:ana.b@example.com
+ATTENDEE;CN=bigroom;PARTSTAT=ACCEPTED:mailto:bigroom@example.com
 END:VEVENT
 BEGIN:VEVENT
 UID:declined
@@ -78,6 +82,12 @@ describe("icsToMeetings", () => {
     test("all-day events are kept but marked, so the sidebar can leave them out", () => {
         const all = icsToMeetings(ICS, FROM, TO, { keepAllDay: true });
         expect(all.find((m) => m.title === "Holiday")?.allDay).toBe(true);
+    });
+
+    test("the room: a booked room's account among the attendees, else a location that is no link", () => {
+        const rooms = (r?: string[]) => icsToMeetings(ICS, FROM, TO, { rooms: r }).map((m) => [m.title, m.room ?? null]);
+        expect(rooms(["BigRoom@example.com"])).toEqual([["Daily (moved)", "Kitchen"], ["Refinement", "Bigroom"]]);
+        expect(rooms()).toEqual([["Daily (moved)", "Kitchen"], ["Refinement", null]]);
     });
 
     test("an empty or broken feed gives no meetings rather than throwing", () => {

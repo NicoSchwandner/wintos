@@ -1,6 +1,6 @@
 import ICAL from "ical.js";
 
-export type IcsMeeting = { title: string; start: string; end: string; url?: string; allDay?: boolean };
+export type IcsMeeting = { title: string; start: string; end: string; url?: string; room?: string; allDay?: boolean };
 
 // A call link in the event: Google's own property first, else the first known one in the text.
 const CALL = /https:\/\/(?:meet\.google\.com|[\w.-]*zoom\.us|teams\.microsoft\.com)\/[^\s<>"\\]+/;
@@ -8,6 +8,17 @@ function callUrl(item: ICAL.Event): string | undefined {
     const google = item.component.getFirstPropertyValue("x-google-conference");
     if (typeof google === "string" && google.startsWith("https://")) return google;
     return CALL.exec(`${item.description ?? ""} ${item.location ?? ""}`)?.[0];
+}
+
+// Where it is: a booked room (a room is an ordinary account, so it is known by its address),
+// else what the location says, unless that is a link. The room by its address's name: bigroom@ → Bigroom.
+function roomOf(item: ICAL.Event, rooms: string[]): string | undefined {
+    for (const a of item.component.getAllProperties("attendee")) {
+        const mail = String(a.getFirstValue()).toLowerCase().replace(/^mailto:/, "");
+        if (rooms.includes(mail) && String(a.getParameter("partstat")).toUpperCase() !== "DECLINED") return mail[0].toUpperCase() + mail.slice(1, mail.indexOf("@"));
+    }
+    const loc = item.location?.trim();
+    return loc && !/https?:\/\//.test(loc) ? loc : undefined;
 }
 
 // The calendar's owner, as Google names a primary calendar's feed after its address.
@@ -18,7 +29,7 @@ function declinedBy(item: ICAL.Event, me: string | undefined): boolean {
 
 // The meetings of an iCal feed that overlap [from, to), recurring ones expanded with their
 // skipped and moved occurrences; declined and cancelled ones left out.
-export function icsToMeetings(text: string, from: number, to: number, opts: { keepAllDay?: boolean } = {}): IcsMeeting[] {
+export function icsToMeetings(text: string, from: number, to: number, opts: { keepAllDay?: boolean; rooms?: string[] } = {}): IcsMeeting[] {
     try {
         return meetingsOf(new ICAL.Component(ICAL.parse(text)), from, to, opts);
     } catch {
@@ -26,7 +37,8 @@ export function icsToMeetings(text: string, from: number, to: number, opts: { ke
     }
 }
 
-function meetingsOf(cal: ICAL.Component, from: number, to: number, opts: { keepAllDay?: boolean }): IcsMeeting[] {
+function meetingsOf(cal: ICAL.Component, from: number, to: number, opts: { keepAllDay?: boolean; rooms?: string[] }): IcsMeeting[] {
+    const rooms = (opts.rooms ?? []).map((r) => r.trim().toLowerCase());
     for (const tz of cal.getAllSubcomponents("vtimezone")) ICAL.TimezoneService.register(tz);
     const name = cal.getFirstPropertyValue("x-wr-calname");
     const me = typeof name === "string" && name.includes("@") ? name.toLowerCase() : undefined;
@@ -45,7 +57,8 @@ function meetingsOf(cal: ICAL.Component, from: number, to: number, opts: { keepA
         if (String(item.component.getFirstPropertyValue("status") ?? "").toUpperCase() === "CANCELLED" || declinedBy(item, me)) return;
         if (start.isDate && !opts.keepAllDay) return;
         const url = callUrl(item) ?? callUrl(series);
-        out.push({ title: item.summary || "(no title)", start: new Date(s).toISOString(), end: new Date(e).toISOString(), ...(url ? { url } : {}), ...(start.isDate ? { allDay: true } : {}) });
+        const room = roomOf(item, rooms);
+        out.push({ title: item.summary || "(no title)", start: new Date(s).toISOString(), end: new Date(e).toISOString(), ...(url ? { url } : {}), ...(room ? { room } : {}), ...(start.isDate ? { allDay: true } : {}) });
     };
     for (const master of masters.values()) {
         if (!master.isRecurring()) {

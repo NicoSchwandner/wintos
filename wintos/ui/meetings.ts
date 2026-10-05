@@ -1,9 +1,9 @@
-// Meetings come from any plugin that reports `meetings: [{ title, start, end, url? }]` (ISO
+// Meetings come from any plugin that reports `meetings: [{ title, start, end, url?, room? }]` (ISO
 // times), so the calendar source can change without the sidebar knowing.
-export type Meeting = { title: string; start: number; end: number; url?: string };
+export type Meeting = { title: string; start: number; end: number; url?: string; room?: string };
 export const WARN_MS = 2 * 60_000;
 
-type Raw = { title?: unknown; start?: unknown; end?: unknown; url?: unknown; allDay?: unknown };
+type Raw = { title?: unknown; start?: unknown; end?: unknown; url?: unknown; room?: unknown; allDay?: unknown };
 
 export function meetingsFrom(plugins: Record<string, { ok?: boolean; at?: number; data?: unknown }> = {}): Meeting[] {
     const out: Meeting[] = [];
@@ -14,7 +14,7 @@ export function meetingsFrom(plugins: Record<string, { ok?: boolean; at?: number
             const start = typeof x?.start === "string" ? Date.parse(x.start) : NaN;
             const end = typeof x?.end === "string" ? Date.parse(x.end) : NaN;
             if (typeof x?.title !== "string" || !(end > start) || x.allDay === true) continue;
-            out.push({ title: x.title, start, end, ...(typeof x.url === "string" && /^https?:\/\//.test(x.url) ? { url: x.url } : {}) });
+            out.push({ title: x.title, start, end, ...(typeof x.url === "string" && /^https?:\/\//.test(x.url) ? { url: x.url } : {}), ...(typeof x.room === "string" && x.room ? { room: x.room } : {}) });
         }
     }
     return out.sort((a, b) => a.start - b.start);

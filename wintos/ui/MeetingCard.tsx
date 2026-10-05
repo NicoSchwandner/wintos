@@ -25,7 +25,10 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
         >
             <style>{`@keyframes wintos-breathe { 0%,100% { box-shadow: 0 0 0 0 #fe801900 } 50% { box-shadow: 0 0 0 3px #fe801955 } } @media (prefers-reduced-motion: reduce) { [data-wintos=meeting-card] { animation: none !important } }`}</style>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontFamily: T.mono, fontSize: 10.5, color: T.muted, fontVariantNumeric: "tabular-nums" }}>
-                <span>{clock(shown.start)} – {clock(shown.end)}</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {clock(shown.start)} – {clock(shown.end)}
+                    {shown.room && <span style={{ color: T.secondary }}> · {shown.room}</span>}
+                </span>
                 <span style={{ color: n.soon ? T.apricot : on ? T.emphasis : T.muted }}>{on ? `ends ${countdown(shown.end - now)}` : countdown(n.msLeft!)}</span>
             </div>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shown.title}</span>

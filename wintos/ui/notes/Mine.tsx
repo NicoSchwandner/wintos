@@ -111,10 +111,18 @@ export function Mine({
 // list the field does its default, except Tab, which indents rather than leaving the field.
 function listKeys(e: React.KeyboardEvent<HTMLTextAreaElement>, setDraft: (t: string) => void): void {
     const t = e.currentTarget;
+    // As typed, not set: only the field's own editing scrolls the caret into view and keeps ⌘Z.
     const put = (text: string, start: number, end = start) => {
         e.preventDefault();
-        setDraft(text);
-        requestAnimationFrame(() => t.setSelectionRange(start, end));
+        const old = t.value;
+        let a = 0;
+        while (a < old.length && a < text.length && old[a] === text[a]) a++;
+        let b = 0;
+        while (b < old.length - a && b < text.length - a && old[old.length - 1 - b] === text[text.length - 1 - b]) b++;
+        t.setSelectionRange(a, old.length - b);
+        const middle = text.slice(a, text.length - b);
+        if (!document.execCommand(middle ? "insertText" : "delete", false, middle)) setDraft(text);
+        t.setSelectionRange(start, end);
     };
     const plain = !e.metaKey && !e.ctrlKey && !e.altKey;
     if (e.key === "Enter" && plain && !e.shiftKey) {

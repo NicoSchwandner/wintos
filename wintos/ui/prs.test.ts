@@ -147,7 +147,7 @@ describe("rowColumns", () => {
 });
 
 describe("matchesPr", () => {
-    const p = { repo: "acme/api", number: 1479, title: "Fix the rounding", author: "ana.b", branch: "DEV-12-rounding" } as Parameters<typeof matchesPr>[0];
+    const p = { repo: "acme/api", number: 1479, title: "Fix the rounding", author: "ana.b", branch: "ABC-12-rounding" } as Parameters<typeof matchesPr>[0];
     test.each([
         ["", true],
         ["rounding", true],
@@ -155,7 +155,7 @@ describe("matchesPr", () => {
         ["1479", true],
         ["#1479", true],
         ["ana", true],
-        ["dev-12", true],
+        ["abc-12", true],
         ["rounding vat", false],
     ])("%s → %s", (q, out) => expect(matchesPr(p, q)).toBe(out));
 });

@@ -87,6 +87,7 @@ describe("icsToMeetings", () => {
     test("the room: a booked room's account among the attendees, else a location that is no link", () => {
         const rooms = (r?: string[]) => icsToMeetings(ICS, FROM, TO, { rooms: r }).map((m) => [m.title, m.room ?? null]);
         expect(rooms(["BigRoom@example.com"])).toEqual([["Daily (moved)", "Kitchen"], ["Refinement", "Bigroom"]]);
+        expect(rooms(["bigroom@example.com=Room (Big)"])).toEqual([["Daily (moved)", "Kitchen"], ["Refinement", "Room (Big)"]]);
         expect(rooms()).toEqual([["Daily (moved)", "Kitchen"], ["Refinement", null]]);
     });
 

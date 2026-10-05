@@ -1,6 +1,6 @@
 // Core plugin: today's and tomorrow's meetings from a calendar's secret iCal address
 // (WINTOS_CALENDAR_ICS), for the sidebar's meeting card and the two-minute warning.
-// WINTOS_ROOMS: the meeting rooms' addresses, comma separated, to tell a booked room from a guest.
+// WINTOS_ROOMS: the meeting rooms, comma separated, each an address or "address=Name", to tell a booked room from a guest.
 // The address is a secret: it is never printed, not even in an error.
 import { icsToMeetings } from "./parse";
 

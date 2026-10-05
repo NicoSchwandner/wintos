@@ -11,11 +11,12 @@ function callUrl(item: ICAL.Event): string | undefined {
 }
 
 // Where it is: a booked room (a room is an ordinary account, so it is known by its address),
-// else what the location says, unless that is a link. The room by its address's name: bigroom@ → Bigroom.
-function roomOf(item: ICAL.Event, rooms: string[]): string | undefined {
+// else what the location says, unless that is a link. A feed names an attendee only by address,
+// so a room is "address=Name", or just the address: bigroom@ → Bigroom.
+function roomOf(item: ICAL.Event, rooms: Map<string, string>): string | undefined {
     for (const a of item.component.getAllProperties("attendee")) {
-        const mail = String(a.getFirstValue()).toLowerCase().replace(/^mailto:/, "");
-        if (rooms.includes(mail) && String(a.getParameter("partstat")).toUpperCase() !== "DECLINED") return mail[0].toUpperCase() + mail.slice(1, mail.indexOf("@"));
+        const room = rooms.get(String(a.getFirstValue()).toLowerCase().replace(/^mailto:/, ""));
+        if (room && String(a.getParameter("partstat")).toUpperCase() !== "DECLINED") return room;
     }
     const loc = item.location?.trim();
     return loc && !/https?:\/\//.test(loc) ? loc : undefined;
@@ -38,7 +39,13 @@ export function icsToMeetings(text: string, from: number, to: number, opts: { ke
 }
 
 function meetingsOf(cal: ICAL.Component, from: number, to: number, opts: { keepAllDay?: boolean; rooms?: string[] }): IcsMeeting[] {
-    const rooms = (opts.rooms ?? []).map((r) => r.trim().toLowerCase());
+    const rooms = new Map(
+        (opts.rooms ?? []).map((r) => {
+            const [address, name] = r.split("=").map((x) => x.trim());
+            const mail = address.toLowerCase();
+            return [mail, name || mail[0].toUpperCase() + mail.slice(1, mail.indexOf("@"))];
+        })
+    );
     for (const tz of cal.getAllSubcomponents("vtimezone")) ICAL.TimezoneService.register(tz);
     const name = cal.getFirstPropertyValue("x-wr-calname");
     const me = typeof name === "string" && name.includes("@") ? name.toLowerCase() : undefined;

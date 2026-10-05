@@ -76,3 +76,10 @@ export function reviewerChips(pr: PR, max: number): { chips: string[]; more: num
 // (the author's, and reviewers' in full rather than initials).
 export type RowColumns = { size: boolean; names: boolean };
 export const rowColumns = (width: number): RowColumns => ({ size: width >= 1000, names: width >= 850 });
+
+// The PR list's filter (f): every word of the query appears in the PR's repo, number, title,
+// author or branch.
+export function matchesPr(pr: Pick<PR, "repo" | "number" | "title" | "author" | "branch">, query: string): boolean {
+    const hay = `${pr.repo} #${pr.number} ${pr.title} ${pr.author} ${pr.branch}`.toLowerCase();
+    return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+}

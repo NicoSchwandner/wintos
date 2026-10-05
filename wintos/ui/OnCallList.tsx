@@ -5,6 +5,7 @@ import { pluginPanels } from "./panels";
 import { T } from "./tokens";
 import { useFocusOnMount } from "./useFocusOnMount";
 import { useZoneKeys } from "./zones";
+import { motionKeys } from "./listMotion";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { relTime } from "./view";
@@ -22,6 +23,7 @@ export const OnCallList = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const open = (i: number) => rows[i]?.count.url && runAction(`open-page:${rows[i].count.url}`);
     const resync = () => panels.forEach((p) => void daemonFetch(`/plugins/${encodeURIComponent(p.name)}/run`, { method: "POST", body: {} }).catch(() => {}));
     useZoneKeys(focusRef, {
+        ...motionKeys((by) => setCursor((c) => Math.max(0, Math.min(c + by, rows.length - 1))), (end) => setCursor(end === "first" ? 0 : rows.length - 1)),
         j: () => setCursor((c) => Math.min(c + 1, rows.length - 1)),
         k: () => setCursor((c) => Math.max(c - 1, 0)),
         Enter: () => void open(cursor),

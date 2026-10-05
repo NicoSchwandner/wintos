@@ -1,5 +1,6 @@
 import { useFocusOnMount } from "./useFocusOnMount";
 import { useZoneKeys } from "./zones";
+import { motionKeys } from "./listMotion";
 import { enterProject } from "./focus";
 import { atoms, createTab } from "@/store/global";
 import { offerPrompt, prLinkPaste } from "./newproject";
@@ -9,7 +10,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Group } from "../daemon/prs/group";
 import { runAction } from "./menu";
 import { Key, KeyOr } from "./Key";
-import { initials, keepSelection, queueModel, reviewerChips, rowColumns, type QueueRow, type RowColumns } from "./prs";
+import { initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns, type QueueRow, type RowColumns } from "./prs";
 import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
@@ -43,7 +44,10 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const [refreshing, setRefreshing] = useState(false);
     const result = state?.plugins?.["gh-prs"];
     const gh = state && ghPrs(state);
-    const model = gh ? queueModel(gh.prs, gh.me, now, state?.snoozes) : null;
+    // f: narrows the list to the PRs matching what you type; Esc clears it, ⏎ goes back to the rows.
+    const [filter, setFilter] = useState<string | null>(null);
+    const filterRef = useRef<HTMLInputElement>(null);
+    const model = gh ? queueModel(filter ? gh.prs.filter((p) => matchesPr(p, filter)) : gh.prs, gh.me, now, state?.snoozes) : null;
     // A stacked PR's row follows its base, one indent per step; the cursor walks them in order.
     const withStack = (r: QueueRow, depth = 0): { r: QueueRow; depth: number }[] => [{ r, depth }, ...r.children.flatMap((c) => withStack(c, depth + 1))];
     const flat = [...(model?.groups.flatMap((g) => g.rows.flatMap((r) => withStack(r).map((x) => x.r))) ?? []), ...(model?.snoozed ?? [])];
@@ -55,7 +59,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
         shownBefore.current = urls;
         if (current !== selected) setSelected(current);
     }, [urls.join(" ")]);
-    const step = (d: 1 | -1) => setSelected(urls[Math.max(0, Math.min(cursor + d, urls.length - 1))]);
+    const step = (d: number) => setSelected(urls[Math.max(0, Math.min(cursor + d, urls.length - 1))]);
     // z: looked at, handed on. Back at the next working day, or as soon as the PR moves.
     const toggleSnooze = (r: QueueRow) =>
         daemonFetch("/prs/snooze", { method: "POST", body: snoozedUrls.has(r.pr.url) ? { url: r.pr.url, until: null } : { url: r.pr.url, until: nextWorkingDayStart(Date.now()), movedAt: lastMovement(r.pr) } }).catch(() => {});
@@ -78,8 +82,11 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
 
     const r = flat[Math.min(cursor, flat.length - 1)];
     useZoneKeys(focusRef, {
+        ...motionKeys(step, (end) => setSelected(urls[end === "first" ? 0 : urls.length - 1])),
         j: () => step(1),
         k: () => step(-1),
+        f: () => void (filter === null ? setFilter("") : filterRef.current?.focus()),
+        Escape: () => (filter === null ? false : (setFilter(null), focusRef.current?.focus(), true)),
         Enter: () => (r ? openPr(r) : false),
         o: () => (r ? goToProject(r) : false),
         r: (e) => void (e.repeat || refresh()),
@@ -108,6 +115,21 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                     <Key k="r" label="" />
                 </span>
             </div>
+            {filter !== null && (
+                <input
+                    ref={filterRef}
+                    autoFocus
+                    value={filter}
+                    data-wintos="pr-filter"
+                    placeholder="Filter by title, repo, number, author or branch"
+                    onChange={(e) => setFilter(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") e.preventDefault(), focusRef.current?.focus();
+                        if (e.key === "Escape") e.preventDefault(), e.stopPropagation(), setFilter(null), focusRef.current?.focus();
+                    }}
+                    style={{ margin: "0 26px 12px", padding: "6px 10px", maxWidth: 460, background: T.card, border: `1px solid ${T.borderActive}`, borderRadius: 8, outline: "none", color: T.text, fontFamily: T.ui, fontSize: 13 }}
+                />
+            )}
             <div ref={rowsRef} style={{ flexGrow: 1, overflowY: "auto", padding: "0 26px", display: "flex", flexDirection: "column", gap: 14 }}>
                 {model?.groups.map(({ group, rows }) => (
                     <div key={group} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -125,7 +147,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                         ))}
                     </div>
                 )}
-                {model && model.groups.length === 0 && <span style={{ color: T.muted, fontSize: 13, padding: "0 12px" }}>Nothing open that concerns you.</span>}
+                {model && model.groups.length === 0 && <span style={{ color: T.muted, fontSize: 13, padding: "0 12px" }}>{filter ? `No PR matches “${filter}”.` : "Nothing open that concerns you."}</span>}
             </div>
             <div style={{ flexShrink: 0, minHeight: 30, padding: "4px 26px", boxSizing: "border-box", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 14px", borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
                 <Key k="j k" label="row" />

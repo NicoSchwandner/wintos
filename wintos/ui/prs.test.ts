@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { PR } from "../daemon/prs/group";
-import { initials, keepSelection, queueModel, reviewerChips, rowColumns } from "./prs";
+import { initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns } from "./prs";
 
 const MON = Date.parse("2026-09-28T09:00:00Z");
 const pr = (p: Partial<PR>): PR => ({
@@ -144,4 +144,18 @@ describe("rowColumns", () => {
     test("the list alone or a wide split shows every column", () => expect(rowColumns(1400)).toEqual({ size: true, names: true }));
     test("a little narrower, the size bar goes first", () => expect(rowColumns(900)).toEqual({ size: false, names: true }));
     test("beside a page on a laptop, names become initials too", () => expect(rowColumns(500)).toEqual({ size: false, names: false }));
+});
+
+describe("matchesPr", () => {
+    const p = { repo: "acme/api", number: 1479, title: "Fix the rounding", author: "ana.b", branch: "DEV-12-rounding" } as Parameters<typeof matchesPr>[0];
+    test.each([
+        ["", true],
+        ["rounding", true],
+        ["ROUND acme", true],
+        ["1479", true],
+        ["#1479", true],
+        ["ana", true],
+        ["dev-12", true],
+        ["rounding vat", false],
+    ])("%s → %s", (q, out) => expect(matchesPr(p, q)).toBe(out));
 });

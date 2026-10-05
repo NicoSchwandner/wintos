@@ -1,4 +1,5 @@
 import type { KeyTable } from "./zones";
+import { motionKeys } from "./listMotion";
 
 // A keyboard cursor over what can be acted on in the notes and on the Today page: task boxes
 // (x ticks), links (⏎ opens) and yesterday's open items (c carries into today). Items are found
@@ -27,7 +28,7 @@ function move(root: HTMLElement, delta: number): boolean {
     const list = items(root);
     if (!list.length) return false;
     const at = marked.get(root) ?? -1;
-    const next = Math.max(0, Math.min(list.length - 1, at < 0 ? (delta > 0 ? 0 : list.length - 1) : at + delta));
+    const next = !Number.isFinite(delta) ? (delta > 0 ? list.length - 1 : 0) : Math.max(0, Math.min(list.length - 1, at < 0 ? (delta > 0 ? 0 : list.length - 1) : at + delta));
     marked.set(root, next);
     watch(root);
     paint(root);
@@ -61,6 +62,10 @@ export const cursorKeys = (root: () => HTMLElement | null): KeyTable => {
         return r ? f(r) : false;
     };
     return {
+        ...motionKeys(
+            (by) => void on((r) => move(r, by))(),
+            (end) => void on((r) => move(r, end === "first" ? -Infinity : Infinity))(),
+        ),
         j: on((r) => move(r, 1)),
         k: on((r) => move(r, -1)),
         x: on((r) => act(r, "check")),

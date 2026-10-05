@@ -161,10 +161,25 @@ export function closeOverlay(): void {
     returnFocus(() => focusArea("terminal"), true);
 }
 
+const BEFORE_JUMP = "wintos:before-jump";
+
+// ⌃⇧⇥: back to where the last ⌃⇥ jumped from.
+export function jumpBack(): boolean {
+    try {
+        const t = JSON.parse(localStorage.getItem(BEFORE_JUMP) ?? "null") as Target | null;
+        if (!t || !latest.tabIds.includes(t.tabId)) return true;
+        localStorage.removeItem(BEFORE_JUMP);
+        focusSession(t);
+    } catch {}
+    return true;
+}
+
 export function jumpToNextWaiting(): boolean {
     const lm = getLayoutModelForStaticTab();
     const current = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
     const t = nextNeedsYou(latest.sessions, latest.tabIds, whereYouAre(), current, latest.needs);
+    // Where this jump started, for ⌃⇧⇥ to go back to.
+    if (t) localStorage.setItem(BEFORE_JUMP, JSON.stringify({ tabId: globalStore.get(atoms.staticTabId), blockId: current ?? "" }));
     // A project in Needs you for its PR has no session to magnify: just its terminals.
     if (t) focusSession("blockId" in t ? t : { tabId: t.tabId, blockId: "" });
     return true;

@@ -3,7 +3,7 @@
 
 import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { FocusManager } from "@/app/store/focusManager";
-import { jumpToNextWaiting } from "@/wintos/ui/focus";
+import { jumpBack, jumpToNextWaiting } from "@/wintos/ui/focus";
 import { sameChord } from "@/wintos/ui/keys";
 import { runKey, WINTOS_KEYS, wintosClose, wintosEscape } from "@/wintos/ui/menu";
 import { zoneKey } from "@/wintos/ui/zones";
@@ -527,6 +527,7 @@ function countTermBlocks(): number {
 function registerGlobalKeys() {
     // WintOS: jump to the next Claude session waiting on you.
     globalKeyMap.set("Ctrl:Tab", jumpToNextWaiting);
+    globalKeyMap.set("Ctrl:Shift:Tab", jumpBack);
     globalKeyMap.set("Cmd:]", () => {
         switchTab(1);
         return true;

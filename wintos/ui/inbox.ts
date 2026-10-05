@@ -27,9 +27,23 @@ export function goToInbox(list: InboxList): void {
     const tabs = Object.fromEntries(ids.map((id) => [id, globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))]));
     const inbox = inboxTabId(ids, tabs, list);
     if (!inbox) return;
-    if (inbox === globalStore.get(atoms.staticTabId)) return focusList();
+    const here = globalStore.get(atoms.staticTabId);
+    if (inbox === here) return focusList();
+    // Remembered for the key pressed again: back to the project you came from.
+    if (!LISTS.some((l) => inboxTabId(ids, tabs, l) === here)) localStorage.setItem(BACK, here);
     localStorage.setItem(KEY, inboxHandoff(list, Date.now()));
     getApi().setActiveTab(inbox);
+}
+
+// ⇧⌘G / ⇧⌘O as a toggle, like ⇧⌘L and ⇧⌘Y: pressed in that list's tab, back where you came from.
+// Only the key toggles; a click on a card always opens.
+const BACK = "wintos:before-inbox";
+export function toggleInbox(list: InboxList): void {
+    const ids = globalStore.get(atoms.workspace)?.tabids ?? [];
+    const tabs = Object.fromEntries(ids.map((id) => [id, globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))]));
+    const back = localStorage.getItem(BACK);
+    if (inboxTabId(ids, tabs, list) === globalStore.get(atoms.staticTabId) && back && ids.includes(back)) return getApi().setActiveTab(back);
+    goToInbox(list);
 }
 
 // In an Inbox tab's renderer, on mount and whenever it becomes visible; only the tab of that

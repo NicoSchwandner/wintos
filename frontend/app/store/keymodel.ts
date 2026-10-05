@@ -773,11 +773,12 @@ function registerGlobalKeys() {
         return true;
     });
     // WintOS: the sidebar replaces the tab bar, so ⌘1–9 no longer mean "tab N" and ⌘[ ⌘] no
-    // longer walk tabs (a web page gets back/forward again). Pane moves are ⌥⌘H/J/K/L, so ⌃⇧
-    // arrows and ⌃⇧hjkl go back to the terminal: ⌘ is WintOS's, the rest the terminal's.
+    // longer walk tabs (a page goes back and forward with ⌘← ⌘→). Panes are ⌘H/⌘L and ⌥⌘J/K,
+    // so every ⌃⇧ key goes back to the terminal: ⌘ is WintOS's, the rest the terminal's.
     for (let idx = 1; idx <= 9; idx++) globalKeyMap.delete(`Cmd:${idx}`);
     for (const k of ["Cmd:[", "Cmd:]", "Shift:Cmd:[", "Shift:Cmd:]"]) globalKeyMap.delete(k);
-    for (const d of ["h", "j", "k", "l", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]) globalKeyMap.delete(`Ctrl:Shift:${d}`);
+    for (const d of ["h", "j", "k", "l", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "x", "i"]) globalKeyMap.delete(`Ctrl:Shift:${d}`);
+    for (let idx = 0; idx <= 9; idx++) for (const k of [`Digit${idx}`, `Numpad${idx}`]) globalKeyMap.delete(`Ctrl:Shift:c{${k}}`);
     for (const [key, action] of WINTOS_KEYS) {
         for (const existing of [...globalKeyMap.keys()]) if (existing !== key && sameChord(existing, key)) globalKeyMap.delete(existing);
         globalKeyMap.set(key, () => runKey(action));
@@ -809,6 +810,8 @@ function registerGlobalKeys() {
         return true;
     });
     globalChordMap.set("Ctrl:Shift:s", splitBlockKeys);
+    // WintOS: ⌃⇧ belongs to the terminal (above); splits are ⌘D and ⇧⌘D.
+    globalChordMap.delete("Ctrl:Shift:s");
 }
 
 function registerBuilderGlobalKeys() {

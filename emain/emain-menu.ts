@@ -149,7 +149,7 @@ function makeFileMenu(
     if (isDev || featureWaveAppBuilder) {
         fileMenu.splice(1, 0, {
             label: "New WaveApp Builder Window",
-            accelerator: unamePlatform === "darwin" ? "Command+Shift+B" : "Alt+Shift+B",
+            // WintOS: no key; ⇧⌘B is WintOS's (a browser pane), and a registered accelerator wins.
             click: () => openBuilderWindow(""),
         });
     }
@@ -193,7 +193,7 @@ function makeAppMenuItems(webContents: electron.WebContents): Electron.MenuItemC
         appMenuItems.push(
             { role: "services" },
             { type: "separator" },
-            // WintOS: ⌘H / ⌥⌘H move focus left (wintos/ui/menu.ts); Hide stays, without a key.
+            // WintOS: ⌘H moves focus left (wintos/ui/menu.ts); Hide stays, without a key.
             { label: "Hide WintOS", click: () => electron.app.hide() },
             { label: "Hide Others", click: () => electron.Menu.sendActionToFirstResponder("hideOtherApplications:") },
             { type: "separator" }

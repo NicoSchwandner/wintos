@@ -65,7 +65,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:g", "prs"],
     ["Shift:Cmd:o", "panel"],
     ["Shift:Cmd:b", "browser"],
-    ["Shift:Cmd:e", "files"],
+    ["Shift:Cmd:f", "files"],
     // ⌥ turns a letter into another character on macOS (⌥J is º), so these match the key's
     // place; j and k sit in the same place on QWERTY and QWERTZ.
     ["Option:Cmd:c{KeyJ}", "pane-down"],
@@ -73,7 +73,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:c", "copy-url"],
     ["Option:Cmd:z", "snooze-project"],
     ["Option:Cmd:p", "park-session"],
-    ["Shift:Cmd:m", "join-meeting"],
+    ["Shift:Cmd:j", "join-meeting"],
     ["Shift:Cmd:y", "day"],
     ["Shift:Cmd:i", "keyboard"],
     ["Shift:Cmd:u", "open-external"],
@@ -147,7 +147,7 @@ function stepSideways(right: boolean): void {
 function stepPane(delta: 1 | -1): boolean {
     const lm = getLayoutModelForStaticTab();
     const ids = paneOrder(globalStore.get(lm.leafOrder), globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))))?.blockids ?? []);
-    wantPane("⌥⌘ hjkl");
+    wantPane("⌥⌘J/K");
     const next = stepProject(ids, globalStore.get(lm.focusedNode)?.data?.blockId ?? "", delta);
     // The Inbox reads one page at a time, and a magnified pane stays magnified; a split in a
     // project stays side by side and only the focus moves.
@@ -169,7 +169,7 @@ function copyUrl(): boolean {
 }
 
 export function runKey(action: string): boolean {
-    const dir = { "pane-left": NavigateDirection.Left, "pane-right": NavigateDirection.Right, "pane-up": NavigateDirection.Up, "pane-down": NavigateDirection.Down }[action];
+    const dir = { "pane-up": NavigateDirection.Up, "pane-down": NavigateDirection.Down }[action];
     if (dir !== undefined) return movePane(dir);
     if (action === "copy-url") return copyUrl();
     // ⌘R in a browser pane stays its reload.

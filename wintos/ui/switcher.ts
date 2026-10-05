@@ -1,6 +1,9 @@
 import { globalStore } from "@/app/store/jotaiStore";
 import { atom } from "jotai";
 import { enterProject, focusArea, whereYouAre } from "./focus";
+import { goToInbox } from "./inbox";
+import { openView } from "./menu";
+import type { InboxList } from "./view";
 import { flog } from "./focusLog";
 
 // ⌘J / ⌘K work like ⌘⇥: hold ⌘ and tap to walk the ranked projects in this renderer's
@@ -32,8 +35,11 @@ export function switchProject(delta: 1 | -1, cmdHeld: boolean): void {
 function commit(why = "⌘ released"): void {
     const target = globalStore.get(switchTargetAtom);
     end(why);
-    // Landing on the project you're in still lands: a page over it (Today) goes away.
-    if (target) enterProject(target);
+    // A card opens what it shows; a project is entered, even the one you're in, so a page over
+    // it (Today) goes away.
+    if (target === "card:prs" || target === "card:oncall") goToInbox(target.slice(5) as InboxList);
+    else if (target === "card:today") openView("day");
+    else if (target) enterProject(target);
     else focusArea("terminal");
 }
 

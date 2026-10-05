@@ -77,7 +77,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const activeStale = model?.quietStale.filter((r) => r.tabId === activeTabId && !expanded) ?? [];
     const quiet = model ? (expanded ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
     // Snoozed projects join the walk while their group is shown; landing on one wakes it.
-    const switchOrder = model ? [...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale, ...(showSnoozed ? model.snoozed : [])].map((r) => r.tabId) : [];
+    // The cards above the projects are walked too, in the order they show: PRs, On call, Today.
+    const cards = [...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : []), ...(state?.day ? ["card:today"] : [])];
+    const switchOrder = model ? [...cards, ...[...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale, ...(showSnoozed ? model.snoozed : [])].map((r) => r.tabId)] : [];
     // Snoozed rows show on their own toggle or while renaming one; the open one always, to find it again.
     const isSnoozedHere = !!model?.snoozed.some((r) => r.tabId === activeTabId);
     const snoozedShown = model ? (showSnoozed || renaming != null ? model.snoozed : model.snoozed.filter((r) => r.tabId === activeTabId)) : [];
@@ -164,19 +166,19 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 {state && (
                     <div style={{ display: "flex", gap: 8 }}>
                         {queue ? (
-                            <SummaryCard label="PRs" keys="⇧⌘G" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={T.brick} active={shows("prs")} onClick={() => goToInbox("prs")} />
+                            <SummaryCard label="PRs" keys="⇧⌘G" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={T.brick} active={shows("prs")} cursor={switchTarget === "card:prs"} onClick={() => goToInbox("prs")} />
                         ) : (
-                            <SummaryCard label="PRs" keys="⇧⌘G" stats={[]} note="loading from GitHub" noteColor={T.faint} active={shows("prs")} onClick={() => goToInbox("prs")} />
+                            <SummaryCard label="PRs" keys="⇧⌘G" stats={[]} note="loading from GitHub" noteColor={T.faint} active={shows("prs")} cursor={switchTarget === "card:prs"} onClick={() => goToInbox("prs")} />
                         )}
                         {panels.map((p) => {
                             const c = cardValue(p.counts);
                             const failed = p.error || p.counts.some((x) => x.count == null);
-                            return <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" busy={running.has(p.name)} stats={c} note={failed ? "couldn't fetch everything" : undefined} noteColor={T.brick} active={shows("oncall")} onClick={() => goToInbox("oncall")} />;
+                            return <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" busy={running.has(p.name)} stats={c} note={failed ? "couldn't fetch everything" : undefined} noteColor={T.brick} active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />;
                         })}
-                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} onClick={() => goToInbox("oncall")} />)}
+                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
-                {state?.day && <TodayCard day={state.day} active={mainView === "day"} walk={<WalkKeys />} />}
+                {state?.day && <TodayCard day={state.day} active={mainView === "day"} cursor={switchTarget === "card:today"} walk={<WalkKeys />} />}
                 {meetings.length > 0 && <MeetingCard meetings={meetings} />}
                 <MeetingEdge meetings={meetings} />
                 {offline || !model ? (
@@ -393,9 +395,9 @@ function Drumming() {
 
 // A title over its numbers, each number stacked on its own label; the note is only for what
 // the numbers can't say (late, updating, loading).
-function SummaryCard({ label, keys, stats, note, noteColor, busy, active, onClick }: { label: string; keys: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; active?: boolean; onClick: () => void }) {
+function SummaryCard({ label, keys, stats, note, noteColor, busy, active, cursor, onClick }: { label: string; keys: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; active?: boolean; cursor?: boolean; onClick: () => void }) {
     return (
-        <div data-key={active ? "" : keys} onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#32302f", border: `1px solid ${active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", ...(active ? ACTIVE : {}) }}>
+        <div data-key={active ? "" : keys} onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#32302f", border: `1px solid ${cursor ? T.apricot : active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", ...(active ? ACTIVE : {}) }}>
             <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, fontWeight: 600, color: T.secondary }}>
                 {label}
                 {busy && <Drumming />}

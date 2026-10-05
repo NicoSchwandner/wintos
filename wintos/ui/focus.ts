@@ -7,6 +7,8 @@ import { editingMineAtom, findInNotesAtom, isPage, mainViewAtom, overlayAtom, ty
 import { rememberReturn, returnFocus, wantPane } from "./focusOwner";
 import { daemonFetch, setProjectSnoozed } from "./useWintos";
 import { flog, where } from "./focusLog";
+import { inboxKind } from "./view";
+import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 
 // Every Wave tab runs in its own renderer, so a renderer can only magnify blocks of its own
 // tab. To reach a block elsewhere we leave the target in localStorage, which all renderers
@@ -37,9 +39,16 @@ export function focusBlock(blockId: string): void {
 // Every project switch: the project opens on its terminals. Views are per renderer, so a PR
 // view left open in a project would otherwise greet you there later.
 // Opening a snoozed project (from its PR, the palette, the Snoozed group) wakes it.
-// Where the walks (⌘J/⌘K, ⌃⇥) start: the project you are in, unless a page that is not that
-// project (the Today page) covers it; then you are outside the list, as in an Inbox tab.
-export const whereYouAre = () => (isPage(globalStore.get(mainViewAtom)) ? "" : globalStore.get(atoms.staticTabId));
+// Where the walks (⌘J/⌘K, ⌃⇥) start: what is showing. The cards above the projects are in the
+// walk as card:prs, card:oncall and card:today; a page with no card (Keyboard) is outside it.
+export function whereYouAre(): string {
+    const view = globalStore.get(mainViewAtom);
+    if (view === "day") return "card:today";
+    if (isPage(view)) return "";
+    const tabId = globalStore.get(atoms.staticTabId);
+    const kind = inboxKind(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId))));
+    return kind ? `card:${kind}` : tabId;
+}
 
 export function enterProject(tabId: string, find?: string): void {
     if (isSnoozedProject(tabId)) void setProjectSnoozed(tabId, false);

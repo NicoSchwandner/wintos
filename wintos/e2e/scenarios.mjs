@@ -108,8 +108,13 @@ async function scenario(name, fn) {
 }
 
 async function toProject() {
+    // ⌘J walks the cards too, so from PRs it may land on On call first.
     let t = await visible();
-    if (await inboxIn(t)) await press(t, "j", { mods: ["meta"] });
+    for (let i = 0; i < 3 && (await inboxIn(t)); i++) {
+        await press(t, "j", { mods: ["meta"] });
+        await sleep(1500);
+        t = await visible();
+    }
     return until("a project in front", async () => ((t = await visible()), !(await inboxIn(t)) && t));
 }
 
@@ -237,8 +242,7 @@ await scenario("5 · ⌘J from the PR list switches the project and leaves the l
     await press(inbox, "j");
     await until("a row selected", () => selectedRow(inbox));
     const row = await selectedRow(inbox);
-    await press(inbox, "j", { mods: ["meta"] });
-    await until("a project in front", async () => !(await inboxIn(await visible())));
+    await toProject();
     const after = await selectedRow(inbox);
     if (after !== row) throw new Error(`the list cursor moved from ${row} to ${after}`);
 });

@@ -5,8 +5,8 @@ import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, getBlockComponentModel, isDev } from "@/store/global";
 import { closeOverlay, editMine, enterProject, focusArea, takeReopen, focusBlock, isSnoozedProject, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
 import { closeWarning } from "./sessions";
-import { goToInbox } from "./inbox";
-import { FLAG_EVENT, mainViewAtom, overlayAtom, renamingAtom, tickModeAtom, type MainView } from "./notes/state";
+import { toggleInbox } from "./inbox";
+import { FLAG_EVENT, mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, tickModeAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
 import { setRailCollapsed } from "./notes/railWidth";
@@ -234,8 +234,8 @@ export function runAction(action: string): void {
     if (action.startsWith("open-page:")) return openPage(action.slice("open-page:".length));
     if (action.startsWith("open-url:")) return void createBlock({ meta: { view: "web", url: action.slice(9) } });
     // PRs and on call live in the Inbox tab, whichever project you are in.
-    if (action === "prs") return goToInbox("prs");
-    if (action === "panel" || action.startsWith("panel:")) return goToInbox("oncall");
+    if (action === "prs") return toggleInbox("prs");
+    if (action === "panel" || action.startsWith("panel:")) return toggleInbox("oncall");
     if (action === "notes") return toggleView("notes");
     if (action === "day") return toggleView("day");
     if (action === "keyboard") return toggleView("keyboard");
@@ -341,11 +341,19 @@ function toggleStoredFlag(key: string): void {
 }
 
 // ⌥⌘R: the focused terminal's shell started again, for one that hangs (Wave's Force Restart).
+// It ends what runs there, a Claude session included, so the first press only asks.
 function restartTerminal(): void {
     const blockId = globalStore.get(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
     const vm = blockId ? (getBlockComponentModel(blockId)?.viewModel as { forceRestartController?: () => Promise<void> } | undefined) : undefined;
-    flog(vm?.forceRestartController ? `restart terminal ${blockId!.slice(0, 6)}` : "restart terminal: the focused pane is not a terminal");
-    void vm?.forceRestartController?.();
+    if (!blockId || !vm?.forceRestartController) return void flog("restart terminal: the focused pane is not a terminal");
+    if (globalStore.get(restartArmedAtom) !== blockId) {
+        globalStore.set(restartArmedAtom, blockId);
+        setTimeout(() => globalStore.get(restartArmedAtom) === blockId && globalStore.set(restartArmedAtom, null), 3000);
+        return;
+    }
+    globalStore.set(restartArmedAtom, null);
+    flog(`restart terminal ${blockId.slice(0, 6)}`);
+    void vm.forceRestartController();
 }
 
 export function toggleView(view: MainView): void {

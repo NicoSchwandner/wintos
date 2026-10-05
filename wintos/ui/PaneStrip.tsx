@@ -8,6 +8,7 @@ const STRIP_GAP = 6; // above the chips, and (with the tile gap) below them
 import { focusSession, takeHandoff } from "./focus";
 import { Key } from "./Key";
 import { copiedAtAtom, focusedPageUrl, runKey } from "./menu";
+import { restartArmedAtom } from "./notes/state";
 import { paneOrder, stripPanes } from "./panes";
 import { liveSessions, unreadSessions } from "./sessions";
 import { T } from "./tokens";
@@ -30,6 +31,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     const now = useNow();
     const magnified = useAtomValue(lm.magnifiedNodeIdAtom);
     const focused = useAtomValue(lm.focusedNode);
+    const armed = useAtomValue(restartArmedAtom);
 
     useEffect(() => {
         takeHandoff();
@@ -94,6 +96,11 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
             {focused && focusedPageUrl(blocks[ids.indexOf(focused.data?.blockId)]) && <CopyUrl />}
             {focused && focusedPageUrl(blocks[ids.indexOf(focused.data?.blockId)]) && <StripAction k="⇧⌘U" label="browser" onClick={() => runKey("open-external")} />}
             {focused && <StripAction k="⌘W" label="close" onClick={() => void lm.closeNode(focused.id)} />}
+            {armed && focused?.data?.blockId === armed && (
+                <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 7, color: T.brick }}>
+                    <Key k="⌥⌘R" label="again to restart this terminal" />
+                </span>
+            )}
             {/* Magnify hides the other panes and has no header button here: say so, and offer the way back. */}
             {magnified && inProject && (
                 <button

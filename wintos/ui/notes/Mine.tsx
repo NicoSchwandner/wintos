@@ -1,6 +1,7 @@
 import { useAtomValue } from "jotai";
 import { editMine } from "../focus";
 import { toggleCheckbox } from "./checkbox";
+import { continueList, indentLines, toggleBox } from "./listEdit";
 import { Md } from "./Md";
 import { useEffect, useRef, useState } from "react";
 import { T } from "../tokens";
@@ -35,12 +36,17 @@ export function Mine({
     // The version the edit started from; a save against anything newer is refused.
     const [base, setBase] = useState(mtime);
     const ref = useRef<HTMLTextAreaElement>(null);
+    // What the edit started with, and whether Esc already warned that it would throw changes away.
+    const [initial, setInitial] = useState("");
+    const [warned, setWarned] = useState(false);
     useEffect(() => {
-        if (editing) (setDraft(text.trim() ? text : start), setBase(mtime), setError(null), setTimeout(() => ref.current?.focus(), 0));
+        const first = text.trim() ? text : start;
+        if (editing) (setDraft(first), setInitial(first), setWarned(false), setBase(mtime), setError(null), setTimeout(() => ref.current?.focus(), 0));
     }, [editing]);
 
     useZoneKeys(ref, {
-        Escape: () => editMine(false),
+        // Esc with unsaved changes warns first; a second Esc discards them.
+        Escape: () => (draft === initial || warned ? editMine(false) : setWarned(true)),
         "Cmd:Enter": () =>
             void save(draft, base).then((r) => {
                 if (r === "ok") editMine(false);
@@ -53,10 +59,12 @@ export function Mine({
         return (
             <>
                 {error && <span style={{ color: T.brick, fontSize: 11 }}>{error}</span>}
+                {warned && <span style={{ color: T.apricot, fontSize: 11 }}>Unsaved changes · esc again to discard, ⌘⏎ to save</span>}
                 <textarea
                     ref={ref}
                     value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
+                    onChange={(e) => (setDraft(e.target.value), setWarned(false))}
+                    onKeyDown={(e) => listKeys(e, setDraft)}
                     data-zone="overlay"
                     data-wintos="mine-editor"
                     spellCheck={false}
@@ -97,4 +105,28 @@ export function Mine({
             {text.trim() && <Md text={text} size={size} onTick={canEdit ? (i) => void tick(i) : undefined} />}
         </div>
     );
+}
+
+// ⏎ continues a list, Tab / ⇧Tab indent it, ⌘L ticks the line's box (listEdit.ts). Outside a
+// list the field does its default, except Tab, which indents rather than leaving the field.
+function listKeys(e: React.KeyboardEvent<HTMLTextAreaElement>, setDraft: (t: string) => void): void {
+    const t = e.currentTarget;
+    const put = (text: string, start: number, end = start) => {
+        e.preventDefault();
+        setDraft(text);
+        requestAnimationFrame(() => t.setSelectionRange(start, end));
+    };
+    const plain = !e.metaKey && !e.ctrlKey && !e.altKey;
+    if (e.key === "Enter" && plain && !e.shiftKey) {
+        const r = continueList(t.value, t.selectionStart);
+        if (r) put(r.text, r.caret);
+    } else if (e.key === "Tab" && plain) {
+        const r = indentLines(t.value, t.selectionStart, t.selectionEnd, e.shiftKey);
+        if (r) put(r.text, r.start, r.end);
+        else if (!e.shiftKey) put(t.value.slice(0, t.selectionStart) + "  " + t.value.slice(t.selectionEnd), t.selectionStart + 2);
+        else e.preventDefault();
+    } else if (e.key === "l" && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        const r = toggleBox(t.value, t.selectionStart);
+        if (r) put(r.text, r.caret);
+    }
 }

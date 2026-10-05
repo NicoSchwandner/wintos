@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo } from "react";
 import { carryToToday, lastDayName, leftFromYesterday, markPlanned, saveFocus, yesterdayItems } from "./day";
 import { dayTimeline, DEFAULT_WORKDAY, focusList, parseSpan, type Block } from "./dayplan";
 import { editMine } from "./focus";
@@ -12,7 +12,7 @@ import { useFocusOnMount } from "./useFocusOnMount";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
 import { useZoneKeys } from "./zones";
-import { cursorKeys } from "./itemCursor";
+import { cursorKeys, startCursor } from "./itemCursor";
 
 const hm = (t: number) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 const span = (ms: number) => {
@@ -30,6 +30,11 @@ export const TodayPage = memo(() => {
     const day = state?.day;
     const editing = useAtomValue(editingMineAtom);
     const left = day ? leftFromYesterday(day) : [];
+    // The page opens on your first open item, so ⇧⌘Y x ticks it.
+    const hasDay = !!day;
+    useEffect(() => {
+        if (hasDay && ref.current) requestAnimationFrame(() => ref.current && startCursor(ref.current, (el) => el.dataset.item === "check" && !el.dataset.done));
+    }, [hasDay]);
     useZoneKeys(ref, day ? {
         ...cursorKeys(() => ref.current),
         "Cmd:e": () => editMine(true),

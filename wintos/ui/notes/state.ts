@@ -13,4 +13,6 @@ export const renamingAtom = atom(null as string | null); // the tab whose title 
 // Text the notes view scrolls to and marks once it shows (a palette hit in the notes).
 // Fired when a key flips a sidebar toggle kept in localStorage, so this window re-reads it.
 export const FLAG_EVENT = "wintos-flag";
+// ⌥⌘X: the Today card unfolded to tick items off, from wherever you are.
+export const tickModeAtom = atom(false);
 export const findInNotesAtom = atom(null as string | null);

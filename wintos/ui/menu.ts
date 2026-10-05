@@ -6,7 +6,7 @@ import { atoms, createBlock, createTab, getApi, getBlockComponentModel, isDev } 
 import { closeOverlay, editMine, enterProject, focusArea, takeReopen, focusBlock, isSnoozedProject, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
 import { closeWarning } from "./sessions";
 import { goToInbox } from "./inbox";
-import { FLAG_EVENT, mainViewAtom, overlayAtom, renamingAtom, type MainView } from "./notes/state";
+import { FLAG_EVENT, mainViewAtom, overlayAtom, renamingAtom, tickModeAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
 import { setRailCollapsed } from "./notes/railWidth";
@@ -79,6 +79,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:u", "open-external"],
     ["Option:Cmd:s", "show-snoozed"],
     ["Option:Cmd:r", "restart-terminal"],
+    ["Option:Cmd:x", "tick"],
     ["Cmd:h", "focus-left"],
     ["Cmd:l", "focus-right"],
 ];
@@ -239,6 +240,7 @@ export function runAction(action: string): void {
     if (action === "day") return toggleView("day");
     if (action === "keyboard") return toggleView("keyboard");
     if (action === "open-external") return openExternal();
+    if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));
     if (action === "show-snoozed") return toggleStoredFlag("wintos:show-snoozed");
     if (action === "restart-terminal") return restartTerminal();
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);

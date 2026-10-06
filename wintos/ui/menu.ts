@@ -18,7 +18,7 @@ import { parkBlock, setProjectSnoozed } from "./useWintos";
 import { flog } from "./focusLog";
 import { meetingToJoin } from "./meetings";
 import { installKeyGame } from "./keyGame";
-import { installFocusOwner, rememberReturn, returnFocus, wantPane } from "./focusOwner";
+import { installFocusOwner, paneWanted, rememberReturn, returnFocus, wantPane } from "./focusOwner";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
 // defines, so a user's widgets.json overrides still apply.
@@ -297,7 +297,14 @@ function openPage(url: string): void {
     const shown = paneShowing((tab?.blockids ?? []).map((id) => globalStore.get(getWaveObjectAtom<Block>(makeORef("block", id)))), url);
     // In the Inbox a page is read one at a time, like a tab: it is magnified, not tiled.
     const inInbox = isInboxTab(tab);
-    if (shown) return inInbox ? void magnifyBlock(shown) : focusBlock(shown);
+    if (shown) {
+        if (inInbox) magnifyBlock(shown);
+        else focusBlock(shown);
+        // Already on screen and focused in the layout, so Wave moves nothing: a wanted pane is
+        // focused here (⏎ on a PR whose page is open).
+        if (paneWanted()) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-blockid="${shown}"] webview`)?.focus());
+        return;
+    }
     // The layout node arrives after createBlock resolves, so magnify once it exists (up to ~2s).
     const magnifyWhenLaid = (id: string, frames = 120) => magnifyBlock(id) || (frames > 0 && requestAnimationFrame(() => magnifyWhenLaid(id, frames - 1)));
     // A double ⏎ would otherwise start two panes before either exists.

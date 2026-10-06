@@ -1,5 +1,6 @@
 import { useFocusOnMount } from "./useFocusOnMount";
 import { useZoneKeys } from "./zones";
+import { wantPane } from "./focusOwner";
 import { motionKeys } from "./listMotion";
 import { enterProject } from "./focus";
 import { atoms, createTab } from "@/store/global";
@@ -87,7 +88,8 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
         k: () => step(-1),
         f: () => void (filter === null ? setFilter("") : filterRef.current?.focus()),
         Escape: () => (filter === null ? false : (setFilter(null), focusRef.current?.focus(), true)),
-        Enter: () => (r ? openPr(r) : false),
+        // ⏎ reads the PR: focus goes with it. A click opens it beside the list and stays there.
+        Enter: () => (r ? (wantPane("⏎ opens the PR"), openPr(r)) : false),
         o: () => (r ? goToProject(r) : false),
         r: (e) => void (e.repeat || refresh()),
         z: (e) => {

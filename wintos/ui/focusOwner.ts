@@ -113,7 +113,12 @@ export function installFocusOwner(): void {
             setTimeout(() => {
                 if (document.activeElement !== document.body) return;
                 flog("focus lost to nothing");
-                if (!restoreFocus("focus lost")) document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus();
+                if (restoreFocus("focus lost")) return;
+                const toList = () => document.activeElement === document.body && document.querySelector<HTMLElement>("[data-wintos=inbox-list]")?.focus();
+                // A pane is wanted (⏎ opened a page): it is still being laid out, and Wave focuses it
+                // once it exists. The list only if nothing has taken focus by then.
+                if (paneWanted()) setTimeout(toList, 1000);
+                else toList();
             }, 0),
         true
     );

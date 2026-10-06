@@ -4,8 +4,8 @@ import { badges, neverUsed, progress, week } from "./keyStats";
 
 describe("progress", () => {
     test("the rank, the next one, and how far", () =>
-        expect(progress({ ...emptyStats(), points: 412, rank: 2 })).toEqual({ rank: "Fluent", next: "Mouse-free", points: 412, toNext: 188, pct: 37 }));
-    test("at the top there is no next", () => expect(progress({ ...emptyStats(), points: 2000, rank: 4 })).toEqual({ rank: "Monk", points: 2000, toNext: 0, pct: 100 }));
+        expect(progress({ ...emptyStats(), points: 412, rank: 2 })).toEqual({ rank: "Fluent", next: "Mouse-free", points: 412, toNext: 288, pct: 28 }));
+    test("at the top there is no next", () => expect(progress({ ...emptyStats(), points: 60000, rank: 9 })).toEqual({ rank: "Zen", points: 60000, toNext: 0, pct: 100 }));
 });
 
 describe("badges", () => {

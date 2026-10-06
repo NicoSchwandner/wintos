@@ -1,8 +1,13 @@
 // The keyboard game: WintOS actions done by key score, a click on something that has a key is a
 // slip. Ranks rise as soon as the points reach them and only fall when a week ends below them,
 // so one click never costs a rank. Each key earns its own badge with use.
-export const RANKS: [string, number][] = [["Tourist", 0], ["Commuter", 100], ["Fluent", 300], ["Mouse-free", 600], ["Monk", 1500]];
-const SLIP_COST = [1, 3, 8, 15, 25]; // by rank: a slip costs more the further you've come
+// Each rank from Mouse-free on asks for twice the last: a busy week earns ~850 points, so the
+// early ranks come in days and the top in about a year.
+export const RANKS: [string, number][] = [
+    ["Tourist", 0], ["Commuter", 100], ["Fluent", 300], ["Mouse-free", 700], ["Touch typist", 1500],
+    ["Keysmith", 3000], ["Virtuoso", 6000], ["Keymaster", 12000], ["Monk", 25000], ["Zen", 50000],
+];
+const SLIP_COST = [1, 3, 8, 15, 25, 35, 50, 70, 100, 150]; // by rank: a slip costs more the further you've come
 const CLEAN_DAY = 20;
 const DAY_DONE = 10; // every item of the day's focus ticked
 const TIERS: [number, Badge["tier"]][] = [[200, "gold"], [50, "silver"], [10, "bronze"]];

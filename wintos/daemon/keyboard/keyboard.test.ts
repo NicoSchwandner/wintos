@@ -29,7 +29,12 @@ describe("points and the streak", () => {
 });
 
 describe("ranks", () => {
-    test("the thresholds", () => expect(RANKS.map(([n, at]) => `${n} ${at}`)).toEqual(["Tourist 0", "Commuter 100", "Fluent 300", "Mouse-free 600", "Monk 1500"]));
+    test("the thresholds", () => expect(RANKS.map(([n, at]) => `${n} ${at}`)).toEqual(["Tourist 0", "Commuter 100", "Fluent 300", "Mouse-free 700", "Touch typist 1500", "Keysmith 3000", "Virtuoso 6000", "Keymaster 12000", "Monk 25000", "Zen 50000"]));
+
+    test("each rank asks for at least twice the last one's points, so the top takes months", () => {
+        for (let i = 3; i < RANKS.length; i++) expect(RANKS[i][1]).toBeGreaterThanOrEqual(2 * RANKS[i - 1][1]);
+        expect(RANKS[RANKS.length - 1][1] / 850).toBeGreaterThan(52); // ~850 points a busy week
+    });
 
     test("a rank rises as soon as the points reach it", () => {
         const s = keys({ ...emptyStats(), points: 99 }, 1);

@@ -90,6 +90,19 @@ export async function startServer(opts: { root: string; port: number; host?: str
     } catch (e) {
         console.error(`[wintosd] cannot watch ${opts.root}: ${e}`);
     }
+    // The journal is edited outside WintOS too (your editor, the journal's own command): a change
+    // there is pushed like a note edit, not only seen by the next request.
+    let journalWatcher: FSWatcher | undefined;
+    if (opts.journal)
+        try {
+            journalWatcher = watch(opts.journal.dir, { recursive: true }, () => {
+                clearTimeout(pending);
+                pending = setTimeout(reload, 100);
+            });
+            journalWatcher.on("error", (e) => console.error(`[wintosd] journal watcher error: ${e}`));
+        } catch (e) {
+            console.error(`[wintosd] cannot watch the journal: ${e}`);
+        }
 
     // Only the hook (no Origin) and the WintOS UI may talk to us. Any web page in any browser
     // on this machine can reach 127.0.0.1, and the Host check stops DNS rebinding.
@@ -280,6 +293,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         http: server,
         close: () => {
             watcher?.close();
+            journalWatcher?.close();
             runner.stop();
             clearTimeout(pending);
             for (const s of sockets) s.terminate();

@@ -164,6 +164,25 @@ describe("the day", () => {
         expect([(await day()).day.focus, (await day()).day.planned]).toEqual(["- [ ] Pair on the flaky test", true]);
     });
 
+    test("an edit to the journal outside WintOS is pushed to the windows", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-journal-"));
+        const { Journal } = await import("../journal/journal");
+        srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")) });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        const ws = new WebSocket(base.replace("http", "ws") + "/ws?token=t0ken", { origin: "http://localhost:5173" });
+        let first: () => void;
+        const connected = new Promise<void>((r) => (first = r));
+        const pushed = new Promise<string>((resolve) => ws.on("message", (m) => (first(), String(m).includes("Edited elsewhere") && resolve(String(m)))));
+        await connected;
+        const d = new Date();
+        const ymd = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")];
+        mkdirSync(join(dir, ymd[0] + "", ymd[1]), { recursive: true });
+        writeFileSync(join(dir, ymd[0] + "", ymd[1], `${ymd.join("-")}.md`), "# Today\n\n## Today's focus (1-3 items)\n\n- [ ] Edited elsewhere\n");
+        expect(JSON.parse(await pushed).day.focus).toBe("- [ ] Edited elsewhere");
+        ws.close();
+    });
+
     test("without a journal the day endpoints say how to get one", async () => expect((await post("/day/focus", { text: "x" })).status).toBe(404));
 });
 

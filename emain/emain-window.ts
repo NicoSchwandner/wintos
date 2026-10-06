@@ -148,6 +148,11 @@ export class WaveBrowserWindow extends BaseWindow {
     waveWindowId: string;
     workspaceId: string;
     allLoadedTabViews: Map<string, WaveTabView>;
+    // WintOS: whether this window has the keys, for the focus frame. A page focused inside it
+    // blurs the renderer's own window, so the renderer cannot tell by itself.
+    sendWintosWindowFocus(focused: boolean) {
+        for (const tv of this.allLoadedTabViews.values()) if (!tv.webContents.isDestroyed()) tv.webContents.send("wintos-window-focus", focused);
+    }
     activeTabView: WaveTabView;
     private canClose: boolean;
     private deleteAllowed: boolean;
@@ -288,9 +293,11 @@ export class WaveBrowserWindow extends BaseWindow {
             setWasInFg(true);
             setWasActive(true);
             setTimeout(() => globalEvents.emit("windows-updated"), 50);
+            this.sendWintosWindowFocus(true);
         });
         this.on("blur", () => {
             setTimeout(() => globalEvents.emit("windows-updated"), 50);
+            this.sendWintosWindowFocus(false);
         });
         this.on("close", (e) => {
             if (this.canClose) {

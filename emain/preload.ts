@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld("api", {
     onWintosMenu: (callback) => ipcRenderer.on("wintos-menu", (_e, action) => callback(action)),
     writeClipboard: (text) => ipcRenderer.send("wintos-clipboard", text),
     onWintosOpenPane: (callback) => ipcRenderer.on("wintos-open-pane", (_e, url) => callback(url)),
+    onWintosWindowFocus: (callback) => ipcRenderer.on("wintos-window-focus", (_e, focused) => callback(focused)),
     updateWindowControlsOverlay: (rect) => ipcRenderer.send("update-window-controls-overlay", rect),
     onReinjectKey: (callback) => ipcRenderer.on("reinject-key", (_event, waveEvent) => callback(waveEvent)),
     setWebviewFocus: (focused: number) => ipcRenderer.send("webview-focus", focused),

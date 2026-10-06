@@ -18,6 +18,11 @@ import { parkBlock, setProjectSnoozed } from "./useWintos";
 import { flog } from "./focusLog";
 import { meetingToJoin } from "./meetings";
 import { installKeyGame } from "./keyGame";
+import { ClientService } from "@/app/store/services";
+import { ClientModel } from "@/app/store/client-model";
+import { RpcApi } from "@/app/store/wshclientapi";
+import { TabRpcClient } from "@/app/store/wshrpcutil";
+import { CurrentOnboardingVersion } from "@/app/onboarding/onboarding-common";
 import { installFocusOwner, paneWanted, rememberReturn, returnFocus, wantPane } from "./focusOwner";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
@@ -397,5 +402,12 @@ export function registerWintosMenu(): void {
     getApi().onWintosOpenPane((url) => runAction(`open-page:${url}`));
     // Dev builds only: lets wintos/e2e drive menu actions that native menus keep out of reach.
     // A dynamic import() from the harness would load second copies of these modules, not the live ones.
-    if (isDev()) Object.assign(window, { wintosAction: runAction, wintosTabId: () => globalStore.get(atoms.staticTabId), wintosKeyDown: appHandleKeyDown, wintosLayout: getLayoutModelForStaticTab });
+    if (isDev()) Object.assign(window, { wintosAction: runAction, wintosTabId: () => globalStore.get(atoms.staticTabId), wintosKeyDown: appHandleKeyDown, wintosLayout: getLayoutModelForStaticTab, wintosSkipOnboarding: skipOnboarding });
+}
+
+// Dev only (wintos/e2e/seed.mjs): a freshly reset dev instance opens Wave's onboarding, which
+// switches every shortcut off; this agrees to it and marks it seen, so reloaded windows skip it.
+async function skipOnboarding(): Promise<void> {
+    await ClientService.AgreeTos();
+    await RpcApi.SetMetaCommand(TabRpcClient, { oref: makeORef("client", ClientModel.getInstance().clientId), meta: { "onboarding:lastversion": CurrentOnboardingVersion } });
 }

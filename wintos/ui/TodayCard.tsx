@@ -16,6 +16,7 @@ import { T } from "./tokens";
 
 const SHOWN = 3;
 const SHOWN_TICKING = 15;
+const INDENT = 16;
 const since = (last: string, today: string) => lastDayName(last, today).replace(/^(Yesterday|Last)/, (w) => w.toLowerCase());
 
 // Today's plan, with the other cards so it is in view everywhere. Until the day is planned it
@@ -55,7 +56,7 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
             ) : (
                 <>
                     {open.slice(0, SHOWN).map((i) => (
-                        <div key={i.line} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: T.secondary, minWidth: 0 }}>
+                        <div key={i.line} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: T.secondary, minWidth: 0, marginLeft: i.depth * INDENT }}>
                             <span data-key="" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()} style={{ display: "contents" }}>
                                 <Box state="todo" size="rail" onToggle={() => void tickFocus(day, i.line)} />
                             </span>
@@ -96,7 +97,7 @@ function TickList({ day }: { day: Day }) {
                 </span>
             </div>
             {open.slice(0, SHOWN_TICKING).map((i) => (
-                <div key={i.line} data-item="check" style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: T.secondary, minWidth: 0, padding: "1px 4px", margin: "0 -4px", borderRadius: 4 }}>
+                <div key={i.line} data-item="check" style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: T.secondary, minWidth: 0, padding: "1px 4px", margin: "0 -4px", marginLeft: i.depth * INDENT - 4, borderRadius: 4 }}>
                     <span data-act data-key="x" onMouseDown={(e) => e.preventDefault()} style={{ display: "contents" }}>
                         <Box state="todo" size="rail" onToggle={() => void tickFocus(day, i.line)} />
                     </span>

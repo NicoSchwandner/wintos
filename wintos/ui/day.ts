@@ -20,14 +20,14 @@ export const carryToToday = (day: Day, item: string) => saveFocus(`${day.focus}\
 
 // Everything the earlier day planned: its focus items, ticked or not, then its goals for
 // tomorrow; each marked carried once it is in today's focus. Carrying copies, so nothing leaves.
-export function yesterdayItems(day: Day): { text: string; done: boolean; carried: boolean }[] {
+export function yesterdayItems(day: Day): { text: string; done: boolean; carried: boolean; depth: number }[] {
     const y = day.yesterday;
     if (!y) return [];
     const today = new Set(focusList(day.focus).map((i) => i.text));
     const seen = new Set<string>();
     return [...focusList(y.focus), ...focusList(y.tomorrow.join("\n"))]
         .filter((i) => !seen.has(i.text) && seen.add(i.text))
-        .map((i) => ({ text: i.text, done: i.done, carried: today.has(i.text) }));
+        .map((i) => ({ text: i.text, done: i.done, carried: today.has(i.text), depth: i.depth }));
 }
 
 // What it left open and today doesn't have yet.

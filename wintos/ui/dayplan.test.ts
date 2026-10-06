@@ -41,9 +41,10 @@ test("the workday defaults to 08:00-17:00 and ends the timeline", () => {
 
 describe("focusList", () => {
     test("the checklist lines with their line in the text, done or not; other lines skipped", () =>
-        expect(focusList("- [x] Review\nnote\n- [ ] Write\n  - [ ] sub")).toEqual([
-            { line: 0, text: "Review", done: true },
-            { line: 2, text: "Write", done: false },
-            { line: 3, text: "sub", done: false },
+        expect(focusList("- [x] Review\nnote\n- [ ] Write\n  - [ ] sub\n\t\t- [ ] tabbed")).toEqual([
+            { line: 0, text: "Review", done: true, depth: 0 },
+            { line: 2, text: "Write", done: false, depth: 0 },
+            { line: 3, text: "sub", done: false, depth: 1 },
+            { line: 4, text: "tabbed", done: false, depth: 2 },
         ]));
 });

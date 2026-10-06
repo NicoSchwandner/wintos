@@ -26,8 +26,10 @@ export function Md({ text, size, inline, links = true, onTick }: { text: string;
         h4: ({ children }) => <Heading size={size}>{children}</Heading>,
         h5: ({ children }) => <Heading size={size}>{children}</Heading>,
         h6: ({ children }) => <Heading size={size}>{children}</Heading>,
-        ul: ({ children, className }) => (
-            <ul style={{ ...block, paddingLeft: className?.includes("contains-task-list") ? 0 : 16, listStyle: className?.includes("contains-task-list") ? "none" : "disc", display: "flex", flexDirection: "column", gap: 2 }}>{children}</ul>
+        // A checkbox list draws its own boxes, so the outermost one sits flush; one nested under
+        // an item (it starts further right in the source) keeps its indent.
+        ul: ({ children, className, node }) => (
+            <ul style={{ ...block, paddingLeft: !className?.includes("contains-task-list") ? 16 : (node?.position?.start.column ?? 1) > 1 ? 20 : 0, listStyle: className?.includes("contains-task-list") ? "none" : "disc", display: "flex", flexDirection: "column", gap: 2 }}>{children}</ul>
         ),
         ol: ({ children, start }) => (
             <ol start={start} style={{ ...block, paddingLeft: 20, listStyle: "decimal", display: "flex", flexDirection: "column", gap: 2 }}>

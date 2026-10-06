@@ -41,9 +41,10 @@ export function dayTimeline(meetings: Meeting[], lunch: [number, number] | undef
 }
 
 // The checklist in a focus section, each item with its line (what a tick flips).
-export function focusList(text: string): { line: number; text: string; done: boolean }[] {
+// depth: how far the item is indented under another, two spaces or a tab a step.
+export function focusList(text: string): { line: number; text: string; done: boolean; depth: number }[] {
     return text.split("\n").flatMap((l, line) => {
-        const m = /^\s*[-*] \[([ xX~])\]\s+(.*)$/.exec(l);
-        return m ? [{ line, text: m[2], done: m[1] === "x" || m[1] === "X" }] : [];
+        const m = /^(\s*)[-*] \[([ xX~])\]\s+(.*)$/.exec(l);
+        return m ? [{ line, text: m[3], done: m[2] === "x" || m[2] === "X", depth: Math.floor(m[1].replace(/\t/g, "  ").length / 2) }] : [];
     });
 }

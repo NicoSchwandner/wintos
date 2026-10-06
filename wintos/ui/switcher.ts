@@ -32,15 +32,41 @@ export function switchProject(delta: 1 | -1, cmdHeld: boolean): void {
     listen(true);
 }
 
-function commit(why = "⌘ released"): void {
-    const target = globalStore.get(switchTargetAtom);
-    end(why);
-    // A card opens what it shows; a project is entered, even the one you're in, so a page over
-    // it (Today) goes away.
+// A card opens what it shows; a project is entered, even the one you're in, so a page over it
+// (Today) goes away.
+function go(target: string | null): void {
     if (target === "card:prs" || target === "card:oncall") goToInbox(target.slice(5) as InboxList);
     else if (target === "card:today") openView("day");
     else if (target) enterProject(target);
     else focusArea("terminal");
+}
+
+function commit(why = "⌘ released"): void {
+    const target = globalStore.get(switchTargetAtom);
+    const from = whereYouAre();
+    end(why);
+    try {
+        if (target && target !== from) localStorage.setItem(UNDO, JSON.stringify({ from, at: Date.now() }));
+    } catch {} // no storage, no undo; the walk itself goes on
+    go(target);
+}
+
+// macOS never hands Esc to an app while ⌘ is held, so a walk cannot be cancelled before it
+// lands. Esc right after it lands takes it back instead. The walk ends in another tab, another
+// renderer, so the way back travels in localStorage.
+const UNDO = "wintos:walk-undo";
+const UNDO_MS = 1500;
+export function undoWalkKey(e: { key: string; cmd?: boolean; shift?: boolean; control?: boolean; alt?: boolean }): boolean {
+    if (e.key !== "Escape" || e.cmd || e.shift || e.control || e.alt) return false;
+    let rec: { from: string; at: number } | null = null;
+    try {
+        rec = JSON.parse(localStorage.getItem(UNDO) ?? "null");
+        localStorage.removeItem(UNDO);
+    } catch {}
+    if (!rec?.from || Date.now() - rec.at > UNDO_MS) return false;
+    flog(`walk undone (esc) → ${rec.from.slice(0, 9)}`);
+    go(rec.from);
+    return true;
 }
 
 function end(why: string): void {

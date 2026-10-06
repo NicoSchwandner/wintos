@@ -4,7 +4,7 @@ vi.mock("./focusLog", () => ({ flog: vi.fn() }));
 const here = { tab: "a" };
 vi.mock("./focus", () => ({ enterProject: vi.fn(), focusArea: vi.fn(), whereYouAre: () => here.tab }));
 import { enterProject } from "./focus";
-import { setSwitchOrder, stepProject, switchProject, switchTargetAtom, topProject, walkKey, walking } from "./switcher";
+import { setSwitchOrder, stepProject, switchProject, switchTargetAtom, topProject, undoWalkKey, walkKey, walking } from "./switcher";
 
 describe("stepProject", () => {
     const order = ["a", "b", "c"];
@@ -90,5 +90,28 @@ describe("switchProject starts from where you are", () => {
         expect(enterProject).toHaveBeenLastCalledWith("a");
         switchProject(-1, false);
         expect(enterProject).toHaveBeenLastCalledWith("c");
+    });
+});
+
+describe("undoWalkKey", () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) });
+    const walkTo = (to: string) => (setSwitchOrder(["a", to]), (here.tab = "a"), switchProject(1, false));
+    const esc = { key: "Escape" };
+
+    test("Esc right after a walk lands goes back where it started, once", () => {
+        walkTo("b");
+        vi.mocked(enterProject).mockClear();
+        expect(undoWalkKey(esc)).toBe(true);
+        expect(enterProject).toHaveBeenCalledWith("a");
+        expect(undoWalkKey(esc)).toBe(false);
+    });
+
+    test("too late, or another key: Esc is just Esc", () => {
+        walkTo("b");
+        expect(undoWalkKey({ key: "Escape", cmd: true })).toBe(false);
+        vi.useFakeTimers({ now: Date.now() + 2000 });
+        expect(undoWalkKey(esc)).toBe(false);
+        vi.useRealTimers();
     });
 });

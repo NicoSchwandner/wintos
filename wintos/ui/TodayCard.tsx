@@ -14,7 +14,7 @@ import { openView } from "./menu";
 import { Box, Rich } from "./notes/ProjectNotes";
 import { T } from "./tokens";
 
-const SHOWN = 3;
+const SHOWN = 10;
 const SHOWN_TICKING = 15;
 const INDENT = 16;
 const since = (last: string, today: string) => lastDayName(last, today).replace(/^(Yesterday|Last)/, (w) => w.toLowerCase());

@@ -36,8 +36,11 @@ export function closeWarning(sessions: Session[], tabId: string): string | null 
 // be there for a PR rather than a session.
 export function nextNeedsYou(sessions: Session[], tabIds: string[], activeTabId: string, currentBlockId: string | undefined, needsTabIds: string[]): Target | { tabId: string } | null {
     const waiting = nextWaiting(sessions, tabIds, activeTabId, currentBlockId);
-    if (waiting) return waiting;
-    if (!needsTabIds.length) return null;
+    // The session you're in is no place to go while another project needs you.
+    const self = waiting?.tabId === activeTabId && waiting.blockId === currentBlockId;
+    if (waiting && !self) return waiting;
+    const others = needsTabIds.filter((t) => t !== activeTabId);
+    if (!others.length) return waiting ?? (needsTabIds.length ? { tabId: needsTabIds[0] } : null);
     return { tabId: needsTabIds[(needsTabIds.indexOf(activeTabId) + 1) % needsTabIds.length] };
 }
 

@@ -73,6 +73,14 @@ describe("nextNeedsYou", () => {
         expect(nextNeedsYou([], ["t1"], "t1", undefined, ["t1"])).toEqual({ tabId: "t1" });
     });
 
+    test("the only waiting session is the one you're in: on to a project in Needs you for its PR", () => {
+        expect(nextNeedsYou([s("a", "t1", "waiting")], ["t1", "t2"], "t1", "b-a", ["t1", "t2"])).toEqual({ tabId: "t2" });
+        // and from there, back to the waiting session
+        expect(nextNeedsYou([s("a", "t1", "waiting")], ["t1", "t2"], "t2", undefined, ["t1", "t2"])).toEqual({ tabId: "t1", blockId: "b-a" });
+        // nothing else needs you: it stays on the session
+        expect(nextNeedsYou([s("a", "t1", "waiting")], ["t1"], "t1", "b-a", ["t1"])).toEqual({ tabId: "t1", blockId: "b-a" });
+    });
+
     test("nothing needs you, nowhere to go", () => {
         expect(nextNeedsYou([], ["t1"], "t1", undefined, [])).toBeNull();
     });

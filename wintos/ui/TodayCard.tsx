@@ -8,7 +8,7 @@ import { tickModeAtom } from "./notes/state";
 import { useZoneKeys } from "./zones";
 import type { Day } from "../daemon/journal/journal";
 import { lastDayName, leftFromYesterday, tickFocus } from "./day";
-import { focusList } from "./dayplan";
+import { focusList, openFocus } from "./dayplan";
 import { Key } from "./Key";
 import { openView } from "./menu";
 import { Box, Rich } from "./notes/ProjectNotes";
@@ -29,6 +29,7 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
     const items = focusList(day.focus);
     const open = items.filter((i) => !i.done);
     const done = items.length - open.length;
+    const shown = openFocus(items);
     const left = leftFromYesterday(day).length;
     return (
         <div
@@ -55,16 +56,16 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
                 <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>{items.length ? `all ${items.length} done` : "nothing planned"}</span>
             ) : (
                 <>
-                    {open.slice(0, SHOWN).map((i) => (
-                        <div key={i.line} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: T.secondary, minWidth: 0, marginLeft: i.depth * INDENT }}>
+                    {shown.slice(0, SHOWN).map((i) => (
+                        <div key={i.line} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: i.done ? T.muted : T.secondary, minWidth: 0, marginLeft: i.depth * INDENT }}>
                             <span data-key="" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()} style={{ display: "contents" }}>
-                                <Box state="todo" size="rail" onToggle={() => void tickFocus(day, i.line)} />
+                                <Box state={i.done ? "done" : "todo"} size="rail" onToggle={() => void tickFocus(day, i.line)} />
                             </span>
-                            <span style={{ minWidth: 0, overflowWrap: "anywhere" }}><Rich text={i.text} size="rail" /></span>
+                            <span style={{ minWidth: 0, overflowWrap: "anywhere", textDecoration: i.done ? "line-through" : undefined }}><Rich text={i.text} size="rail" /></span>
                         </div>
                     ))}
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>
-                        {[open.length > SHOWN ? `+${open.length - SHOWN} more` : "", done ? `${done} done` : ""].filter(Boolean).join(" · ")}
+                        {[shown.length > SHOWN ? `+${shown.length - SHOWN} more` : "", done ? `${done} done` : ""].filter(Boolean).join(" · ")}
                     </span>
                 </>
             )}
@@ -78,7 +79,9 @@ TodayCard.displayName = "TodayCard";
 // folds it back to where you were. The same keys as on the Today page.
 function TickList({ day }: { day: Day }) {
     const ref = useRef<HTMLDivElement>(null);
-    const open = focusList(day.focus).filter((i) => !i.done);
+    const items = focusList(day.focus);
+    const open = items.filter((i) => !i.done);
+    const shown = openFocus(items);
     const close = () => (globalStore.set(tickModeAtom, false), returnFocus(() => focusArea("terminal")));
     useZoneKeys(ref, { ...cursorKeys(() => ref.current), Escape: close });
     useEffect(() => {
@@ -96,15 +99,16 @@ function TickList({ day }: { day: Day }) {
                     <Key k="esc" label="" />
                 </span>
             </div>
-            {open.slice(0, SHOWN_TICKING).map((i) => (
-                <div key={i.line} data-item="check" style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: T.secondary, minWidth: 0, padding: "1px 4px", margin: "0 -4px", marginLeft: i.depth * INDENT - 4, borderRadius: 4 }}>
+            {/* A ticked parent of open items is there for context only: no cursor stop. */}
+            {shown.slice(0, SHOWN_TICKING).map((i) => (
+                <div key={i.line} data-item={i.done ? undefined : "check"} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: i.done ? T.muted : T.secondary, textDecoration: i.done ? "line-through" : undefined, minWidth: 0, padding: "1px 4px", margin: "0 -4px", marginLeft: i.depth * INDENT - 4, borderRadius: 4 }}>
                     <span data-act data-key="x" onMouseDown={(e) => e.preventDefault()} style={{ display: "contents" }}>
-                        <Box state="todo" size="rail" onToggle={() => void tickFocus(day, i.line)} />
+                        <Box state={i.done ? "done" : "todo"} size="rail" onToggle={() => void tickFocus(day, i.line)} />
                     </span>
                     <span style={{ minWidth: 0, overflowWrap: "anywhere" }}><Rich text={i.text} size="rail" /></span>
                 </div>
             ))}
-            {open.length > SHOWN_TICKING && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>+{open.length - SHOWN_TICKING} more on the Today page</span>}
+            {shown.length > SHOWN_TICKING && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>+{shown.length - SHOWN_TICKING} more on the Today page</span>}
         </div>
     );
 }

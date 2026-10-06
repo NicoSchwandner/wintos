@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { dayTimeline, focusList, parseSpan } from "./dayplan";
+import { dayTimeline, focusList, openFocus, parseSpan } from "./dayplan";
 
 const DAY = new Date(2026, 9, 2);
 const t = (h: number, m = 0) => new Date(2026, 9, 2, h, m).getTime();
@@ -47,4 +47,10 @@ describe("focusList", () => {
             { line: 3, text: "sub", done: false, depth: 1 },
             { line: 4, text: "tabbed", done: false, depth: 2 },
         ]));
+});
+
+describe("openFocus", () => {
+    const text = "- [x] Ship it\n  - [ ] tell the team\n  - [x] tag\n- [x] Done and dusted\n  - [x] all of it\n- [ ] Open";
+    test("the open items, and a ticked one only while something under it is open", () =>
+        expect(openFocus(focusList(text)).map((i) => `${i.text}${i.done ? " (done)" : ""}`)).toEqual(["Ship it (done)", "tell the team", "Open"]));
 });

@@ -41,6 +41,20 @@ export function dayTimeline(meetings: Meeting[], lunch: [number, number] | undef
 }
 
 // The checklist in a focus section, each item with its line (what a tick flips).
+type FocusItem = ReturnType<typeof focusList>[number];
+// What is still to do: the open items, and a ticked one while something under it is open, so the
+// open child keeps its parent for context.
+export function openFocus(items: FocusItem[]): FocusItem[] {
+    return items.filter((item, i) => {
+        if (!item.done) return true;
+        for (const after of items.slice(i + 1)) {
+            if (after.depth <= item.depth) return false;
+            if (!after.done) return true;
+        }
+        return false;
+    });
+}
+
 // depth: how far the item is indented under another, two spaces or a tab a step.
 export function focusList(text: string): { line: number; text: string; done: boolean; depth: number }[] {
     return text.split("\n").flatMap((l, line) => {

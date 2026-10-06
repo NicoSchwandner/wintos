@@ -43,11 +43,12 @@ export function Md({ text, size, inline, links = true, onTick }: { text: string;
             const done = !!(node?.children[0] as { properties?: { checked?: boolean } } | undefined)?.properties?.checked;
             const line = (node?.position?.start.line ?? 1) - 1;
             return (
-                <li data-item={onTick ? "check" : undefined} data-done={done || undefined} style={{ display: "flex", gap: 8, alignItems: "flex-start", minWidth: 0, overflowWrap: "anywhere", color: done ? T.muted : undefined, textDecoration: done ? "line-through" : undefined }}>
+                <li data-item={onTick ? "check" : undefined} data-done={done || undefined} style={{ display: "flex", gap: 8, alignItems: "flex-start", minWidth: 0, overflowWrap: "anywhere", color: done ? T.muted : undefined }}>
                     <span data-act data-key={onTick ? "x" : undefined} style={{ display: "contents" }}>
                         <Box state={done ? "done" : "todo"} size={size} onToggle={onTick ? () => onTick(line) : undefined} />
                     </span>
-                    <span style={{ minWidth: 0 }}>{children}</span>
+                    {/* Struck through is the text only: across the box it reads as a second tick. */}
+                    <span style={{ minWidth: 0, textDecoration: done ? "line-through" : undefined }}>{children}</span>
                 </li>
             );
         },

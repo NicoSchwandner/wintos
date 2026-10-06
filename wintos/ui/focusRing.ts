@@ -23,6 +23,6 @@ export function installFocusRing(): void {
     const mark = () => setTimeout(() => (document.documentElement.dataset.wintosFocus = windowFocused ? zoneOf(document.activeElement) : "away"), 0);
     document.addEventListener("focusin", mark, true);
     document.addEventListener("focusout", mark, true);
-    getApi().onWintosWindowFocus((focused) => ((windowFocused = focused), mark()));
+    getApi().onWintosWindowFocus?.((focused) => ((windowFocused = focused), mark()));
     mark();
 }

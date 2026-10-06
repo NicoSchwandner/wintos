@@ -176,9 +176,9 @@ describe("the day", () => {
         const pushed = new Promise<string>((resolve) => ws.on("message", (m) => (first(), String(m).includes("Edited elsewhere") && resolve(String(m)))));
         await connected;
         const d = new Date();
-        const ymd = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")];
-        mkdirSync(join(dir, ymd[0] + "", ymd[1]), { recursive: true });
-        writeFileSync(join(dir, ymd[0] + "", ymd[1], `${ymd.join("-")}.md`), "# Today\n\n## Today's focus (1-3 items)\n\n- [ ] Edited elsewhere\n");
+        const ymd = [String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")];
+        mkdirSync(join(dir, ymd[0], ymd[1]), { recursive: true });
+        writeFileSync(join(dir, ymd[0], ymd[1], `${ymd.join("-")}.md`), "# Today\n\n## Today's focus (1-3 items)\n\n- [ ] Edited elsewhere\n");
         expect(JSON.parse(await pushed).day.focus).toBe("- [ ] Edited elsewhere");
         ws.close();
     });

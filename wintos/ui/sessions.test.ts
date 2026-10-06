@@ -1,40 +1,8 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { closeWarning, liveSessions, nextNeedsYou, nextWaiting, unreadSessions } from "./sessions";
+import { closeWarning, liveSessions, nextNeedsYou, unreadSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
-
-describe("nextWaiting", () => {
-    const tabs = ["t", "u", "v"];
-
-    test("cycles to the next waiting session in this tab after the current block", () => {
-        const all = [s("1", "t", "waiting"), s("2", "t", "working"), s("3", "t", "waiting")];
-        expect(nextWaiting(all, tabs, "t", "b-1")).toEqual({ tabId: "t", blockId: "b-3" });
-        expect(nextWaiting(all, tabs, "t", "b-3")).toEqual({ tabId: "t", blockId: "b-1" });
-    });
-
-    test("with nothing else waiting here, goes to the longest wait in another tab", () => {
-        const all = [s("1", "t", "working"), s("2", "u", "waiting", 50), s("3", "v", "waiting", 10)];
-        expect(nextWaiting(all, tabs, "t", "b-1")).toEqual({ tabId: "v", blockId: "b-3" });
-    });
-
-    test("when the only waiting session here is the current one, move on to another tab", () => {
-        const all = [s("1", "t", "waiting", 5), s("2", "u", "waiting", 50)];
-        expect(nextWaiting(all, tabs, "t", "b-1")).toEqual({ tabId: "u", blockId: "b-2" });
-    });
-
-    test("the only waiting session is the current one: stay", () => {
-        expect(nextWaiting([s("1", "t", "waiting")], tabs, "t", "b-1")).toEqual({ tabId: "t", blockId: "b-1" });
-    });
-
-    test("tabs outside the workspace are never targets", () => {
-        expect(nextWaiting([s("1", "gone", "waiting")], tabs, "t", undefined)).toBeNull();
-    });
-
-    test("nothing waiting anywhere", () => {
-        expect(nextWaiting([s("1", "t", "working")], tabs, "t", "b-1")).toBeNull();
-    });
-});
 
 describe("liveSessions", () => {
     test("a session whose block was closed no longer counts", () => {
@@ -60,38 +28,45 @@ describe("closeWarning", () => {
 });
 
 describe("nextNeedsYou", () => {
-    test("a waiting session comes first", () => {
-        expect(nextNeedsYou([s("a", "t2", "waiting")], ["t1", "t2"], "t1", undefined, ["t3"])).toEqual({ tabId: "t2", blockId: "b-a" });
+    // Needs you, top to bottom: t1 (two waiting sessions), t2 (one), t3 (there for a PR).
+    const all = [s("a", "t1", "waiting", 1), s("b", "t1", "waiting", 2), s("c", "t2", "waiting", 3), s("w", "t2", "working")];
+    const tabs = ["t0", "t1", "t2", "t3"];
+    const needs = ["t1", "t2", "t3"];
+    const next = (tab: string, block?: string) => nextNeedsYou(all, tabs, tab, block, needs);
+
+    test("walks Needs you in its order, each waiting session a stop, and wraps", () => {
+        expect(next("t1", "b-a")).toEqual({ tabId: "t1", blockId: "b-b" });
+        expect(next("t1", "b-b")).toEqual({ tabId: "t2", blockId: "b-c" });
+        expect(next("t2", "b-c")).toEqual({ tabId: "t3" });
+        expect(next("t3")).toEqual({ tabId: "t1", blockId: "b-a" });
     });
 
-    test("with none waiting, the next project in Needs you (a PR that needs you), cycling", () => {
-        expect(nextNeedsYou([], ["t1", "t2", "t3"], "t1", undefined, ["t2", "t3"])).toEqual({ tabId: "t2" });
-        expect(nextNeedsYou([], ["t1", "t2", "t3"], "t3", undefined, ["t2", "t3"])).toEqual({ tabId: "t2" });
+    test("every project is reached, however many need you", () => {
+        const seen = new Set<string>();
+        let at: { tabId: string; blockId?: string } = { tabId: "t1", blockId: "b-a" };
+        for (let i = 0; i < 4; i++) (at = next(at.tabId, at.blockId)!), seen.add(at.tabId);
+        expect([...seen].sort()).toEqual(["t1", "t2", "t3"]);
     });
 
-    test("the open project as the only one in Needs you is still the answer (back to its terminals)", () => {
+    test("in a listed project but not on one of its waiting sessions: that project's first", () => {
+        expect(next("t2", "b-w")).toEqual({ tabId: "t2", blockId: "b-c" });
+    });
+
+    test("from anywhere else, the top of Needs you", () => {
+        expect(next("t0")).toEqual({ tabId: "t1", blockId: "b-a" });
+        expect(next("card:prs")).toEqual({ tabId: "t1", blockId: "b-a" });
+    });
+
+    test("a waiting session in a project not in Needs you still counts, after the list", () => {
+        expect(nextNeedsYou([s("z", "t0", "waiting")], tabs, "t3", undefined, ["t3"])).toEqual({ tabId: "t0", blockId: "b-z" });
+    });
+
+    test("the only stop is where you are: stay", () => {
+        expect(nextNeedsYou([s("a", "t1", "waiting")], tabs, "t1", "b-a", ["t1"])).toEqual({ tabId: "t1", blockId: "b-a" });
         expect(nextNeedsYou([], ["t1"], "t1", undefined, ["t1"])).toEqual({ tabId: "t1" });
     });
 
-    test("the only waiting session is the one you're in: on to a project in Needs you for its PR", () => {
-        expect(nextNeedsYou([s("a", "t1", "waiting")], ["t1", "t2"], "t1", "b-a", ["t1", "t2"])).toEqual({ tabId: "t2" });
-        // and from there, back to the waiting session
-        expect(nextNeedsYou([s("a", "t1", "waiting")], ["t1", "t2"], "t2", undefined, ["t1", "t2"])).toEqual({ tabId: "t1", blockId: "b-a" });
-        // nothing else needs you: it stays on the session
-        expect(nextNeedsYou([s("a", "t1", "waiting")], ["t1"], "t1", "b-a", ["t1"])).toEqual({ tabId: "t1", blockId: "b-a" });
-    });
-
-    test("nothing needs you, nowhere to go", () => {
-        expect(nextNeedsYou([], ["t1"], "t1", undefined, [])).toBeNull();
-    });
-});
-
-describe("unreadSessions", () => {
-    const e = (id: string, tabId: string, state: Session["state"], turnEndedAt?: number): Session => ({ ...s(id, tabId, state), turnEndedAt });
-
-    test("sessions of this tab whose last turn ended after you last looked", () => {
-        const all = [e("a", "t1", "done", 50), e("b", "t1", "working", 10), e("c", "t2", "done", 50), e("d", "t1", "ended", 60)];
-        expect(unreadSessions(all, "t1", 20).map((x) => x.id)).toEqual(["a"]);
-        expect(unreadSessions(all, "t1", undefined).map((x) => x.id)).toEqual(["a", "b"]);
+    test("tabs outside the workspace are never stops; nothing needs you, nowhere to go", () => {
+        expect(nextNeedsYou([s("1", "gone", "waiting")], ["t1"], "t1", undefined, [])).toBeNull();
     });
 });

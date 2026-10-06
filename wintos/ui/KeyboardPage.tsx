@@ -22,7 +22,9 @@ export const KeyboardPage = memo(() => {
     const weekKeys = days.reduce((n, d) => n + d.keys, 0);
     const weekClicks = days.reduce((n, d) => n + d.clicks, 0);
     const top = Math.max(1, ...days.map((d) => d.keys + d.clicks));
-    const clicked = Object.entries(s.clicks).sort((a, b) => b[1] - a[1]).slice(0, 4);
+    // What a key does, as the key card says it: the clicks below name the action they skipped.
+    const does = (key: string) => SECTIONS.flatMap(([, keys]) => keys).find(([k]) => k === key || k.split(" / ").includes(key))?.[1];
+    const clicked = Object.entries(s.clicks).sort((a, b) => b[1] - a[1]).slice(0, 8);
     const unused = neverUsed(SECTIONS, s);
     const earned = badges(s);
     return (
@@ -50,6 +52,13 @@ export const KeyboardPage = memo(() => {
                 </span>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", alignItems: "start", gap: 14, maxWidth: 1100 }}>
+                <Panel label="Worst offenders" note="clicked, though a key does it">
+                    {clicked.length ? (
+                        clicked.map(([key, n]) => <Row key={key} k={key} text={does(key) ?? ""} count={n} />)
+                    ) : (
+                        <Quiet>No clicks on anything with a key. Keep it that way.</Quiet>
+                    )}
+                </Panel>
                 <Panel label="This week" note={weekKeys + weekClicks ? `${((weekKeys / (weekKeys + weekClicks)) * 100).toFixed(1)} % by key` : undefined}>
                     <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 70 }}>
                         {days.map((d) => (
@@ -62,9 +71,6 @@ export const KeyboardPage = memo(() => {
                     <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>
                         {weekKeys} keys · {weekClicks} clicks
                     </span>
-                </Panel>
-                <Panel label="Clicked most" note="use the key instead">
-                    {clicked.length ? clicked.map(([key, n]) => <Row key={key} k={key} text={`${n} click${n === 1 ? "" : "s"}`} />) : <Quiet>No clicks yet.</Quiet>}
                 </Panel>
                 <Panel label="Never used" note={`${unused.length} keys`}>
                     {unused.length ? unused.slice(0, 8).map(([k, what]) => <Row key={k} k={k} text={what} />) : <Quiet>You've used every key on the card.</Quiet>}
@@ -100,10 +106,11 @@ function Panel({ label, note, children }: { label: string; note?: string; childr
     );
 }
 
-const Row = ({ k, text }: { k: string; text: string }) => (
+const Row = ({ k, text, count }: { k: string; text: string; count?: number }) => (
     <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, color: T.secondary, minWidth: 0 }}>
         <Key k={k} label="" />
-        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>
+        <span style={{ minWidth: 0, flexGrow: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>
+        {count !== undefined && <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.brick }}>{count}×</span>}
     </div>
 );
 const Quiet = ({ children }: { children: React.ReactNode }) => <span style={{ fontSize: 12, color: T.faint }}>{children}</span>;

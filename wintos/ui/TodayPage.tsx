@@ -70,7 +70,7 @@ export const TodayPage = memo(() => {
                             {!day.planned && (
                                 <>
                                     {yesterdayItems(day).map((i) => (
-                                        <Item key={i.text} text={i.text} done={i.done} carried={i.carried} carry={i.carried ? undefined : () => void carryToToday(day, i.text)} />
+                                        <Item key={i.text} text={i.text} depth={i.depth} done={i.done} carried={i.carried} carry={i.carried ? undefined : () => void carryToToday(day, i.text)} />
                                     ))}
                                     {!yesterdayItems(day).length && <span style={{ fontSize: 12, color: T.faint }}>Nothing was planned.</span>}
                                 </>
@@ -108,12 +108,12 @@ function Panel({ label, note, warn, keys, children }: { label: string; note?: st
     );
 }
 
-function Item({ text, done, carried, carry }: { text: string; done?: boolean; carried?: boolean; carry?: () => void }) {
+function Item({ text, depth, done, carried, carry }: { text: string; depth: number; done?: boolean; carried?: boolean; carry?: () => void }) {
     return (
-        <div data-item={carry ? "carry" : undefined} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "3px 6px", margin: "0 -6px", borderRadius: 6, fontSize: 13, lineHeight: 1.5, color: done ? T.muted : T.secondary, textDecoration: done ? "line-through" : undefined }}>
+        <div data-item={carry ? "carry" : undefined} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "3px 6px", margin: "0 -6px", marginLeft: depth * 20 - 6, borderRadius: 6, fontSize: 13, lineHeight: 1.5, color: done ? T.muted : T.secondary, textDecoration: done ? "line-through" : undefined }}>
             <span style={{ width: 12, height: 12, marginTop: 4, flexShrink: 0, borderRadius: 3, border: `1.5px solid ${done ? T.moss : T.muted}`, background: done ? T.moss : "transparent" }} />
             <span style={{ flexGrow: 1, minWidth: 0, overflowWrap: "anywhere" }}><Rich text={text} size="full" /></span>
-            {carried && <span style={{ display: "inline-block", flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.moss }}>carried</span>}
+            {carried && <span style={{ display: "inline-block", flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.moss, textDecoration: "none" }}>carried</span>}
             {carry && (
                 <button type="button" data-key="c" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={carry} title="Carry into today" style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                     <Key k="c" label="today" />

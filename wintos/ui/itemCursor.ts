@@ -13,15 +13,15 @@ const items = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>("[da
 const watched = new WeakSet<HTMLElement>();
 function paint(root: HTMLElement): void {
     const at = marked.get(root);
-    items(root).forEach((el, i) => {
-        if (i === at && !el.hasAttribute("data-cursor")) el.setAttribute("data-cursor", "");
-        if (i !== at && el.hasAttribute("data-cursor")) el.removeAttribute("data-cursor");
-    });
+    const target = at === undefined ? undefined : items(root)[at];
+    // Also an element that stopped being an item (a carried row) keeps no mark.
+    root.querySelectorAll("[data-cursor]").forEach((el) => el !== target && el.removeAttribute("data-cursor"));
+    if (target && !target.hasAttribute("data-cursor")) target.setAttribute("data-cursor", "");
 }
 function watch(root: HTMLElement): void {
     if (watched.has(root)) return;
     watched.add(root);
-    new MutationObserver(() => paint(root)).observe(root, { childList: true, subtree: true });
+    new MutationObserver(() => paint(root)).observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-item"] });
 }
 
 function move(root: HTMLElement, delta: number): boolean {

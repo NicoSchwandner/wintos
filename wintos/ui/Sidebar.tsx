@@ -78,7 +78,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const quiet = model ? (expanded ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
     // Snoozed projects join the walk while their group is shown; landing on one wakes it.
     // The cards above the projects are walked too, in the order they show: PRs, On call, Today.
-    const cards = [...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : []), ...(state?.day ? ["card:today"] : [])];
+    const cards = [...(state?.day ? ["card:today"] : []), ...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : [])];
     const switchOrder = model ? [...cards, ...[...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale, ...(showSnoozed ? model.snoozed : [])].map((r) => r.tabId)] : [];
     // Snoozed rows show on their own toggle or while renaming one; the open one always, to find it again.
     const isSnoozedHere = !!model?.snoozed.some((r) => r.tabId === activeTabId);
@@ -163,6 +163,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 data-wintos="sidebar-list"
                 style={{ flexGrow: 1, overflowY: "auto", padding: "4px 12px 12px", display: "flex", flexDirection: "column", gap: 18 }}
             >
+                {state?.day && <TodayCard day={state.day} active={mainView === "day"} cursor={switchTarget === "card:today"} walk={<WalkKeys />} />}
                 {state && (
                     <div style={{ display: "flex", gap: 8 }}>
                         {queue ? (
@@ -178,7 +179,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         {loading.map((p) => <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
-                {state?.day && <TodayCard day={state.day} active={mainView === "day"} cursor={switchTarget === "card:today"} walk={<WalkKeys />} />}
                 {meetings.length > 0 && <MeetingCard meetings={meetings} />}
                 <MeetingEdge meetings={meetings} />
                 {offline || !model ? (

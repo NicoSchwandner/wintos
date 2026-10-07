@@ -150,14 +150,15 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             )}
             {/* The header drags the window, as a macOS title bar would; nothing in it is clickable. Its
                 top clears the window buttons, which sit over the sidebar; full screen has none. */}
-            <div style={{ padding: `${fullScreen ? 12 : 36}px 16px 13px`, display: "flex", alignItems: "flex-end", justifyContent: "space-between", WebkitAppRegion: "drag" } as React.CSSProperties}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                    <span style={{ fontFamily: T.display, fontSize: 21, lineHeight: 1 }}>WintOS</span>
-                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>
-                        <DateTime />
-                    </span>
+            <div style={{ padding: `${fullScreen ? 12 : 36}px 16px 13px`, display: "flex", flexDirection: "column", gap: 4, WebkitAppRegion: "drag" } as React.CSSProperties}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+                    <span style={{ fontFamily: T.display, fontSize: 27, lineHeight: 1 }}>WintOS</span>
+                    <Clock />
                 </div>
-                <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{tabIds.length} {tabIds.length === 1 ? "project" : "projects"}</span>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+                    <Today />
+                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{tabIds.length} {tabIds.length === 1 ? "project" : "projects"}</span>
+                </div>
             </div>
             <div
                 data-wintos="sidebar-list"
@@ -356,13 +357,14 @@ function QuietRow(p: RowProps) {
 
 
 // Its own component so the per-second tick re-renders only this line, not the sidebar.
-function DateTime() {
+function Clock() {
     const d = new Date(useNow(1_000));
-    return (
-        <>
-            {d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).toLowerCase()} · {d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
-        </>
-    );
+    return <span style={{ fontFamily: T.mono, fontSize: 17, color: T.text, fontVariantNumeric: "tabular-nums" }}>{d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}</span>;
+}
+
+function Today() {
+    const d = new Date(useNow(60_000));
+    return <span style={{ fontSize: 12, color: T.secondary }}>{d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</span>;
 }
 
 // A panel's title from its last run, so after a restart its loading card says "On call", not

@@ -95,10 +95,10 @@ function RailToggle({ open }: { open: boolean }) {
             type="button"
             aria-label={open ? "Hide the notes" : "Show the notes"}
             aria-expanded={open}
-            title={open ? "Hide the notes" : "Show the notes (⌘L)"}
+            title={open ? "Hide the notes (⌥⌘L)" : "Show the notes (⌥⌘L)"}
             tabIndex={-1}
             onPointerDown={(e) => (e.stopPropagation(), e.preventDefault())}
-            data-key={open ? "" : "⌘L"}
+            data-key="⌥⌘L"
             onClick={(e) => (e.stopPropagation(), setRailCollapsed(open))}
             onMouseEnter={() => setHover(true)}
             onMouseLeave={() => setHover(false)}
@@ -107,6 +107,10 @@ function RailToggle({ open }: { open: boolean }) {
             style={{ WebkitAppRegion: "no-drag", position: "absolute", top: 10, left: open ? -12 : -34, zIndex: 20, width: 24, height: 24, borderRadius: 12, border: `1px solid ${hover ? T.borderActive : T.border}`, background: T.ground, color: hover ? T.title : T.muted, opacity: open || hover ? 1 : 0.55, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, boxShadow: open ? "none" : "0 2px 8px rgba(0,0,0,0.4)" } as React.CSSProperties}
         >
             <i className={`fa-solid ${open ? "fa-chevron-right" : "fa-chevron-left"}`} style={{ fontSize: 10 }} />
+            {/* The key beside the button, on the terminals' side, as every WintOS button shows its key. */}
+            <span style={{ position: "absolute", right: 30, pointerEvents: "none", opacity: open || hover ? 1 : 0.8 }}>
+                <Key k="⌥⌘L" label="" />
+            </span>
         </button>
     );
 }

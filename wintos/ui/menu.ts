@@ -9,7 +9,7 @@ import { toggleInbox } from "./inbox";
 import { FLAG_EVENT, mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, tickModeAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
-import { setRailCollapsed } from "./notes/railWidth";
+import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
 import { isInboxTab } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
@@ -85,6 +85,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:s", "show-snoozed"],
     ["Option:Cmd:r", "restart-terminal"],
     ["Option:Cmd:x", "tick"],
+    ["Option:Cmd:c{KeyL}", "rail"],
     ["Cmd:h", "focus-left"],
     ["Cmd:l", "focus-right"],
 ];
@@ -147,6 +148,14 @@ function stepSideways(right: boolean): void {
     }
     if (right) return void (setRailCollapsed(false), focusArea("notes"));
     if (zone !== "pane") focusArea("terminal");
+}
+
+// ⌥⌘L: the notes rail folded away or back, focus following it in and out.
+function toggleRail(): void {
+    const fold = !globalStore.get(railCollapsedAtom);
+    setRailCollapsed(fold);
+    if (!fold) return focusArea("notes");
+    if (document.activeElement?.closest("[data-wintos=notes-rail]")) focusArea("terminal");
 }
 
 // The previous/next pane of this tab, in layout order, wrapping.
@@ -248,6 +257,7 @@ export function runAction(action: string): void {
     if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));
     if (action === "show-snoozed") return toggleStoredFlag("wintos:show-snoozed");
     if (action === "restart-terminal") return restartTerminal();
+    if (action === "rail") return toggleRail();
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);
     if (b) createBlock(b.def, false, b.ephemeral);
 }

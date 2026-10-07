@@ -423,3 +423,40 @@ describe("the daily recap", () => {
         expect(await (await fetch(base + "/day/recap")).json()).toEqual({ date: day, bullets: ["Idea skill: We merged the two lanes."] });
     });
 });
+
+describe("the shelf", () => {
+    const script = (id: string) => `cd '/w' && claude --resume '${id}'`;
+    const shelfOf = async () => (await (await fetch(base + "/state")).json()).shelf;
+
+    test("a closed session is kept with its project, its label and what it was last about", async () => {
+        const transcript = join(root, "t.jsonl");
+        writeFileSync(transcript, JSON.stringify({ timestamp: "2026-10-06T15:00:00Z", type: "system", subtype: "away_summary", content: "We merged the two lanes. Next, rerun it." }));
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, transcript_path: transcript });
+        expect((await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "merge the lanes" })).status).toBe(200);
+        expect(await shelfOf()).toEqual({ "tab-1": [expect.objectContaining({ sessionId: prompt.session_id, label: "merge the lanes", gist: "We merged the two lanes." })] });
+    });
+
+    test("it follows the project's folder into a reopened tab, and survives a restart", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await post("/projects/tab-1/shelf", { script: script("s1"), label: "x" });
+        await post("/projects/tab-1/reopen", { tabId: "tab-2" });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect(Object.keys(await shelfOf())).toEqual(["tab-2"]);
+    });
+
+    test("a session that runs again leaves the shelf", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
+        await event({ ...prompt, hook_event_name: "SessionStart" });
+        expect(await shelfOf()).toEqual({});
+    });
+
+    test("only the hook's resume command, and only for a project", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        expect((await post("/projects/tab-1/shelf", { script: "rm -rf ~", label: "x" })).status).toBe(400);
+        expect((await post("/projects/tab-9/shelf", { script: script("s1"), label: "x" })).status).toBe(404);
+    });
+});

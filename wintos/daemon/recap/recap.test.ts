@@ -20,6 +20,7 @@ describe("lastRecaps", () => {
         "not json",
     ].join("\n");
     test("the day's last recap of a transcript", () => expect(lastRecaps(jsonl, "2026-10-06")).toBe("We merged the lanes. Next, rerun the test."));
+    test("any day: the latest", () => expect(lastRecaps(jsonl, "")).toBe("Today's."));
     test("none that day", () => expect(lastRecaps(jsonl, "2026-10-05")).toBeUndefined());
 });
 

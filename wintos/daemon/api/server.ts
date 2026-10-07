@@ -1,7 +1,7 @@
 import { readFileSync, watch, writeFileSync, type FSWatcher } from "fs";
 import http from "http";
 import type { AddressInfo } from "net";
-import { join } from "path";
+import { basename, join } from "path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { injection } from "../inject";
 import { Plugin, PluginRunner } from "../plugins/runner";
@@ -10,6 +10,7 @@ import { ProjectStore } from "../projects/store";
 import type { Journal } from "../journal/journal";
 import { dayRecapper } from "../recap/day";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
+import { resumedSession, shelve, unshelve, type Shelf } from "../shelf/shelf";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
@@ -44,6 +45,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // The keyboard game's score, per instance like the rest of this folder.
     const keyboardFile = join(opts.root, ".keyboard.json");
     let keyboard = readJson<KeyStats>(keyboardFile, emptyStats());
+    const shelfFile = join(opts.root, ".shelf.json");
+    let shelf = readJson<Shelf>(shelfFile, {});
+    const saveShelf = (next: Shelf) => ((shelf = next), writeFileSync(shelfFile, JSON.stringify(shelf)));
     const sockets = new Set<WebSocket>();
     let port = opts.port;
 
@@ -59,6 +63,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         seen,
         ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
         keyboard,
+        // By the tab the project's folder belongs to now.
+        shelf: Object.fromEntries(store.list().flatMap((p) => (p.id && shelf[basename(p.dir)] ? [[p.id, shelf[basename(p.dir)]]] : []))),
         ...(opts.lunch ? { lunch: opts.lunch } : {}),
         ...(opts.workday ? { workday: opts.workday } : {}),
     });
@@ -148,6 +154,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     return send(res, 400, "need string tabId, blockId, payload.session_id, payload.hook_event_name");
                 sessions = reduceSession(sessions, ev, Date.now());
                 saveSessions();
+                if (Object.values(shelf).some((l) => l.some((i) => i.sessionId === p.session_id))) saveShelf(unshelve(shelf, p.session_id));
                 const tp = (p as { transcript_path?: unknown }).transcript_path;
                 recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now());
                 if (p.hook_event_name === "UserPromptSubmit") markSeen(ev.tabId); // you read it to answer it
@@ -195,6 +202,18 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!isSafe(b?.tabId)) return send(res, 400, "need the new tab's id");
                 const r = store.reopen(decodeURIComponent(reopen[1]), b.tabId);
                 if (r !== "ok") return send(res, r === "taken" ? 409 : 404, r);
+                broadcast();
+                return send(res, 200, "");
+            }
+            const toShelf = /^\/projects\/([^/]+)\/shelf$/.exec(url.pathname);
+            if (req.method === "POST" && toShelf) {
+                const b = (await body(req)) as { script?: unknown; label?: unknown };
+                const sessionId = typeof b?.script === "string" ? resumedSession(b.script) : undefined;
+                if (!sessionId) return send(res, 400, "need the pane's resume command");
+                const label = typeof b.label === "string" && isSafe(b.label) ? b.label.slice(0, MAX_TITLE) : "session";
+                const p = store.byTab(decodeURIComponent(toShelf[1]));
+                if (!p) return send(res, 404, "no project for this tab");
+                saveShelf(shelve(shelf, basename(p.dir), { sessionId, script: b.script as string, label, gist: recapper.gistOf(sessionId), at: Date.now() }, 14));
                 broadcast();
                 return send(res, 200, "");
             }

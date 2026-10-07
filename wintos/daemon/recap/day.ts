@@ -1,7 +1,7 @@
 import { execFile } from "child_process";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { cutBullets, lastRecaps, parseBullets, recapPrompt, recordActivity, type Activity, type RecapItem } from "./recap";
+import { cutBullets, gist, lastRecaps, parseBullets, recapPrompt, recordActivity, type Activity, type RecapItem } from "./recap";
 
 const KEEP_DAYS = 14;
 const isoDay = (t: number) => {
@@ -65,7 +65,14 @@ export function dayRecapper(root: string, cmd?: string, extra?: string) {
         return { date: day, bullets };
     };
 
-    return { record, recap };
+    // What a session was last about, from its latest recap on any day.
+    const gistOf = (sessionId: string): string | undefined => {
+        const transcript = Object.values(activity).flatMap((d) => Object.values(d)).map((p) => p.sessions[sessionId]).find(Boolean);
+        const last = transcript && lastRecaps(safeText(transcript), "");
+        return last ? gist(last) : undefined;
+    };
+
+    return { record, recap, gistOf };
 }
 
 function safeText(file: string): string {

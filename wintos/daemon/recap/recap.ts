@@ -17,7 +17,7 @@ export function recordActivity(a: Activity, day: string, tabId: string, title: s
 }
 
 // The day's last recap in a transcript (Claude Code's away summary). Timestamps are UTC, so a
-// late-evening recap can land on the next day's date; good enough for a daily.
+// late-evening recap can land on the next day's date; good enough for a daily. Day "": any day.
 export function lastRecaps(jsonl: string, day: string): string | undefined {
     let last: string | undefined;
     for (const line of jsonl.split("\n")) {
@@ -35,12 +35,11 @@ const MAX = 5;
 const noTickets = (s: string) => s.replace(/\s*\(?\b[A-Z][A-Z0-9]+-\d+\b\)?/g, "").replace(/\s{2,}/g, " ").trim();
 const short = (s: string, n = 110) => (s.length > n ? `${s.slice(0, s.lastIndexOf(" ", n - 1))}…` : s);
 
+const firstSentence = (s: string) => /^.*?[.!?](?=\s|$)/.exec(s)?.[0] ?? s;
+export const gist = (recap: string) => short(firstSentence(noTickets(recap)));
+
 export function cutBullets(items: RecapItem[]): string[] {
-    return items.slice(0, MAX).map((i) => {
-        const recap = noTickets(i.recaps[i.recaps.length - 1] ?? "");
-        const first = /^.*?[.!?](?=\s|$)/.exec(recap)?.[0] ?? recap;
-        return short(`${i.title}: ${first}`);
-    });
+    return items.slice(0, MAX).map((i) => short(`${i.title}: ${firstSentence(noTickets(i.recaps[i.recaps.length - 1] ?? ""))}`));
 }
 
 // extra: the user's own addition, e.g. another source to search; {day} becomes the day.

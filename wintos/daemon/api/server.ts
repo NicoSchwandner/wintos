@@ -8,6 +8,7 @@ import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
 import type { Journal } from "../journal/journal";
+import { dayRecapper } from "../recap/day";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session } from "../sessions/reduce";
 
@@ -24,8 +25,13 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
+    const recapper = dayRecapper(opts.root, opts.recapCmd, opts.recapExtra);
+    // Ready before you open the Today page: the summarizer takes a minute. Cached, so this is
+    // one run a day.
+    const warmRecap = setInterval(() => void recapper.recap(Date.now()).catch(() => {}), 30 * 60_000);
+    warmRecap.unref();
     const uiOrigins = new Set(opts.uiOrigins ?? [...DEFAULT_UI_ORIGINS, ...(process.env.WINTOS_UI_ORIGINS?.split(",") ?? [])]);
     // Saved on every change and restored at start, so a restart doesn't forget who waits on you.
     const sessionFile = join(opts.root, ".sessions.json");
@@ -142,6 +148,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     return send(res, 400, "need string tabId, blockId, payload.session_id, payload.hook_event_name");
                 sessions = reduceSession(sessions, ev, Date.now());
                 saveSessions();
+                const tp = (p as { transcript_path?: unknown }).transcript_path;
+                recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now());
                 if (p.hook_event_name === "UserPromptSubmit") markSeen(ev.tabId); // you read it to answer it
                 const text =
                     p.hook_event_name === "UserPromptSubmit" ? injection(store.byTab(ev.tabId), store.mineDiff(ev.tabId, p.session_id)) : "";
@@ -153,6 +161,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 return (await runner.run(decodeURIComponent(plugin[1]))) ? send(res, 200, "") : send(res, 404, "no such plugin");
             }
             if (req.method === "GET" && url.pathname === "/projects/texts") return json(res, store.texts());
+            if (req.method === "GET" && url.pathname === "/day/recap") return json(res, await recapper.recap(Date.now()));
             if (req.method === "POST" && url.pathname === "/keyboard") {
                 const b = (await body(req)) as { kind?: unknown; key?: unknown };
                 if ((b?.kind !== "key" && b?.kind !== "click") || typeof b.key !== "string" || !b.key || b.key.length > 24) return send(res, 400, "need kind key|click and the key");
@@ -294,6 +303,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         close: () => {
             watcher?.close();
             journalWatcher?.close();
+            clearInterval(warmRecap);
             runner.stop();
             clearTimeout(pending);
             for (const s of sockets) s.terminate();

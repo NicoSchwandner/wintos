@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import type { AddressInfo } from "net";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -400,5 +400,26 @@ describe("seen", () => {
     test("prompting a session means you read what came before", async () => {
         await event(prompt);
         expect(await seenOf()).toBeGreaterThan(0);
+    });
+});
+
+describe("the daily recap", () => {
+    const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    test("a session's events note its project and transcript for the day", async () => {
+        await event({ ...prompt, transcript_path: "/t/s.jsonl" });
+        const activity = JSON.parse(readFileSync(join(root, ".activity.json"), "utf8"));
+        expect(activity[iso(new Date())]["tab-1"]).toMatchObject({ prompts: 1, sessions: { [prompt.session_id]: "/t/s.jsonl" } });
+    });
+
+    test("the last worked day before today, one bullet per project from its recap", async () => {
+        const day = "2026-10-06";
+        const transcript = join(root, "t.jsonl");
+        writeFileSync(transcript, JSON.stringify({ timestamp: `${day}T15:00:00Z`, type: "system", subtype: "away_summary", content: "We merged the two lanes. Next, rerun it." }));
+        writeFileSync(join(root, ".activity.json"), JSON.stringify({ [day]: { "tab-1": { title: "Idea skill", prompts: 3, sessions: { s: transcript } } } }));
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect(await (await fetch(base + "/day/recap")).json()).toEqual({ date: day, bullets: ["Idea skill: We merged the two lanes."] });
     });
 });

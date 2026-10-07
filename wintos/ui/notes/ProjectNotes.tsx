@@ -58,7 +58,7 @@ function Line({ lead, size, children }: { lead: React.ReactNode; size: Size; chi
 // Long lists stay short: past this many, the rest (later decisions, ticked Built items) wait behind a button.
 const LONG = 4;
 
-function More({ open, label, onClick }: { open: boolean; label: string; onClick: () => void }) {
+export function More({ open, label, onClick }: { open: boolean; label: string; onClick: () => void }) {
     return (
         <button type="button" data-more={open ? "open" : "closed"} data-key="m" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 8, padding: 0, background: "transparent", border: "none", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}>
             {open ? "Show fewer" : label}

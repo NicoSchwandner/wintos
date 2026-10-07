@@ -1,17 +1,17 @@
 import { useAtomValue } from "jotai";
-import { memo, useEffect, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { carryToToday, lastDayName, leftFromYesterday, markPlanned, saveFocus, yesterdayItems } from "./day";
 import { dayTimeline, DEFAULT_WORKDAY, focusList, parseSpan, type Block } from "./dayplan";
 import { editMine } from "./focus";
 import { Key } from "./Key";
 import { meetingsFrom } from "./meetings";
 import { Mine } from "./notes/Mine";
-import { Rich } from "./notes/ProjectNotes";
+import { More, Rich } from "./notes/ProjectNotes";
 import { editingMineAtom } from "./notes/state";
 import { T } from "./tokens";
 import { useFocusOnMount } from "./useFocusOnMount";
 import { useNow } from "./useNow";
-import { useWintos } from "./useWintos";
+import { daemonFetch, useWintos } from "./useWintos";
 import { useZoneKeys } from "./zones";
 import { cursorKeys, startCursor } from "./itemCursor";
 
@@ -65,6 +65,7 @@ export const TodayPage = memo(() => {
             <div style={{ flexGrow: 1, minHeight: 0, display: "grid", gridTemplateColumns: "clamp(220px, 26vw, 400px) minmax(0, 760px)", gap: 20, paddingBottom: 18 }}>
                 <Timeline now={now} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflowY: "auto" }}>
+                    <WhatYouDid today={day.date} />
                     {y && (
                         <Panel label={lastDayName(y.date, day.date)} note={day.planned ? `${yItems.filter((i) => i.done).length} done · ${yesterdayItems(day).filter((i) => i.carried).length} carried` : undefined} keys={!day.planned && yesterdayItems(day).some((i) => !i.carried) && <Key k="j k · c" label="carry" />}>
                             {!day.planned && (
@@ -93,6 +94,36 @@ export const TodayPage = memo(() => {
 TodayPage.displayName = "TodayPage";
 
 // keys: the panel's own shortcuts, shown on it rather than in a footer.
+// For the daily: the last worked day in at most five lines, condensed by the daemon from the
+// recaps your Claude sessions wrote in each project. Folded; m opens it.
+function WhatYouDid({ today }: { today: string }) {
+    const [recap, setRecap] = useState<{ date: string; bullets: string[] } | null | undefined>();
+    const [open, setOpen] = useState(false);
+    useEffect(() => {
+        let live = true;
+        daemonFetch("/day/recap")
+            .then((r) => (r.ok ? r.json() : null))
+            .then((r) => live && setRecap(r), () => live && setRecap(null));
+        return () => void (live = false);
+    }, [today]);
+    if (recap === null || (recap && !recap.bullets.length)) return null;
+    const label = recap ? `What you did ${lastDayName(recap.date, today).replace(/^(Yesterday|Last)/, (w) => w.toLowerCase())}` : "What you did";
+    return (
+        <Panel label={label} note={recap ? undefined : "summarizing…"}>
+            {open && recap && (
+                <ul style={{ margin: 0, paddingLeft: 18, listStyle: "disc", display: "flex", flexDirection: "column", gap: 4, fontSize: 13, lineHeight: 1.5, color: T.secondary }}>
+                    {recap.bullets.map((b) => (
+                        <li key={b}>
+                            <Rich text={b} size="full" />
+                        </li>
+                    ))}
+                </ul>
+            )}
+            {recap && <More open={open} label="Show it, for the daily" onClick={() => setOpen(!open)} />}
+        </Panel>
+    );
+}
+
 function Panel({ label, note, warn, keys, children }: { label: string; note?: string; warn?: boolean; keys?: React.ReactNode; children: React.ReactNode }) {
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", background: T.card, border: `1px solid ${warn ? T.apricot : T.border}`, borderRadius: 10 }}>

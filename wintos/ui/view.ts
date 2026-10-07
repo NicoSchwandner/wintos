@@ -5,8 +5,9 @@ import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
 import { GROUPS, isSnoozed, isStacked, lastMovement, projectPrs, qualifier, type Group, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
 import type { Session } from "../daemon/sessions/reduce";
+import type { Shelved } from "../daemon/shelf/shelf";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; projectSnoozes?: Record<string, number>; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats };
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; projectSnoozes?: Record<string, number>; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]> };
 export type Tone = "apricot" | "brick" | "secondary";
 export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
 

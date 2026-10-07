@@ -1,5 +1,5 @@
 import { globalStore } from "@/app/store/jotaiStore";
-import { atoms, getApi } from "@/store/global";
+import { atoms, createBlock, getApi } from "@/store/global";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import type { Session } from "../daemon/sessions/reduce";
 import { nextNeedsYou, Target } from "./sessions";
@@ -81,14 +81,15 @@ export function focusSession(t: Target): void {
 
 // Arriving in a project: on the session asked for, else back in an unsaved mine.md edit (its
 // view left as it was, so the draft stays), else on the terminals.
-function landOn({ blockId, find }: Target): void {
+function landOn({ blockId, find, resume }: Target): void {
     if (find) {
         rememberReturn();
         globalStore.set(findInNotesAtom, find);
         return globalStore.set(mainViewAtom, "notes");
     }
-    if (!blockId && mineEditor()) return focusMineEditor();
+    if (!blockId && mineEditor() && !resume) return focusMineEditor();
     globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
+    if (resume) return void createBlock({ meta: { view: "term", controller: "shell", "cmd:initscript": resume } });
     wantPane(blockId ? "landing on a session" : "landing on the terminals");
     if (!blockId) return focusArea("terminal");
     // Magnify is a mode you choose (⌘M): landing on a session keeps it, never starts it. An

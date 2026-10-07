@@ -56,7 +56,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
                         style={{ display: view === "terminal" ? "flex" : "none" }}
                     >
                         <PaneStrip tabId={tabId} />
-                        {empty ? <EmptyProject /> : children}
+                        {empty ? <EmptyProject tabId={tabId} /> : children}
                     </div>
                 </div>
                 {view === "terminal" && <NotesRail tabId={tabId} />}
@@ -86,8 +86,9 @@ function useMagnifyFollowsFocus(): void {
 }
 
 // Closing the last pane leaves the project open; say what to do next.
-function EmptyProject() {
-    const keys: [string, string][] = [["⇧⌘T", "new Claude session"], ["⌘T", "new terminal"], ["⌘J ⌘K", "another project"], ["⇧⌘W", "close this project"]];
+function EmptyProject({ tabId }: { tabId: string }) {
+    const shelved = useWintos().state?.shelf?.[tabId]?.length ?? 0;
+    const keys: [string, string][] = [...(shelved ? [["⇧⌘P", `resume one of ${shelved} shelved (type shelved)`] as [string, string]] : []), ["⇧⌘T", "new Claude session"], ["⌘T", "new terminal"], ["⌘J ⌘K", "another project"], ["⇧⌘W", "close this project"]];
     return (
         <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, fontFamily: T.ui, color: T.muted }}>
             <span style={{ fontFamily: T.display, fontSize: 24, color: T.secondary }}>Nothing open in this project</span>

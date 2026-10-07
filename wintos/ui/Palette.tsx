@@ -1,7 +1,8 @@
 import { globalStore } from "@/app/store/jotaiStore";
 import { atoms } from "@/store/global";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { closeOverlay, enterProject, focusSession, reopenProject } from "./focus";
+import { closeOverlay, enterProject, focusSession, reopenProject, toggleOverlay } from "./focus";
+import { liveSessions } from "./sessions";
 import { runAction, runKey } from "./menu";
 import { groupHits, searchPalette, type Field, type Hit, type Kind, type PaletteItem } from "./palette-search";
 import { pluginPanels } from "./panels";
@@ -19,11 +20,22 @@ type Texts = Record<string, { body: string; mine: string }>;
 // Task ids (DEV-29372) a project names in its title or notes.
 const taskIds = (...texts: string[]) => [...new Set(texts.join(" ").match(/\b[A-Z]+-\d+\b/g) ?? [])].join(" ");
 
+// The strip's "N shelved" opens the palette already searching.
+let startQuery = "";
+export function openPalette(q: string): void {
+    startQuery = q;
+    toggleOverlay("palette");
+}
+
 // ⇧⌘P: everything, including the projects the sidebar dropped and the closed ones (PaletteC).
 export const Palette = memo(({ names }: { names: Record<string, string | undefined> }) => {
     const { state } = useWintos();
     const now = useNow();
-    const [q, setQ] = useState("");
+    const [q, setQ] = useState(() => {
+        const given = startQuery;
+        startQuery = "";
+        return given;
+    });
     const [cursor, setCursor] = useState(0);
     const [expanded, setExpanded] = useState(new Set<Kind>());
     const [texts, setTexts] = useState<Texts>({});
@@ -193,8 +205,18 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
             run: () => runAction(`open-page:${pr.url}`),
         });
     }
-    for (const s of state.sessions.filter((s) => s.state !== "ended" && tabIds.includes(s.tabId)))
+    // Only sessions whose pane is still there: a closed pane's session is on the shelf, or gone.
+    const blocksOf = Object.fromEntries(tabIds.map((id) => [id, globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))?.blockids ?? []]));
+    for (const s of liveSessions(state.sessions, blocksOf).filter((s) => s.state !== "ended" && tabIds.includes(s.tabId)))
         out.push({ id: `s:${s.id}`, kind: "session", title: s.label ?? "session", subtitle: `${s.state} · ${title(s.tabId)}`, run: () => focusSession({ tabId: s.tabId, blockId: s.blockId }) });
+    for (const id of tabIds)
+        for (const s of state.shelf?.[id] ?? [])
+            out.push({
+                id: `sh:${s.sessionId}`, kind: "session", title: s.label,
+                subtitle: [`shelved ${relTime(now - s.at)} ago`, title(id), s.gist].filter(Boolean).join(" · "),
+                fields: [{ text: s.gist ?? "", weight: 25 }], recency: s.at,
+                run: () => focusSession({ tabId: id, blockId: "", resume: s.script }),
+            });
     const here = title(activeTab);
     // The key's own path (runKey), so an action does from here exactly what its key does.
     const action = (id: string, t: string, hint: string, a: string): PaletteItem => ({ id: `a:${id}`, kind: "action", title: t, hint, run: () => void runKey(a) });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { allowedInInbox, blockDefFor, focusedPageUrl, newSessionScript, paneShowing } from "./menu";
+import { allowedInInbox, blockDefFor, focusedPageUrl, newSessionScript, paneShowing, shelvable } from "./menu";
 
 const widgets = {
     "defwidget@terminal": { blockdef: { meta: { view: "term", controller: "shell" } } },
@@ -66,5 +66,14 @@ describe("allowedInInbox", () => {
     test("the Inbox opens pages and moves between them; it starts no terminals or Claude sessions", () => {
         for (const a of ["palette", "keymap", "prs", "panel", "open-page:https://github.com/acme/api/pull/1", "switch-next", "project", "copy-url", "pane-next", "browser", "focus-left", "focus-right"]) expect([a, allowedInInbox(a)]).toEqual([a, true]);
         for (const a of ["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes"]) expect([a, allowedInInbox(a)]).toEqual([a, false]);
+    });
+});
+
+describe("shelvable", () => {
+    test("a session pane with the hook's resume command goes on the shelf", () =>
+        expect(shelvable({ "cmd:initscript": "cd '/w' && claude --resume 'abc'" })).toBe("cd '/w' && claude --resume 'abc'"));
+    test("a fresh session, one ended with /exit, a plain terminal or a page just close", () => {
+        for (const meta of [{ "cmd:initscript": "cd '/w' && claude" }, { "cmd:initscript": "" }, { view: "term" }, { view: "web", url: "https://x" }, undefined])
+            expect(shelvable(meta as MetaType)).toBeUndefined();
     });
 });

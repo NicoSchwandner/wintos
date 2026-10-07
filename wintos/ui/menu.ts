@@ -14,7 +14,7 @@ import { isInboxTab } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
 import { installFocusRing } from "./focusRing";
-import { parkBlock, setProjectSnoozed } from "./useWintos";
+import { daemonFetch, parkBlock, setProjectSnoozed } from "./useWintos";
 import { flog } from "./focusLog";
 import { meetingToJoin } from "./meetings";
 import { installKeyGame } from "./keyGame";
@@ -266,8 +266,22 @@ export function wintosClose(): boolean {
     });
     if (action === "overlay") closeOverlay();
     if (action === "view") closeNotesView();
+    if (action === "pane") shelvePane(focused?.data?.blockId);
     return action !== "pane";
 }
+
+// Closing a Claude session's pane keeps it on the project's shelf, to resume from ⇧⌘P. A session
+// you ended with /exit has no resume command (the hook clears it) and just closes.
+export function shelvePane(blockId: string | undefined): void {
+    const script = blockId && shelvable(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId)))?.meta);
+    if (!script) return;
+    const label = latestSessions().find((s) => s.blockId === blockId)?.label ?? "session";
+    void daemonFetch(`/projects/${encodeURIComponent(globalStore.get(atoms.staticTabId))}/shelf`, { method: "POST", body: { script, label } });
+}
+export const shelvable = (meta: MetaType | undefined): string | undefined => {
+    const script = meta?.["cmd:initscript"];
+    return typeof script === "string" && script.includes(" claude --resume ") ? script : undefined;
+};
 
 // Esc forwarded out of a page in the Inbox hands focus back to its list.
 export function wintosEscape(): boolean {

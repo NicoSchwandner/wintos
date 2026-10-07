@@ -306,6 +306,32 @@ await scenario("11 · ⇧⌘Y in a project and in the Inbox shows the Today page
     }
 });
 
+await scenario("12 · closing a session pane shelves it, and ⇧⌘P resumes it as a new pane", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const shelf = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).shelf?.[tabId] ?? [];
+    const panes = () => sql(`select json_array_length(data->'blockids') from db_tab where oid='${tabId}'`);
+    // What the hook leaves on a session's pane after its first prompt.
+    // A project's shell starts when its terminal first shows: give it a moment to take input.
+    await until("a terminal", () => evalIn(t, "!!document.querySelector('.xterm-helper-textarea')"));
+    await sleep(2500);
+    await cdpFocus(t, ".xterm-helper-textarea");
+    await cdp(t, "Input.insertText", { text: `wsh setmeta -b this "cmd:initscript=cd '/tmp' && claude --resume 'e2e-shelf'"` });
+    await press(t, "Enter", { keyCode: 13 });
+    await until("the resume command on the pane", () => sql(`select count(*) from db_block where data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`) === "1");
+    const before = panes();
+    await evalIn(t, `document.querySelector('button[data-key="⌘W"]').click()`);
+    await until("the session on the shelf", async () => (await shelf()).some((s) => s.sessionId === "e2e-shelf"));
+    await until("the pane closed", () => panes() !== before);
+    await until("the strip's shelved chip", () => evalIn(t, `document.body.innerText.includes("1 shelved")`));
+    await press(t, "p", { mods: ["meta", "shift"] });
+    await until("the palette", () => evalIn(t, `!!document.querySelector("[data-wintos=palette]")`));
+    await cdp(t, "Input.insertText", { text: "shelved" });
+    await sleep(300);
+    await press(t, "Enter", { keyCode: 13 });
+    await until("a new pane resuming it", () => sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j, db_block b where t.oid='${tabId}' and b.oid=j.value and b.data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`) === "1");
+});
+
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
 // must not cost the run its results.
 await scenario("clean-up · the panes this run opened are closed", async () => {

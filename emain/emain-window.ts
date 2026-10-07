@@ -264,20 +264,18 @@ export class WaveBrowserWindow extends BaseWindow {
                 return;
             }
             console.log("enter-full-screen event", this.getContentBounds());
-            const tabView = this.activeTabView;
-            if (tabView) {
-                tabView.webContents.send("fullscreen-change", true);
-            }
+            // WintOS: every loaded tab, not only the active one; a cached tab shown later would
+            // otherwise lay out for the wrong mode (window buttons that are not there).
+            for (const tv of this.allLoadedTabViews.values()) if (!tv.webContents.isDestroyed()) tv.webContents.send("fullscreen-change", true);
             this.activeTabView?.positionTabOnScreen(this.getContentBounds());
         });
         this.on("leave-full-screen", async () => {
             if (this.isDestroyed()) {
                 return;
             }
-            const tabView = this.activeTabView;
-            if (tabView) {
-                tabView.webContents.send("fullscreen-change", false);
-            }
+            // WintOS: every loaded tab, not only the active one; a cached tab shown later would
+            // otherwise lay out for the wrong mode (window buttons that are not there).
+            for (const tv of this.allLoadedTabViews.values()) if (!tv.webContents.isDestroyed()) tv.webContents.send("fullscreen-change", false);
             this.activeTabView?.positionTabOnScreen(this.getContentBounds());
         });
         this.on("focus", () => {
@@ -493,6 +491,8 @@ export class WaveBrowserWindow extends BaseWindow {
             oldActiveView.isActiveTab = false;
         }
         this.activeTabView = tabView;
+        // WintOS: a tab loaded after the switch to or from full screen learns the mode here.
+        if (!tabView.webContents.isDestroyed()) tabView.webContents.send("fullscreen-change", this.isFullScreen());
         this.allLoadedTabViews.set(tabView.waveTabId, tabView);
         if (!tabInitialized) {
             console.log("initializing a new tab", primaryStartupTab ? "(primary startup)" : "");

@@ -340,6 +340,12 @@ export function initIpcHandlers() {
         }
     });
 
+    // WintOS: a tab asks for the window's mode when it starts, as it may have missed the event.
+    electron.ipcMain.on("wintos-is-fullscreen", (event) => {
+        const ww = getWaveWindowByWebContentsId(event.sender.id);
+        event.returnValue = !!ww && !ww.isDestroyed() && ww.isFullScreen();
+    });
+
     electron.ipcMain.on("register-global-webview-keys", (event, keys: string[]) => {
         webviewKeys = keys ?? [];
     });

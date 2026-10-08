@@ -31,6 +31,8 @@ export const TodayPage = memo(() => {
     const day = state?.day;
     const editing = useAtomValue(editingMineAtom);
     const left = day ? leftFromYesterday(day) : [];
+    // Once the day is planned, yesterday's list folds to its count; m shows it again.
+    const [showYesterday, setShowYesterday] = useState(false);
     // The page opens on your first open item, so ⇧⌘Y x ticks it.
     const hasDay = !!day;
     useEffect(() => {
@@ -68,7 +70,7 @@ export const TodayPage = memo(() => {
                     <WhatYouDid today={day.date} />
                     {y && (
                         <Panel label={lastDayName(y.date, day.date)} note={day.planned ? `${yItems.filter((i) => i.done).length} done · ${yesterdayItems(day).filter((i) => i.carried).length} carried` : undefined} keys={!day.planned && yesterdayItems(day).some((i) => !i.carried) && <Key k="j k · c" label="carry" />}>
-                            {!day.planned && (
+                            {(!day.planned || showYesterday) && (
                                 <>
                                     {yesterdayItems(day).map((i) => (
                                         <Item key={i.text} text={i.text} depth={i.depth} done={i.done} carried={i.carried} carry={i.carried ? undefined : () => void carryToToday(day, i.text)} />
@@ -76,6 +78,7 @@ export const TodayPage = memo(() => {
                                     {!yesterdayItems(day).length && <span style={{ fontSize: 12, color: T.faint }}>Nothing was planned.</span>}
                                 </>
                             )}
+                            {day.planned && yItems.length > 0 && <More open={showYesterday} label={`Show the ${yItems.length} items`} onClick={() => setShowYesterday(!showYesterday)} />}
                         </Panel>
                     )}
                     <Panel

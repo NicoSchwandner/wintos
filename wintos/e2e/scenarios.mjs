@@ -359,6 +359,23 @@ await scenario("13 · ⌃⌘H carries the focused pane one place left and it kee
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(mine)}).id)`);
 });
 
+await scenario("14 · ⌥⌘P parks the session waiting in a pane just opened", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const panes = Number(sql(`select json_array_length(data->'blockids') from db_tab where oid='${tabId}'`));
+    await press(t, "d", { mods: ["meta"] });
+    await until("a new pane", () => Number(sql(`select json_array_length(data->'blockids') from db_tab where oid='${tabId}'`)) === panes + 1);
+    const blockId = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const post = (hook_event_name) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-park", hook_event_name, prompt: "e2e park" } }) });
+    await post("UserPromptSubmit");
+    await post("Stop");
+    const state = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((s) => s.id === "e2e-park")?.state;
+    await until("the session waiting", async () => (await state()) === "waiting");
+    await press(t, "p", { code: "KeyP", keyCode: 80, mods: ["alt", "meta"] });
+    await until("the session parked", async () => (await state()) === "parked");
+    await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
+});
+
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
 // must not cost the run its results.
 await scenario("clean-up · the panes this run opened are closed", async () => {

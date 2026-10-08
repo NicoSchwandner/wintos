@@ -5,7 +5,7 @@ import type { Session } from "../daemon/sessions/reduce";
 import { nextNeedsYou, Target } from "./sessions";
 import { editingMineAtom, findInNotesAtom, isPage, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
 import { rememberReturn, returnFocus, wantPane } from "./focusOwner";
-import { daemonFetch, setProjectSnoozed } from "./useWintos";
+import { currentState, daemonFetch, setProjectSnoozed } from "./useWintos";
 import { flog, where } from "./focusLog";
 import { inboxKind } from "./view";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
@@ -19,7 +19,8 @@ const HANDOFF_TTL_MS = 5000;
 let latest: { sessions: Session[]; tabIds: string[]; needs: string[]; snoozed: string[] } = { sessions: [], tabIds: [], needs: [], snoozed: [] };
 export const setLatestSessions = (sessions: Session[], tabIds: string[], needs: string[], snoozed: string[] = []) => (latest = { sessions, tabIds, needs, snoozed });
 export const isSnoozedProject = (tabId: string) => latest.snoozed.includes(tabId);
-export const latestSessions = () => latest.sessions;
+// The daemon's snapshot, not the Sidebar's copy: that one lags a pane opened a moment ago.
+export const latestSessions = () => currentState()?.sessions ?? latest.sessions;
 
 export function magnifyBlock(blockId: string): boolean {
     const lm = getLayoutModelForStaticTab();
@@ -115,7 +116,8 @@ export function takeHandoff(): void {
 export function focusedSession(): Session | undefined {
     const lm = getLayoutModelForStaticTab();
     const blockId = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
-    return latest.sessions.find((s) => s.blockId === blockId) ?? latest.sessions.find((s) => s.tabId === globalStore.get(atoms.staticTabId));
+    const sessions = latestSessions();
+    return sessions.find((s) => s.blockId === blockId) ?? sessions.find((s) => s.tabId === globalStore.get(atoms.staticTabId));
 }
 
 // ⌘H ⌘L in a project: the focused terminal, the notes rail. The sidebar never takes focus (⌘J/⌘K switch).

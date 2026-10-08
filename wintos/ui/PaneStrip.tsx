@@ -5,7 +5,6 @@ import { getSettingsKeyAtom } from "@/app/store/global";
 import { memo, useEffect, useMemo, useState } from "react";
 
 const STRIP_GAP = 6; // above the chips, and (with the tile gap) below them
-const RAIL_TOGGLE_ROOM = 110; // the notes rail's ⌥⌘L toggle floats over the strip's right end
 import { focusSession, takeHandoff } from "./focus";
 import { Key } from "./Key";
 import { confirmPaneClose, copiedAtAtom, focusedPageUrl, runKey, shelvePane } from "./menu";
@@ -45,9 +44,8 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
 
     const sessions = state ? liveSessions(state.sessions, { [tabId]: ids }) : [];
     const chips = stripPanes(blocks, sessions);
-    const shelf = state?.shelf?.[tabId] ?? [];
-    // The strip is where every pane's controls live, and the shelf's dock: it shows whenever there is either.
-    if (!chips.length && !shelf.length) return null;
+    // The strip is where every pane's controls live, so it shows whenever there is a pane.
+    if (!chips.length) return null;
     const unread = new Set(unreadSessions(sessions, tabId, state?.seen?.[tabId]).map((s) => s.id));
     const on = magnified ?? focused?.id;
     const inProject = !isInboxTab(tab);
@@ -108,15 +106,6 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
             {armed && focused?.data?.blockId === armed && (
                 <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 7, color: T.brick }}>
                     <Key k="⌥⌘R" label="again to restart this terminal" />
-                </span>
-            )}
-            {/* The dock: this project's shelved sessions, newest first, each back as a pane with its key. */}
-            {shelf.length > 0 && (
-                <span data-wintos="shelf-dock" style={{ marginLeft: "auto", marginRight: RAIL_TOGGLE_ROOM, display: "inline-flex", alignItems: "center" }}>
-                    {shelf.slice(0, 9).map((s, i) => (
-                        <StripAction key={s.sessionId} k={`⌥⌘${i + 1}`} label={`${s.label} · ${relTime(now - s.at)}`} onClick={() => runKey(`unshelve-${i + 1}`)} />
-                    ))}
-                    {shelf.length > 9 && <StripAction k="⇧⌘P" label={`${shelf.length - 9} more`} onClick={() => openPalette("shelved")} />}
                 </span>
             )}
             {/* Magnify hides the other panes and has no header button here: say so, and offer the way back. */}

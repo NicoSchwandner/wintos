@@ -12,6 +12,9 @@ import { editingMineAtom } from "./state";
 import { useNotes } from "./useNotes";
 import { notesKeys, PrList } from "./PrList";
 import { useWintos } from "../useWintos";
+import { runKey } from "../menu";
+import { openPalette } from "../Palette";
+import { relTime } from "../view";
 
 // The notes rail beside the terminal (MainC): next action, project.md, mine.md.
 export const NotesRail = memo(({ tabId }: { tabId: string }) => {
@@ -67,6 +70,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
                 <Mine text={notes?.mine ?? ""} mtime={notes?.mineMtime ?? 0} canEdit={!!notes} save={save} size="rail" />
             </div>
             <PrList tabId={tabId} size="rail" />
+            <Shelf shelf={state?.shelf?.[tabId] ?? []} />
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.secondary }}>project.md</span>
@@ -85,6 +89,24 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
     );
 });
 NotesRail.displayName = "NotesRail";
+
+// This project's shelved sessions, newest first, each back as a pane with its key.
+function Shelf({ shelf }: { shelf: { sessionId: string; label: string; at: number }[] }) {
+    if (!shelf.length) return null;
+    const row = (k: string, text: string, onClick: () => void, key: string) => (
+        <button key={key} type="button" data-key={k} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 9, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12.5, lineHeight: 1.55, color: T.quietTitle, textAlign: "left" }}>
+            <Key k={k} label="" />
+            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>
+        </button>
+    );
+    return (
+        <div data-wintos="shelf-dock" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>Shelved</span>
+            {shelf.slice(0, 9).map((s, i) => row(`⌥⌘${i + 1}`, `${s.label} · ${relTime(Date.now() - s.at)}`, () => runKey(`unshelve-${i + 1}`), s.sessionId))}
+            {shelf.length > 9 && row("⇧⌘P", `${shelf.length - 9} more`, () => openPalette("shelved"), "more")}
+        </div>
+    );
+}
 
 // Fold or unfold the rail: a real button, 24px (WCAG 2.2 target size), named and stating whether
 // the rail is open, sitting on the divider. It never takes focus (⌘L is the keyboard way).

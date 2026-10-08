@@ -8,7 +8,7 @@ import { closeWarning } from "./sessions";
 import { toggleInbox } from "./inbox";
 import { FLAG_EVENT, mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, tickModeAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject, topProject } from "./switcher";
-import { getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
+import { getLayoutModelForStaticTab, LayoutTreeActionType, NavigateDirection, type LayoutTreeSwapNodeAction } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
 import { isInboxTab } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
@@ -86,6 +86,10 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:r", "restart-terminal"],
     ["Option:Cmd:x", "tick"],
     ["Option:Cmd:c{KeyL}", "rail"],
+    ["Ctrl:Cmd:c{KeyH}", "carry-left"],
+    ["Ctrl:Cmd:c{KeyJ}", "carry-down"],
+    ["Ctrl:Cmd:c{KeyK}", "carry-up"],
+    ["Ctrl:Cmd:c{KeyL}", "carry-right"],
     ["Cmd:h", "focus-left"],
     ["Cmd:l", "focus-right"],
 ];
@@ -126,6 +130,22 @@ function movePane(dir: NavigateDirection): boolean {
     if (inInbox() || globalStore.get(lm.magnifiedNodeIdAtom)) return stepPane(dir === NavigateDirection.Left || dir === NavigateDirection.Up ? -1 : 1);
     wantPane("⌥⌘J/K");
     lm.switchNodeFocusInDirection(dir, false); // at the edge nothing moves
+    return true;
+}
+
+// ⌃⌘H/J/K/L: the focused pane trades places with its neighbour that way and keeps the focus;
+// at the edge nothing moves.
+function carryPane(dir: NavigateDirection): boolean {
+    const lm = getLayoutModelForStaticTab();
+    if (inInbox() || globalStore.get(lm.magnifiedNodeIdAtom)) return false;
+    const from = globalStore.get(lm.focusedNode)?.id;
+    if (!from) return false;
+    lm.switchNodeFocusInDirection(dir, false);
+    const to = globalStore.get(lm.focusedNode)?.id;
+    if (to && to !== from) {
+        lm.treeReducer({ type: LayoutTreeActionType.Swap, node1Id: from, node2Id: to } as LayoutTreeSwapNodeAction);
+        lm.focusNode(from);
+    }
     return true;
 }
 
@@ -186,6 +206,8 @@ function copyUrl(): boolean {
 export function runKey(action: string): boolean {
     const dir = { "pane-up": NavigateDirection.Up, "pane-down": NavigateDirection.Down }[action];
     if (dir !== undefined) return movePane(dir);
+    const carry = { "carry-left": NavigateDirection.Left, "carry-right": NavigateDirection.Right, "carry-up": NavigateDirection.Up, "carry-down": NavigateDirection.Down }[action];
+    if (carry !== undefined) return carryPane(carry);
     if (action === "copy-url") return copyUrl();
     // ⌘R in a browser pane stays its reload.
     if (action === "rename" && document.activeElement?.tagName === "WEBVIEW") return false;

@@ -315,10 +315,15 @@ await scenario("12 · closing a session pane shelves it, and ⇧⌘P resumes it 
     // A project's shell starts when its terminal first shows: give it a moment to take input.
     await until("a terminal", () => evalIn(t, "!!document.querySelector('.xterm-helper-textarea')"));
     await sleep(2500);
-    await cdpFocus(t, ".xterm-helper-textarea");
-    await cdp(t, "Input.insertText", { text: `wsh setmeta -b this "cmd:initscript=cd '/tmp' && claude --resume 'e2e-shelf'"` });
-    await press(t, "Enter", { keyCode: 13 });
-    await until("the resume command on the pane", () => sql(`select count(*) from db_block where data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`) === "1");
+    // A shell still drawing its first prompt drops what was typed, so type again until it lands.
+    const resumable = () => sql(`select count(*) from db_block where data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`) === "1";
+    for (let i = 0; i < 4 && !resumable(); i++) {
+        await cdpFocus(t, ".xterm-helper-textarea");
+        await cdp(t, "Input.insertText", { text: `wsh setmeta -b this "cmd:initscript=cd '/tmp' && claude --resume 'e2e-shelf'"` });
+        await press(t, "Enter", { keyCode: 13 });
+        await until("the resume command on the pane", resumable, 4000).catch(() => {});
+    }
+    await until("the resume command on the pane", resumable, 1000);
     const before = panes();
     await evalIn(t, `document.querySelector('button[data-key="⌘W"]').click()`);
     await until("the session on the shelf", async () => (await shelf()).some((s) => s.sessionId === "e2e-shelf"));
@@ -330,6 +335,24 @@ await scenario("12 · closing a session pane shelves it, and ⇧⌘P resumes it 
     await sleep(300);
     await press(t, "Enter", { keyCode: 13 });
     await until("a new pane resuming it", () => sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j, db_block b where t.oid='${tabId}' and b.oid=j.value and b.data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`) === "1");
+});
+
+await scenario("13 · ⌃⌘H carries the focused pane one place left and it keeps the focus", async () => {
+    const t = await toProject();
+    const order = () => evalIn(t, `JSON.stringify(window.wintosLayout().getter(window.wintosLayout().leafOrder).map((l) => l.blockid))`);
+    const focused = () => evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    // An empty project gets its first pane from the first ⌘D, so split until there are two.
+    for (let n = JSON.parse(await order()).length; n < 2; n++) {
+        await press(t, "d", { mods: ["meta"] });
+        await until("a split", async () => JSON.parse(await order()).length === n + 1);
+    }
+    const split = JSON.parse(await order());
+    const mine = await focused();
+    if (split.indexOf(mine) < 1) throw new Error(`the new pane is not right of another: ${split}`);
+    await press(t, "h", { mods: ["meta", "ctrl"] });
+    await until("the pane one place left", async () => JSON.parse(await order()).indexOf(mine) === split.indexOf(mine) - 1);
+    if ((await focused()) !== mine) throw new Error("the focus stayed behind");
+    await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(mine)}).id)`);
 });
 
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up

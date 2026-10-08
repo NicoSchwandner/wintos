@@ -3,7 +3,7 @@ import { Key } from "../Key";
 import { T } from "../tokens";
 import { type CheckState } from "./checkbox";
 import { Md } from "./Md";
-import { parseNotes } from "./parse";
+import { newestFirst, parseNotes } from "./parse";
 
 
 export type Size = "rail" | "full";
@@ -55,7 +55,7 @@ function Line({ lead, size, children }: { lead: React.ReactNode; size: Size; chi
     );
 }
 
-// Long lists stay short: past this many, the rest (later decisions, ticked Built items) wait behind a button.
+// Long lists stay short: past this many, the rest (older decisions, ticked Built items) wait behind a button.
 const LONG = 4;
 
 export function More({ open, label, onClick }: { open: boolean; label: string; onClick: () => void }) {
@@ -71,7 +71,8 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
     const n = parseNotes(md);
     const [allDecisions, setAllDecisions] = useState(false);
     const [allBuilt, setAllBuilt] = useState(false);
-    const decisions = allDecisions ? n.decisions : n.decisions.slice(0, LONG);
+    const sorted = newestFirst(n.decisions);
+    const decisions = allDecisions ? sorted : sorted.slice(0, LONG);
     const checked = n.built.length > LONG ? n.built.filter((b) => b.state === "done").length : 0;
     const built = allBuilt || !checked ? n.built : n.built.filter((b) => b.state !== "done");
     const z = SIZES[size];

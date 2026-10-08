@@ -3,7 +3,7 @@
 
 export function makeTermLinkHandlers(
     isMacOS: boolean,
-    openUri: (uri: string) => void,
+    openUri: (uri: string, external: boolean) => void,
     onHover: (uri: string | null, x: number, y: number, showUrl: boolean) => void,
     openPath?: (path: string, external: boolean) => void
 ) {
@@ -14,7 +14,7 @@ export function makeTermLinkHandlers(
             if (!modifier(event)) {
                 return;
             }
-            openUri(uri);
+            openUri(uri, !!event.shiftKey);
         },
         activatePath: (event: MouseEvent, path: string) => {
             event.preventDefault();

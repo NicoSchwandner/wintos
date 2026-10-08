@@ -4,8 +4,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { findPathLinks, makeTermLinkHandlers, paneCwd, resolvePathLink } from "./term-links";
 
-function linkEvent(metaKey = false, ctrlKey = false): MouseEvent {
-    return { metaKey, ctrlKey, preventDefault: vi.fn(), clientX: 12, clientY: 34 } as unknown as MouseEvent;
+function linkEvent(metaKey = false, ctrlKey = false, shiftKey = false): MouseEvent {
+    return { metaKey, ctrlKey, shiftKey, preventDefault: vi.fn(), clientX: 12, clientY: 34 } as unknown as MouseEvent;
 }
 
 describe("terminal link handlers", () => {
@@ -26,7 +26,13 @@ describe("terminal link handlers", () => {
 
         const rightModifier = linkEvent(isMacOS, !isMacOS);
         handlers.activate(rightModifier, "https://example.com/third");
-        expect(openUri).toHaveBeenCalledExactlyOnceWith("https://example.com/third");
+        expect(openUri).toHaveBeenCalledExactlyOnceWith("https://example.com/third", false);
+    });
+
+    it("opens a shift-modifier-clicked URL in the default browser", () => {
+        const openUri = vi.fn();
+        makeTermLinkHandlers(true, openUri, vi.fn()).activate(linkEvent(true, false, true), "https://example.com/out");
+        expect(openUri).toHaveBeenCalledExactlyOnceWith("https://example.com/out", true);
     });
 
     it("shows the destination for OSC 8 links but keeps plain URL hover unchanged", () => {

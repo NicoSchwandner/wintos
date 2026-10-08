@@ -148,7 +148,7 @@ export class TermWrap {
         this.webglEnabledAtom = jotai.atom(false) as jotai.PrimitiveAtom<boolean>;
         const linkHandlers = makeTermLinkHandlers(
             PLATFORM === PlatformMacOS,
-            (uri) => fireAndForget(() => openLink(uri)),
+            (uri, external) => (external ? getApi().openExternal(uri) : fireAndForget(() => openLink(uri))),
             (uri, x, y, showUrl) => {
                 this.hoveredLinkUri = uri;
                 this.onLinkHover?.(uri, x, y, showUrl);

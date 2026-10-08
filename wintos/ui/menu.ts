@@ -285,7 +285,7 @@ export function wintosClose(): boolean {
 export function shelvePane(blockId: string | undefined): void {
     const script = blockId && shelvable(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId)))?.meta);
     if (!script) return;
-    const label = latestSessions().find((s) => s.blockId === blockId)?.label ?? "session";
+    const label = latestSessions().find((s) => s.blockId === blockId)?.label;
     void daemonFetch(`/projects/${encodeURIComponent(globalStore.get(atoms.staticTabId))}/shelf`, { method: "POST", body: { script, label } });
 }
 export const shelvable = (meta: MetaType | undefined): string | undefined => {

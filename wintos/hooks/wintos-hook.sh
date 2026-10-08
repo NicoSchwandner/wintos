@@ -6,8 +6,8 @@
 payload="$(cat)"
 
 # The block's init script is what Wave runs when the app starts, so pointing it at this
-# session makes a quit-and-relaunch resume it. It is set on a prompt, not on SessionStart:
-# Claude saves nothing to resume until the first prompt. Quitting WintOS ends sessions with
+# session makes a quit-and-relaunch resume it. It is set on a prompt, not on a new session's
+# start: Claude saves nothing to resume until the first prompt. A resumed one is saved already. Quitting WintOS ends sessions with
 # reason "other"; only a deliberate exit clears the command.
 # Only an interactive session you started owns its block: a `claude -p` run from inside it
 # (CLAUDE_CODE_ENTRYPOINT=sdk-cli) inherits the block id and would otherwise make the next
@@ -15,8 +15,8 @@ payload="$(cat)"
 # sets it for everything it spawns, the interactive session's own hooks included.
 if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" != "sdk-cli" ]; then
     wsh="${WAVETERM_WSHBINDIR:+$WAVETERM_WSHBINDIR/}wsh"
-    case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.reason // "")' 2>/dev/null)" in
-    UserPromptSubmit:*)
+    case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.reason // .source // "")' 2>/dev/null)" in
+    UserPromptSubmit:* | SessionStart:resume)
         # Transcripts are keyed by the launch directory; the payload's cwd follows the session.
         # A session of another Claude account (its own CLAUDE_CONFIG_DIR) resumes in that
         # account; without one, none is set, as setting it even to the default switches keychains.

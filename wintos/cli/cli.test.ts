@@ -119,10 +119,16 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         expect(w.calls()).toBe("");
     });
 
-    test("SessionStart does not, since Claude saves nothing to resume before the first prompt", () => {
+    test("a new session's start does not, since Claude saves nothing to resume before the first prompt", () => {
         const w = fakeWsh();
-        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", session_id: "s-1", cwd: "/x" }));
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", source: "startup", session_id: "s-1", cwd: "/x" }));
         expect(w.calls()).toBe("");
+    });
+
+    test("a resumed session's start does: it is saved already, and closed before a prompt it still shelves", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", source: "resume", session_id: "s-1", cwd: "/x" }));
+        expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/x' && claude --resume 's-1'\n`);
     });
 
     test("other events leave the block alone", () => {

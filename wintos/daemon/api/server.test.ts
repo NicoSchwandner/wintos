@@ -435,6 +435,8 @@ describe("the shelf", () => {
         await event({ ...prompt, transcript_path: transcript });
         expect((await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "merge the lanes" })).status).toBe(200);
         expect(await shelfOf()).toEqual({ "tab-1": [expect.objectContaining({ sessionId: prompt.session_id, label: "merge the lanes", gist: "We merged the two lanes." })] });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id) });
+        expect((await shelfOf())["tab-1"][0].label).toBe("We merged the two lanes.");
     });
 
     test("it follows the project's folder into a reopened tab, and survives a restart", async () => {

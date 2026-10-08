@@ -212,10 +212,12 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const b = (await body(req)) as { script?: unknown; label?: unknown };
                 const sessionId = typeof b?.script === "string" ? resumedSession(b.script) : undefined;
                 if (!sessionId) return send(res, 400, "need the pane's resume command");
-                const label = typeof b.label === "string" && isSafe(b.label) ? b.label.slice(0, MAX_TITLE) : "session";
                 const p = store.byTab(decodeURIComponent(toShelf[1]));
                 if (!p) return send(res, 404, "no project for this tab");
-                saveShelf(shelve(shelf, basename(p.dir), { sessionId, script: b.script as string, label, gist: recapper.gistOf(sessionId), at: Date.now() }, 14));
+                // A session resumed and closed again before a prompt has no label: its recap names it.
+                const gist = recapper.gistOf(sessionId);
+                const label = typeof b.label === "string" && b.label && isSafe(b.label) ? b.label.slice(0, MAX_TITLE) : (gist ?? "session");
+                saveShelf(shelve(shelf, basename(p.dir), { sessionId, script: b.script as string, label, gist, at: Date.now() }, 14));
                 broadcast();
                 return send(res, 200, "");
             }

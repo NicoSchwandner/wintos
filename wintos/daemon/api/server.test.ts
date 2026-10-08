@@ -454,6 +454,13 @@ describe("the shelf", () => {
         expect(await shelfOf()).toEqual({});
     });
 
+    test("closing its pane ends the session, and that keeps it on the shelf", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
+        await event({ ...prompt, hook_event_name: "SessionEnd", reason: "other" });
+        expect((await shelfOf())["tab-1"]).toHaveLength(1);
+    });
+
     test("only the hook's resume command, and only for a project", async () => {
         await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
         expect((await post("/projects/tab-1/shelf", { script: "rm -rf ~", label: "x" })).status).toBe(400);

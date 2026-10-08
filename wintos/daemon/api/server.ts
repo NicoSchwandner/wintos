@@ -154,7 +154,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     return send(res, 400, "need string tabId, blockId, payload.session_id, payload.hook_event_name");
                 sessions = reduceSession(sessions, ev, Date.now());
                 saveSessions();
-                if (Object.values(shelf).some((l) => l.some((i) => i.sessionId === p.session_id))) saveShelf(unshelve(shelf, p.session_id));
+                // Running again: started or prompted. Closing its pane ends it (SessionEnd) on the way onto the shelf.
+                const runs = p.hook_event_name === "SessionStart" || p.hook_event_name === "UserPromptSubmit";
+                if (runs && Object.values(shelf).some((l) => l.some((i) => i.sessionId === p.session_id))) saveShelf(unshelve(shelf, p.session_id));
                 const tp = (p as { transcript_path?: unknown }).transcript_path;
                 recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now());
                 if (p.hook_event_name === "UserPromptSubmit") markSeen(ev.tabId); // you read it to answer it

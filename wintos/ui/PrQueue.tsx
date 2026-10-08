@@ -23,6 +23,7 @@ export const HEADERS: Record<Group, { label: string; note: string; color: string
     fix: { label: "Fix", note: "your PR, ball in your court", color: T.apricot },
     review: { label: "Review", note: "someone asked you", color: T.title },
     chase: { label: "Chase", note: "past the team's two working days with nobody on it", color: T.brick },
+    release: { label: "Release", note: "merged past two working days, not on main yet", color: T.brick },
     waiting: { label: "Waiting", note: "yours, with someone else", color: T.muted },
     team: { label: "The team's", note: "asked of your team: yours to review too", color: T.muted },
 };

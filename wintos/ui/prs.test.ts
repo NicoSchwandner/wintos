@@ -159,3 +159,11 @@ describe("matchesPr", () => {
         ["rounding vat", false],
     ])("%s → %s", (q, out) => expect(matchesPr(p, q)).toBe(out));
 });
+
+test("an unreleased merge past the SLA is in Release, counted past SLA", () => {
+    const m = queueModel([pr({ url: "r", mergedAt: "2026-09-23T09:00:00Z" })], "me", MON);
+    expect(m.groups.map((g) => g.group)).toEqual(["release"]);
+    expect(m.pastSla).toBe(1);
+});
+
+test("a merged PR asks no reviewer", () => expect(reviewerChips(pr({ mergedAt: "2026-09-23T09:00:00Z" }), 2).none).toBe(false));

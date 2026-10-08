@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { linkStacks, normalize, orgQualifier, type Node } from "./normalize";
+import { linkStacks, normalize, orgQualifier, unreleased, type Node } from "./normalize";
 
 const node = (n: Partial<Node> = {}): Node => ({
     number: 7, title: "Add flag", url: "https://github.com/o/r/pull/7", isDraft: false,
@@ -106,4 +106,16 @@ describe("approval in a repo that requires no reviews", () => {
         const p = normalize(node({ reviewDecision: "REVIEW_REQUIRED", latestReviews: { nodes: [review("genne", "APPROVED")] } }), "me", asked);
         expect(p.reviewDecision).toBe("REVIEW_REQUIRED");
     });
+});
+
+describe("unreleased", () => {
+    const merged = (repo: string, oid: string, defaultBranch = "development") =>
+        node({ repository: { nameWithOwner: repo, defaultBranchRef: { name: defaultBranch } }, mergedAt: "2026-09-23T09:00:00Z", mergeCommit: { oid } });
+    test("keeps the merges main does not have yet", () => {
+        const nodes = [merged("o/a", "1"), merged("o/a", "2"), merged("o/b", "3")];
+        expect(unreleased(nodes, { "o/a": new Set(["2"]), "o/b": new Set() }).map((n) => n.mergeCommit!.oid)).toEqual(["2"]);
+    });
+    test("skips a repo it could not compare", () => expect(unreleased([merged("o/a", "1")], {})).toEqual([]));
+    test("normalize carries when it merged", () =>
+        expect(normalize(merged("o/a", "1"), "me", { requestedMe: false, requestedTeam: false }).mergedAt).toBe("2026-09-23T09:00:00Z"));
 });

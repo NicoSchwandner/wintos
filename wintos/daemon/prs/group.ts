@@ -25,13 +25,15 @@ export type PR = {
     base?: string; // the branch it merges into
     defaultBranch?: string; // the repo's
     stackedOn?: string; // url of the open PR whose branch is `base`, when that PR is in the list
+    mergedAt?: string; // merged into the default branch, not yet on main
 };
 
 // On another branch than the repo's default: merging it would land on that branch, not ship.
 export const isStacked = (pr: PR) => !!pr.base && !!pr.defaultBranch && pr.base !== pr.defaultBranch;
 // team: reviews asked of your team, undone work. waiting: yours, with someone else, fine for now.
-export type Group = "merge" | "fix" | "review" | "chase" | "waiting" | "team";
-export const GROUPS: Group[] = ["merge", "fix", "review", "chase", "team", "waiting"];
+// release: merged, but past the SLA still not on main; nobody else chases a release.
+export type Group = "merge" | "fix" | "review" | "chase" | "release" | "waiting" | "team";
+export const GROUPS: Group[] = ["merge", "fix", "review", "chase", "release", "team", "waiting"];
 
 // The team's rule: past two working days a PR comes back to its author. A draft is nobody
 // else's problem yet, so it only becomes a decision after a longer silence.
@@ -41,7 +43,7 @@ export const DRAFT_SLA_WORKING_DAYS = 5;
 const DAY = 86_400_000;
 const redChecks = (pr: PR) => pr.checks === "FAILURE" || pr.checks === "ERROR";
 const sla = (pr: PR) => (pr.isDraft ? DRAFT_SLA_WORKING_DAYS : SLA_WORKING_DAYS);
-export const lastMovement = (pr: PR) => pr.lastReviewAt ?? pr.createdAt;
+export const lastMovement = (pr: PR) => pr.mergedAt ?? pr.lastReviewAt ?? pr.createdAt;
 
 // Weekdays elapsed after `from` up to `now`. No holiday calendar (spec §4).
 export function workingDaysBetween(from: string, now: number): number {
@@ -73,6 +75,7 @@ export function isSnoozed(pr: PR, snoozes: Snoozes, now: number): boolean {
 }
 
 export function groupOf(pr: PR, me: string, now: number): Group {
+    if (pr.mergedAt) return workingDaysBetween(pr.mergedAt, now) >= SLA_WORKING_DAYS ? "release" : "waiting";
     const mine = pr.author === me;
     const approved = pr.reviewDecision === "APPROVED";
     // No CI at all is green: a repo without checks must still reach Merge. BLOCKED is GitHub
@@ -93,6 +96,7 @@ export function groupOf(pr: PR, me: string, now: number): Group {
 // reviewers: false leaves out who it waits on, for views that show reviewers themselves.
 export function qualifier(pr: PR, group: Group, opts: { reviewers?: boolean } = {}): { text: string; brick?: boolean } | undefined {
     if (group === "merge") return undefined;
+    if (pr.mergedAt) return { text: "merged, not on main" };
     if (group === "fix") {
         if (pr.reviewDecision === "CHANGES_REQUESTED") return { text: pr.changesRequestedBy ? `changes requested by ${pr.changesRequestedBy}` : "changes requested" };
         if (redChecks(pr)) return { text: "CI red", brick: true };
@@ -143,13 +147,14 @@ export type ProjectPrs = {
 // Chase), and otherwise why the project is quiet.
 export function projectPrs(project: { pr?: string[]; title?: string }, prs: PR[], me: string, now: number): ProjectPrs {
     const items = prsForProject(project.pr ?? [], project.title ?? "", prs).map((pr) => ({ pr, group: groupOf(pr, me, now) }));
-    const needing = items.filter((i) => i.group === "fix" || i.group === "chase");
+    const needing = items.filter((i) => i.group === "fix" || i.group === "chase" || i.group === "release");
     const oldest = needing.sort((a, b) => Date.parse(lastMovement(a.pr)) - Date.parse(lastMovement(b.pr)))[0];
     if (oldest) {
         const { pr, group } = oldest;
         const since = Date.parse(lastMovement(pr));
         if (group === "fix") return { items, blocked: { since, text: `#${pr.number}: ${qualifier(pr, group)?.text ?? "needs a fix"}`, tone: "apricot" } };
         const wd = workingDaysBetween(lastMovement(pr), now);
+        if (group === "release") return { items, blocked: { since, text: `#${pr.number} merged ${wd} working days ago, not on main`, tone: "brick" } };
         return { items, blocked: { since, text: `Nobody has looked at #${pr.number} in ${wd} working days`, tone: "brick" } };
     }
     const first = items[0]?.pr;

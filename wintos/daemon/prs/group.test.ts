@@ -153,3 +153,16 @@ describe("qualifier without reviewers (the queue shows them as chips)", () => {
         expect(qualifier(pr({ checks: "FAILURE" }), "fix", { reviewers: false })).toEqual({ text: "CI red", brick: true });
     });
 });
+
+describe("a merged PR not yet on the release branch", () => {
+    // Merged Wednesday 2026-09-23: three working days before MON.
+    const merged = (mergedAt = "2026-09-23T09:00:00Z") => pr({ mergedAt, reviewDecision: "APPROVED", checks: "SUCCESS" });
+    test("past two working days it asks for a release", () => expect(groupOf(merged(), "me", MON)).toBe("release"));
+    test("within two working days it waits", () => expect(groupOf(merged("2026-09-25T09:00:00Z"), "me", MON)).toBe("waiting"));
+    test("its age counts from the merge", () => expect(ageLabel(merged(), MON).text).toBe("3 wd"));
+    test("it says it is not released", () => expect(qualifier(merged(), "release")?.text).toBe("merged, not on main"));
+    test("it marks its project", () =>
+        expect(projectPrs({ pr: [], title: "DEV-9" }, [{ ...merged(), number: 5, title: "DEV-9 x" }], "me", MON).blocked).toEqual({
+            since: Date.parse("2026-09-23T09:00:00Z"), text: "#5 merged 3 working days ago, not on main", tone: "brick",
+        }));
+});

@@ -17,4 +17,5 @@ export const FLAG_EVENT = "wintos-flag";
 export const tickModeAtom = atom(false);
 // ⌥⌘R pressed once: the terminal it would restart, until a second press or 3 s.
 export const restartArmedAtom = atom(null as string | null);
+export const closeArmedAtom = atom(null as string | null); // the pane a second ⌘W closes
 export const findInNotesAtom = atom(null as string | null);

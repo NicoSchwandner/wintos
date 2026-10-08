@@ -5,11 +5,12 @@ import { getSettingsKeyAtom } from "@/app/store/global";
 import { memo, useEffect, useMemo, useState } from "react";
 
 const STRIP_GAP = 6; // above the chips, and (with the tile gap) below them
+const RAIL_TOGGLE_ROOM = 110; // the notes rail's ⌥⌘L toggle floats over the strip's right end
 import { focusSession, takeHandoff } from "./focus";
 import { Key } from "./Key";
-import { copiedAtAtom, focusedPageUrl, runKey, shelvePane } from "./menu";
+import { confirmPaneClose, copiedAtAtom, focusedPageUrl, runKey, shelvePane } from "./menu";
 import { openPalette } from "./Palette";
-import { restartArmedAtom } from "./notes/state";
+import { closeArmedAtom, restartArmedAtom } from "./notes/state";
 import { paneOrder, stripPanes } from "./panes";
 import { liveSessions, unreadSessions } from "./sessions";
 import { T } from "./tokens";
@@ -33,6 +34,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     const magnified = useAtomValue(lm.magnifiedNodeIdAtom);
     const focused = useAtomValue(lm.focusedNode);
     const armed = useAtomValue(restartArmedAtom);
+    const closeArmed = useAtomValue(closeArmedAtom);
 
     useEffect(() => {
         takeHandoff();
@@ -43,11 +45,11 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
 
     const sessions = state ? liveSessions(state.sessions, { [tabId]: ids }) : [];
     const chips = stripPanes(blocks, sessions);
-    // The strip is where every pane's controls live, so it shows whenever there is a pane.
-    if (!chips.length) return null;
+    const shelf = state?.shelf?.[tabId] ?? [];
+    // The strip is where every pane's controls live, and the shelf's dock: it shows whenever there is either.
+    if (!chips.length && !shelf.length) return null;
     const unread = new Set(unreadSessions(sessions, tabId, state?.seen?.[tabId]).map((s) => s.id));
     const on = magnified ?? focused?.id;
-    const shelved = state?.shelf?.[tabId]?.length ?? 0;
     const inProject = !isInboxTab(tab);
     // As much room under the chips as above them: the panes below already sit half the tile
     // gap (window:tilegapsize) down, so the strip adds only the rest.
@@ -97,11 +99,24 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
             {inProject && chips.length > 1 && !magnified && focused && <StripAction k="⌘M" label="magnify" onClick={() => lm.magnifyNodeToggle(focused.id)} />}
             {focused && focusedPageUrl(blocks[ids.indexOf(focused.data?.blockId)]) && <CopyUrl />}
             {focused && focusedPageUrl(blocks[ids.indexOf(focused.data?.blockId)]) && <StripAction k="⇧⌘U" label="browser" onClick={() => runKey("open-external")} />}
-            {focused && <StripAction k="⌘W" label="close" onClick={() => (shelvePane(focused.data?.blockId), void lm.closeNode(focused.id))} />}
-            {shelved > 0 && <StripAction k="⇧⌘P" label={`${shelved} shelved`} onClick={() => openPalette("shelved")} />}
+            {focused && <StripAction k="⌘W" label="close" onClick={() => confirmPaneClose(focused.data?.blockId) && (shelvePane(focused.data?.blockId), void lm.closeNode(focused.id))} />}
+            {closeArmed && focused?.data?.blockId === closeArmed && (
+                <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 7, color: T.brick }}>
+                    <Key k="⌘W" label="again to stop the working session" />
+                </span>
+            )}
             {armed && focused?.data?.blockId === armed && (
                 <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 7, color: T.brick }}>
                     <Key k="⌥⌘R" label="again to restart this terminal" />
+                </span>
+            )}
+            {/* The dock: this project's shelved sessions, newest first, each back as a pane with its key. */}
+            {shelf.length > 0 && (
+                <span data-wintos="shelf-dock" style={{ marginLeft: "auto", marginRight: RAIL_TOGGLE_ROOM, display: "inline-flex", alignItems: "center" }}>
+                    {shelf.slice(0, 9).map((s, i) => (
+                        <StripAction key={s.sessionId} k={`⌥⌘${i + 1}`} label={`${s.label} · ${relTime(now - s.at)}`} onClick={() => runKey(`unshelve-${i + 1}`)} />
+                    ))}
+                    {shelf.length > 9 && <StripAction k="⇧⌘P" label={`${shelf.length - 9} more`} onClick={() => openPalette("shelved")} />}
                 </span>
             )}
             {/* Magnify hides the other panes and has no header button here: say so, and offer the way back. */}

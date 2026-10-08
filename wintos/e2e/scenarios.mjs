@@ -306,7 +306,7 @@ await scenario("11 · ⇧⌘Y in a project and in the Inbox shows the Today page
     }
 });
 
-await scenario("12 · closing a session pane shelves it, and ⇧⌘P resumes it as a new pane", async () => {
+await scenario("12 · ⌘W on a working session warns first, then shelves it into the dock, and ⌥⌘1 resumes it as a new pane", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const shelf = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).shelf?.[tabId] ?? [];
@@ -324,16 +324,20 @@ await scenario("12 · closing a session pane shelves it, and ⇧⌘P resumes it 
         await until("the resume command on the pane", resumable, 4000).catch(() => {});
     }
     await until("the resume command on the pane", resumable, 1000);
+    // A prompt makes the session working: the first ⌘W only warns, the second closes.
+    const blockId = sql(`select oid from db_block where data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`);
+    await fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-shelf", hook_event_name: "UserPromptSubmit", prompt: "e2e shelf" } }) });
+    await sleep(1000);
     const before = panes();
+    await evalIn(t, `document.querySelector('button[data-key="⌘W"]').click()`);
+    await until("the warning", () => evalIn(t, `document.body.innerText.includes("again to stop the working session")`));
+    await sleep(500);
+    if (panes() !== before) throw new Error("the first ⌘W closed a working session");
     await evalIn(t, `document.querySelector('button[data-key="⌘W"]').click()`);
     await until("the session on the shelf", async () => (await shelf()).some((s) => s.sessionId === "e2e-shelf"));
     await until("the pane closed", () => panes() !== before);
-    await until("the strip's shelved chip", () => evalIn(t, `document.body.innerText.includes("1 shelved")`));
-    await press(t, "p", { mods: ["meta", "shift"] });
-    await until("the palette", () => evalIn(t, `!!document.querySelector("[data-wintos=palette]")`));
-    await cdp(t, "Input.insertText", { text: "shelved" });
-    await sleep(300);
-    await press(t, "Enter", { keyCode: 13 });
+    await until("its chip in the dock", () => evalIn(t, `document.querySelector("[data-wintos=shelf-dock]")?.innerText.includes("e2e shelf")`));
+    await press(t, "¡", { code: "Digit1", keyCode: 49, mods: ["alt", "meta"] });
     await until("a new pane resuming it", () => sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j, db_block b where t.oid='${tabId}' and b.oid=j.value and b.data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`) === "1");
 });
 

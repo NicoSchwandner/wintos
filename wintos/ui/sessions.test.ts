@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { closeWarning, liveSessions, nextNeedsYou, unreadSessions } from "./sessions";
+import { closeWarning, liveSessions, nextNeedsYou, paneCloseWarns, unreadSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
 
@@ -69,4 +69,14 @@ describe("nextNeedsYou", () => {
     test("tabs outside the workspace are never stops; nothing needs you, nowhere to go", () => {
         expect(nextNeedsYou([s("1", "gone", "waiting")], ["t1"], "t1", undefined, [])).toBeNull();
     });
+});
+
+describe("paneCloseWarns", () => {
+    test("the first ⌘W on a pane whose session is working only warns", () =>
+        expect(paneCloseWarns([s("a", "t", "working")], "b-a", null)).toBe(true));
+    test("the second ⌘W on it closes", () => expect(paneCloseWarns([s("a", "t", "working")], "b-a", "b-a")).toBe(false));
+    test("a warning armed for another pane does not count", () => expect(paneCloseWarns([s("a", "t", "working")], "b-a", "b-x")).toBe(true));
+    test.each(["waiting", "idle", "parked", "done", "ended"] as const)("a %s session closes at once", (state) =>
+        expect(paneCloseWarns([s("a", "t", state)], "b-a", null)).toBe(false));
+    test("a pane without a session closes at once", () => expect(paneCloseWarns([], "b-a", null)).toBe(false));
 });

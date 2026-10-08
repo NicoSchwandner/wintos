@@ -16,6 +16,11 @@ export function closeWarning(sessions: Session[], tabId: string): string | null 
     return n ? `${n} Claude session${n === 1 ? "" : "s"} will stop` : null;
 }
 
+// Closing a pane ends its Claude session; while one is working, the first ⌘W only warns.
+export function paneCloseWarns(sessions: Session[], blockId: string, armed: string | null): boolean {
+    return armed !== blockId && sessions.some((s) => s.blockId === blockId && s.state === "working");
+}
+
 // ⌃⇥: the next stop in Needs you, in the order the sidebar shows it, wrapping, so every project
 // there is reached and the next one can be read off the screen. A project's waiting sessions are
 // a stop each (longest waiting first); a project there for a PR is one stop, its terminals. A

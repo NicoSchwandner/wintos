@@ -3,10 +3,10 @@ import { atom } from "jotai";
 import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, getBlockComponentModel, isDev } from "@/store/global";
-import { closeOverlay, editMine, enterProject, focusArea, takeReopen, focusBlock, isSnoozedProject, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
-import { closeWarning } from "./sessions";
+import { closeOverlay, editMine, enterProject, focusArea, focusSession, takeReopen, focusBlock, isSnoozedProject, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
+import { closeWarning, paneCloseWarns } from "./sessions";
 import { toggleInbox } from "./inbox";
-import { FLAG_EVENT, mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, tickModeAtom, type MainView } from "./notes/state";
+import { FLAG_EVENT, mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, tickModeAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, LayoutTreeActionType, NavigateDirection, type LayoutTreeSwapNodeAction } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
@@ -14,7 +14,7 @@ import { isInboxTab } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
 import { installFocusRing } from "./focusRing";
-import { daemonFetch, parkBlock, setProjectSnoozed } from "./useWintos";
+import { currentState, daemonFetch, parkBlock, setProjectSnoozed } from "./useWintos";
 import { flog } from "./focusLog";
 import { meetingToJoin } from "./meetings";
 import { installKeyGame } from "./keyGame";
@@ -90,6 +90,8 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Ctrl:Cmd:c{KeyJ}", "carry-down"],
     ["Ctrl:Cmd:c{KeyK}", "carry-up"],
     ["Ctrl:Cmd:c{KeyL}", "carry-right"],
+    // ⌥ turns a digit into another character too, so these match the key's place.
+    ...Array.from({ length: 9 }, (_, i): [string, string] => [`Option:Cmd:c{Digit${i + 1}}`, `unshelve-${i + 1}`]),
     ["Cmd:h", "focus-left"],
     ["Cmd:l", "focus-right"],
 ];
@@ -279,6 +281,7 @@ export function runAction(action: string): void {
     if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));
     if (action === "show-snoozed") return toggleStoredFlag("wintos:show-snoozed");
     if (action === "restart-terminal") return restartTerminal();
+    if (action.startsWith("unshelve-")) return unshelve(Number(action.slice("unshelve-".length)));
     if (action === "rail") return toggleRail();
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);
     if (b) createBlock(b.def, false, b.ephemeral);
@@ -298,8 +301,29 @@ export function wintosClose(): boolean {
     });
     if (action === "overlay") closeOverlay();
     if (action === "view") closeNotesView();
-    if (action === "pane") shelvePane(focused?.data?.blockId);
+    if (action === "pane") {
+        if (!confirmPaneClose(focused?.data?.blockId)) return true;
+        shelvePane(focused?.data?.blockId);
+    }
     return action !== "pane";
+}
+
+// True when the pane may close now; a working session's pane first asks for a second ⌘W.
+export function confirmPaneClose(blockId: string | undefined): boolean {
+    if (!blockId || !paneCloseWarns(currentState()?.sessions ?? [], blockId, globalStore.get(closeArmedAtom))) {
+        globalStore.set(closeArmedAtom, null);
+        return true;
+    }
+    globalStore.set(closeArmedAtom, blockId);
+    setTimeout(() => globalStore.get(closeArmedAtom) === blockId && globalStore.set(closeArmedAtom, null), 3000);
+    return false;
+}
+
+// ⌥⌘1–9: the project's shelved sessions, newest first, back as a pane.
+function unshelve(n: number): void {
+    const tabId = globalStore.get(atoms.staticTabId);
+    const s = currentState()?.shelf?.[tabId]?.[n - 1];
+    if (s) focusSession({ tabId, blockId: "", resume: s.script });
 }
 
 // Closing a Claude session's pane keeps it on the project's shelf, to resume from ⇧⌘P. A session
@@ -307,7 +331,7 @@ export function wintosClose(): boolean {
 export function shelvePane(blockId: string | undefined): void {
     const script = blockId && shelvable(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId)))?.meta);
     if (!script) return;
-    const label = latestSessions().find((s) => s.blockId === blockId)?.label;
+    const label = currentState()?.sessions.find((s) => s.blockId === blockId)?.label;
     void daemonFetch(`/projects/${encodeURIComponent(globalStore.get(atoms.staticTabId))}/shelf`, { method: "POST", body: { script, label } });
 }
 export const shelvable = (meta: MetaType | undefined): string | undefined => {

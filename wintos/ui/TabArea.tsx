@@ -88,7 +88,7 @@ function useMagnifyFollowsFocus(): void {
 // Closing the last pane leaves the project open; say what to do next.
 function EmptyProject({ tabId }: { tabId: string }) {
     const shelved = useWintos().state?.shelf?.[tabId]?.length ?? 0;
-    const keys: [string, string][] = [...(shelved ? [["⇧⌘P", `resume one of ${shelved} shelved (type shelved)`] as [string, string]] : []), ["⇧⌘T", "new Claude session"], ["⌘T", "new terminal"], ["⌘J ⌘K", "another project"], ["⇧⌘W", "close this project"]];
+    const keys: [string, string][] = [...(shelved ? [["⌥⌘1", shelved > 1 ? `the newest of ${shelved} shelved sessions back (in the dock above)` : "the shelved session back (in the dock above)"] as [string, string]] : []), ["⇧⌘T", "new Claude session"], ["⌘T", "new terminal"], ["⌘J ⌘K", "another project"], ["⇧⌘W", "close this project"]];
     return (
         <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, fontFamily: T.ui, color: T.muted }}>
             <span style={{ fontFamily: T.display, fontSize: 24, color: T.secondary }}>Nothing open in this project</span>

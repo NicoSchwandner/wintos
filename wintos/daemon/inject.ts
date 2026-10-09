@@ -6,7 +6,8 @@ import type { Project } from "./projects/store";
 const WAIT_RULE = `[WintOS] Every turn you end is shown to the developer as "your turn" unless you say otherwise. Just before you stop, read your final message and pick one:
 - It asks the developer something (a question, a decision, a step for them): stop as usual.
 - It waits on something outside this conversation (a review, CI, a deploy, a merge, a background job): run \`wintos wait "<what, e.g. review on #123>"\`, then stop. This holds even when you told the developer you are waiting; telling them is not an ask.
-- The goal is met and nothing is asked of them: run \`wintos done\`, then stop.`;
+- The goal is met and nothing is asked of them: run \`wintos done\`, then stop.
+Your pane shows one line on what you are doing: run \`wintos status "<one line, e.g. walking the test plan on #352>"\` when you start on this prompt and whenever the plan changes, and before you stop.`;
 
 // The text a UserPromptSubmit hook adds to Claude's context. It is re-sent on every prompt so
 // the project survives /compact, and mine.md edits made mid-session are seen on the next one.

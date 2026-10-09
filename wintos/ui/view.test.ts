@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { inboxKind, inboxTabId, isInboxTab, prProjects, projectTabIds, projectPrList, prsByTab, relTime, rowView, sidebarModel, withSnoozes, type WintosState } from "./view";
+import { inboxKind, inboxTabId, isInboxTab, prProjects, projectTabIds, projectPrList, prsByTab, relTime, rowView, sessionHeader, sidebarModel, urgentPr, withSnoozes, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -170,6 +170,12 @@ describe("projectPrList (the notes' Pull requests section)", () => {
         ]);
     });
 
+    test("a PR a session in this project owns is on its pane, not in the list", () => {
+        const owner = { id: "s", tabId: "t1", blockId: "b", state: "working", since: 0, lastAt: 0, prs: ["https://github.com/acme/api/pull/2"] };
+        const list = projectPrList({ ...st([p(1), p(2)]), sessions: [owner] } as unknown as WintosState, "t1");
+        expect(list.map((r) => r.pr.number)).toEqual([1]);
+    });
+
     test("no PR data yet, or no project, is an empty list", () => {
         expect(projectPrList({ now: 0, sessions: [], projects: [] } as unknown as WintosState, "t1")).toEqual([]);
     });
@@ -230,4 +236,40 @@ describe("withSnoozes", () => {
     });
 
     test("nothing snoozed changes nothing", () => expect(withSnoozes(model, {})).toEqual({ ...model, snoozed: [], wake: [] }));
+});
+
+describe("sessionHeader (the header on a Claude pane)", () => {
+    const base = { repo: "acme/api", title: "t", author: "me", isDraft: false, conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, createdAt: "2026-09-21T08:00:00Z" };
+    const p = (n: number, extra: object = {}) => ({ ...base, number: n, url: `https://github.com/acme/api/pull/${n}`, branch: `DEV-77-thing`, ...extra });
+    const sess = (extra: object = {}) => ({ id: "s", tabId: "t1", blockId: "b", state: "working", since: 0, lastAt: 0, cwd: "/w/DEV-88-other", ...extra });
+    const st = (sessions: object[], prs: object[] = []) =>
+        ({ now: Date.parse("2026-09-28T09:00:00Z"), sessions, projects: [], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs } } } }) as unknown as WintosState;
+
+    test("no Claude session in the pane, no header", () => expect(sessionHeader(st([]), "b")).toBeUndefined());
+    test("an ended session has none either", () => expect(sessionHeader(st([sess({ state: "ended" })]), "b")).toBeUndefined());
+
+    test("its PRs with their queue group and why; the task and branch from the first PR", () => {
+        const h = sessionHeader(st([sess({ prs: [p(1).url, p(2).url] })], [p(1, { checks: "FAILURE" }), p(2, { reviewers: ["ana"] })]), "b")!;
+        expect(h.prs.map((x) => [x.number, x.group, x.why])).toEqual([[1, "fix", "CI red"], [2, "chase", "waiting on ana"]]);
+        expect([h.task, h.branch]).toEqual(["DEV-77", "DEV-77-thing"]);
+    });
+
+    test("a past-SLA PR makes the stripe brick, a fix apricot, nothing else none", () => {
+        expect(sessionHeader(st([sess({ prs: [p(1).url, p(2).url] })], [p(1, { checks: "FAILURE" }), p(2, { reviewers: ["ana"] })]), "b")!.tone).toBe("brick");
+        expect(sessionHeader(st([sess({ prs: [p(1).url] })], [p(1, { checks: "FAILURE" })]), "b")!.tone).toBe("apricot");
+        expect(sessionHeader(st([sess({ prs: [p(1).url] })], [p(1, { createdAt: "2026-09-28T08:00:00Z" })]), "b")!.tone).toBeUndefined();
+    });
+
+    test("a PR no longer open is listed without a group", () =>
+        expect(sessionHeader(st([sess({ prs: ["https://github.com/acme/api/pull/9"] })]), "b")!.prs).toEqual([{ url: "https://github.com/acme/api/pull/9", number: 9 }]));
+
+    test("⌥⌘G opens the PR the queue would put first", () => {
+        const h = sessionHeader(st([sess({ prs: [p(1).url, p(2).url] })], [p(1, { reviewers: ["ana"], createdAt: "2026-09-28T08:00:00Z" }), p(2, { checks: "FAILURE" })]), "b");
+        expect(urgentPr(h)?.number).toBe(2);
+    });
+
+    test("without PRs the task and branch come from where it runs", () => {
+        const h = sessionHeader(st([sess()]), "b")!;
+        expect([h.task, h.branch]).toEqual(["DEV-88", "DEV-88-other"]);
+    });
 });

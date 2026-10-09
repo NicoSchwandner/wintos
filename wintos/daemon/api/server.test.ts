@@ -25,6 +25,14 @@ const post = (path: string, body: unknown, headers: Record<string, string> = JSO
 const event = (payload: object, tabId = "tab-1") => post("/events", { tabId, blockId: "blk-1", payload });
 
 describe("wintosd API", () => {
+    test("`wintos status` sets the session's line, shown in /state", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/status", { text: "Walking the test plan" })).status).toBe(200);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].status).toEqual({ text: "Walking the test plan", at: expect.any(Number) });
+        expect((await post("/blocks/blk-1/status", { text: "a\nb" })).status).toBe(400);
+    });
+
     test("`wintos wait` then Stop parks the session on what it waits for", async () => {
         await event(prompt);
         expect((await post("/blocks/blk-1/wait", { reason: "CI on #1479" })).status).toBe(200);

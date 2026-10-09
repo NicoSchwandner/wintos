@@ -11,13 +11,14 @@ import type { Journal } from "../journal/journal";
 import { dayRecapper } from "../recap/day";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { resumedSession, shelve, unshelve, type Shelf } from "../shelf/shelf";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session } from "../sessions/reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setStatus } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
 // The WintOS renderer in dev. A packaged build adds its own origin via WINTOS_UI_ORIGINS.
 const DEFAULT_UI_ORIGINS = ["http://localhost:5173"];
 const MAX_BODY = 1_000_000;
+const MAX_STATUS = 160;
 const MAX_TITLE = 120;
 // Ids and titles end up as front matter lines; a line break would let a value forge keys.
 const SAFE = /^[^\r\n\u0000-\u001f]+$/;
@@ -283,6 +284,18 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!isSafe(blockId) || !reason || !isSafe(reason) || reason.length > MAX_TITLE)
                     return send(res, 400, `need a one-line reason up to ${MAX_TITLE} characters`);
                 sessions = parkSession(sessions, blockId, reason, Date.now());
+                saveSessions();
+                broadcast();
+                return send(res, 200, "");
+            }
+            const status = /^\/blocks\/([^/]+)\/status$/.exec(url.pathname);
+            if (req.method === "POST" && status) {
+                const blockId = decodeURIComponent(status[1]);
+                const b = (await body(req)) as { text?: unknown };
+                const text = typeof b?.text === "string" ? b.text.trim() : "";
+                if (!isSafe(blockId) || !text || !isSafe(text) || text.length > MAX_STATUS)
+                    return send(res, 400, `need a one-line status up to ${MAX_STATUS} characters`);
+                sessions = setStatus(sessions, blockId, text, Date.now());
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");

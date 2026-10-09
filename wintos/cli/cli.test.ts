@@ -144,6 +144,25 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
     });
 });
 
+describe("wintos-hook.sh on PostToolUse", () => {
+    const post = (command: string, stdout: string) => JSON.stringify({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", tool_name: "Bash", tool_input: { command }, tool_response: { stdout } });
+    test("sends only the PR links of a gh pr command, not the output", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr create --fill", "https://github.com/o/r/pull/12\n"));
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", prs: ["https://github.com/o/r/pull/12"] });
+    });
+    test("a PR named by number and repo counts too", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr edit 340 -R WintDev/Wint.HeartMcp --add-reviewer x", ""));
+        expect(d.seen[0].body.payload.prs).toEqual(["https://github.com/WintDev/Wint.HeartMcp/pull/340"]);
+    });
+    test("a command that is no gh pr command sends nothing", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("ls", "https://github.com/o/r/pull/12"));
+        expect(d.seen).toEqual([]);
+    });
+});
+
 describe("wintos hooks", () => {
     const setup = () => {
         const dir = tmp();
@@ -161,8 +180,9 @@ describe("wintos hooks", () => {
         expect(s.model).toBe("x");
         expect(s.hooks.Stop).toHaveLength(2);
         expect(s.hooks.Stop[0].hooks[0].command).toBe("mine.sh");
-        for (const e of ["SessionStart", "UserPromptSubmit", "Stop", "SubagentStop", "Notification", "SessionEnd"])
+        for (const e of ["SessionStart", "UserPromptSubmit", "Stop", "SubagentStop", "Notification", "SessionEnd", "PostToolUse"])
             expect(s.hooks[e].filter((h: any) => h.hooks[0].command.endsWith("wintos-hook.sh"))).toHaveLength(1);
+        expect(s.hooks.PostToolUse[0].matcher).toBe("Bash");
     });
 
     test("a Claude config dir given names where they go; another account's settings stay as they were", () => {
@@ -249,6 +269,17 @@ describe("wintos wait", () => {
         const r = spawnSync(CLI, ["wait", "x"], { env: { PATH: process.env.PATH! }, encoding: "utf8" });
         expect(r.status).toBe(1);
         expect(r.stderr).toContain("no WAVETERM_BLOCKID");
+    });
+});
+
+describe("wintos status", () => {
+    test("sets this block's session's line", async () => {
+        const d = await fakeDaemon("");
+        const out = await new Promise<string>((resolve) =>
+            require("child_process").execFile(CLI, ["status", "Walking", "the", "plan"], { env: { ...process.env, WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+        );
+        expect(out.trim()).toBe("status: Walking the plan");
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/status", body: { text: "Walking the plan" } });
     });
 });
 

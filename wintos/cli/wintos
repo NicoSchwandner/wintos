@@ -3,6 +3,7 @@
 #   wintos title <words…>              name this tab's project (used by Claude)
 #   wintos wait <what…>                end this turn parked on something outside (used by Claude)
 #   wintos done                        end this turn done: nothing waits on the developer (used by Claude)
+#   wintos status <line…>              what this session is doing now, shown on its pane (used by Claude)
 #   wintos hooks install|uninstall [<claude config dir>]
 #                                      wire the hook into that Claude Code config (default ~/.claude);
 #                                      one account each, named explicitly
@@ -47,6 +48,15 @@ wait)
         die "wintosd not reachable on port $PORT, or it refused the reason"
     echo "waiting on: $*"
     ;;
+status)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos status <what this session is doing>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    jq -n --arg t "$*" '{text: $t}' |
+        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/status" >/dev/null ||
+        die "wintosd not reachable on port $PORT, or it refused the line"
+    echo "status: $*"
+    ;;
 done)
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     echo '{}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/done" >/dev/null ||
@@ -67,8 +77,9 @@ hooks)
     install)
         # shellcheck disable=SC2016
         rewrite_settings --arg hook "$HOOK" --arg events "$EVENTS" "$strip"' | reduce ($events | split(" "))[] as $e (.;
-            .hooks[$e] = ((.hooks[$e] // []) + [{hooks: [{type: "command", command: $hook}]}]))'
-        echo "wintos: hooks installed in $SETTINGS ($EVENTS)"
+            .hooks[$e] = ((.hooks[$e] // []) + [{hooks: [{type: "command", command: $hook}]}]))
+            | .hooks.PostToolUse = ((.hooks.PostToolUse // []) + [{matcher: "Bash", hooks: [{type: "command", command: $hook}]}])'
+        echo "wintos: hooks installed in $SETTINGS ($EVENTS PostToolUse:Bash)"
         ;;
     uninstall)
         rewrite_settings "$strip"' | .hooks |= with_entries(select(.value | length > 0)) | if .hooks == {} then del(.hooks) else . end'
@@ -77,5 +88,5 @@ hooks)
     *) die "usage: wintos hooks install|uninstall [<claude config dir>]" ;;
     esac
     ;;
-*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos hooks install|uninstall [<claude config dir>]" ;;
+*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos status <line> | wintos hooks install|uninstall [<claude config dir>]" ;;
 esac

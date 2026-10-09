@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session } from "./reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setStatus } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -144,4 +144,23 @@ describe("turnEndedAt", () => {
         expect(only(m).turnEndedAt).toBe(1010);
         expect(only(reduceSession(m, ev(prompt), 2000)).turnEndedAt).toBe(1010);
     });
+});
+
+describe("a session's PRs (PostToolUse on gh pr)", () => {
+    const tool = (prs: string[]) => ({ ...stop, hook_event_name: "PostToolUse", prs });
+    const A = "https://github.com/o/r/pull/1", B = "https://github.com/o/r/pull/2";
+    test("collects the PRs its commands touched, once each, newest last", () =>
+        expect(only(run([ev(prompt), ev(tool([A])), ev(tool([B, A]))])).prs).toEqual([B, A]));
+    test("a listing of many PRs claims none", () =>
+        expect(only(run([ev(prompt), ev(tool([A, B, "https://github.com/o/r/pull/3", "https://github.com/o/r/pull/4"]))])).prs).toBeUndefined());
+    test("a tool call never changes the state", () => expect(only(run([ev(stop), ev(tool([A]))])).state).toBe("waiting"));
+    test("the PRs outlive the turn", () => expect(only(run([ev(tool([A])), ev(stop), ev(prompt)])).prs).toEqual([A]));
+});
+
+describe("setStatus (`wintos status`)", () => {
+    const m = run([ev(prompt)]);
+    test("sets the block's live session's line, with when", () =>
+        expect(only(setStatus(m, "blk-1", "Walking the test plan", 5000)).status).toEqual({ text: "Walking the test plan", at: 5000 }));
+    test("it outlives turns", () => expect(only(reduceSession(setStatus(m, "blk-1", "x", 5000), ev(stop), 6000)).status?.text).toBe("x"));
+    test("another block's session is untouched", () => expect(setStatus(m, "other", "x", 5000)).toBe(m));
 });

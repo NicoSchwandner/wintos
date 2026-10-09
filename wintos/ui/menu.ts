@@ -10,7 +10,7 @@ import { FLAG_EVENT, mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, 
 import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, LayoutTreeActionType, NavigateDirection, type LayoutTreeSwapNodeAction } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
-import { isInboxTab } from "./view";
+import { isInboxTab, sessionHeader, urgentPr } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
 import { installFocusRing } from "./focusRing";
@@ -78,6 +78,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:c", "copy-url"],
     ["Option:Cmd:z", "snooze-project"],
     ["Option:Cmd:p", "park-session"],
+    ["Option:Cmd:g", "open-pane-pr"],
     ["Shift:Cmd:j", "join-meeting"],
     ["Shift:Cmd:y", "day"],
     ["Shift:Cmd:i", "keyboard"],
@@ -254,6 +255,15 @@ export function runAction(action: string): void {
         const m = meetingToJoin(Date.now());
         flog(m ? `join meeting ${m.title}` : "join meeting: none with a link today");
         if (m?.url) getApi().openExternal(m.url);
+        return;
+    }
+    if (action === "open-pane-pr") {
+        const lm = getLayoutModelForStaticTab();
+        const blockId = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
+        const state = currentState();
+        const pr = blockId && state ? urgentPr(sessionHeader(state, blockId)) : undefined;
+        flog(pr ? `open pane pr ${pr.url}` : "open pane pr: none on this pane");
+        if (pr) openPage(pr.url);
         return;
     }
     if (action === "park-session") {

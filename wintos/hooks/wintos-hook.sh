@@ -29,6 +29,19 @@ if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" != "sdk-cli" ];
     esac
 fi
 
+# A Bash call (PostToolUse) only matters when it was a gh pr command: then the PRs it named, by
+# link or by number and repo, become the session's. The rest of the call never leaves here.
+if [ "$(printf '%s' "$payload" | jq -r '.hook_event_name' 2>/dev/null)" = "PostToolUse" ]; then
+    payload="$(printf '%s' "$payload" | jq -c '
+        (.tool_input.command // "") as $c
+        | select($c | test("(^|[;&|(\\s])gh pr (create|edit|ready|merge|comment|view|checks|review|close|reopen)\\b"))
+        | ([$c, (.tool_response | tostring)] | join(" ") | [scan("https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+")])
+          + ([($c | capture("gh pr [a-z]+ (?<n>[0-9]+)\\b")), ($c | capture("(-R|--repo)[ =](?<r>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"))] | if length == 2 then ["https://github.com/\(.[1].r)/pull/\(.[0].n)"] else [] end)
+        | unique as $prs | select($prs | length > 0)
+        | {hook_event_name: "PostToolUse", session_id: $ARGS.named.p.session_id, cwd: $ARGS.named.p.cwd, prs: $prs}' --argjson p "$payload" 2>/dev/null)"
+    [ -n "$payload" ] || exit 0
+fi
+
 printf '%s' "$payload" | jq -c --arg t "$WAVETERM_TABID" --arg b "${WAVETERM_BLOCKID:-}" '{tabId: $t, blockId: $b, payload: .}' 2>/dev/null |
     curl -sf -m 0.2 -H "Content-Type: application/json" --data-binary @- "http://127.0.0.1:${WINTOS_PORT:-7730}/events" 2>/dev/null
 exit 0

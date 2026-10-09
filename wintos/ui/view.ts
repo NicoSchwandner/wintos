@@ -3,7 +3,7 @@ import type { Day } from "../daemon/journal/journal";
 import type { KeyStats } from "../daemon/keyboard/keyboard";
 import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
-import { GROUPS, isSnoozed, isStacked, lastMovement, projectPrs, qualifier, type Group, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
+import { GROUPS, groupOf, isSnoozed, isStacked, lastMovement, projectPrs, qualifier, type Group, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
 import type { Session } from "../daemon/sessions/reduce";
 import type { Shelved } from "../daemon/shelf/shelf";
 
@@ -113,7 +113,9 @@ export function projectPrList(state: WintosState, tabId: string): ProjectPrRow[]
     const project = state.projects.find((p) => p.id === tabId);
     if (!gh || !project) return [];
     const numbers = new Map(gh.prs.map((p) => [p.url, p.number]));
-    const rows = projectPrs(project, gh.prs, gh.me, state.now).items.map(({ pr, group }): ProjectPrRow => {
+    // A PR a session here owns is on that session's pane header instead.
+    const owned = new Set(state.sessions.filter((s) => s.tabId === tabId && s.state !== "ended").flatMap((s) => s.prs ?? []));
+    const rows = projectPrs(project, gh.prs.filter((p) => !owned.has(p.url)), gh.me, state.now).items.map(({ pr, group }): ProjectPrRow => {
         const on = !isStacked(pr) ? undefined : pr.stackedOn && numbers.has(pr.stackedOn) ? `#${numbers.get(pr.stackedOn)}` : pr.base;
         const note = [qualifier(pr, group)?.text, on && `stacked on ${on}`].filter(Boolean).join(" · ") || undefined;
         return { pr, group, note, snoozed: isSnoozed(pr, state.snoozes ?? {}, state.now) };
@@ -135,3 +137,40 @@ export function prProjects(tabIds: string[], state: WintosState): Map<string, st
     }
     return out;
 }
+
+// The header on a Claude pane: what it works on and what its PRs ask of you.
+export type SessionHeader = {
+    session: Session;
+    task?: string;
+    branch?: string;
+    prs: { url: string; number: number; group?: Group; why?: string }[];
+    tone?: "apricot" | "brick"; // a PR here needs a fix (apricot) or is past the SLA (brick)
+};
+
+const TASK_ID = /\b[A-Z][A-Z0-9]+-\d+\b/i;
+
+export function sessionHeader(state: WintosState, blockId: string): SessionHeader | undefined {
+    const session = state.sessions.filter((s) => s.blockId === blockId && s.state !== "ended").sort((a, b) => b.lastAt - a.lastAt)[0];
+    if (!session) return undefined;
+    const gh = ghPrs(state);
+    const byUrl = new Map((gh?.prs ?? []).map((p) => [p.url, p]));
+    const prs = (session.prs ?? []).map((url) => {
+        const pr = byUrl.get(url);
+        const number = Number(url.split("/").pop());
+        if (!pr || !gh) return { url, number };
+        const group = groupOf(pr, gh.me, state.now);
+        const why = qualifier(pr, group)?.text;
+        return why ? { url, number, group, why } : { url, number, group };
+    });
+    const open = (session.prs ?? []).map((u) => byUrl.get(u)).filter((p): p is PR => !!p);
+    const where = session.cwd?.split("/").pop();
+    const branch = open[0]?.branch ?? where;
+    const task = [...open.flatMap((p) => [p.branch, p.title]), where ?? ""].map((t) => TASK_ID.exec(t)?.[0]).find(Boolean)?.toUpperCase();
+    const groups = prs.map((p) => p.group);
+    const tone = groups.some((g) => g === "chase" || g === "release") ? "brick" : groups.includes("fix") ? "apricot" : undefined;
+    return { session, ...(task && { task }), ...(branch && { branch }), prs, ...(tone && { tone }) };
+}
+
+// The PR ⌥⌘G opens from the focused pane: the one the queue would put first.
+export const urgentPr = (h: SessionHeader | undefined) =>
+    h?.prs.filter((p) => p.group).sort((a, b) => GROUPS.indexOf(a.group!) - GROUPS.indexOf(b.group!))[0] ?? h?.prs[0];

@@ -29,7 +29,7 @@ export const PrList = memo(({ tabId, size }: { tabId: string; size: "rail" | "fu
     if (!rows.length) return null;
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.secondary }}>pull requests</span>
+            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.secondary }}>other pull requests</span>
             {rows.map((r, i) => (
                 <div
                     key={r.pr.url}

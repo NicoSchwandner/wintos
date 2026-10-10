@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { linkStacks, normalize, orgQualifier, type Node } from "./normalize";
+import { linkStacks, normalize, orgQualifier, unreleased, type Node } from "./normalize";
 
 const node = (n: Partial<Node> = {}): Node => ({
     number: 7, title: "Add flag", url: "https://github.com/o/r/pull/7", isDraft: false,
@@ -41,6 +41,17 @@ describe("normalize", () => {
             ] },
         }), "me", { requestedMe: false, requestedTeam: false });
         expect([p.lastReviewAt, p.changesRequestedBy, p.reviewedByMe]).toEqual(["2026-09-26T10:00:00Z", "bo.k", true]);
+    });
+
+    test("changes requested, and everyone who asked has been asked again: re-requested", () => {
+        const cr = (latest: Node["latestReviews"]["nodes"], asked: string[]) =>
+            normalize(node({ reviewDecision: "CHANGES_REQUESTED", latestReviews: { nodes: latest }, reviewRequests: { nodes: asked.map((login) => ({ requestedReviewer: { __typename: "User", login } })) } }), "me", { requestedMe: false, requestedTeam: false }).changesRerequested;
+        const bo = { author: { login: "bo.k" }, state: "CHANGES_REQUESTED", submittedAt: "2026-09-26T10:00:00Z" };
+        expect(cr([bo], ["bo.k"])).toBe(true);
+        // GitHub can drop the old review from latestReviews once its author is asked again.
+        expect(cr([], ["bo.k"])).toBe(true);
+        expect(cr([bo], [])).toBeUndefined();
+        expect(cr([bo, { ...bo, author: { login: "cy" } }], ["bo.k"])).toBeUndefined();
     });
 
     test("team review requests use the team name; conflicts and missing checks are read", () => {
@@ -95,4 +106,16 @@ describe("approval in a repo that requires no reviews", () => {
         const p = normalize(node({ reviewDecision: "REVIEW_REQUIRED", latestReviews: { nodes: [review("genne", "APPROVED")] } }), "me", asked);
         expect(p.reviewDecision).toBe("REVIEW_REQUIRED");
     });
+});
+
+describe("unreleased", () => {
+    const merged = (repo: string, oid: string, defaultBranch = "development") =>
+        node({ repository: { nameWithOwner: repo, defaultBranchRef: { name: defaultBranch } }, mergedAt: "2026-09-23T09:00:00Z", mergeCommit: { oid } });
+    test("keeps the merges main does not have yet", () => {
+        const nodes = [merged("o/a", "1"), merged("o/a", "2"), merged("o/b", "3")];
+        expect(unreleased(nodes, { "o/a": new Set(["2"]), "o/b": new Set() }).map((n) => n.mergeCommit!.oid)).toEqual(["2"]);
+    });
+    test("skips a repo it could not compare", () => expect(unreleased([merged("o/a", "1")], {})).toEqual([]));
+    test("normalize carries when it merged", () =>
+        expect(normalize(merged("o/a", "1"), "me", { requestedMe: false, requestedTeam: false }).mergedAt).toBe("2026-09-23T09:00:00Z"));
 });

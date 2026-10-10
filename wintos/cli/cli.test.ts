@@ -83,6 +83,18 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/tmp/it'\\''s here' && claude --resume 's-1'\n`);
     });
 
+    test("a session of another Claude account resumes in that account", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir, { CLAUDE_CONFIG_DIR: "/Users/n/.claude-private" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/Users/n/personal" }));
+        expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/Users/n/personal' && CLAUDE_CONFIG_DIR='/Users/n/.claude-private' claude --resume 's-1'\n`);
+    });
+
+    test("without one set, the resume sets none: setting it, even to the default, changes the account's keychain item", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir, { CLAUDE_CONFIG_DIR: "" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/Users/n/work" }));
+        expect(w.calls()).not.toContain("CLAUDE_CONFIG_DIR");
+    });
+
     test("quitting WintOS (SessionEnd reason other) keeps the resume command", () => {
         const w = fakeWsh();
         runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionEnd", session_id: "s-1", reason: "other" }));
@@ -107,10 +119,16 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         expect(w.calls()).toBe("");
     });
 
-    test("SessionStart does not, since Claude saves nothing to resume before the first prompt", () => {
+    test("a new session's start does not, since Claude saves nothing to resume before the first prompt", () => {
         const w = fakeWsh();
-        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", session_id: "s-1", cwd: "/x" }));
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", source: "startup", session_id: "s-1", cwd: "/x" }));
         expect(w.calls()).toBe("");
+    });
+
+    test("a resumed session's start does: it is saved already, and closed before a prompt it still shelves", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", source: "resume", session_id: "s-1", cwd: "/x" }));
+        expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/x' && claude --resume 's-1'\n`);
     });
 
     test("other events leave the block alone", () => {
@@ -123,6 +141,30 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         const w = fakeWsh();
         runHook({ WAVETERM_TABID: "t", WAVETERM_WSHBINDIR: w.dir, WINTOS_PORT: "1" }, JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s", cwd: "/x" }));
         expect(w.calls()).toBe("");
+    });
+});
+
+describe("wintos-hook.sh on PostToolUse", () => {
+    const post = (command: string, stdout: string) => JSON.stringify({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", tool_name: "Bash", tool_input: { command }, tool_response: { stdout } });
+    test("sends only the PR links of a gh pr command, not the output", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr create --fill", "https://github.com/o/r/pull/12\n"));
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", prs: ["https://github.com/o/r/pull/12"], pr_verb: "create" });
+    });
+    test("gh pr ready is sent even when it names no PR link, so the lane can move", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr ready 12", "✓ Pull request o/r#12 is marked as \"ready for review\"\n"));
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", prs: [], pr_verb: "ready" });
+    });
+    test("a PR named by number and repo counts too", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr edit 340 -R WintDev/Wint.HeartMcp --add-reviewer x", ""));
+        expect(d.seen[0].body.payload.prs).toEqual(["https://github.com/WintDev/Wint.HeartMcp/pull/340"]);
+    });
+    test("a command that is no gh pr command sends nothing", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("ls", "https://github.com/o/r/pull/12"));
+        expect(d.seen).toEqual([]);
     });
 });
 
@@ -143,8 +185,24 @@ describe("wintos hooks", () => {
         expect(s.model).toBe("x");
         expect(s.hooks.Stop).toHaveLength(2);
         expect(s.hooks.Stop[0].hooks[0].command).toBe("mine.sh");
-        for (const e of ["SessionStart", "UserPromptSubmit", "Stop", "SubagentStop", "Notification", "SessionEnd"])
+        for (const e of ["SessionStart", "UserPromptSubmit", "Stop", "SubagentStop", "Notification", "SessionEnd", "PostToolUse"])
             expect(s.hooks[e].filter((h: any) => h.hooks[0].command.endsWith("wintos-hook.sh"))).toHaveLength(1);
+        expect(s.hooks.PostToolUse[0].matcher).toBe("Bash");
+    });
+
+    test("a Claude config dir given names where they go; another account's settings stay as they were", () => {
+        const { settings, read } = setup();
+        const other = tmp();
+        execFileSync(CLI, ["hooks", "install", other], { env: { ...process.env, WINTOS_CLAUDE_SETTINGS: settings } });
+        const s = JSON.parse(readFileSync(join(other, "settings.json"), "utf8"));
+        expect(s.hooks.Stop[0].hooks[0].command).toMatch(/wintos-hook\.sh$/);
+        expect(read().hooks.Stop).toHaveLength(1);
+        execFileSync(CLI, ["hooks", "uninstall", other]);
+        expect(JSON.parse(readFileSync(join(other, "settings.json"), "utf8"))).toEqual({});
+    });
+
+    test("a config dir that does not exist is refused", () => {
+        expect(() => execFileSync(CLI, ["hooks", "install", join(tmp(), "nope")], { stdio: "pipe" })).toThrow(/no such Claude config dir/);
     });
 
     test("hooks without a command (prompt/agent types) survive install and uninstall", () => {
@@ -216,6 +274,31 @@ describe("wintos wait", () => {
         const r = spawnSync(CLI, ["wait", "x"], { env: { PATH: process.env.PATH! }, encoding: "utf8" });
         expect(r.status).toBe(1);
         expect(r.stderr).toContain("no WAVETERM_BLOCKID");
+    });
+});
+
+describe("wintos status", () => {
+    test("sets this block's session's line", async () => {
+        const d = await fakeDaemon("");
+        const out = await new Promise<string>((resolve) =>
+            require("child_process").execFile(CLI, ["status", "Walking", "the", "plan"], { env: { ...process.env, WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+        );
+        expect(out.trim()).toBe("status: Walking the plan");
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/status", body: { text: "Walking the plan" } });
+    });
+});
+
+describe("wintos lane and step", () => {
+    const cli = (args: string[], port: number) =>
+        new Promise<string>((resolve) => require("child_process").execFile(CLI, args, { env: { ...process.env, WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(port) } }, (_e: unknown, so: string) => resolve(so)));
+    test("lane sends the name and steps; step the step and its note", async () => {
+        const d = await fakeDaemon("");
+        expect((await cli(["lane", "feature", "Design", "?Approve spec", "Build"], d.port)).trim()).toBe("lane: feature (Design · ?Approve spec · Build)");
+        expect((await cli(["step", "Build", "slice", "2", "of", "3"], d.port)).trim()).toBe("step: Build (slice 2 of 3)");
+        expect(d.seen).toEqual([
+            { url: "/blocks/blk-1/lane", body: { name: "feature", steps: ["Design", "?Approve spec", "Build"] } },
+            { url: "/blocks/blk-1/step", body: { step: "Build", note: "slice 2 of 3" } },
+        ]);
     });
 });
 

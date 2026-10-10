@@ -44,6 +44,11 @@ async function visible() {
 // So WintOS keys are pressed after CDP's own DOM.focus on the Inbox list, else the document body.
 async function focusOut(t) {
     if (await evalIn(t, "document.hasFocus() && document.activeElement?.tagName !== 'WEBVIEW'")) return;
+    await cdpFocus(t, "[data-wintos=inbox-list]", "body");
+}
+
+// Real focus through CDP on the first selector that matches; node ids live per session.
+async function cdpFocus(t, ...selectors) {
     const ws = new WebSocket(t.webSocketDebuggerUrl);
     await new Promise((r) => ws.addEventListener("open", r));
     let id = 0;
@@ -57,9 +62,13 @@ async function focusOut(t) {
             ws.send(JSON.stringify({ id: n, method, params }));
         });
     const { root } = await call("DOM.getDocument");
-    const list = await call("DOM.querySelector", { nodeId: root.nodeId, selector: "[data-wintos=inbox-list]" });
-    const body = await call("DOM.querySelector", { nodeId: root.nodeId, selector: "body" });
-    await call("DOM.focus", { nodeId: list?.nodeId || body.nodeId });
+    for (const selector of selectors) {
+        const found = await call("DOM.querySelector", { nodeId: root.nodeId, selector });
+        if (found?.nodeId) {
+            await call("DOM.focus", { nodeId: found.nodeId });
+            break;
+        }
+    }
     ws.close();
 }
 
@@ -99,21 +108,48 @@ async function scenario(name, fn) {
 }
 
 async function toProject() {
+    // ⌘J walks the cards too, so from PRs it may land on On call first.
     let t = await visible();
-    if (await inboxIn(t)) await press(t, "j", { mods: ["meta"] });
+    for (let i = 0; i < 3 && (await inboxIn(t)); i++) {
+        await press(t, "j", { mods: ["meta"] });
+        await sleep(1500);
+        t = await visible();
+    }
     return until("a project in front", async () => ((t = await visible()), !(await inboxIn(t)) && t));
 }
 
+// The dev window usually sits behind the developer's own windows, and it must stay there: a
+// covered window is neither focused nor visible, so focus handoffs stall. Focus emulation makes
+// each renderer behave as if in front; it lasts while its CDP session stays open, so hold one per
+// renderer for the whole run.
+const held = new Set();
+async function holdFocus() {
+    for (const t of await renderers()) {
+        if (held.has(t.id)) continue;
+        const ws = new WebSocket(t.webSocketDebuggerUrl);
+        await new Promise((r) => ws.addEventListener("open", r));
+        ws.send(JSON.stringify({ id: 1, method: "Emulation.setFocusEmulationEnabled", params: { enabled: true } }));
+        held.add(t.id);
+    }
+}
+await holdFocus();
+const heldTimer = setInterval(holdFocus, 1000); // renderers created during the run
+
 // Every run starts with at least one project (the dev-only wintosAction hook creates one).
-const projects = () => Number(sql(`select count(*) from db_tab where coalesce(data->>'$.meta."wintos:inbox"', 0) != 1`));
+const projects = () => Number(sql(`select count(*) from db_tab where data->>'$.meta."wintos:inbox"' is null`));
+// The PRs tab (1: an Inbox from before the split into PRs and On call).
+const PRS_TAB = `data->>'$.meta."wintos:inbox"' in (1, 'prs')`;
 if (projects() === 0) {
     await evalIn(await visible(), `window.wintosAction("project")`);
     await until("a project", async () => projects() > 0);
 }
 
-await scenario("9 · the Inbox exists exactly once", async () => {
-    const n = sql(`select count(*) from db_tab where data->>'$.meta."wintos:inbox"' = 1`);
-    if (n !== "1") throw new Error(`${n} Inbox tabs`);
+// Panes in the Inbox before the run; the run closes every other one at the end.
+const inboxPanesAtStart = sql(`select j.value from db_tab t, json_each(t.data->'blockids') j where t.${PRS_TAB}`).split("\n").filter(Boolean);
+
+await scenario("9 · the PRs and the On call tab exist, one of each", async () => {
+    const n = (kind) => sql(`select count(*) from db_tab where data->>'$.meta."wintos:inbox"' = '${kind}' or (${kind === "prs" ? "data->>'$.meta.\"wintos:inbox\"' = 1" : "0"})`);
+    if (n("prs") !== "1" || n("oncall") !== "1") throw new Error(`PRs tabs ${n("prs")}, On call tabs ${n("oncall")}`);
 });
 
 await scenario("1 · ⇧⌘G from a project shows the Inbox with its list focused, and no project renders a PR view", async () => {
@@ -124,7 +160,8 @@ await scenario("1 · ⇧⌘G from a project shows the Inbox with its list focuse
         return (await inboxIn(t)) && t;
     });
     await until("the list focused", () => evalIn(inbox, `document.activeElement?.dataset?.wintos === "inbox-list"`));
-    for (const t of await renderers()) if (t.id !== inbox.id && (await evalIn(t, `!!document.querySelector("[data-wintos=inbox-list]")`))) throw new Error(`renderer ${t.id.slice(0, 6)} renders a PR list`);
+    // Only the Inbox tabs (PRs, On call) show a list; a project never does.
+    for (const t of await renderers()) if (t.id !== inbox.id && (await evalIn(t, `!!document.querySelector("[data-wintos=inbox-list]") && !document.querySelector("[data-wintos=inbox]")`))) throw new Error(`renderer ${t.id.slice(0, 6)} renders a PR list`);
 });
 
 let prUrl;
@@ -168,24 +205,191 @@ await scenario("3b · a new-window link in the Inbox opens a pane you can see", 
     await until("the new pane in front", () => evalIn(inbox, `(() => { const on = document.querySelector("[data-pane][data-on]")?.dataset.pane; return !!on && document.querySelector('[data-blockid="' + on + '"] webview')?.getAttribute("src") === ${JSON.stringify(url)}; })()`));
 });
 
-await scenario("4 · ⌥⌘→ moves to the next pane", async () => {
+await scenario("4 · ⌘L from the list goes to the page", async () => {
     const inbox = await visible();
-    const on = () => evalIn(inbox, `document.querySelector("[data-pane][data-on]")?.dataset.pane`);
-    const first = await on();
-    await press(inbox, "ArrowRight", { code: "ArrowRight", keyCode: 39, mods: ["alt", "meta"] });
-    await until("another pane", async () => (await on()) !== first);
+    await focusOut(inbox);
+    await press(inbox, "l", { mods: ["meta"] });
+    await until("the page focused", () => evalIn(inbox, `document.activeElement?.tagName === "WEBVIEW"`));
 });
 
 await scenario("8 · ⇧⌘W in the Inbox leaves it open", async () => {
-    const inbox = await visible();
+    // Pressed on a project it would close that project: make sure the Inbox is in front first.
+    let inbox = await visible();
+    if (!(await inboxIn(inbox))) await press(inbox, "g", { mods: ["meta", "shift"] });
+    inbox = await until("the Inbox in front", async () => ((await inboxIn(await visible())) ? visible() : false));
     const before = projects();
     await press(inbox, "w", { mods: ["meta", "shift"] });
     await sleep(1500);
     if (!(await inboxIn(await visible()))) throw new Error("the Inbox is no longer in front");
-    if (sql(`select count(*) from db_tab where data->>'$.meta."wintos:inbox"' = 1`) !== "1") throw new Error("the Inbox tab is gone");
+    if (sql(`select count(*) from db_tab where ${PRS_TAB}`) !== "1") throw new Error("the PRs tab is gone");
     // Wave's own ⇧⌘W once shadowed WintOS's and closed a project without asking.
     if (projects() !== before) throw new Error("a project was closed");
 });
 
+const inboxId = () => sql(`select oid from db_tab where ${PRS_TAB}`);
+const inboxPanes = () => Number(sql(`select json_array_length(data->'blockids') from db_tab where oid = '${inboxId()}'`));
+const selectedRow = (t) => evalIn(t, `document.querySelector("[data-selected]")?.dataset.pr`);
+const toInbox = async () => {
+    const t = await visible();
+    if (!(await inboxIn(t))) await press(t, "g", { mods: ["meta", "shift"] });
+    const inbox = await until("the Inbox in front", async () => ((await inboxIn(await visible())) ? visible() : false));
+    await cdpFocus(inbox, "[data-wintos=inbox-list]");
+    return inbox;
+};
+
+await scenario("5 · ⌘J from the PR list switches the project and leaves the list cursor where it was", async () => {
+    const inbox = await toInbox();
+    await press(inbox, "j");
+    await until("a row selected", () => selectedRow(inbox));
+    const row = await selectedRow(inbox);
+    await toProject();
+    const after = await selectedRow(inbox);
+    if (after !== row) throw new Error(`the list cursor moved from ${row} to ${after}`);
+});
+
+await scenario("6 · ⌘W with the list focused closes nothing", async () => {
+    const inbox = await toInbox();
+    const [panes, before] = [inboxPanes(), projects()];
+    await press(inbox, "w", { mods: ["meta"] });
+    await sleep(1500);
+    if (inboxPanes() !== panes) throw new Error(`${panes - inboxPanes()} pane(s) closed`);
+    if (projects() !== before) throw new Error("a project was closed");
+});
+
+await scenario("7 · Esc closes the palette and focus goes back to the list; from a page, back to the list", async () => {
+    const inbox = await toInbox();
+    await press(inbox, "p", { mods: ["meta", "shift"] });
+    await until("the palette", () => evalIn(inbox, `!!document.querySelector("[data-wintos=palette]")`));
+    // j and z are the list's keys; in the palette's field they are typing.
+    const row = await selectedRow(inbox);
+    for (const k of ["j", "z"]) {
+        const ev = { key: k, code: `Key${k.toUpperCase()}`, windowsVirtualKeyCode: k.toUpperCase().charCodeAt(0) };
+        await cdp(inbox, "Input.dispatchKeyEvent", { type: "keyDown", text: k, ...ev });
+        await cdp(inbox, "Input.dispatchKeyEvent", { type: "keyUp", ...ev });
+    }
+    const typed = await evalIn(inbox, `document.querySelector("[data-wintos=palette] input")?.value`);
+    if (typed !== "jz") throw new Error(`the palette field reads "${typed}", want "jz"`);
+    if ((await selectedRow(inbox)) !== row) throw new Error("typing in the palette moved the list");
+    // A ⌘ key in the field stays there: no project switches behind the palette.
+    await press(inbox, "j", { mods: ["meta"] });
+    await sleep(800);
+    if (!(await inboxIn(await visible()))) throw new Error("⌘J in the palette switched the project");
+    await press(inbox, "Escape", { code: "Escape", keyCode: 27 });
+    await until("the palette closed", () => evalIn(inbox, `!document.querySelector("[data-wintos=palette]")`));
+    await until("the list focused again", () => evalIn(inbox, `document.activeElement?.dataset?.wintos === "inbox-list"`));
+    // A click, as a person would: it gives the guest page real focus.
+    const at = await evalIn(inbox, `(() => { const w = [...document.querySelectorAll("webview")].find((w) => w.getURL().includes("github.com") && w.getBoundingClientRect().width > 0); const r = w?.getBoundingClientRect(); return r && { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    if (!at) throw new Error("no visible page in the Inbox");
+    for (const type of ["mousePressed", "mouseReleased"]) await cdp(inbox, "Input.dispatchMouseEvent", { type, ...at, button: "left", clickCount: 1 });
+    await until("the page focused", () => evalIn(inbox, `document.activeElement?.tagName === "WEBVIEW"`));
+    // CDP's keys never pass Electron's before-input-event, so emain can't forward them: hand the
+    // renderer the event emain reinjects for a real Esc in the page.
+    await evalIn(inbox, `window.wintosKeyDown({ type: "keydown", key: "Escape", code: "Escape", shift: false, control: false, alt: false, meta: false, cmd: false, option: false, repeat: false, location: 0 })`);
+    await until("the list focused from the page", () => evalIn(inbox, `document.activeElement?.dataset?.wintos === "inbox-list"`));
+});
+
+await scenario("10 · ⌘D in the Inbox makes no terminal", async () => {
+    const inbox = await toInbox();
+    const panes = inboxPanes();
+    await press(inbox, "d", { mods: ["meta"] });
+    await sleep(1500);
+    if (inboxPanes() !== panes) throw new Error("a pane was added to the Inbox");
+});
+
+await scenario("11 · ⇧⌘Y in a project and in the Inbox shows the Today page, and again goes back", async () => {
+    for (const t of [await toProject(), await toInbox()]) {
+        await press(t, "y", { mods: ["meta", "shift"] });
+        await until("the Today page", () => evalIn(t, `!!document.querySelector("[data-wintos=today]")`));
+        if (await evalIn(t, `document.body.innerText.includes("Cannot read properties")`)) throw new Error("the page crashed");
+        await press(t, "y", { mods: ["meta", "shift"] });
+        await until("the page gone", async () => !(await evalIn(t, `!!document.querySelector("[data-wintos=today]")`)));
+    }
+});
+
+await scenario("12 · ⌘W on a working session warns first, then shelves it into the notes, and ⌥⌘1 resumes it as a new pane", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const shelf = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).shelf?.[tabId] ?? [];
+    const panes = () => sql(`select json_array_length(data->'blockids') from db_tab where oid='${tabId}'`);
+    // What the hook leaves on a session's pane after its first prompt.
+    // A project's shell starts when its terminal first shows: give it a moment to take input.
+    await until("a terminal", () => evalIn(t, "!!document.querySelector('.xterm-helper-textarea')"));
+    await sleep(2500);
+    // A shell still drawing its first prompt drops what was typed, so type again until it lands.
+    const resumable = () => sql(`select count(*) from db_block where data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`) === "1";
+    for (let i = 0; i < 4 && !resumable(); i++) {
+        await cdpFocus(t, ".xterm-helper-textarea");
+        await cdp(t, "Input.insertText", { text: `wsh setmeta -b this "cmd:initscript=cd '/tmp' && claude --resume 'e2e-shelf'"` });
+        await press(t, "Enter", { keyCode: 13 });
+        await until("the resume command on the pane", resumable, 4000).catch(() => {});
+    }
+    await until("the resume command on the pane", resumable, 1000);
+    // A prompt makes the session working: the first ⌘W only warns, the second closes.
+    const blockId = sql(`select oid from db_block where data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`);
+    await fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-shelf", hook_event_name: "UserPromptSubmit", prompt: "e2e shelf" } }) });
+    await sleep(1000);
+    const before = panes();
+    await evalIn(t, `document.querySelector('button[data-key="⌘W"]').click()`);
+    await until("the warning", () => evalIn(t, `document.body.innerText.includes("again to stop the working session")`));
+    await sleep(500);
+    if (panes() !== before) throw new Error("the first ⌘W closed a working session");
+    await evalIn(t, `document.querySelector('button[data-key="⌘W"]').click()`);
+    await until("the session on the shelf", async () => (await shelf()).some((s) => s.sessionId === "e2e-shelf"));
+    await until("the pane closed", () => panes() !== before);
+    await until("its row in the notes", () => evalIn(t, `document.querySelector("[data-wintos=shelf-dock]")?.innerText.includes("e2e shelf")`));
+    await press(t, "¡", { code: "Digit1", keyCode: 49, mods: ["alt", "meta"] });
+    await until("a new pane resuming it", () => sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j, db_block b where t.oid='${tabId}' and b.oid=j.value and b.data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`) === "1");
+});
+
+await scenario("13 · ⌃⌘H carries the focused pane one place left and it keeps the focus", async () => {
+    const t = await toProject();
+    const order = () => evalIn(t, `JSON.stringify(window.wintosLayout().getter(window.wintosLayout().leafOrder).map((l) => l.blockid))`);
+    const focused = () => evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    // An empty project gets its first pane from the first ⌘D, so split until there are two.
+    for (let n = JSON.parse(await order()).length; n < 2; n++) {
+        await press(t, "d", { mods: ["meta"] });
+        await until("a split", async () => JSON.parse(await order()).length === n + 1);
+    }
+    const split = JSON.parse(await order());
+    const mine = await focused();
+    if (split.indexOf(mine) < 1) throw new Error(`the new pane is not right of another: ${split}`);
+    await press(t, "h", { mods: ["meta", "ctrl"] });
+    await until("the pane one place left", async () => JSON.parse(await order()).indexOf(mine) === split.indexOf(mine) - 1);
+    if ((await focused()) !== mine) throw new Error("the focus stayed behind");
+    await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(mine)}).id)`);
+});
+
+await scenario("14 · ⌥⌘P parks the session waiting in a pane just opened", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const panes = Number(sql(`select json_array_length(data->'blockids') from db_tab where oid='${tabId}'`));
+    await press(t, "d", { mods: ["meta"] });
+    await until("a new pane", () => Number(sql(`select json_array_length(data->'blockids') from db_tab where oid='${tabId}'`)) === panes + 1);
+    const blockId = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const post = (hook_event_name) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-park", hook_event_name, prompt: "e2e park" } }) });
+    await post("UserPromptSubmit");
+    await post("Stop");
+    const state = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((s) => s.id === "e2e-park")?.state;
+    await until("the session waiting", async () => (await state()) === "waiting");
+    await press(t, "p", { code: "KeyP", keyCode: 80, mods: ["alt", "meta"] });
+    await until("the session parked", async () => (await state()) === "parked");
+    await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
+});
+
+// The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
+// must not cost the run its results.
+await scenario("clean-up · the panes this run opened are closed", async () => {
+    const inbox = await toInbox();
+    await evalIn(inbox, `(async () => {
+        const keep = new Set(${JSON.stringify(inboxPanesAtStart)});
+        const lm = window.wintosLayout();
+        for (const el of document.querySelectorAll("[data-blockid]")) {
+            const node = !keep.has(el.dataset.blockid) && lm.getNodeByBlockId(el.dataset.blockid);
+            if (node) await lm.closeNode(node.id);
+        }
+    })()`);
+});
+
+clearInterval(heldTimer);
 for (const r of results) console.log(r.join("  "));
 process.exit(results.some((r) => r[0] === "FAIL") ? 1 : 0);

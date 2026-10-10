@@ -289,6 +289,14 @@ export function initIpcHandlers() {
     });
 
     const hasBeforeInputRegisteredMap = new Map<number, boolean>();
+    // WintOS: pages whose focused element takes text (a GitHub comment), as their preload reports.
+    // There the page keeps its own editing keys, though WintOS binds them elsewhere.
+    const editingPages = new Set<number>();
+    const PAGE_EDIT_KEYS = ["Escape", "Cmd:Enter", "Cmd:k", "Cmd:e", "Cmd:i", "Cmd:b", "Shift:Cmd:p"];
+    electron.ipcMain.on("wintos-page-editing", (event: Electron.IpcMainEvent, editing: boolean) => {
+        if (editing) editingPages.add(event.sender.id);
+        else editingPages.delete(event.sender.id);
+    });
 
     electron.ipcMain.on("webview-focus", (event: Electron.IpcMainEvent, focusedId: number) => {
         webviewFocusId = focusedId;
@@ -313,6 +321,9 @@ export function initIpcHandlers() {
                 if (input.type != "keyDown") {
                     return;
                 }
+                if (editingPages.has(focusedId) && PAGE_EDIT_KEYS.some((k) => keyutil.checkKeyPressed(waveEvent, k))) {
+                    return;
+                }
                 for (let keyDesc of webviewKeys) {
                     if (keyutil.checkKeyPressed(waveEvent, keyDesc)) {
                         e.preventDefault();
@@ -324,8 +335,15 @@ export function initIpcHandlers() {
             });
             webviewWc.on("destroyed", () => {
                 hasBeforeInputRegisteredMap.delete(focusedId);
+                editingPages.delete(focusedId);
             });
         }
+    });
+
+    // WintOS: a tab asks for the window's mode when it starts, as it may have missed the event.
+    electron.ipcMain.on("wintos-is-fullscreen", (event) => {
+        const ww = getWaveWindowByWebContentsId(event.sender.id);
+        event.returnValue = !!ww && !ww.isDestroyed() && ww.isFullScreen();
     });
 
     electron.ipcMain.on("register-global-webview-keys", (event, keys: string[]) => {

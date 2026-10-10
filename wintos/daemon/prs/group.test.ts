@@ -25,6 +25,8 @@ describe("groupOf (spec §4, first match wins)", () => {
     test("red CI on a draft is work in progress, not a fix", () =>
         expect(groupOf(pr({ isDraft: true, checks: "FAILURE" }), "me", MON)).toBe("waiting"));
     test("fix: changes requested", () => expect(groupOf(pr({ reviewDecision: "CHANGES_REQUESTED" }), "me", MON)).toBe("fix"));
+    test("changes requested, all asked again: waiting on them, not yours", () =>
+        expect(groupOf(pr({ reviewDecision: "CHANGES_REQUESTED", changesRerequested: true, reviewers: ["ana.b"], lastReviewAt: "2026-09-28T09:00:00Z" }), "me", MON)).toBe("waiting"));
     test("fix: CI red", () => expect(groupOf(pr({ checks: "FAILURE" }), "me", MON)).toBe("fix"));
     test("fix beats chase", () =>
         expect(groupOf(pr({ checks: "FAILURE", createdAt: "2026-09-01T00:00:00Z" }), "me", MON)).toBe("fix"));
@@ -150,4 +152,17 @@ describe("qualifier without reviewers (the queue shows them as chips)", () => {
         expect(qualifier(pr({ reviewers: [], createdAt: "2026-09-01T09:00:00Z" }), "chase", { reviewers: false })).toBeUndefined();
         expect(qualifier(pr({ checks: "FAILURE" }), "fix", { reviewers: false })).toEqual({ text: "CI red", brick: true });
     });
+});
+
+describe("a merged PR not yet on the release branch", () => {
+    // Merged Wednesday 2026-09-23: three working days before MON.
+    const merged = (mergedAt = "2026-09-23T09:00:00Z") => pr({ mergedAt, reviewDecision: "APPROVED", checks: "SUCCESS" });
+    test("past two working days it asks for a release", () => expect(groupOf(merged(), "me", MON)).toBe("release"));
+    test("within two working days it waits", () => expect(groupOf(merged("2026-09-25T09:00:00Z"), "me", MON)).toBe("waiting"));
+    test("its age counts from the merge", () => expect(ageLabel(merged(), MON).text).toBe("3 wd"));
+    test("it says it is not released", () => expect(qualifier(merged(), "release")?.text).toBe("merged, not on main"));
+    test("it marks its project", () =>
+        expect(projectPrs({ pr: [], title: "DEV-9" }, [{ ...merged(), number: 5, title: "DEV-9 x" }], "me", MON).blocked).toEqual({
+            since: Date.parse("2026-09-23T09:00:00Z"), text: "#5 merged 3 working days ago, not on main", tone: "brick",
+        }));
 });

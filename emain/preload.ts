@@ -7,6 +7,7 @@ import { contextBridge, ipcRenderer, Rectangle, webUtils, WebviewTag } from "ele
 contextBridge.exposeInMainWorld("api", {
     getAuthKey: () => ipcRenderer.sendSync("get-auth-key"),
     getIsDev: () => ipcRenderer.sendSync("get-is-dev"),
+    getWintosFullScreen: () => ipcRenderer.sendSync("wintos-is-fullscreen"),
     getPlatform: () => ipcRenderer.sendSync("get-platform"),
     getCursorPoint: () => ipcRenderer.sendSync("get-cursor-point"),
     getUserName: () => ipcRenderer.sendSync("get-user-name"),
@@ -46,6 +47,7 @@ contextBridge.exposeInMainWorld("api", {
     onWintosMenu: (callback) => ipcRenderer.on("wintos-menu", (_e, action) => callback(action)),
     writeClipboard: (text) => ipcRenderer.send("wintos-clipboard", text),
     onWintosOpenPane: (callback) => ipcRenderer.on("wintos-open-pane", (_e, url) => callback(url)),
+    onWintosWindowFocus: (callback) => ipcRenderer.on("wintos-window-focus", (_e, focused) => callback(focused)),
     updateWindowControlsOverlay: (rect) => ipcRenderer.send("update-window-controls-overlay", rect),
     onReinjectKey: (callback) => ipcRenderer.on("reinject-key", (_event, waveEvent) => callback(waveEvent)),
     setWebviewFocus: (focused: number) => ipcRenderer.send("webview-focus", focused),

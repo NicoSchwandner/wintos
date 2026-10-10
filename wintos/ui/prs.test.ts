@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { PR } from "../daemon/prs/group";
-import { initials, keepSelection, queueModel, reviewerChips } from "./prs";
+import { initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns } from "./prs";
 
 const MON = Date.parse("2026-09-28T09:00:00Z");
 const pr = (p: Partial<PR>): PR => ({
@@ -139,3 +139,31 @@ describe("reviewerChips", () => {
         expect(reviewerChips(pr({ reviewers: [], isDraft: true }), 2)).toEqual({ chips: [], more: 0, none: false, approved: [] });
     });
 });
+
+describe("rowColumns", () => {
+    test("the list alone or a wide split shows every column", () => expect(rowColumns(1400)).toEqual({ size: true, names: true }));
+    test("a little narrower, the size bar goes first", () => expect(rowColumns(900)).toEqual({ size: false, names: true }));
+    test("beside a page on a laptop, names become initials too", () => expect(rowColumns(500)).toEqual({ size: false, names: false }));
+});
+
+describe("matchesPr", () => {
+    const p = { repo: "acme/api", number: 1479, title: "Fix the rounding", author: "ana.b", branch: "ABC-12-rounding" } as Parameters<typeof matchesPr>[0];
+    test.each([
+        ["", true],
+        ["rounding", true],
+        ["ROUND acme", true],
+        ["1479", true],
+        ["#1479", true],
+        ["ana", true],
+        ["abc-12", true],
+        ["rounding vat", false],
+    ])("%s → %s", (q, out) => expect(matchesPr(p, q)).toBe(out));
+});
+
+test("an unreleased merge past the SLA is in Release, counted past SLA", () => {
+    const m = queueModel([pr({ url: "r", mergedAt: "2026-09-23T09:00:00Z" })], "me", MON);
+    expect(m.groups.map((g) => g.group)).toEqual(["release"]);
+    expect(m.pastSla).toBe(1);
+});
+
+test("a merged PR asks no reviewer", () => expect(reviewerChips(pr({ mergedAt: "2026-09-23T09:00:00Z" }), 2).none).toBe(false));

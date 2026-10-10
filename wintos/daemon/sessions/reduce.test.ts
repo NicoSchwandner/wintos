@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session } from "./reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -61,6 +61,11 @@ describe("reduceSession", () => {
 
 describe("parkSession (`wintos wait`)", () => {
     const park = (m: Map<string, Session>, reason = "CI on #1479") => parkSession(m, "blk-1", reason, 5000);
+
+    test("a turn that already ended waiting on you parks at once (you parked it: nothing for you)", () => {
+        const m = run([ev(start), ev(prompt), ev(stop)]);
+        expect(only(park(m, "parked by you"))).toMatchObject({ state: "parked", parkedOn: "parked by you", since: 5000 });
+    });
 
     test("a turn that ends after `wintos wait` is parked, not waiting on the developer", () => {
         const m = run([ev(start), ev(prompt)]);
@@ -138,5 +143,53 @@ describe("turnEndedAt", () => {
         const m = run([ev(prompt), ev(stop)]);
         expect(only(m).turnEndedAt).toBe(1010);
         expect(only(reduceSession(m, ev(prompt), 2000)).turnEndedAt).toBe(1010);
+    });
+});
+
+describe("a session's PRs (PostToolUse on gh pr)", () => {
+    const tool = (prs: string[]) => ({ ...stop, hook_event_name: "PostToolUse", prs });
+    const A = "https://github.com/o/r/pull/1", B = "https://github.com/o/r/pull/2";
+    test("collects the PRs its commands touched, once each, newest last", () =>
+        expect(only(run([ev(prompt), ev(tool([A])), ev(tool([B, A]))])).prs).toEqual([B, A]));
+    test("a listing of many PRs claims none", () =>
+        expect(only(run([ev(prompt), ev(tool([A, B, "https://github.com/o/r/pull/3", "https://github.com/o/r/pull/4"]))])).prs).toBeUndefined());
+    test("a tool call never changes the state", () => expect(only(run([ev(stop), ev(tool([A]))])).state).toBe("waiting"));
+    test("the PRs outlive the turn", () => expect(only(run([ev(tool([A])), ev(stop), ev(prompt)])).prs).toEqual([A]));
+});
+
+describe("setStatus (`wintos status`)", () => {
+    const m = run([ev(prompt)]);
+    test("sets the block's live session's line, with when", () =>
+        expect(only(setStatus(m, "blk-1", "Walking the test plan", 5000)).status).toEqual({ text: "Walking the test plan", at: 5000 }));
+    test("it outlives turns", () => expect(only(reduceSession(setStatus(m, "blk-1", "x", 5000), ev(stop), 6000)).status?.text).toBe("x"));
+    test("another block's session is untouched", () => expect(setStatus(m, "other", "x", 5000)).toBe(m));
+});
+
+describe("a session's lane (`wintos lane`, `wintos step`)", () => {
+    const m = setLane(run([ev(prompt)]), "blk-1", "feature", ["Design", "Spec", "?Approve spec", "Build"]);
+    test("starts at its first step", () => expect(only(m).lane).toEqual({ name: "feature", steps: ["Design", "Spec", "?Approve spec", "Build"], at: 0 }));
+    test("a step is found by name, any case, without its ?, or by its start", () => {
+        expect(only(setStep(m, "blk-1", "approve SPEC")!).lane?.at).toBe(2);
+        expect(only(setStep(m, "blk-1", "Bui", "slice 2 of 3")!).lane).toMatchObject({ at: 3, note: "slice 2 of 3" });
+    });
+    test("an unknown step is refused", () => expect(setStep(m, "blk-1", "Deploy")).toBeUndefined());
+    test("moving on drops the old step's note", () => expect(only(setStep(setStep(m, "blk-1", "Build", "x")!, "blk-1", "Spec")!).lane?.note).toBeUndefined());
+    test("it outlives turns", () => expect(only(reduceSession(m, ev(stop), 6000)).lane?.name).toBe("feature"));
+});
+
+describe("a gh pr command moves the lane on by itself", () => {
+    const steps = ["Build", "Draft PRs", "?Your OK", "Ready", "Test path"];
+    const lane = setStep(setLane(run([ev(prompt)]), "blk-1", "feature", steps), "blk-1", "Build", "slice 2")!;
+    const gh = (pr_verb: string) => ev({ ...stop, hook_event_name: "PostToolUse", pr_verb });
+    const at = (m: Map<string, Session>) => only(m).lane?.at;
+    test("gh pr create: to the PR step, dropping the note", () =>
+        expect(only(reduceSession(lane, gh("create"), 5000)).lane).toEqual({ name: "feature", steps, at: 1 }));
+    test("gh pr ready: to Ready", () => expect(at(reduceSession(lane, gh("ready"), 5000))).toBe(3));
+    test("never back: a second PR in the stack while on Ready", () =>
+        expect(at(reduceSession(reduceSession(lane, gh("ready"), 5000), gh("create"), 6000))).toBe(3));
+    test("other verbs, and lanes without such a step, stay put", () => {
+        expect(at(reduceSession(lane, gh("view"), 5000))).toBe(0);
+        const plain = setLane(run([ev(prompt)]), "blk-1", "investigate", ["Query", "Answer"]);
+        expect(at(reduceSession(plain, gh("create"), 5000))).toBe(0);
     });
 });

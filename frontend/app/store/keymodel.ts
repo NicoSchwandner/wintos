@@ -3,9 +3,24 @@
 
 import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { FocusManager } from "@/app/store/focusManager";
-import { jumpToNextWaiting } from "@/wintos/ui/focus";
+import { jumpBack, jumpToNextWaiting } from "@/wintos/ui/focus";
 import { sameChord } from "@/wintos/ui/keys";
 import { runKey, WINTOS_KEYS, wintosClose, wintosEscape } from "@/wintos/ui/menu";
+import { zoneKey } from "@/wintos/ui/zones";
+import { restoreFocus, wantPane } from "@/wintos/ui/focusOwner";
+import { flog, where } from "@/wintos/ui/focusLog";
+import { reportKey } from "@/wintos/ui/keyGame";
+import { undoWalkKey, walkKey } from "@/wintos/ui/switcher";
+
+// WintOS: a key in the focus trail, never one typed into a terminal or a field.
+function logKey(e: WaveKeyboardEvent, zone: "handled" | "typing" | false): void {
+    if (e.type !== "keydown" || e.repeat || ["Meta", "Shift", "Control", "Alt"].includes(e.key)) return;
+    const named = e.cmd || e.control || e.alt || e.option || !keyutil.isCharacterKeyEvent(e);
+    if (!named && zone !== "handled") return;
+    const mods = (e.control ? "⌃" : "") + (e.alt || e.option ? "⌥" : "") + (e.shift ? "⇧" : "") + (e.cmd ? "⌘" : "");
+    const name = e.key.length === 1 ? e.key.toUpperCase() : { Escape: "Esc", Enter: "⏎", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓" }[e.key] ?? e.key;
+    flog(`key ${mods}${name} in ${where(document.activeElement)}${zone === "handled" ? " → its zone" : zone === "typing" ? " → kept by the field" : ""}`);
+}
 import {
     atoms,
     createBlock,
@@ -199,10 +214,6 @@ function genericClose() {
             }
         }
     }
-    // WintOS: the last pane's ⌘W leaves the project open; ⌘W again, on the empty project,
-    // closes it (through ⇧⌘W's path, which asks while Claude sessions would stop).
-    if (getStaticTabBlockCount() === 0) return runKey("close-project");
-
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
     const blockId = focusedNode?.data?.blockId;
@@ -315,9 +326,8 @@ function globalRefocus() {
     if (isBuilderWindow()) {
         return;
     }
-    // WintOS: a switch to the Inbox focuses its list; the refocus after a tab is shown must not
-    // pull focus back into the page beside it.
-    if (document.activeElement?.closest("[data-wintos=inbox-list]")) return;
+    // WintOS: focus goes where it should be (focusOwner.ts); a pane only when a pane is wanted.
+    if (restoreFocus("wave refocus")) return;
 
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
@@ -373,6 +383,7 @@ async function handleCmdN() {
 }
 
 async function handleSplitHorizontal(position: "before" | "after") {
+    wantPane("split"); // WintOS: the new pane takes focus, from the notes too
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
     if (focusedNode == null) {
@@ -383,6 +394,7 @@ async function handleSplitHorizontal(position: "before" | "after") {
 }
 
 async function handleSplitVertical(position: "before" | "after") {
+    wantPane("split"); // WintOS: the new pane takes focus, from the notes too
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
     if (focusedNode == null) {
@@ -414,6 +426,17 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
         return false;
     }
     lastHandledEvent = nativeEvent;
+    // WintOS: a ⌘J/⌘K walk owns the keyboard until it ends, over any zone.
+    if (walkKey(waveEvent)) return true;
+    if (undoWalkKey(waveEvent)) return true;
+    // WintOS: the focused zone's own keys (a list's j/k, a field's Enter) come first, before any
+    // Wave chord can start or finish: a text field keeps Ctrl+Shift+S and what follows it.
+    const zone = zoneKey(waveEvent, document.activeElement);
+    logKey(waveEvent, zone);
+    if (zone !== false && activeChord) resetChord();
+    // WintOS: every key WintOS or a zone acts on scores in the keyboard game (keyGame.ts).
+    if (zone === "handled") return reportKey(waveEvent), true;
+    if (zone === "typing") return false;
     if (activeChord) {
         console.log("handle activeChord", activeChord);
         // If we're in chord mode, look for the second key.
@@ -436,8 +459,18 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
 
     const [, globalHandler] = checkKeyMap(waveEvent, globalKeyMap);
     if (globalHandler) {
-        const handled = globalHandler(waveEvent);
+        // WintOS: a key handler that throws (one that assumed a focused pane) must never take
+        // the app down; the key is swallowed and the failure logged.
+        let handled: boolean;
+        try {
+            handled = globalHandler(waveEvent);
+        } catch (err) {
+            flog(`key handler failed: ${err}`);
+            console.error("key handler failed", err);
+            return true;
+        }
         if (handled) {
+            reportKey(waveEvent);
             return true;
         }
     }
@@ -495,6 +528,7 @@ function countTermBlocks(): number {
 function registerGlobalKeys() {
     // WintOS: jump to the next Claude session waiting on you.
     globalKeyMap.set("Ctrl:Tab", jumpToNextWaiting);
+    globalKeyMap.set("Ctrl:Shift:Tab", jumpBack);
     globalKeyMap.set("Cmd:]", () => {
         switchTab(1);
         return true;
@@ -643,7 +677,7 @@ function registerGlobalKeys() {
     });
     globalKeyMap.set("Cmd:g", () => {
         const bcm = getBlockComponentModel(getFocusedBlockInStaticTab());
-        if (bcm.openSwitchConnection != null) {
+        if (bcm?.openSwitchConnection != null) {
             recordTEvent("action:other", { "action:type": "conndropdown", "action:initiator": "keyboard" });
             bcm.openSwitchConnection();
             return true;
@@ -698,6 +732,7 @@ function registerGlobalKeys() {
     function activateSearch(event: WaveKeyboardEvent): boolean {
         const bcm = getBlockComponentModel(getFocusedBlockInStaticTab());
         // Ctrl+f is reserved in most shells
+        if (bcm == null) return false; // WintOS: an Inbox list or notes has no focused block
         if (event.control && bcm.viewModel.viewType == "term") {
             return false;
         }
@@ -717,7 +752,7 @@ function registerGlobalKeys() {
     }
     function deactivateSearch(): boolean {
         const bcm = getBlockComponentModel(getFocusedBlockInStaticTab());
-        if (bcm.viewModel.searchAtoms && globalStore.get(bcm.viewModel.searchAtoms.isOpen)) {
+        if (bcm?.viewModel?.searchAtoms && globalStore.get(bcm.viewModel.searchAtoms.isOpen)) {
             globalStore.set(bcm.viewModel.searchAtoms.isOpen, false);
             return true;
         }
@@ -739,8 +774,13 @@ function registerGlobalKeys() {
         WorkspaceLayoutModel.getInstance().setAIPanelVisible(!currentVisible);
         return true;
     });
-    // WintOS: the sidebar replaces the tab bar, so ⌘1–9 no longer mean "tab N".
+    // WintOS: the sidebar replaces the tab bar, so ⌘1–9 no longer mean "tab N" and ⌘[ ⌘] no
+    // longer walk tabs (a page goes back and forward with ⌘← ⌘→). Panes are ⌘H/⌘L and ⌥⌘J/K,
+    // so every ⌃⇧ key goes back to the terminal: ⌘ is WintOS's, the rest the terminal's.
     for (let idx = 1; idx <= 9; idx++) globalKeyMap.delete(`Cmd:${idx}`);
+    for (const k of ["Cmd:[", "Cmd:]", "Shift:Cmd:[", "Shift:Cmd:]"]) globalKeyMap.delete(k);
+    for (const d of ["h", "j", "k", "l", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "x", "i"]) globalKeyMap.delete(`Ctrl:Shift:${d}`);
+    for (let idx = 0; idx <= 9; idx++) for (const k of [`Digit${idx}`, `Numpad${idx}`]) globalKeyMap.delete(`Ctrl:Shift:c{${k}}`);
     for (const [key, action] of WINTOS_KEYS) {
         for (const existing of [...globalKeyMap.keys()]) if (existing !== key && sameChord(existing, key)) globalKeyMap.delete(existing);
         globalKeyMap.set(key, () => runKey(action));
@@ -751,7 +791,7 @@ function registerGlobalKeys() {
     globalKeyMap.set("Escape", (e) => wintosEscape() || waveEscape(e));
     const allKeys = Array.from(globalKeyMap.keys());
     // special case keys, handled by web view
-    allKeys.push("Cmd:l", "Cmd:r", "Cmd:ArrowRight", "Cmd:ArrowLeft", "Cmd:o");
+    allKeys.push("Cmd:u", "Cmd:r", "Cmd:ArrowRight", "Cmd:ArrowLeft", "Cmd:o");
     getApi().registerGlobalWebviewKeys(allKeys);
 
     const splitBlockKeys = new Map<string, KeyHandler>();
@@ -772,6 +812,8 @@ function registerGlobalKeys() {
         return true;
     });
     globalChordMap.set("Ctrl:Shift:s", splitBlockKeys);
+    // WintOS: ⌃⇧ belongs to the terminal (above); splits are ⌘D and ⇧⌘D.
+    globalChordMap.delete("Ctrl:Shift:s");
 }
 
 function registerBuilderGlobalKeys() {

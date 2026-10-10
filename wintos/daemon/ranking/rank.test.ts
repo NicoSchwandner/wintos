@@ -78,10 +78,14 @@ describe("rank", () => {
 });
 
 describe("parked sessions", () => {
-    test("a session parked on CI runs; it is not waiting on you", () => {
+    test("a parked session is quiet: nothing for you, and Claude isn't working", () => {
         const r = rank(["t1"], [s("t1", "parked", NOW - 1000)], NOW);
+        expect([r.quiet.map((x) => x.tabId), r.running, r.needs]).toEqual([["t1"], [], []]);
+    });
+
+    test("another session there still working keeps the project running", () => {
+        const r = rank(["t1"], [s("t1", "parked", NOW - 1000), { ...s("t1", "working", NOW - 500), id: "w", blockId: "b2" }], NOW);
         expect(r.running.map((x) => x.tabId)).toEqual(["t1"]);
-        expect(r.needs).toEqual([]);
     });
 });
 
@@ -93,9 +97,9 @@ describe("unread", () => {
         expect(r.needs).toEqual([expect.objectContaining({ tabId: "t", unread: true, waitingSince: NOW - 50 })]);
     });
 
-    test("once seen, it falls to where it belongs: done is quiet, parked is running", () => {
+    test("once seen, it falls to where it belongs: done and parked are quiet", () => {
         expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
-        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, {}, { t: NOW - 10 }).running.map((x) => x.tabId)).toEqual(["t"]);
+        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
     });
 
     test("never seen at all counts as unread; an ended session's last reply does not", () => {

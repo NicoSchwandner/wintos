@@ -26,6 +26,8 @@ function initGlobalAtoms(initOpts: GlobalInitOptions) {
 
     const isFullScreenAtom = atom(false) as PrimitiveAtom<boolean>;
     try {
+        // WintOS: start from the window's real mode; the change events only tell what changes.
+        globalStore.set(isFullScreenAtom, !!getApi().getWintosFullScreen?.());
         getApi().onFullScreenChange((isFullScreen) => {
             globalStore.set(isFullScreenAtom, isFullScreen);
         });

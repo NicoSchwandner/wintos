@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { stripPanes } from "./panes";
+import { paneOrder, stripPanes } from "./panes";
 
 const block = (oid: string, meta: Record<string, unknown>) => ({ oid, meta }) as unknown as Block;
 const session = (id: string, blockId: string, state: Session["state"], label?: string): Session => ({ id, tabId: "t", blockId, state, since: 5, lastAt: 5, label });
@@ -28,4 +28,11 @@ describe("stripPanes", () => {
     });
 
     test("a pane not loaded yet is skipped", () => expect(stripPanes([undefined as unknown as Block], [])).toEqual([]));
+});
+
+describe("paneOrder", () => {
+    test("panes follow the layout, left to right, as the eye reads them", () =>
+        expect(paneOrder([{ nodeid: "n2", blockid: "b2" }, { nodeid: "n1", blockid: "b1" }], ["b1", "b2"])).toEqual(["b2", "b1"]));
+    test("a block not laid out yet comes last, and a stale leaf is dropped", () =>
+        expect(paneOrder([{ nodeid: "n9", blockid: "gone" }, { nodeid: "n2", blockid: "b2" }], ["b1", "b2"])).toEqual(["b2", "b1"]));
 });

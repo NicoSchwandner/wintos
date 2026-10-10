@@ -19,7 +19,7 @@ export const ConfirmClose = memo(() => {
                 ref={ref}
                 tabIndex={0}
                 data-wintos="confirm-close"
-                onKeyDown={(e) => e.key === "Escape" && (e.preventDefault(), closeOverlay())}
+                data-zone="overlay"
                 onClick={(e) => e.stopPropagation()}
                 style={{ padding: "22px 26px", background: "#1d2021", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none", display: "flex", flexDirection: "column", gap: 14 }}
             >

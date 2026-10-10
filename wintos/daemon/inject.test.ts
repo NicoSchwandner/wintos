@@ -24,6 +24,8 @@ describe("injection", () => {
     ])("%s is told to park a turn that ends waiting on something outside", (_n, project) => {
         expect(injection(project as never, { text: "m" })).toContain('wintos wait "');
         expect(injection(project as never, { text: "m" })).toContain("wintos done");
+        expect(injection(project as never, { text: "m" })).toContain('wintos status "');
+        expect(injection(project as never, { text: "m" })).toContain("wintos lane");
     });
 
     test("no project at all asks for a title", () => {

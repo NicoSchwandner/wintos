@@ -1,4 +1,4 @@
-export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string };
+export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string };
 export type HookEvent = { tabId: string; blockId: string; payload: HookPayload };
 // parked: the turn ended waiting on something outside (CI, a review), not on the developer.
 // done: the turn ended with the goal met and nothing asked of the developer.
@@ -16,10 +16,35 @@ export type Session = {
     parkPending?: boolean; // `wintos wait` ran this turn; the turn's Stop parks instead of waiting
     donePending?: boolean; // `wintos done` ran this turn; the turn's Stop ends it done
     restored?: boolean;
+    prs?: string[]; // PR links its gh pr commands named, oldest first
+    status?: { text: string; at: number }; // its own line on what it is doing (`wintos status`)
+    lane?: Lane; // the process it follows and where it is in it (`wintos lane`, `wintos step`)
     turnEndedAt?: number; // the last Stop: a reply the developer may not have read yet // saved at the last quit, its Claude not started again yet
 };
 
+// A step starting with ? is the developer's call: the session stops there.
+export type Lane = { name: string; steps: string[]; at: number; note?: string };
+
 const LABEL_MAX = 24;
+// One gh pr command names a PR or two (a stack); more is a listing, which claims nothing.
+const MAX_PRS_PER_CALL = 3;
+const PR_LINK = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/;
+
+function withPrs(prev: string[] | undefined, named: unknown): string[] | undefined {
+    const links = Array.isArray(named) ? named.filter((u): u is string => typeof u === "string" && PR_LINK.test(u)) : [];
+    if (!links.length || links.length > MAX_PRS_PER_CALL) return prev;
+    return [...(prev ?? []).filter((u) => !links.includes(u)), ...links];
+}
+// The lane steps a gh pr command proves were reached, so they move even when the session forgets.
+const PR_STEPS: Record<string, RegExp> = { create: /\bprs?\b/, ready: /^ready$/ };
+function withPrStep(lane: Lane | undefined, verb: unknown): Lane | undefined {
+    const step = typeof verb === "string" ? PR_STEPS[verb] : undefined;
+    if (!lane || !step) return lane;
+    const i = lane.steps.findIndex((s, i) => i > lane.at && step.test(s.replace(/^\?\s*/, "").toLowerCase()));
+    if (i < 0) return lane;
+    const { note: _old, ...rest } = lane;
+    return { ...rest, at: i };
+}
 const labelOf = (prompt?: string) =>
     prompt && (prompt.length > LABEL_MAX ? `${prompt.slice(0, LABEL_MAX - 1).trimEnd()}…` : prompt);
 
@@ -34,7 +59,7 @@ const TRANSITIONS: Record<string, SessionState> = {
 };
 
 export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now: number): Map<string, Session> {
-    const { session_id: id, hook_event_name: name, cwd, prompt } = ev.payload;
+    const { session_id: id, hook_event_name: name, cwd, prompt, prs, pr_verb } = ev.payload;
     const prev = sessions.get(id);
     // A resumed session starting up is still where it was at quit (a turn waiting on you).
     const next = prev?.restored && name === "SessionStart" ? undefined : TRANSITIONS[name];
@@ -56,6 +81,11 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
         donePending: next ? undefined : prev?.donePending,
         turnEndedAt: name === "Stop" ? now : prev?.turnEndedAt,
     };
+    const owned = name === "PostToolUse" ? withPrs(prev?.prs, prs) : prev?.prs;
+    if (owned) session.prs = owned;
+    if (prev?.status) session.status = prev.status;
+    const lane = name === "PostToolUse" ? withPrStep(prev?.lane, pr_verb) : prev?.lane;
+    if (lane) session.lane = lane;
     const out = new Map(sessions);
     // The block's saved entry is replaced by whatever session now reports from it.
     for (const s of sessions.values()) if (s.restored && s.blockId === ev.blockId && s.id !== id) out.delete(s.id);
@@ -73,10 +103,39 @@ export function restoreSessions(saved: Session[]): Map<string, Session> {
 }
 
 // `wintos wait "<what>"` from inside a session: the block's live session ends this turn parked.
+// `wintos wait` from inside a session (the turn's Stop parks), or the developer parking a turn
+// that already ended (⌥⌘P).
 export function parkSession(sessions: Map<string, Session>, blockId: string, reason: string, now: number): Map<string, Session> {
     const live = liveIn(sessions, blockId);
     if (!live) return sessions;
+    // A turn that already ended waiting on the developer parks now: they parked it from WintOS.
+    if (live.state === "waiting") return new Map(sessions).set(live.id, { ...live, state: "parked", since: now, parkedOn: reason, parkPending: undefined, donePending: undefined, lastAt: now });
     return new Map(sessions).set(live.id, { ...live, parkedOn: reason, parkPending: true, donePending: undefined, lastAt: now });
+}
+
+export function setStatus(sessions: Map<string, Session>, blockId: string, text: string, now: number): Map<string, Session> {
+    const live = liveIn(sessions, blockId);
+    if (!live) return sessions;
+    return new Map(sessions).set(live.id, { ...live, status: { text, at: now } });
+}
+
+export function setLane(sessions: Map<string, Session>, blockId: string, name: string, steps: string[]): Map<string, Session> {
+    const live = liveIn(sessions, blockId);
+    if (!live) return sessions;
+    return new Map(sessions).set(live.id, { ...live, lane: { name, steps, at: 0 } });
+}
+
+// undefined: no such step in the session's lane, so the caller can say so.
+export function setStep(sessions: Map<string, Session>, blockId: string, step: string, note?: string): Map<string, Session> | undefined {
+    const live = liveIn(sessions, blockId);
+    if (!live?.lane) return undefined;
+    const bare = (s: string) => s.replace(/^\?\s*/, "").toLowerCase();
+    const want = bare(step);
+    const names = live.lane.steps.map(bare);
+    const at = names.indexOf(want) >= 0 ? names.indexOf(want) : names.findIndex((n) => n.startsWith(want));
+    if (at < 0) return undefined;
+    const { note: _old, ...lane } = live.lane;
+    return new Map(sessions).set(live.id, { ...live, lane: note ? { ...lane, at, note } : { ...lane, at } });
 }
 
 // `wintos done` from inside a session: the block's live session ends this turn done.

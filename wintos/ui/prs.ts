@@ -42,7 +42,7 @@ export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes 
         yours: rows.length - team - waiting,
         waiting,
         team,
-        pastSla: rows.filter((r) => r.group === "chase" || (r.group === "review" && r.age.late)).length,
+        pastSla: rows.filter((r) => r.group === "chase" || r.group === "release" || (r.group === "review" && r.age.late)).length,
     };
 }
 
@@ -65,9 +65,21 @@ export function keepSelection(before: string[], after: string[], selected: strin
 }
 
 // Who a PR waits on, as chips beside it (a wrapped "waiting on a, b, team" line was unreadable).
-// A ready PR nobody is asked on shows "none"; a draft is nobody's yet.
+// A ready PR nobody is asked on shows "none"; a draft is nobody's yet, a merged one nobody's any more.
 // With nobody still asked, whoever approved is shown (✓) instead.
 export function reviewerChips(pr: PR, max: number): { chips: string[]; more: number; none: boolean; approved: string[] } {
     const approved = pr.reviewers.length ? [] : (pr.approvedBy ?? []).slice(0, max);
-    return { chips: pr.reviewers.slice(0, max), more: Math.max(0, pr.reviewers.length - max), none: !pr.isDraft && pr.reviewers.length === 0 && !approved.length, approved };
+    return { chips: pr.reviewers.slice(0, max), more: Math.max(0, pr.reviewers.length - max), none: !pr.isDraft && !pr.mergedAt && pr.reviewers.length === 0 && !approved.length, approved };
+}
+
+// Which optional columns fit beside a readable title: the size bar goes first, then the names
+// (the author's, and reviewers' in full rather than initials).
+export type RowColumns = { size: boolean; names: boolean };
+export const rowColumns = (width: number): RowColumns => ({ size: width >= 1000, names: width >= 850 });
+
+// The PR list's filter (f): every word of the query appears in the PR's repo, number, title,
+// author or branch.
+export function matchesPr(pr: Pick<PR, "repo" | "number" | "title" | "author" | "branch">, query: string): boolean {
+    const hay = `${pr.repo} #${pr.number} ${pr.title} ${pr.author} ${pr.branch}`.toLowerCase();
+    return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
 }

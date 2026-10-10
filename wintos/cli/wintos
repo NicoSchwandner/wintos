@@ -3,7 +3,12 @@
 #   wintos title <words…>              name this tab's project (used by Claude)
 #   wintos wait <what…>                end this turn parked on something outside (used by Claude)
 #   wintos done                        end this turn done: nothing waits on the developer (used by Claude)
-#   wintos hooks install|uninstall     wire the hook into Claude Code settings
+#   wintos status <line…>              what this session is doing now, shown on its pane (used by Claude)
+#   wintos lane <name> <step…>         the process this session follows; ?step is the developer's call (used by Claude)
+#   wintos step <step> [note…]         where in it the session is now (used by Claude)
+#   wintos hooks install|uninstall [<claude config dir>]
+#                                      wire the hook into that Claude Code config (default ~/.claude);
+#                                      one account each, named explicitly
 set -eu
 PORT="${WINTOS_PORT:-7730}"
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -45,6 +50,37 @@ wait)
         die "wintosd not reachable on port $PORT, or it refused the reason"
     echo "waiting on: $*"
     ;;
+status)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos status <what this session is doing>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    jq -n --arg t "$*" '{text: $t}' |
+        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/status" >/dev/null ||
+        die "wintosd not reachable on port $PORT, or it refused the line"
+    echo "status: $*"
+    ;;
+lane)
+    shift
+    [ $# -gt 1 ] || die "usage: wintos lane <name> <step…>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    name="$1"
+    shift
+    jq -n --arg n "$name" '{name: $n, steps: $ARGS.positional}' --args "$@" |
+        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/lane" >/dev/null ||
+        die "wintosd not reachable on port $PORT, or it refused the lane"
+    echo "lane: $name ($(printf '%s\n' "$@" | paste -sd'|' - | sed 's/|/ · /g'))"
+    ;;
+step)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos step <step> [note…]"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    step="$1"
+    shift
+    jq -n --arg s "$step" --arg n "$*" '{step: $s} + (if $n != "" then {note: $n} else {} end)' |
+        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/step" >/dev/null ||
+        die "wintosd refused the step: not in this session's lane (run wintos lane first), or not reachable on port $PORT"
+    echo "step: $step${*:+ ($*)}"
+    ;;
 done)
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     echo '{}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/done" >/dev/null ||
@@ -52,6 +88,10 @@ done)
     echo "done: nothing waits on the developer"
     ;;
 hooks)
+    if [ -n "${3:-}" ]; then
+        [ -d "$3" ] || die "no such Claude config dir: $3"
+        SETTINGS="$3/settings.json"
+    fi
     [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
     [ -f "$SETTINGS.wintos-bak" ] || cp "$SETTINGS" "$SETTINGS.wintos-bak"
     # Ours are recognised by the hook path, so the user's own hooks are never touched.
@@ -61,15 +101,16 @@ hooks)
     install)
         # shellcheck disable=SC2016
         rewrite_settings --arg hook "$HOOK" --arg events "$EVENTS" "$strip"' | reduce ($events | split(" "))[] as $e (.;
-            .hooks[$e] = ((.hooks[$e] // []) + [{hooks: [{type: "command", command: $hook}]}]))'
-        echo "wintos: hooks installed in $SETTINGS ($EVENTS)"
+            .hooks[$e] = ((.hooks[$e] // []) + [{hooks: [{type: "command", command: $hook}]}]))
+            | .hooks.PostToolUse = ((.hooks.PostToolUse // []) + [{matcher: "Bash", hooks: [{type: "command", command: $hook}]}])'
+        echo "wintos: hooks installed in $SETTINGS ($EVENTS PostToolUse:Bash)"
         ;;
     uninstall)
-        rewrite_settings "$strip"' | .hooks |= with_entries(select(.value | length > 0))'
+        rewrite_settings "$strip"' | .hooks |= with_entries(select(.value | length > 0)) | if .hooks == {} then del(.hooks) else . end'
         echo "wintos: hooks removed from $SETTINGS"
         ;;
-    *) die "usage: wintos hooks install|uninstall" ;;
+    *) die "usage: wintos hooks install|uninstall [<claude config dir>]" ;;
     esac
     ;;
-*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos hooks install|uninstall" ;;
+*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos status <line> | wintos lane <name> <step…> | wintos step <step> [note] | wintos hooks install|uninstall [<claude config dir>]" ;;
 esac

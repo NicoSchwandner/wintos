@@ -3,8 +3,12 @@ import type { Project } from "./projects/store";
 
 // WintOS shows a session whose turn ended as waiting on the developer; this is how Claude says
 // it is waiting on something else instead.
-const WAIT_RULE =
-    'If you end a turn waiting on something outside the conversation (CI, a review, a deploy, a background job), run `wintos wait "<what, e.g. CI on #123>"` just before you stop, so WintOS does not show the turn as waiting on the developer. If you end a turn with the goal met and nothing asked of the developer (no question, no decision, no step for them), run `wintos done` instead. Never run it when your last message asks them anything.';
+const WAIT_RULE = `[WintOS] Every turn you end is shown to the developer as "your turn" unless you say otherwise. Just before you stop, read your final message and pick one:
+- It asks the developer something (a question, a decision, a step for them): stop as usual.
+- It waits on something outside this conversation (a review, CI, a deploy, a merge, a background job): run \`wintos wait "<what, e.g. review on #123>"\`, then stop. This holds even when you told the developer you are waiting; telling them is not an ask.
+- The goal is met and nothing is asked of them: run \`wintos done\`, then stop.
+Your pane shows one line on what you are doing: run \`wintos status "<one line, e.g. walking the test plan on #352>"\` when you start on this prompt and whenever the plan changes, and before you stop.
+When your instructions give the work a process with named steps (a lane, a checklist), run \`wintos lane <name> <step>…\` once you know it (prefix a step that is the developer's call with ?), then \`wintos step <step> [note]\` each time you move to the next one.`;
 
 // The text a UserPromptSubmit hook adds to Claude's context. It is re-sent on every prompt so
 // the project survives /compact, and mine.md edits made mid-session are seen on the next one.
@@ -39,8 +43,8 @@ Do not rewrite it when nothing changed.
   ## Built: \`- [x]\` done, \`- [~]\` partial, \`- [ ]\` todo.
   ## Open questions: one bullet each; end the one blocking progress with \`(blocking)\`.
   Use \`backticks\` for code. Under ~40 lines; replace, don't append.
-- mine.md is the developer's. Read it, never write it. It outranks your own conclusions.
-- ${WAIT_RULE}`);
+- mine.md is the developer's. Read it, never write it. It outranks your own conclusions.`);
+    parts.push(WAIT_RULE);
     parts.push(`mine.md:\n${mine.text}`);
     parts.push(`project.md:\n${project.error ? `(unreadable: ${project.error})` : project.body ?? ""}`);
     return parts.join("\n\n");

@@ -23,3 +23,23 @@
 body {
     background: #1d2021;
 }
+
+/* A Claude pane shows its lane beside the terminal when wide, as a header row when narrow. */
+.wintos-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    container-type: inline-size;
+}
+@container (min-width: 700px) {
+    .wintos-steps-row {
+        display: none !important;
+    }
+}
+@container (max-width: 699px) {
+    .wintos-steps-side {
+        /* !important: the column sets display: flex inline. */
+        display: none !important;
+    }
+}

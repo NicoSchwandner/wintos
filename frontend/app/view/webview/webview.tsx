@@ -563,7 +563,8 @@ export class WebViewModel implements ViewModel {
     }
 
     keyDownHandler(e: WaveKeyboardEvent): boolean {
-        if (checkKeyPressed(e, "Cmd:l")) {
+        // WintOS: ⌘U, as ⌘L is the notes (the right area).
+        if (checkKeyPressed(e, "Cmd:u")) {
             this.urlInputRef?.current?.focus();
             this.urlInputRef?.current?.select();
             return true;
@@ -1071,6 +1072,9 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
             globalStore.set(model.domReady, true);
             setBgColor();
         };
+        // WintOS: a page that closes itself (a sign-in popup once it is done) closes its pane, else
+        // a dead page stays behind that takes no focus or key, and so cannot be closed.
+        const closeHandler = () => model.nodeModel.onClose();
         const handleMediaPlaying = () => {
             model.setMediaPlaying(true);
         };
@@ -1091,6 +1095,7 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
         webview.addEventListener("media-started-playing", handleMediaPlaying);
         webview.addEventListener("media-paused", handleMediaPaused);
         webview.addEventListener("found-in-page", onFoundInPage);
+        webview.addEventListener("close", closeHandler);
 
         // Clean up event listeners on component unmount
         return () => {
@@ -1107,6 +1112,7 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
             webview.removeEventListener("media-started-playing", handleMediaPlaying);
             webview.removeEventListener("media-paused", handleMediaPaused);
             webview.removeEventListener("found-in-page", onFoundInPage);
+            webview.removeEventListener("close", closeHandler);
         };
     }, []);
 

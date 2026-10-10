@@ -19,6 +19,8 @@ export type Node = {
     commits: { nodes: { commit: { statusCheckRollup: { state: string } | null } }[] };
     reviewRequests: { nodes: { requestedReviewer: Reviewer | null }[] };
     latestReviews: { nodes: { author: { login: string } | null; state: string; submittedAt: string }[] };
+    mergedAt?: string | null;
+    mergeCommit?: { oid: string } | null;
 };
 
 // Copilot and CI bots request and leave reviews too; counting them hid PRs nobody had looked at.
@@ -50,6 +52,7 @@ export function normalize(n: Node, me: string, asked: { requestedMe: boolean; re
         deletions: n.deletions,
         branch: n.headRefName,
     };
+    if (n.mergedAt) pr.mergedAt = n.mergedAt;
     if (n.baseRefName) pr.base = n.baseRefName;
     if (n.repository.defaultBranchRef?.name) pr.defaultBranch = n.repository.defaultBranchRef.name;
     if (n.reviewDecision) pr.reviewDecision = n.reviewDecision;
@@ -58,6 +61,8 @@ export function normalize(n: Node, me: string, asked: { requestedMe: boolean; re
     if (latest) pr.lastReviewAt = latest;
     const changes = reviews.filter((r) => r.state === "CHANGES_REQUESTED").pop();
     if (changes) pr.changesRequestedBy = changes.author!.login;
+    const stillAsking = reviews.filter((r) => r.state === "CHANGES_REQUESTED" && !reviewers.includes(r.author!.login));
+    if (n.reviewDecision === "CHANGES_REQUESTED" && reviewers.length && !stillAsking.length) pr.changesRerequested = true;
     const approvers = reviews.filter((r) => r.state === "APPROVED").map((r) => r.author!.login);
     if (approvers.length) pr.approvedBy = approvers;
     // A repo that requires no reviews gets no decision from GitHub, approved or not; there a
@@ -78,4 +83,10 @@ export function linkStacks(prs: PR[]): PR[] {
         const on = p.base && byHead.get(`${p.repo}:${p.base}`);
         return on && on !== p.url ? { ...p, stackedOn: on } : p;
     });
+}
+
+// Merged PRs whose merge commit is among the commits the default branch has ahead of main.
+// A repo missing from `ahead` (no main, or the compare failed) has nothing to release here.
+export function unreleased(merged: Node[], ahead: Record<string, Set<string>>): Node[] {
+    return merged.filter((n) => !!n.mergeCommit && !!ahead[n.repository.nameWithOwner]?.has(n.mergeCommit.oid));
 }

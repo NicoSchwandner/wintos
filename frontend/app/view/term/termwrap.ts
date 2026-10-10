@@ -39,6 +39,8 @@ import {
     type ShellIntegrationStatus,
 } from "./osc-handlers";
 import { findPathLinks, makeTermLinkHandlers, paneCwd, resolvePathLink } from "./term-links";
+import { findRefLinks, resolveRef } from "@/wintos/ui/refLinks";
+import { currentState } from "@/wintos/ui/useWintos";
 import {
     bufferLinesToText,
     createTempFileFromBlob,
@@ -366,7 +368,13 @@ export class TermWrap {
                 };
             })
         );
-        const found = links.filter((l) => l != null);
+        // WintOS: a PR Claude names (#352, Core#14129) links to it when it is clear which one.
+        const state = currentState();
+        const refs = !state ? [] : findRefLinks(line).flatMap(({ start, end, ...ref }) => {
+            const url = resolveRef(ref, state, this.blockId);
+            return url ? [{ range: { start: { x: start + 1, y }, end: { x: end, y } }, text: url, activate: handlers.activate, hover: handlers.osc8Hover, leave: handlers.leave }] : [];
+        });
+        const found = [...links.filter((l) => l != null), ...refs];
         return found.length ? found : undefined;
     }
 

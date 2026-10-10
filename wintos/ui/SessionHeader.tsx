@@ -7,6 +7,7 @@ import { HEADERS } from "./PrQueue";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
+import type { Lane } from "../daemon/sessions/reduce";
 import { relTime, sessionHeader, urgentPr } from "./view";
 
 const DOT = { working: T.moss, waiting: T.apricot, parked: T.muted, done: T.dim, idle: T.dim, ended: T.dim } as const;
@@ -32,6 +33,11 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                 {h.task && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>{h.task}</span>}
                 {h.branch && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.branch}</span>}
             </div>
+            {s.lane && (
+                <div className="wintos-steps-row">
+                    <StepTrack lane={s.lane} />
+                </div>
+            )}
             {s.status && (
                 <div style={{ color: T.secondary, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.status.text}>
                     {s.status.text}
@@ -65,3 +71,73 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     );
 });
 SessionHeader.displayName = "SessionHeader";
+
+const gate = (step: string) => step.startsWith("?");
+const stepName = (step: string) => step.replace(/^\?\s*/, "");
+// The panel vocabulary: moss is the machine working (the step now), apricot is you (your calls,
+// ringed ahead, filled when it is now); done steps go quiet.
+function stepColor(lane: Lane, i: number) {
+    if (i < lane.at) return { dot: T.muted, ring: T.muted, text: T.muted };
+    if (i === lane.at) return gate(lane.steps[i]) ? { dot: T.apricot, ring: T.apricot, text: T.apricot } : { dot: T.moss, ring: T.moss, text: T.title };
+    return { dot: "transparent", ring: gate(lane.steps[i]) ? T.apricot : T.faint, text: T.faint };
+}
+const Dot = ({ c, size = 7 }: { c: { dot: string; ring: string }; size?: number }) => (
+    <span style={{ display: "inline-block", width: size, height: size, flexShrink: 0, borderRadius: "50%", boxSizing: "border-box", background: c.dot, border: `1.5px solid ${c.ring}` }} />
+);
+
+// A narrow pane: the lane as one row. No room for every step, so it says how many are done,
+// the one now, and the next that is your call (else simply the next one). The note gives way first.
+function StepTrack({ lane }: { lane: Lane }) {
+    const ahead = lane.steps.slice(lane.at + 1);
+    const nextGate = ahead.findIndex(gate);
+    const next = nextGate >= 0 ? lane.at + 1 + nextGate : ahead.length ? lane.at + 1 : -1;
+    const step = (i: number, extra?: string) => {
+        const c = stepColor(lane, i);
+        return (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: c.text, fontWeight: i === lane.at ? 600 : 400, minWidth: 0, flexShrink: extra ? 1 : 0 }}>
+                <Dot c={c} />
+                <span style={{ flexShrink: 0 }}>{stepName(lane.steps[i])}</span>
+                {extra && <span style={{ color: T.muted, fontWeight: 400, overflow: "hidden", textOverflow: "ellipsis" }}>· {extra}</span>}
+            </span>
+        );
+    };
+    return (
+        <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 11 }}>
+            <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, border: `1px solid ${T.border}`, borderRadius: 4, padding: "0 5px", flexShrink: 0 }}>{lane.name}</span>
+            {lane.at > 0 && <span style={{ color: T.faint, flexShrink: 0 }}>{lane.at}/{lane.steps.length}</span>}
+            {step(lane.at, lane.note)}
+            {next >= 0 && <span style={{ color: T.faint, flexShrink: 0 }}>→</span>}
+            {next >= 0 && step(next)}
+        </div>
+    );
+}
+
+// A wide pane: the lane as a column beside the terminal.
+export const SessionSteps = memo(({ blockId }: { blockId: string }) => {
+    const { state } = useWintos();
+    const lane = state ? sessionHeader(state, blockId)?.session.lane : undefined;
+    if (!lane) return null;
+    return (
+        <div className="wintos-steps-side" data-wintos="session-steps" style={{ width: 210, flexShrink: 0, borderLeft: `1px solid ${T.border}`, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", fontFamily: T.ui }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>{lane.name}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                {lane.steps.map((step, i) => {
+                    const c = stepColor(lane, i);
+                    return (
+                        <div key={i} style={{ display: "flex", gap: 8, fontSize: 12.5, lineHeight: 1.35, color: c.text, fontWeight: i === lane.at ? 600 : 400 }}>
+                            <span style={{ display: "flex", paddingTop: 4 }}>
+                                <Dot c={c} size={9} />
+                            </span>
+                            <span>
+                                {stepName(step)}
+                                {i === lane.at && lane.note && <span style={{ display: "block", fontSize: 11, fontWeight: 400, color: T.muted }}>{lane.note}</span>}
+                                {i >= lane.at && gate(step) && <span style={{ display: "block", fontSize: 11, fontWeight: 400, color: T.apricot }}>your call</span>}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+});
+SessionSteps.displayName = "SessionSteps";

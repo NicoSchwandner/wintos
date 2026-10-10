@@ -18,8 +18,12 @@ export type Session = {
     restored?: boolean;
     prs?: string[]; // PR links its gh pr commands named, oldest first
     status?: { text: string; at: number }; // its own line on what it is doing (`wintos status`)
+    lane?: Lane; // the process it follows and where it is in it (`wintos lane`, `wintos step`)
     turnEndedAt?: number; // the last Stop: a reply the developer may not have read yet // saved at the last quit, its Claude not started again yet
 };
+
+// A step starting with ? is the developer's call: the session stops there.
+export type Lane = { name: string; steps: string[]; at: number; note?: string };
 
 const LABEL_MAX = 24;
 // One gh pr command names a PR or two (a stack); more is a listing, which claims nothing.
@@ -70,6 +74,7 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     const owned = name === "PostToolUse" ? withPrs(prev?.prs, prs) : prev?.prs;
     if (owned) session.prs = owned;
     if (prev?.status) session.status = prev.status;
+    if (prev?.lane) session.lane = prev.lane;
     const out = new Map(sessions);
     // The block's saved entry is replaced by whatever session now reports from it.
     for (const s of sessions.values()) if (s.restored && s.blockId === ev.blockId && s.id !== id) out.delete(s.id);
@@ -101,6 +106,25 @@ export function setStatus(sessions: Map<string, Session>, blockId: string, text:
     const live = liveIn(sessions, blockId);
     if (!live) return sessions;
     return new Map(sessions).set(live.id, { ...live, status: { text, at: now } });
+}
+
+export function setLane(sessions: Map<string, Session>, blockId: string, name: string, steps: string[]): Map<string, Session> {
+    const live = liveIn(sessions, blockId);
+    if (!live) return sessions;
+    return new Map(sessions).set(live.id, { ...live, lane: { name, steps, at: 0 } });
+}
+
+// undefined: no such step in the session's lane, so the caller can say so.
+export function setStep(sessions: Map<string, Session>, blockId: string, step: string, note?: string): Map<string, Session> | undefined {
+    const live = liveIn(sessions, blockId);
+    if (!live?.lane) return undefined;
+    const bare = (s: string) => s.replace(/^\?\s*/, "").toLowerCase();
+    const want = bare(step);
+    const names = live.lane.steps.map(bare);
+    const at = names.indexOf(want) >= 0 ? names.indexOf(want) : names.findIndex((n) => n.startsWith(want));
+    if (at < 0) return undefined;
+    const { note: _old, ...lane } = live.lane;
+    return new Map(sessions).set(live.id, { ...live, lane: note ? { ...lane, at, note } : { ...lane, at } });
 }
 
 // `wintos done` from inside a session: the block's live session ends this turn done.

@@ -11,7 +11,7 @@ import type { Journal } from "../journal/journal";
 import { dayRecapper } from "../recap/day";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { resumedSession, shelve, unshelve, type Shelf } from "../shelf/shelf";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setStatus } from "../sessions/reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -19,6 +19,8 @@ export type WintosServer = { http: http.Server; close: () => void };
 const DEFAULT_UI_ORIGINS = ["http://localhost:5173"];
 const MAX_BODY = 1_000_000;
 const MAX_STATUS = 160;
+const MAX_STEPS = 15;
+const MAX_STEP = 40;
 const MAX_TITLE = 120;
 // Ids and titles end up as front matter lines; a line break would let a value forge keys.
 const SAFE = /^[^\r\n\u0000-\u001f]+$/;
@@ -296,6 +298,32 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!isSafe(blockId) || !text || !isSafe(text) || text.length > MAX_STATUS)
                     return send(res, 400, `need a one-line status up to ${MAX_STATUS} characters`);
                 sessions = setStatus(sessions, blockId, text, Date.now());
+                saveSessions();
+                broadcast();
+                return send(res, 200, "");
+            }
+            const lane = /^\/blocks\/([^/]+)\/lane$/.exec(url.pathname);
+            if (req.method === "POST" && lane) {
+                const blockId = decodeURIComponent(lane[1]);
+                const b = (await body(req)) as { name?: unknown; steps?: unknown };
+                const steps = Array.isArray(b?.steps) ? b.steps.map((s) => (typeof s === "string" ? s.trim() : "")) : [];
+                const ok = isSafe(blockId) && isSafe(b?.name) && b.name.length <= MAX_STEP && steps.length > 0 && steps.length <= MAX_STEPS && steps.every((s) => s && isSafe(s) && s.length <= MAX_STEP);
+                if (!ok) return send(res, 400, `need a lane name and 1-${MAX_STEPS} one-line steps up to ${MAX_STEP} characters`);
+                sessions = setLane(sessions, blockId, b.name as string, steps);
+                saveSessions();
+                broadcast();
+                return send(res, 200, "");
+            }
+            const step = /^\/blocks\/([^/]+)\/step$/.exec(url.pathname);
+            if (req.method === "POST" && step) {
+                const blockId = decodeURIComponent(step[1]);
+                const b = (await body(req)) as { step?: unknown; note?: unknown };
+                const note = typeof b?.note === "string" && b.note.trim() ? b.note.trim() : undefined;
+                if (!isSafe(blockId) || !isSafe(b?.step) || (note !== undefined && (!isSafe(note) || note.length > MAX_STATUS)))
+                    return send(res, 400, "need a step name and an optional one-line note");
+                const next = setStep(sessions, blockId, b.step as string, note);
+                if (!next) return send(res, 400, "no such step in this session's lane; run wintos lane first");
+                sessions = next;
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");

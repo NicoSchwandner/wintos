@@ -25,6 +25,16 @@ const post = (path: string, body: unknown, headers: Record<string, string> = JSO
 const event = (payload: object, tabId = "tab-1") => post("/events", { tabId, blockId: "blk-1", payload });
 
 describe("wintosd API", () => {
+    test("`wintos lane` then `wintos step` show in /state; an unknown step is a 400", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/lane", { name: "fast", steps: ["Test", "Fix", "?Your OK"] })).status).toBe(200);
+        expect((await post("/blocks/blk-1/step", { step: "fix" })).status).toBe(200);
+        expect((await post("/blocks/blk-1/step", { step: "Deploy" })).status).toBe(400);
+        expect((await post("/blocks/blk-1/lane", { name: "x", steps: [] })).status).toBe(400);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].lane).toEqual({ name: "fast", steps: ["Test", "Fix", "?Your OK"], at: 1 });
+    });
+
     test("`wintos status` sets the session's line, shown in /state", async () => {
         await event(prompt);
         expect((await post("/blocks/blk-1/status", { text: "Walking the test plan" })).status).toBe(200);

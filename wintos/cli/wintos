@@ -4,6 +4,8 @@
 #   wintos wait <what…>                end this turn parked on something outside (used by Claude)
 #   wintos done                        end this turn done: nothing waits on the developer (used by Claude)
 #   wintos status <line…>              what this session is doing now, shown on its pane (used by Claude)
+#   wintos lane <name> <step…>         the process this session follows; ?step is the developer's call (used by Claude)
+#   wintos step <step> [note…]         where in it the session is now (used by Claude)
 #   wintos hooks install|uninstall [<claude config dir>]
 #                                      wire the hook into that Claude Code config (default ~/.claude);
 #                                      one account each, named explicitly
@@ -57,6 +59,28 @@ status)
         die "wintosd not reachable on port $PORT, or it refused the line"
     echo "status: $*"
     ;;
+lane)
+    shift
+    [ $# -gt 1 ] || die "usage: wintos lane <name> <step…>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    name="$1"
+    shift
+    jq -n --arg n "$name" '{name: $n, steps: $ARGS.positional}' --args "$@" |
+        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/lane" >/dev/null ||
+        die "wintosd not reachable on port $PORT, or it refused the lane"
+    echo "lane: $name ($(printf '%s\n' "$@" | paste -sd'|' - | sed 's/|/ · /g'))"
+    ;;
+step)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos step <step> [note…]"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    step="$1"
+    shift
+    jq -n --arg s "$step" --arg n "$*" '{step: $s} + (if $n != "" then {note: $n} else {} end)' |
+        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/step" >/dev/null ||
+        die "wintosd refused the step: not in this session's lane (run wintos lane first), or not reachable on port $PORT"
+    echo "step: $step${*:+ ($*)}"
+    ;;
 done)
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     echo '{}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/done" >/dev/null ||
@@ -88,5 +112,5 @@ hooks)
     *) die "usage: wintos hooks install|uninstall [<claude config dir>]" ;;
     esac
     ;;
-*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos status <line> | wintos hooks install|uninstall [<claude config dir>]" ;;
+*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos status <line> | wintos lane <name> <step…> | wintos step <step> [note] | wintos hooks install|uninstall [<claude config dir>]" ;;
 esac

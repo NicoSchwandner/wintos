@@ -283,6 +283,20 @@ describe("wintos status", () => {
     });
 });
 
+describe("wintos lane and step", () => {
+    const cli = (args: string[], port: number) =>
+        new Promise<string>((resolve) => require("child_process").execFile(CLI, args, { env: { ...process.env, WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(port) } }, (_e: unknown, so: string) => resolve(so)));
+    test("lane sends the name and steps; step the step and its note", async () => {
+        const d = await fakeDaemon("");
+        expect((await cli(["lane", "feature", "Design", "?Approve spec", "Build"], d.port)).trim()).toBe("lane: feature (Design · ?Approve spec · Build)");
+        expect((await cli(["step", "Build", "slice", "2", "of", "3"], d.port)).trim()).toBe("step: Build (slice 2 of 3)");
+        expect(d.seen).toEqual([
+            { url: "/blocks/blk-1/lane", body: { name: "feature", steps: ["Design", "?Approve spec", "Build"] } },
+            { url: "/blocks/blk-1/step", body: { step: "Build", note: "slice 2 of 3" } },
+        ]);
+    });
+});
+
 describe("wintos done", () => {
     test("ends this block's session turn as done", async () => {
         const d = await fakeDaemon("");

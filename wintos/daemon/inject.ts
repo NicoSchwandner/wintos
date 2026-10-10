@@ -7,7 +7,8 @@ const WAIT_RULE = `[WintOS] Every turn you end is shown to the developer as "you
 - It asks the developer something (a question, a decision, a step for them): stop as usual.
 - It waits on something outside this conversation (a review, CI, a deploy, a merge, a background job): run \`wintos wait "<what, e.g. review on #123>"\`, then stop. This holds even when you told the developer you are waiting; telling them is not an ask.
 - The goal is met and nothing is asked of them: run \`wintos done\`, then stop.
-Your pane shows one line on what you are doing: run \`wintos status "<one line, e.g. walking the test plan on #352>"\` when you start on this prompt and whenever the plan changes, and before you stop.`;
+Your pane shows one line on what you are doing: run \`wintos status "<one line, e.g. walking the test plan on #352>"\` when you start on this prompt and whenever the plan changes, and before you stop.
+When your instructions give the work a process with named steps (a lane, a checklist), run \`wintos lane <name> <step>…\` once you know it (prefix a step that is the developer's call with ?), then \`wintos step <step> [note]\` each time you move to the next one.`;
 
 // The text a UserPromptSubmit hook adds to Claude's context. It is re-sent on every prompt so
 // the project survives /compact, and mine.md edits made mid-session are seen on the next one.

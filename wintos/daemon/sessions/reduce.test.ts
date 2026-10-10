@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setStatus } from "./reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -163,4 +163,16 @@ describe("setStatus (`wintos status`)", () => {
         expect(only(setStatus(m, "blk-1", "Walking the test plan", 5000)).status).toEqual({ text: "Walking the test plan", at: 5000 }));
     test("it outlives turns", () => expect(only(reduceSession(setStatus(m, "blk-1", "x", 5000), ev(stop), 6000)).status?.text).toBe("x"));
     test("another block's session is untouched", () => expect(setStatus(m, "other", "x", 5000)).toBe(m));
+});
+
+describe("a session's lane (`wintos lane`, `wintos step`)", () => {
+    const m = setLane(run([ev(prompt)]), "blk-1", "feature", ["Design", "Spec", "?Approve spec", "Build"]);
+    test("starts at its first step", () => expect(only(m).lane).toEqual({ name: "feature", steps: ["Design", "Spec", "?Approve spec", "Build"], at: 0 }));
+    test("a step is found by name, any case, without its ?, or by its start", () => {
+        expect(only(setStep(m, "blk-1", "approve SPEC")!).lane?.at).toBe(2);
+        expect(only(setStep(m, "blk-1", "Bui", "slice 2 of 3")!).lane).toMatchObject({ at: 3, note: "slice 2 of 3" });
+    });
+    test("an unknown step is refused", () => expect(setStep(m, "blk-1", "Deploy")).toBeUndefined());
+    test("moving on drops the old step's note", () => expect(only(setStep(setStep(m, "blk-1", "Build", "x")!, "blk-1", "Spec")!).lane?.note).toBeUndefined());
+    test("it outlives turns", () => expect(only(reduceSession(m, ev(stop), 6000)).lane?.name).toBe("feature"));
 });

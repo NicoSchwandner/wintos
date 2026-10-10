@@ -176,3 +176,20 @@ describe("a session's lane (`wintos lane`, `wintos step`)", () => {
     test("moving on drops the old step's note", () => expect(only(setStep(setStep(m, "blk-1", "Build", "x")!, "blk-1", "Spec")!).lane?.note).toBeUndefined());
     test("it outlives turns", () => expect(only(reduceSession(m, ev(stop), 6000)).lane?.name).toBe("feature"));
 });
+
+describe("a gh pr command moves the lane on by itself", () => {
+    const steps = ["Build", "Draft PRs", "?Your OK", "Ready", "Test path"];
+    const lane = setStep(setLane(run([ev(prompt)]), "blk-1", "feature", steps), "blk-1", "Build", "slice 2")!;
+    const gh = (pr_verb: string) => ev({ ...stop, hook_event_name: "PostToolUse", pr_verb });
+    const at = (m: Map<string, Session>) => only(m).lane?.at;
+    test("gh pr create: to the PR step, dropping the note", () =>
+        expect(only(reduceSession(lane, gh("create"), 5000)).lane).toEqual({ name: "feature", steps, at: 1 }));
+    test("gh pr ready: to Ready", () => expect(at(reduceSession(lane, gh("ready"), 5000))).toBe(3));
+    test("never back: a second PR in the stack while on Ready", () =>
+        expect(at(reduceSession(reduceSession(lane, gh("ready"), 5000), gh("create"), 6000))).toBe(3));
+    test("other verbs, and lanes without such a step, stay put", () => {
+        expect(at(reduceSession(lane, gh("view"), 5000))).toBe(0);
+        const plain = setLane(run([ev(prompt)]), "blk-1", "investigate", ["Query", "Answer"]);
+        expect(at(reduceSession(plain, gh("create"), 5000))).toBe(0);
+    });
+});

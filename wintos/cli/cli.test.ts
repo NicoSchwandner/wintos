@@ -149,7 +149,12 @@ describe("wintos-hook.sh on PostToolUse", () => {
     test("sends only the PR links of a gh pr command, not the output", async () => {
         const d = await fakeDaemon("");
         await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr create --fill", "https://github.com/o/r/pull/12\n"));
-        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", prs: ["https://github.com/o/r/pull/12"] });
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", prs: ["https://github.com/o/r/pull/12"], pr_verb: "create" });
+    });
+    test("gh pr ready is sent even when it names no PR link, so the lane can move", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr ready 12", "✓ Pull request o/r#12 is marked as \"ready for review\"\n"));
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", prs: [], pr_verb: "ready" });
     });
     test("a PR named by number and repo counts too", async () => {
         const d = await fakeDaemon("");

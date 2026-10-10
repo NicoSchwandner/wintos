@@ -1,4 +1,4 @@
-export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown };
+export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string };
 export type HookEvent = { tabId: string; blockId: string; payload: HookPayload };
 // parked: the turn ended waiting on something outside (CI, a review), not on the developer.
 // done: the turn ended with the goal met and nothing asked of the developer.
@@ -35,6 +35,16 @@ function withPrs(prev: string[] | undefined, named: unknown): string[] | undefin
     if (!links.length || links.length > MAX_PRS_PER_CALL) return prev;
     return [...(prev ?? []).filter((u) => !links.includes(u)), ...links];
 }
+// The lane steps a gh pr command proves were reached, so they move even when the session forgets.
+const PR_STEPS: Record<string, RegExp> = { create: /\bprs?\b/, ready: /^ready$/ };
+function withPrStep(lane: Lane | undefined, verb: unknown): Lane | undefined {
+    const step = typeof verb === "string" ? PR_STEPS[verb] : undefined;
+    if (!lane || !step) return lane;
+    const i = lane.steps.findIndex((s, i) => i > lane.at && step.test(s.replace(/^\?\s*/, "").toLowerCase()));
+    if (i < 0) return lane;
+    const { note: _old, ...rest } = lane;
+    return { ...rest, at: i };
+}
 const labelOf = (prompt?: string) =>
     prompt && (prompt.length > LABEL_MAX ? `${prompt.slice(0, LABEL_MAX - 1).trimEnd()}…` : prompt);
 
@@ -49,7 +59,7 @@ const TRANSITIONS: Record<string, SessionState> = {
 };
 
 export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now: number): Map<string, Session> {
-    const { session_id: id, hook_event_name: name, cwd, prompt, prs } = ev.payload;
+    const { session_id: id, hook_event_name: name, cwd, prompt, prs, pr_verb } = ev.payload;
     const prev = sessions.get(id);
     // A resumed session starting up is still where it was at quit (a turn waiting on you).
     const next = prev?.restored && name === "SessionStart" ? undefined : TRANSITIONS[name];
@@ -74,7 +84,8 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     const owned = name === "PostToolUse" ? withPrs(prev?.prs, prs) : prev?.prs;
     if (owned) session.prs = owned;
     if (prev?.status) session.status = prev.status;
-    if (prev?.lane) session.lane = prev.lane;
+    const lane = name === "PostToolUse" ? withPrStep(prev?.lane, pr_verb) : prev?.lane;
+    if (lane) session.lane = lane;
     const out = new Map(sessions);
     // The block's saved entry is replaced by whatever session now reports from it.
     for (const s of sessions.values()) if (s.restored && s.blockId === ev.blockId && s.id !== id) out.delete(s.id);

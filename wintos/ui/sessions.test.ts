@@ -34,6 +34,9 @@ describe("nextNeedsYou", () => {
     const needs = ["t1", "t2", "t3"];
     const next = (tab: string, block?: string) => nextNeedsYou(all, tabs, tab, block, needs);
 
+    test("a project there for a PR stops at the session behind it, when it has one", () =>
+        expect(nextNeedsYou([], tabs, "t0", undefined, ["t3"], [], { t3: { tabId: "t3", blockId: "", resume: "r" } })).toEqual({ tabId: "t3", blockId: "", resume: "r" }));
+
     test("a waiting session in a snoozed project is no stop: you put that project away", () =>
         expect(nextNeedsYou([s("z", "t0", "waiting")], tabs, "t3", undefined, ["t3"], ["t0"])).toEqual({ tabId: "t3" }));
 

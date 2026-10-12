@@ -91,7 +91,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-tabid="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
 
     useEffect(() => {
-        if (state) setLatestSessions(state.sessions, tabIds, model?.needs.map((r) => r.tabId) ?? [], model?.snoozed.map((r) => r.tabId) ?? []);
+        if (state) setLatestSessions(state.sessions, tabIds, model?.needs.map((r) => r.tabId) ?? [], model?.snoozed.map((r) => r.tabId) ?? [], model?.targets ?? {});
     }, [state, tabIds.join(",")]);
 
     // The project title is the source of truth; the tab name follows it.
@@ -102,7 +102,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
         }
     }, [state, names]);
 
-    const open = (tabId: string) => (tabId === activeTabId ? focusArea("terminal") : enterProject(tabId));
+    // The open project with something that needs you lands on its session too; else the terminals.
+    const open = (tabId: string) => (tabId !== activeTabId || model?.targets[tabId] ? enterProject(tabId) : focusArea("terminal"));
     const menu = (e: React.MouseEvent, tabId: string) => {
         e.preventDefault();
         ContextMenuModel.getInstance().showContextMenu(
@@ -321,6 +322,7 @@ function CardRow(p: RowProps) {
             </div>
             {v.next && <div style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty" } as React.CSSProperties}><Rich text={v.next} size="rail" links={false} /></div>}
             {v.meta && <div style={{ fontFamily: T.mono, fontSize: 9.5, color: T.muted }}>{v.meta}</div>}
+            {p.active && v.sleepable && <span style={{ alignSelf: "flex-start" }}><Key k="⌥⌘Z" label="sleep" /></span>}
         </div>
     );
 }

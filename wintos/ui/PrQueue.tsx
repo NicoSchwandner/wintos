@@ -2,7 +2,7 @@ import { useFocusOnMount } from "./useFocusOnMount";
 import { useZoneKeys } from "./zones";
 import { wantPane } from "./focusOwner";
 import { motionKeys } from "./listMotion";
-import { enterProject } from "./focus";
+import { enterProject, focusSession } from "./focus";
 import { atoms, createTab } from "@/store/global";
 import { offerPrompt, prLinkPaste } from "./newproject";
 import { useAtomValue } from "jotai";
@@ -16,7 +16,7 @@ import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
-import { ghPrs, prProjects, relTime } from "./view";
+import { ghPrs, prOwners, prProjects, relTime } from "./view";
 
 export const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
     merge: { label: "Merge", note: "approved, green, waiting on the button", color: T.moss },
@@ -70,11 +70,14 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const tabIds = useAtomValue(atoms.workspace)?.tabids ?? [];
     const projectOf = state ? prProjects(tabIds, state) : new Map<string, string>();
     const titleOf = (tabId: string) => state?.projects.find((p) => p.id === tabId)?.title ?? "its project";
-    // o: the PR's project, or a new one for it whose Claude prompt starts with the PR's link.
+    // o: the session that owns the PR (resumed from the shelf if need be), else its project, else
+    // a new project for it whose Claude prompt starts with the PR's link.
     const goToProject = (r: QueueRow) => {
         const tabId = projectOf.get(r.pr.url);
         if (!tabId) return void (offerPrompt(prLinkPaste(r.pr.url)), createTab());
-        enterProject(tabId);
+        const owner = state && prOwners(state, tabId).get(r.pr.url);
+        if (!owner) return enterProject(tabId);
+        focusSession("resume" in owner ? { tabId, blockId: "", resume: owner.resume } : { tabId, blockId: owner.blockId });
     };
     const refresh = async () => {
         setRefreshing(true);

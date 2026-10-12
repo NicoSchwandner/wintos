@@ -1,6 +1,7 @@
 import { QUIET_CAP, rank, type Ranking, type Row } from "../daemon/ranking/rank";
 import type { Project } from "../daemon/projects/store";
 import { isSnoozed, projectPrs, type ProjectPrs } from "../daemon/prs/group";
+import type { Target } from "./sessions";
 import { ghPrs, prOwners, relTime, type Owner, type RowView, type WintosState } from "./view";
 
 // Which projects need you, why, and in what order: the one place that decides it. The sidebar,
@@ -68,7 +69,8 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     if (row.band === "needs") {
         const sessionWaiting = row.sessions.some((s) => s.state === "waiting");
         if (!sessionWaiting && row.unread) return { title, next: project?.next ? `New reply · ${project.next}` : "New reply", tone: "apricot", age, meta };
-        if (!sessionWaiting && prs?.blocked) return { title, next: prs.blocked.text, tone: prs.blocked.tone, age, meta };
+        // A PR keeps it here; a deploy done by hand may never turn it green, so ⌥⌘Z lets it sleep.
+        if (!sessionWaiting && prs?.blocked) return { title, next: prs.blocked.text, tone: prs.blocked.tone, age, meta, sleepable: true };
         return { title, next: project?.next ?? "Your turn", tone: "apricot", age, meta };
     }
     if (row.band === "running") {
@@ -82,12 +84,21 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
 
 // Everything the sidebar and the palette show about the projects, computed once: the bands
 // (snoozes applied), each row's text and each project's PRs. `now` ticks the ages.
-export type Attention = SidebarSplit & { views: Record<string, RowView>; prs: Record<string, AttentionPrs> };
+// targets: where opening a project that needs you lands, the session behind the need: the one
+// waiting longest, else the one (live, or shelved and resumed) owning the PR that needs you.
+export type Attention = SidebarSplit & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target> };
 export function attention(tabIds: string[], state: WintosState, names: Record<string, string | undefined>, now: number): Attention {
     const prs = prsByTab(tabIds, state);
     const split = withSnoozes(sidebarModel(tabIds, state, prs), state.projectSnoozes);
     const rows = [...split.needs, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale, ...split.snoozed];
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const views = Object.fromEntries(rows.map((r) => [r.tabId, rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId])]));
-    return { ...split, views, prs };
+    const targets: Record<string, Target> = {};
+    for (const r of rows.filter((r) => r.band === "needs")) {
+        const waiting = r.sessions.filter((s) => s.state === "waiting").sort((a, b) => a.since - b.since)[0];
+        const owner = prs[r.tabId]?.blocked?.owner;
+        if (waiting) targets[r.tabId] = { tabId: r.tabId, blockId: waiting.blockId };
+        else if (owner) targets[r.tabId] = "resume" in owner ? { tabId: r.tabId, blockId: "", resume: owner.resume } : { tabId: r.tabId, blockId: owner.blockId };
+    }
+    return { ...split, views, prs, targets };
 }

@@ -16,8 +16,9 @@ import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 const HANDOFF = "wintos:focus";
 const HANDOFF_TTL_MS = 5000;
 
-let latest: { sessions: Session[]; tabIds: string[]; needs: string[]; snoozed: string[] } = { sessions: [], tabIds: [], needs: [], snoozed: [] };
-export const setLatestSessions = (sessions: Session[], tabIds: string[], needs: string[], snoozed: string[] = []) => (latest = { sessions, tabIds, needs, snoozed });
+let latest: { sessions: Session[]; tabIds: string[]; needs: string[]; snoozed: string[]; targets: Record<string, Target> } = { sessions: [], tabIds: [], needs: [], snoozed: [], targets: {} };
+export const setLatestSessions = (sessions: Session[], tabIds: string[], needs: string[], snoozed: string[] = [], targets: Record<string, Target> = {}) =>
+    (latest = { sessions, tabIds, needs, snoozed, targets });
 export const isSnoozedProject = (tabId: string) => latest.snoozed.includes(tabId);
 // The daemon's snapshot, not the Sidebar's copy: that one lags a pane opened a moment ago.
 export const latestSessions = () => currentState()?.sessions ?? latest.sessions;
@@ -51,9 +52,11 @@ export function whereYouAre(): string {
     return kind ? `card:${kind}` : tabId;
 }
 
+// Opening a project: on the session behind what needs you there, when something does
+// (attention's target), else as you left it.
 export function enterProject(tabId: string, find?: string): void {
     if (isSnoozedProject(tabId)) void setProjectSnoozed(tabId, false);
-    focusSession({ tabId, blockId: "", ...(find ? { find } : {}) });
+    focusSession(find ? { tabId, blockId: "", find } : (latest.targets[tabId] ?? { tabId, blockId: "" }));
 }
 
 // A closed project comes back in a new tab: the tab is created here, and its renderer, the
@@ -90,7 +93,14 @@ function landOn({ blockId, find, resume }: Target): void {
     }
     if (!blockId && mineEditor() && !resume) return focusMineEditor();
     globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
-    if (resume) return void createBlock({ meta: { view: "term", controller: "shell", "cmd:initscript": resume } });
+    // Resumed once: a second click while it starts lands on the pane already resuming it.
+    if (resume) {
+        const lm = getLayoutModelForStaticTab();
+        const tab = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))));
+        const there = tab?.blockids?.find((id) => globalStore.get(getWaveObjectAtom<Block>(makeORef("block", id)))?.meta?.["cmd:initscript"] === resume);
+        if (there && lm) return focusBlock(there);
+        return void createBlock({ meta: { view: "term", controller: "shell", "cmd:initscript": resume } });
+    }
     wantPane(blockId ? "landing on a session" : "landing on the terminals");
     if (!blockId) return focusArea("terminal");
     // Magnify is a mode you choose (⌘M): landing on a session keeps it, never starts it. An
@@ -180,10 +190,10 @@ export function jumpBack(): boolean {
 export function jumpToNextWaiting(): boolean {
     const lm = getLayoutModelForStaticTab();
     const current = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
-    const t = nextNeedsYou(latest.sessions, latest.tabIds, whereYouAre(), current, latest.needs, latest.snoozed);
+    const t = nextNeedsYou(latest.sessions, latest.tabIds, whereYouAre(), current, latest.needs, latest.snoozed, latest.targets);
     // Where this jump started, for ⌃⇧⇥ to go back to.
     if (t) localStorage.setItem(BEFORE_JUMP, JSON.stringify({ tabId: globalStore.get(atoms.staticTabId), blockId: current ?? "" }));
-    // A project in Needs you for its PR has no session to magnify: just its terminals.
+    // A project in Needs you for a PR nobody here owns has no session to land on: its terminals.
     if (t) focusSession("blockId" in t ? t : { tabId: t.tabId, blockId: "" });
     return true;
 }

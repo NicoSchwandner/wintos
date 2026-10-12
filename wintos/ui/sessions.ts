@@ -23,17 +23,20 @@ export function paneCloseWarns(sessions: Session[], blockId: string, armed: stri
 
 // ⌃⇥: the next stop in Needs you, in the order the sidebar shows it, wrapping, so every project
 // there is reached and the next one can be read off the screen. A project's waiting sessions are
-// a stop each (longest waiting first); a project there for a PR is one stop, its terminals. A
+// a stop each (longest waiting first); a project there for a PR is one stop, the session behind
+// it (attention's target) or else its terminals. A
 // waiting session in a project not listed comes after the list, unless you snoozed that project.
-export function nextNeedsYou(sessions: Session[], tabIds: string[], activeTabId: string, currentBlockId: string | undefined, needsTabIds: string[], snoozedTabIds: string[] = []): Target | { tabId: string } | null {
+export function nextNeedsYou(sessions: Session[], tabIds: string[], activeTabId: string, currentBlockId: string | undefined, needsTabIds: string[], snoozedTabIds: string[] = [], targets: Record<string, Target> = {}): Target | { tabId: string } | null {
     const waiting = sessions.filter((s) => s.state === "waiting" && tabIds.includes(s.tabId) && !snoozedTabIds.includes(s.tabId)).sort((a, b) => a.since - b.since);
     const order = [...needsTabIds, ...waiting.map((s) => s.tabId)].filter((t, i, all) => tabIds.includes(t) && all.indexOf(t) === i);
     const stops: (Target | { tabId: string })[] = order.flatMap((tabId) => {
         const here = waiting.filter((s) => s.tabId === tabId).map((s) => ({ tabId, blockId: s.blockId }));
-        return here.length ? here : [{ tabId }];
+        return here.length ? here : [targets[tabId] ?? { tabId }];
     });
     if (!stops.length) return null;
-    const at = stops.findIndex((t) => t.tabId === activeTabId && (!("blockId" in t) || t.blockId === currentBlockId));
+    // A stop without a pane yet (a shelved session to resume) is the project itself: you are on it
+    // once you are in the project, or ⌃⇥ would resume it again on every press.
+    const at = stops.findIndex((t) => t.tabId === activeTabId && (!("blockId" in t) || !t.blockId || t.blockId === currentBlockId));
     if (at >= 0) return stops[(at + 1) % stops.length];
     // In a listed project but not on one of its stops: its first. Anywhere else: the top.
     return stops.find((t) => t.tabId === activeTabId) ?? stops[0];

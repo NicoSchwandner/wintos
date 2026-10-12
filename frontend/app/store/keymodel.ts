@@ -675,14 +675,8 @@ function registerGlobalKeys() {
         }
         return false;
     });
-    globalKeyMap.set("Cmd:g", () => {
-        const bcm = getBlockComponentModel(getFocusedBlockInStaticTab());
-        if (bcm?.openSwitchConnection != null) {
-            recordTEvent("action:other", { "action:type": "conndropdown", "action:initiator": "keyboard" });
-            bcm.openSwitchConnection();
-            return true;
-        }
-    });
+    // WintOS: no Cmd:g. It opened the connection switcher, anchored to the pane header's
+    // connection button, and WintOS panes have no such header: the switcher crashed the tab.
     globalKeyMap.set("Ctrl:Shift:i", () => {
         const tabModel = getActiveTabModel();
         if (tabModel == null) {

@@ -146,7 +146,8 @@ const TypeAheadModal = ({
     }, [height, suggestions]);
 
     useLayoutEffect(() => {
-        if (!blockRef.current || !modalRef.current) return;
+        // WintOS: a pane without its header has no anchor; better no modal than a crashed tab.
+        if (!blockRef.current || !modalRef.current || !anchorRef.current) return;
 
         const blockRect = blockRef.current.getBoundingClientRect();
         const anchorRect = anchorRef.current.getBoundingClientRect();

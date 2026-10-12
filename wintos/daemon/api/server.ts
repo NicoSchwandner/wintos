@@ -8,6 +8,7 @@ import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
 import type { Journal } from "../journal/journal";
+import { formatMarkdown } from "../markdown";
 import { dayRecapper } from "../recap/day";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { resumedSession, shelve, unshelve, type Shelf } from "../shelf/shelf";
@@ -186,10 +187,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
             if (req.method === "POST" && url.pathname === "/day/focus") {
                 const b = (await body(req)) as { text?: unknown; baseMtime?: unknown };
                 if (typeof b?.text !== "string" || b.text.length > 20_000) return send(res, 400, "need the focus text");
-                const r = opts.journal!.saveFocus(new Date(), b.text, typeof b.baseMtime === "number" ? b.baseMtime : undefined);
+                const text = await formatMarkdown(b.text);
+                const r = opts.journal!.saveFocus(new Date(), text, typeof b.baseMtime === "number" ? b.baseMtime : undefined);
                 if (r === "conflict") return send(res, 409, "the day's file changed on disk");
                 // All of today's focus ticked: the keyboard game's day-done bonus (once a day).
-                if (/\[[xX]\]/.test(b.text) && !/^\s*[-*] \[[ ~]\]/m.test(b.text)) {
+                if (/\[[xX]\]/.test(text) && !/^\s*[-*] \[[ ~]\]/m.test(text)) {
                     keyboard = recordDayDone(keyboard, Date.now());
                     writeFileSync(keyboardFile, JSON.stringify(keyboard));
                 }
@@ -233,7 +235,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             if (req.method === "POST" && mine) {
                 const b = (await body(req)) as { text?: unknown; baseMtime?: unknown };
                 if (typeof b?.text !== "string") return send(res, 400, "need text");
-                const r = store.saveMine(decodeURIComponent(mine[1]), b.text, typeof b.baseMtime === "number" ? b.baseMtime : undefined);
+                const r = store.saveMine(decodeURIComponent(mine[1]), await formatMarkdown(b.text), typeof b.baseMtime === "number" ? b.baseMtime : undefined);
                 if (r === "no project") return send(res, 404, "no project for this tab");
                 if (r === "conflict") return send(res, 409, "mine.md changed on disk since you started editing");
                 return send(res, 200, "");

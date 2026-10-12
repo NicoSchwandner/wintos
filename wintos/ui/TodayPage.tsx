@@ -73,7 +73,7 @@ export const TodayPage = memo(() => {
                             {(!day.planned || showYesterday) && (
                                 <>
                                     {yesterdayItems(day).map((i) => (
-                                        <Item key={i.text} text={i.text} depth={i.depth} done={i.done} carried={i.carried} carry={i.carried ? undefined : () => void carryToToday(day, i.text)} />
+                                        <Item key={i.text} text={i.text} depth={i.depth} done={i.done} carried={i.carried} carry={i.carried ? undefined : () => void carryToToday(day, i.chain)} />
                                     ))}
                                     {!yesterdayItems(day).length && <span style={{ fontSize: 12, color: T.faint }}>Nothing was planned.</span>}
                                 </>

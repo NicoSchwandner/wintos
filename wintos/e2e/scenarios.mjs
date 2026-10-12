@@ -376,6 +376,18 @@ await scenario("14 · ⌥⌘P parks the session waiting in a pane just opened", 
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
 });
 
+await scenario("15 · carrying last workday's sub-item into today brings its parent and keeps the nesting", async () => {
+    const t = await toProject();
+    await press(t, "y", { mods: ["meta", "shift"] });
+    await until("the Today page", () => evalIn(t, `!!document.querySelector("[data-wintos=today]")`));
+    const carry = (text) => evalIn(t, `(() => { const row = [...document.querySelectorAll("[data-wintos=today] [data-item]")].find((el) => el.textContent.includes(${JSON.stringify(text)}) && el.querySelector("[data-key=c]")); row?.querySelector("[data-key=c]").click(); return !!row; })()`);
+    if (!(await carry("measure the threshold"))) throw new Error("no carry button on the sub-item");
+    const focus = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).day.focus;
+    await until("the item in today", async () => (await focus()).includes("measure the threshold"));
+    if ((await focus()) !== "- [ ] Fallback for low-confidence pages\n  - [ ] measure the threshold") throw new Error(`today is ${JSON.stringify(await focus())}`);
+    await press(t, "y", { mods: ["meta", "shift"] });
+});
+
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
 // must not cost the run its results.
 await scenario("clean-up · the panes this run opened are closed", async () => {

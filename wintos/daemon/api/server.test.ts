@@ -182,6 +182,13 @@ describe("the day", () => {
         expect([(await day()).day.focus, (await day()).day.planned]).toEqual(["- [ ] Pair on the flaky test", true]);
     });
 
+    test("today's focus is saved tidied, its nesting kept", async () => {
+        await withJournal();
+        await post("/day/focus", { text: "-  [ ] Ship it\n\t- [ ] the fallback" });
+        const d = (await (await fetch(base + "/state")).json()) as { day: { focus: string } };
+        expect(d.day.focus).toBe("- [ ] Ship it\n  - [ ] the fallback");
+    });
+
     test("an edit to the journal outside WintOS is pushed to the windows", async () => {
         srv.close();
         const dir = mkdtempSync(join(tmpdir(), "wintos-journal-"));
@@ -215,7 +222,7 @@ describe("notes", () => {
     test("saving mine.md writes the file in the project folder", async () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });
         expect((await post("/projects/tab-1/mine", { text: "## Promised\nmetric\n" })).status).toBe(200);
-        expect(require("fs").readFileSync(join(root, "x", "mine.md"), "utf8")).toBe("## Promised\nmetric\n");
+        expect(require("fs").readFileSync(join(root, "x", "mine.md"), "utf8")).toBe("## Promised\n\nmetric\n");
     });
 
     test("a save based on an older mine.md is refused, never overwriting an outside edit", async () => {

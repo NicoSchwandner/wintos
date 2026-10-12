@@ -11,7 +11,9 @@ for _ in $(seq 1 20); do pgrep -f "remote-debugging-port=9224" >/dev/null || bre
 rm -rf "$D/data" "$D/projects" "$D/journal"
 mkdir -p "$D/journal/templates"
 cp wintos/e2e/fixtures/daily_template.md "$D/journal/templates/"
-Y=$(date -v-1d +%Y-%m-%d)
+# The last workday: the journal never treats a weekend file as yesterday.
+n=1; while [ "$(date -v-${n}d +%u)" -ge 6 ]; do n=$((n + 1)); done
+Y=$(date -v-${n}d +%Y-%m-%d)
 mkdir -p "$D/journal/days/${Y:0:4}/${Y:5:2}"
 cp wintos/e2e/fixtures/yesterday.md "$D/journal/days/${Y:0:4}/${Y:5:2}/$Y.md"
 (WINTOS_JOURNAL_DIR="$D/journal/days" WINTOS_JOURNAL_TEMPLATE="$D/journal/templates/daily_template.md" nohup wintos/dev-instance.sh >/tmp/wintos-dev.log 2>&1 &)

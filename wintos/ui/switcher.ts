@@ -101,10 +101,10 @@ const onKeyDown = (e: KeyboardEvent) => {
 const onBlur = () => end("window blur");
 
 // ⌘Esc during a walk comes from the main process, which holds it while the walk runs.
-getApi().onWintosWalkEsc?.(() => end("⌘esc"));
-
+let escHooked = false;
 function listen(on: boolean): void {
-    getApi().setWintosWalking?.(on);
+    if (on && !escHooked) (escHooked = true), getApi()?.onWintosWalkEsc?.(() => end("⌘esc"));
+    getApi()?.setWintosWalking?.(on);
     const f = (on ? window.addEventListener : window.removeEventListener).bind(window);
     f("keyup", onKeyUp, true);
     f("keydown", onKeyDown, true);

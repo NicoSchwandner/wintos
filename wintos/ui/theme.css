@@ -32,6 +32,10 @@ body {
     min-height: 0;
     container-type: inline-size;
 }
+/* Wave sizes a split pane's content to the pane minus the frame it measured once, at mount; the
+   session header and the lane column come later, so that size runs past the frame (the footer is
+   cut off). In a WintOS pane the flex row sizes it instead. */
+.wintos-pane .block-content { width: auto !important; height: auto !important; flex: 1 1 0; min-width: 0; }
 @container (min-width: 700px) {
     .wintos-steps-row {
         display: none !important;

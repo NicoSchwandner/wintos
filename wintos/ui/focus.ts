@@ -180,7 +180,7 @@ export function jumpBack(): boolean {
 export function jumpToNextWaiting(): boolean {
     const lm = getLayoutModelForStaticTab();
     const current = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
-    const t = nextNeedsYou(latest.sessions, latest.tabIds, whereYouAre(), current, latest.needs);
+    const t = nextNeedsYou(latest.sessions, latest.tabIds, whereYouAre(), current, latest.needs, latest.snoozed);
     // Where this jump started, for ⌃⇧⇥ to go back to.
     if (t) localStorage.setItem(BEFORE_JUMP, JSON.stringify({ tabId: globalStore.get(atoms.staticTabId), blockId: current ?? "" }));
     // A project in Needs you for its PR has no session to magnify: just its terminals.

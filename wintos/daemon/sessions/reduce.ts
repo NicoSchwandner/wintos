@@ -15,11 +15,11 @@ export type Session = {
     parkedOn?: string;
     parkPending?: boolean; // `wintos wait` ran this turn; the turn's Stop parks instead of waiting
     donePending?: boolean; // `wintos done` ran this turn; the turn's Stop ends it done
-    restored?: boolean;
+    restored?: boolean; // saved at the last quit, its Claude not started again yet
     prs?: string[]; // PR links its gh pr commands named, oldest first
     status?: { text: string; at: number }; // its own line on what it is doing (`wintos status`)
     lane?: Lane; // the process it follows and where it is in it (`wintos lane`, `wintos step`)
-    turnEndedAt?: number; // the last Stop: a reply the developer may not have read yet // saved at the last quit, its Claude not started again yet
+    turnEndedAt?: number; // the last Stop: a reply the developer may not have read yet
 };
 
 // A step starting with ? is the developer's call: the session stops there.
@@ -104,7 +104,6 @@ export function restoreSessions(saved: Session[]): Map<string, Session> {
     return out;
 }
 
-// `wintos wait "<what>"` from inside a session: the block's live session ends this turn parked.
 // `wintos wait` from inside a session (the turn's Stop parks), or the developer parking a turn
 // that already ended (⌥⌘P).
 export function parkSession(sessions: Map<string, Session>, blockId: string, reason: string, now: number): Map<string, Session> {
@@ -167,5 +166,7 @@ export function finishSession(sessions: Map<string, Session>, blockId: string, n
     return new Map(sessions).set(live.id, { ...live, donePending: true, parkPending: undefined, lastAt: now });
 }
 
-const liveIn = (sessions: Map<string, Session>, blockId: string) =>
-    [...sessions.values()].filter((s) => s.blockId === blockId && s.state !== "ended").sort((a, b) => b.lastAt - a.lastAt)[0];
+// The session a pane runs now: not ended, the latest to report from it.
+export const liveSessionIn = (sessions: Iterable<Session>, blockId: string): Session | undefined =>
+    [...sessions].filter((s) => s.blockId === blockId && s.state !== "ended").sort((a, b) => b.lastAt - a.lastAt)[0];
+const liveIn = (sessions: Map<string, Session>, blockId: string) => liveSessionIn(sessions.values(), blockId);

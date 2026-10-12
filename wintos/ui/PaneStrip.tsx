@@ -12,12 +12,11 @@ import { openPalette } from "./Palette";
 import { closeArmedAtom, restartArmedAtom } from "./notes/state";
 import { paneOrder, stripPanes } from "./panes";
 import { liveSessions, unreadSessions } from "./sessions";
-import { T } from "./tokens";
+import { SESSION_DOT, T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
 import { isInboxTab, relTime } from "./view";
 
-const DOT = { working: T.moss, waiting: T.apricot, parked: T.muted, done: T.dim, idle: T.dim, ended: T.dim } as const;
 const GLYPH = { terminal: "›_", web: "◎", other: "□" } as const;
 
 // One chip per pane of this tab (Claude sessions, terminals, browser pages), in projects and the
@@ -79,7 +78,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                     >
                         {s ? (
                             // Unread: a ring in the waiting colour until you have looked.
-                            <span style={{ width: 6, height: 6, flexShrink: 0, borderRadius: "50%", background: DOT[s.state], boxShadow: unread.has(s.id) && s.state !== "waiting" ? `0 0 0 2px ${T.apricot}` : undefined }} />
+                            <span style={{ width: 6, height: 6, flexShrink: 0, borderRadius: "50%", background: SESSION_DOT[s.state], boxShadow: unread.has(s.id) && s.state !== "waiting" ? `0 0 0 2px ${T.apricot}` : undefined }} />
                         ) : (
                             <span style={{ color: T.muted }}>{GLYPH[c.kind as keyof typeof GLYPH]}</span>
                         )}

@@ -23,6 +23,7 @@ import { ClientModel } from "@/app/store/client-model";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { CurrentOnboardingVersion } from "@/app/onboarding/onboarding-common";
+import { liveSessionIn } from "../daemon/sessions/reduce";
 import { installFocusOwner, paneWanted, rememberReturn, returnFocus, wantPane } from "./focusOwner";
 
 // Menu-bar actions that replace Wave's widget bar. They open the blocks the widget config
@@ -247,11 +248,6 @@ export function runAction(action: string): void {
     if (action === "terminal") return void createBlock(getDefaultNewBlockDef());
     if (action === "rename") return globalStore.set(renamingAtom, globalStore.get(atoms.staticTabId));
     if (action === "palette" || action === "keymap") return toggleOverlay(action);
-    // ⌘H / ⌘L: the left and the right area, the same in every tab (the sidebar never takes
-    // focus): the Inbox's list and its page, a project's terminals and its notes.
-    // ⌥⌘Z: this project is done for now; the same key, or opening it, brings it back.
-    // You read the turn and nothing is yours: it waits on something outside, as with `wintos wait`.
-    // The focused session if it waits on you, else every one in this project that does.
     // The meeting on now, else the next one, in the system browser: a call wants the camera.
     if (action === "join-meeting") {
         const m = meetingToJoin(Date.now());
@@ -268,6 +264,8 @@ export function runAction(action: string): void {
         if (pr) openPage(pr.url);
         return;
     }
+    // You read the turn and nothing is yours: it waits on something outside, as with `wintos wait`.
+    // The focused session if it waits on you, else every one in this project that does.
     if (action === "park-session") {
         const tabId = globalStore.get(atoms.staticTabId);
         const waiting = latestSessions().filter((s) => s.tabId === tabId && s.state === "waiting");
@@ -275,10 +273,13 @@ export function runAction(action: string): void {
         for (const s of focused?.state === "waiting" ? [focused] : waiting) void parkBlock(s.blockId);
         return;
     }
+    // ⌥⌘Z: this project is done for now; the same key, or opening it, brings it back.
     if (action === "snooze-project") {
         const tabId = globalStore.get(atoms.staticTabId);
         return void setProjectSnoozed(tabId, !isSnoozedProject(tabId));
     }
+    // ⌘H / ⌘L: the left and the right area, the same in every tab (the sidebar never takes
+    // focus): the Inbox's list and its page, a project's terminals and its notes.
     if (action === "focus-left" || action === "focus-right") return stepSideways(action === "focus-right");
     if (action.startsWith("focus-")) return focusArea(action.slice(6) as "terminal" | "notes");
     if (action.startsWith("open-page:")) return openPage(action.slice("open-page:".length));
@@ -343,7 +344,7 @@ function unshelve(n: number): void {
 export function shelvePane(blockId: string | undefined): void {
     const script = blockId && shelvable(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId)))?.meta);
     if (!script) return;
-    const label = currentState()?.sessions.find((s) => s.blockId === blockId)?.label;
+    const label = liveSessionIn(currentState()?.sessions ?? [], blockId)?.label;
     void daemonFetch(`/projects/${encodeURIComponent(globalStore.get(atoms.staticTabId))}/shelf`, { method: "POST", body: { script, label } });
 }
 export const shelvable = (meta: MetaType | undefined): string | undefined => {

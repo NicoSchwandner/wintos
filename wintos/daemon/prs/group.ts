@@ -45,6 +45,10 @@ const DAY = 86_400_000;
 const redChecks = (pr: PR) => pr.checks === "FAILURE" || pr.checks === "ERROR";
 const sla = (pr: PR) => (pr.isDraft ? DRAFT_SLA_WORKING_DAYS : SLA_WORKING_DAYS);
 export const lastMovement = (pr: PR) => pr.mergedAt ?? pr.lastReviewAt ?? pr.createdAt;
+// The one urgency order, wherever PRs are ranked: the queue's groups top to bottom, then the
+// one still longest.
+export const byUrgency = (a: { pr: PR; group: Group }, b: { pr: PR; group: Group }) =>
+    GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || Date.parse(lastMovement(a.pr)) - Date.parse(lastMovement(b.pr));
 
 // Weekdays elapsed after `from` up to `now`. No holiday calendar (spec §4).
 export function workingDaysBetween(from: string, now: number): number {
@@ -146,21 +150,20 @@ export type ProjectPrs = {
     reason?: string; // the quiet row's right column
 };
 
-// What a project's PRs mean for its sidebar row: whether one needs you (spec §3.3, Fix or
-// Chase), and otherwise why the project is quiet.
+// What a project's PRs mean for its sidebar row: whether one needs you (Fix, Chase or Release,
+// the most urgent speaking for it), and otherwise why the project is quiet.
 export function projectPrs(project: { pr?: string[]; title?: string }, prs: PR[], me: string, now: number): ProjectPrs {
     const items = prsForProject(project.pr ?? [], project.title ?? "", prs).map((pr) => ({ pr, group: groupOf(pr, me, now) }));
-    const needing = items.filter((i) => i.group === "fix" || i.group === "chase" || i.group === "release");
-    const oldest = needing.sort((a, b) => Date.parse(lastMovement(a.pr)) - Date.parse(lastMovement(b.pr)))[0];
-    if (oldest) {
-        const { pr, group } = oldest;
+    const urgent = items.filter((i) => i.group === "fix" || i.group === "chase" || i.group === "release").sort(byUrgency)[0];
+    if (urgent) {
+        const { pr, group } = urgent;
         const since = Date.parse(lastMovement(pr));
         if (group === "fix") return { items, blocked: { since, text: `#${pr.number}: ${qualifier(pr, group)?.text ?? "needs a fix"}`, tone: "apricot" } };
         const wd = workingDaysBetween(lastMovement(pr), now);
         if (group === "release") return { items, blocked: { since, text: `#${pr.number} merged ${wd} working days ago, not on main`, tone: "brick" } };
         return { items, blocked: { since, text: `Nobody has looked at #${pr.number} in ${wd} working days`, tone: "brick" } };
     }
-    const first = items[0]?.pr;
+    const first = [...items].sort(byUrgency)[0]?.pr;
     if (!first) return { items };
     const reason = first.reviewDecision === "APPROVED" ? "approved" : first.reviewers.length ? `with ${first.reviewers[0]}` : first.isDraft ? "draft" : "open";
     return { items, reason: `#${first.number} ${reason}` };

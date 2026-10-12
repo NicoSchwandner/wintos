@@ -92,7 +92,7 @@ describe("parked sessions", () => {
 describe("unread", () => {
     const ended = (tabId: string, state: Session["state"], turnEndedAt: number): Session => ({ ...s(tabId, state, turnEndedAt), turnEndedAt });
 
-    test("a reply you haven't seen keeps the project in Needs you, whatever the session's state", () => {
+    test("a reply you haven't seen keeps the project in Needs you, a done one included", () => {
         const r = rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, {}, { t: NOW - 100 });
         expect(r.needs).toEqual([expect.objectContaining({ tabId: "t", unread: true, waitingSince: NOW - 50 })]);
     });
@@ -100,6 +100,14 @@ describe("unread", () => {
     test("once seen, it falls to where it belongs: done and parked are quiet", () => {
         expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
         expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
+    });
+
+    test("a parked turn is no reply to read: you parked it, it waits on something else", () =>
+        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, {}, { t: NOW - 100 }).needs).toEqual([]));
+
+    test("latestNeed is when the newest need began, so a snooze can tell a new one from an old one", () => {
+        const r = rank(["t"], [s("t", "waiting", NOW - 10)], NOW, {}, { t: NOW - 500 });
+        expect([r.needs[0].waitingSince, r.needs[0].latestNeed]).toEqual([NOW - 500, NOW - 10]);
     });
 
     test("never seen at all counts as unread; an ended session's last reply does not", () => {

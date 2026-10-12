@@ -11,7 +11,8 @@ import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { useZoneKeys } from "./zones";
-import { ghPrs, prProjects, projectTabIds, relTime, sessionName, sidebarModel, withSnoozes, type WintosState } from "./view";
+import { attention } from "./attention";
+import { ghPrs, prProjects, projectTabIds, relTime, sessionName, type WintosState } from "./view";
 import { shelvedName } from "../daemon/shelf/shelf";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 
@@ -156,8 +157,12 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     const ws = globalStore.get(atoms.workspace);
     const activeTab = globalStore.get(atoms.staticTabId);
     const ids = ws?.tabids ?? [];
-    const tabIds = projectTabIds(ids, Object.fromEntries(ids.map((id) => [id, globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))])));
-    const model = withSnoozes(sidebarModel(tabIds, state), state.projectSnoozes);
+    const tabs = Object.fromEntries(ids.map((id) => [id, globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))]));
+    const tabIds = projectTabIds(ids, tabs);
+    // Only sessions whose pane is still there: a closed pane's session is on the shelf, or gone.
+    // The bands come from these, as the sidebar's do.
+    const live = liveSessions(state.sessions, Object.fromEntries(ids.map((id) => [id, tabs[id]?.blockids])));
+    const model = attention(tabIds, { ...state, sessions: live }, names, now);
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const title = (id: string) => project(id)?.title ?? names[id] ?? "Untitled";
     const band: Record<string, string> = {};
@@ -206,9 +211,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
             run: () => runAction(`open-page:${pr.url}`),
         });
     }
-    // Only sessions whose pane is still there: a closed pane's session is on the shelf, or gone.
-    const blocksOf = Object.fromEntries(tabIds.map((id) => [id, globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))?.blockids ?? []]));
-    for (const s of liveSessions(state.sessions, blocksOf).filter((s) => s.state !== "ended" && tabIds.includes(s.tabId)))
+    for (const s of live.filter((s) => s.state !== "ended" && tabIds.includes(s.tabId)))
         out.push({ id: `s:${s.id}`, kind: "session", title: sessionName(s), subtitle: `${s.state} · ${title(s.tabId)}`, run: () => focusSession({ tabId: s.tabId, blockId: s.blockId }) });
     for (const id of tabIds)
         for (const s of state.shelf?.[id] ?? [])

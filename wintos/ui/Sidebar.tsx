@@ -21,7 +21,8 @@ import { closeProjectTab, registerWintosMenu } from "./menu";
 import { FLAG_EVENT, isPage, mainViewAtom, renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
 import { instance, setProjectSnoozed, setProjectTitle, useWintos } from "./useWintos";
-import { ghPrs, inboxKind, isInboxTab, prsByTab, type InboxList, projectTabIds, rowView, RowView, sidebarModel, withSnoozes } from "./view";
+import { attention } from "./attention";
+import { ghPrs, inboxKind, isInboxTab, type InboxList, projectTabIds, RowView } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
@@ -62,15 +63,13 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
-    const model = state ? withSnoozes(sidebarModel(tabIds, state), state.projectSnoozes) : null;
-    const prsTab = state ? prsByTab(tabIds, state) : {};
+    const model = state ? attention(tabIds, state, names, now) : null;
     const gh = state ? ghPrs(state) : undefined;
     const queue = gh ? queueModel(gh.prs, gh.me, now, state?.snoozes) : null;
     const panels = state ? pluginPanels(state) : [];
     const loading = state ? loadingPanels(state, lastPanelTitles(panels)) : [];
     const running = new Set(state?.pluginsRunning ?? []);
     const meetings = useMemo(() => meetingsFrom(state?.plugins), [state?.plugins]);
-    const project = (tabId: string) => state?.projects.find((p) => p.id === tabId);
     // The open tab is always visible even when it is stale; walking with ⌘J/⌘K or renaming
     // (the row must exist to hold the input) shows them all.
     const expanded = showAll || switchTarget != null || renaming != null;
@@ -122,7 +121,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
         );
     };
     const renderRow = (row: Row) => {
-        const v = rowView(row, project(row.tabId), names[row.tabId], now, prsTab[row.tabId]);
+        const v = model!.views[row.tabId];
         const props = {
             key: row.tabId,
             tabId: row.tabId,

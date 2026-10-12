@@ -4,13 +4,12 @@ import { memo } from "react";
 import { Key } from "./Key";
 import { runAction } from "./menu";
 import { HEADERS } from "./PrQueue";
-import { T } from "./tokens";
+import { SESSION_DOT, T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
 import type { Lane } from "../daemon/sessions/reduce";
 import { relTime, sessionHeader, urgentPr } from "./view";
 
-const DOT = { working: T.moss, waiting: T.apricot, parked: T.muted, done: T.dim, idle: T.dim, ended: T.dim } as const;
 
 // Above a Claude pane: its state, what it works on, its own status line and its PRs' verdicts.
 export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
@@ -25,8 +24,8 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
         <div data-wintos="session-header" style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", gap: 5, padding: "7px 10px 8px 12px", borderBottom: `1px solid ${T.border}`, fontFamily: T.ui, fontSize: 12, minWidth: 0 }}>
             {h.tone && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: h.tone === "brick" ? T.brick : T.apricot }} />}
             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, whiteSpace: "nowrap" }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: DOT[s.state] }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: DOT[s.state] }} />
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: SESSION_DOT[s.state] }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: SESSION_DOT[s.state] }} />
                     {s.state}
                     {s.state !== "working" && ` ${relTime(now - s.since)}`}
                 </span>

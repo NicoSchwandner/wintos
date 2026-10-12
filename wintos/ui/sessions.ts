@@ -24,9 +24,9 @@ export function paneCloseWarns(sessions: Session[], blockId: string, armed: stri
 // ⌃⇥: the next stop in Needs you, in the order the sidebar shows it, wrapping, so every project
 // there is reached and the next one can be read off the screen. A project's waiting sessions are
 // a stop each (longest waiting first); a project there for a PR is one stop, its terminals. A
-// waiting session in a project not listed comes after the list.
-export function nextNeedsYou(sessions: Session[], tabIds: string[], activeTabId: string, currentBlockId: string | undefined, needsTabIds: string[]): Target | { tabId: string } | null {
-    const waiting = sessions.filter((s) => s.state === "waiting" && tabIds.includes(s.tabId)).sort((a, b) => a.since - b.since);
+// waiting session in a project not listed comes after the list, unless you snoozed that project.
+export function nextNeedsYou(sessions: Session[], tabIds: string[], activeTabId: string, currentBlockId: string | undefined, needsTabIds: string[], snoozedTabIds: string[] = []): Target | { tabId: string } | null {
+    const waiting = sessions.filter((s) => s.state === "waiting" && tabIds.includes(s.tabId) && !snoozedTabIds.includes(s.tabId)).sort((a, b) => a.since - b.since);
     const order = [...needsTabIds, ...waiting.map((s) => s.tabId)].filter((t, i, all) => tabIds.includes(t) && all.indexOf(t) === i);
     const stops: (Target | { tabId: string })[] = order.flatMap((tabId) => {
         const here = waiting.filter((s) => s.tabId === tabId).map((s) => ({ tabId, blockId: s.blockId }));

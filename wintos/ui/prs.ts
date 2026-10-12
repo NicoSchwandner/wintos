@@ -1,4 +1,4 @@
-import { ageLabel, Group, GROUPS, groupOf, isSnoozed, isStacked, lastMovement, PR, qualifier, type Snoozes } from "../daemon/prs/group";
+import { ageLabel, byUrgency, Group, GROUPS, groupOf, isSnoozed, isStacked, lastMovement, PR, qualifier, type Snoozes } from "../daemon/prs/group";
 
 // children: PRs stacked on this one that only wait for it (spec: stacked PRs sit under their base).
 export type QueueRow = { pr: PR; group: Group; mine: boolean; age: { text: string; late: boolean }; qualifier?: { text: string; brick?: boolean }; total: number; repoShort: string; children: QueueRow[] };
@@ -6,7 +6,6 @@ export type QueueRow = { pr: PR; group: Group; mine: boolean; age: { text: strin
 const ACTS: Group[] = ["merge", "fix", "review", "chase"];
 
 // Longest untouched first: the older the last review or push, the more it is owed.
-const byUrgency = (a: QueueRow, b: QueueRow) => lastMovement(a.pr).localeCompare(lastMovement(b.pr));
 // snoozed: looked at and handed on; out of the groups and the counts until it wakes.
 export type QueueModel = { groups: { group: Group; rows: QueueRow[] }[]; snoozed: QueueRow[]; yours: number; waiting: number; team: number; pastSla: number };
 

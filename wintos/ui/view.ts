@@ -1,10 +1,9 @@
-import { QUIET_CAP, rank, Ranking, Row } from "../daemon/ranking/rank";
 import type { Day } from "../daemon/journal/journal";
 import type { KeyStats } from "../daemon/keyboard/keyboard";
 import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
-import { GROUPS, groupOf, isSnoozed, isStacked, lastMovement, projectPrs, qualifier, type Group, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
-import type { Session } from "../daemon/sessions/reduce";
+import { byUrgency, GROUPS, groupOf, isSnoozed, isStacked, projectPrs, qualifier, type Group, type PR, type Snoozes } from "../daemon/prs/group";
+import { liveSessionIn, type Session } from "../daemon/sessions/reduce";
 import type { Shelved } from "../daemon/shelf/shelf";
 
 export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; projectSnoozes?: Record<string, number>; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]> };
@@ -21,73 +20,6 @@ export function relTime(ms: number): string {
 
 export function ghPrs(state: WintosState): { me: string; prs: PR[] } | undefined {
     return state.plugins?.["gh-prs"]?.data as { me: string; prs: PR[] } | undefined;
-}
-
-export function prsByTab(tabIds: string[], state: WintosState): Record<string, ProjectPrs> {
-    const gh = ghPrs(state);
-    if (!gh) return {};
-    const out: Record<string, ProjectPrs> = {};
-    const awake = gh.prs.filter((pr) => !isSnoozed(pr, state.snoozes ?? {}, state.now));
-    for (const id of tabIds) {
-        const p = state.projects.find((x) => x.id === id);
-        if (p) out[id] = projectPrs(p, awake, gh.me, state.now);
-    }
-    return out;
-}
-
-export function sidebarModel(tabIds: string[], state: WintosState): Ranking {
-    const touched = Object.fromEntries(state.projects.filter((p) => p.id).map((p) => [p.id!, p.mtime]));
-    const byTab = prsByTab(tabIds, state);
-    const blocked = Object.fromEntries(Object.entries(byTab).filter(([, v]) => v.blocked).map(([k, v]) => [k, v.blocked!.since]));
-    return rank(tabIds, state.sessions, state.now, touched, blocked, state.seen);
-}
-
-// Snoozed projects (done, but may need re-work) leave the bands and the ⌘J/⌘K walk for their own
-// group; one that needs you anew (a waiting session, a PR in Fix, a new reply, begun after the
-// snooze) comes back, and is marked to be woken for good. A need already there when you snoozed
-// is what you chose to put away.
-export type SidebarSplit = Ranking & { snoozed: Row[]; wake: string[] };
-export function withSnoozes(model: Ranking, snoozed: Record<string, number> = {}): SidebarSplit {
-    const is = (r: Row) => r.tabId in snoozed;
-    const out = (rows: Row[]) => rows.filter((r) => !is(r));
-    const woken = (r: Row) => is(r) && (r.waitingSince ?? 0) > snoozed[r.tabId];
-    const needs = model.needs.filter((r) => !is(r) || woken(r));
-    return {
-        needs,
-        running: out(model.running),
-        // The cap counts shown projects: a snoozed one gives its slot to the next.
-        quiet: out([...model.quiet, ...model.quietMore]).slice(0, QUIET_CAP),
-        quietMore: out([...model.quiet, ...model.quietMore]).slice(QUIET_CAP),
-        quietStale: out(model.quietStale),
-        // Put away: a snoozed project reads as quiet, whether a session there waits or works.
-        snoozed: [...model.needs.filter((r) => is(r) && !woken(r)), ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].filter(is).map((r) => ({ ...r, band: "quiet" as const })),
-        wake: needs.filter(woken).map((r) => r.tabId),
-    };
-}
-
-export function rowView(row: Row, project: Project | undefined, tabName: string | undefined, now: number, prs?: ProjectPrs): RowView {
-    const title = project?.title ?? tabName ?? "Untitled";
-    const since = row.band === "needs" ? row.waitingSince! : row.lastAt;
-    const age = since > 0 ? relTime(now - since) : "";
-    const first = prs?.items[0]?.pr;
-    const link = first ? `#${first.number} · ${first.branch}` : project?.pr?.[0];
-    // Restored at the last restart: shown as it was, but its Claude starts only when you open it.
-    const notStarted = row.sessions.length > 0 && row.sessions.every((s) => s.restored);
-    const meta = notStarted ? [link, "not started, opens with the project"].filter(Boolean).join(" · ") : link;
-    if (project?.error) return { title, next: `note unreadable: ${project.dir}/project.md`, tone: "brick", age, meta };
-    if (row.band === "needs") {
-        const sessionWaiting = row.sessions.some((s) => s.state === "waiting");
-        if (!sessionWaiting && row.unread) return { title, next: project?.next ? `New reply · ${project.next}` : "New reply", tone: "apricot", age, meta };
-        if (!sessionWaiting && prs?.blocked) return { title, next: prs.blocked.text, tone: prs.blocked.tone, age, meta };
-        return { title, next: project?.next ?? "Your turn", tone: "apricot", age, meta };
-    }
-    if (row.band === "running") {
-        // Parked beats the next action: it is the live reason nobody needs to act.
-        const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
-        return { title, next: parkedOn ? `Waiting on ${parkedOn}` : (project?.next ?? "Claude is working"), tone: "secondary", age, meta };
-    }
-    const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
-    return { title, age, reason: parkedOn ? `waiting on ${parkedOn}` : (prs?.reason ?? meta ?? age) };
 }
 
 // The Inbox is the one tab that is not a project (pkg/wcore/inbox.go); a tab not loaded yet is one.
@@ -120,9 +52,7 @@ export function projectPrList(state: WintosState, tabId: string): ProjectPrRow[]
         const note = [qualifier(pr, group)?.text, on && `stacked on ${on}`].filter(Boolean).join(" · ") || undefined;
         return { pr, group, note, snoozed: isSnoozed(pr, state.snoozes ?? {}, state.now) };
     });
-    return rows.sort(
-        (a, b) => Number(a.snoozed) - Number(b.snoozed) || GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || lastMovement(a.pr).localeCompare(lastMovement(b.pr))
-    );
+    return rows.sort((a, b) => Number(a.snoozed) - Number(b.snoozed) || byUrgency(a, b));
 }
 
 // Which project each PR belongs to, for "go to project" in the queue. Snoozed PRs included:
@@ -150,7 +80,7 @@ export type SessionHeader = {
 const TASK_ID = /\b[A-Z][A-Z0-9]+-\d+\b/i;
 
 export function sessionHeader(state: WintosState, blockId: string): SessionHeader | undefined {
-    const session = state.sessions.filter((s) => s.blockId === blockId && s.state !== "ended").sort((a, b) => b.lastAt - a.lastAt)[0];
+    const session = liveSessionIn(state.sessions, blockId);
     if (!session) return undefined;
     const gh = ghPrs(state);
     const byUrl = new Map((gh?.prs ?? []).map((p) => [p.url, p]));

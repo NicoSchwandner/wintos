@@ -72,11 +72,13 @@ export class Journal {
         }
     }
 
+    // The last workday's file: a weekend note (a personal to-do on a Sunday) is not the plan Monday
+    // carries on from. ponytail: Saturday and Sunday are fixed, a setting if weekends ever become workdays.
     private previous(before: string): string | undefined {
         const files: string[] = [];
         for (const y of safeList(this.dir).filter((n) => /^\d{4}$/.test(n)))
             for (const m of safeList(join(this.dir, y)).filter((n) => /^\d{2}$/.test(n)))
-                for (const f of safeList(join(this.dir, y, m))) if (/^\d{4}-\d{2}-\d{2}\.md$/.test(f) && f.slice(0, 10) < before) files.push(join(this.dir, y, m, f));
+                for (const f of safeList(join(this.dir, y, m))) if (/^\d{4}-\d{2}-\d{2}\.md$/.test(f) && f.slice(0, 10) < before && !weekend(f.slice(0, 10))) files.push(join(this.dir, y, m, f));
         return files.sort().pop();
     }
 
@@ -126,3 +128,5 @@ const safeList = (dir: string) => {
         return [];
     }
 };
+
+const weekend = (iso: string) => [0, 6].includes(new Date(`${iso}T12:00:00`).getDay());

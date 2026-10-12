@@ -85,6 +85,13 @@ describe("Journal", () => {
         expect([d.yesterday?.date, d.yesterday?.focus, d.yesterday?.tomorrow]).toEqual(["2026-09-30", "- [x] Review the export PR\n- [ ] Write the rollout note", ["- [ ] Ship the fallback"]]);
     });
 
+    test("a weekend file is never yesterday: Monday looks back to Friday", () => {
+        const { j, put } = setup();
+        put("2026-10-09", DAY("- [ ] Friday's plan"));
+        put("2026-10-11", DAY("- [ ] a Sunday to-do"));
+        expect(j.day(new Date(2026, 9, 12)).yesterday?.date).toBe("2026-10-09");
+    });
+
     test("planned is remembered per day", () => {
         const { j } = setup();
         const today = new Date(2026, 9, 2);

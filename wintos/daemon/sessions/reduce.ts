@@ -23,7 +23,9 @@ export type Session = {
 };
 
 // A step starting with ? is the developer's call: the session stops there.
-export type Lane = { name: string; steps: string[]; at: number; note?: string };
+// todos: what is in flight in the step now (`wintos todo`); the next step starts without them.
+export type Todo = { text: string; done: boolean };
+export type Lane = { name: string; steps: string[]; at: number; note?: string; todos?: Todo[] };
 
 const LABEL_MAX = 24;
 // One gh pr command names a PR or two (a stack); more is a listing, which claims nothing.
@@ -42,7 +44,7 @@ function withPrStep(lane: Lane | undefined, verb: unknown): Lane | undefined {
     if (!lane || !step) return lane;
     const i = lane.steps.findIndex((s, i) => i > lane.at && step.test(s.replace(/^\?\s*/, "").toLowerCase()));
     if (i < 0) return lane;
-    const { note: _old, ...rest } = lane;
+    const { note: _note, todos: _todos, ...rest } = lane;
     return { ...rest, at: i };
 }
 const labelOf = (prompt?: string) =>
@@ -134,8 +136,28 @@ export function setStep(sessions: Map<string, Session>, blockId: string, step: s
     const names = live.lane.steps.map(bare);
     const at = names.indexOf(want) >= 0 ? names.indexOf(want) : names.findIndex((n) => n.startsWith(want));
     if (at < 0) return undefined;
-    const { note: _old, ...lane } = live.lane;
-    return new Map(sessions).set(live.id, { ...live, lane: note ? { ...lane, at, note } : { ...lane, at } });
+    const { note: _old, todos, ...lane } = live.lane;
+    const kept = at === live.lane.at && todos ? { todos } : {};
+    return new Map(sessions).set(live.id, { ...live, lane: { ...lane, at, ...kept, ...(note ? { note } : {}) } });
+}
+
+// undefined: the session has no lane yet, so the caller can say so.
+export function setTodo(sessions: Map<string, Session>, blockId: string, items: string[]): Map<string, Session> | undefined {
+    const live = liveIn(sessions, blockId);
+    if (!live?.lane) return undefined;
+    return new Map(sessions).set(live.id, { ...live, lane: { ...live.lane, todos: items.map((text) => ({ text, done: false })) } });
+}
+
+// Matched like a step: by name in any case, else by its start. undefined: no such to-do.
+export function tickTodo(sessions: Map<string, Session>, blockId: string, item: string): Map<string, Session> | undefined {
+    const live = liveIn(sessions, blockId);
+    const todos = live?.lane?.todos;
+    if (!live?.lane || !todos) return undefined;
+    const want = item.toLowerCase();
+    const names = todos.map((t) => t.text.toLowerCase());
+    const i = names.indexOf(want) >= 0 ? names.indexOf(want) : names.findIndex((n) => n.startsWith(want));
+    if (i < 0) return undefined;
+    return new Map(sessions).set(live.id, { ...live, lane: { ...live.lane, todos: todos.map((t, k) => (k === i ? { ...t, done: true } : t)) } });
 }
 
 // `wintos done` from inside a session: the block's live session ends this turn done.

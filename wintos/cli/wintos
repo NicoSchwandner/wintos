@@ -81,6 +81,21 @@ step)
         die "wintosd refused the step: not in this session's lane (run wintos lane first), or not reachable on port $PORT"
     echo "step: $step${*:+ ($*)}"
     ;;
+todo)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos todo <to-do>… | wintos todo done <to-do>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    if [ "$1" = done ] && [ $# -gt 1 ]; then
+        shift
+        jq -n --arg d "$*" '{done: $d}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/todo" >/dev/null ||
+            die "wintosd refused it: no such to-do in this step, or not reachable on port $PORT"
+        echo "todo done: $*"
+    else
+        jq -n '{items: $ARGS.positional}' --args "$@" | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/todo" >/dev/null ||
+            die "wintosd refused the to-dos: no lane in this session (run wintos lane first), or not reachable on port $PORT"
+        echo "todo: $(printf '%s\n' "$@" | paste -sd'|' - | sed 's/|/ · /g')"
+    fi
+    ;;
 done)
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     echo '{}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/done" >/dev/null ||
@@ -112,5 +127,5 @@ hooks)
     *) die "usage: wintos hooks install|uninstall [<claude config dir>]" ;;
     esac
     ;;
-*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos status <line> | wintos lane <name> <step…> | wintos step <step> [note] | wintos hooks install|uninstall [<claude config dir>]" ;;
+*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos status <line> | wintos lane <name> <step…> | wintos step <step> [note] | wintos todo <to-do>… | wintos todo done <to-do> | wintos hooks install|uninstall [<claude config dir>]" ;;
 esac

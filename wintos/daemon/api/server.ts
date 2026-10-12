@@ -13,7 +13,7 @@ import { dayRecapper } from "../recap/day";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { titlePrompt, writeTitle } from "../shelf/title";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep } from "../sessions/reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -23,6 +23,7 @@ const MAX_BODY = 1_000_000;
 const MAX_STATUS = 160;
 const MAX_STEPS = 15;
 const MAX_STEP = 40;
+const MAX_TODO = 80;
 const MAX_TITLE = 120;
 // Ids and titles end up as front matter lines; a line break would let a value forge keys.
 const SAFE = /^[^\r\n\u0000-\u001f]+$/;
@@ -330,6 +331,20 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const ok = isSafe(blockId) && isSafe(b?.name) && b.name.length <= MAX_STEP && steps.length > 0 && steps.length <= MAX_STEPS && steps.every((s) => s && isSafe(s) && s.length <= MAX_STEP);
                 if (!ok) return send(res, 400, `need a lane name and 1-${MAX_STEPS} one-line steps up to ${MAX_STEP} characters`);
                 sessions = setLane(sessions, blockId, b.name as string, steps);
+                saveSessions();
+                broadcast();
+                return send(res, 200, "");
+            }
+            const todo = /^\/blocks\/([^/]+)\/todo$/.exec(url.pathname);
+            if (req.method === "POST" && todo) {
+                const blockId = decodeURIComponent(todo[1]);
+                const b = (await body(req)) as { items?: unknown; done?: unknown };
+                const items = Array.isArray(b?.items) ? b.items.map((s) => (typeof s === "string" ? s.trim() : "")) : undefined;
+                const okItems = items && items.length > 0 && items.length <= MAX_STEPS && items.every((s) => s && isSafe(s) && s.length <= MAX_TODO);
+                if (!isSafe(blockId) || (!okItems && !isSafe(b?.done))) return send(res, 400, `need 1-${MAX_STEPS} one-line to-dos up to ${MAX_TODO} characters, or the one done`);
+                const next = okItems ? setTodo(sessions, blockId, items!) : tickTodo(sessions, blockId, b.done as string);
+                if (!next) return send(res, 400, okItems ? "no lane in this session; run wintos lane first" : "no such to-do in this step");
+                sessions = next;
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");

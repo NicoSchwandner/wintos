@@ -105,7 +105,7 @@ function StepTrack({ lane }: { lane: Lane }) {
         <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 11 }}>
             <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, border: `1px solid ${T.border}`, borderRadius: 4, padding: "0 5px", flexShrink: 0 }}>{lane.name}</span>
             {lane.at > 0 && <span style={{ color: T.faint, flexShrink: 0 }}>{lane.at}/{lane.steps.length}</span>}
-            {step(lane.at, lane.note)}
+            {step(lane.at, [lane.note, lane.todos && `${lane.todos.filter((t) => t.done).length}/${lane.todos.length}`].filter(Boolean).join(" · ") || undefined)}
             {next >= 0 && <span style={{ color: T.faint, flexShrink: 0 }}>→</span>}
             {next >= 0 && step(next)}
         </div>
@@ -131,6 +131,16 @@ export const SessionSteps = memo(({ blockId }: { blockId: string }) => {
                             <span>
                                 {stepName(step)}
                                 {i === lane.at && lane.note && <span style={{ display: "block", fontSize: 11, fontWeight: 400, color: T.muted }}>{lane.note}</span>}
+                                {i === lane.at && lane.todos && (
+                                    <span style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 4, fontSize: 11.5, fontWeight: 400 }}>
+                                        {lane.todos.map((t, k) => (
+                                            <span key={k} style={{ display: "flex", gap: 6, color: t.done ? T.faint : T.secondary, textDecoration: t.done ? "line-through" : undefined }}>
+                                                <span style={{ fontFamily: T.mono, color: t.done ? T.moss : T.faint }}>{t.done ? "✓" : "○"}</span>
+                                                {t.text}
+                                            </span>
+                                        ))}
+                                    </span>
+                                )}
                                 {i >= lane.at && gate(step) && <span style={{ display: "block", fontSize: 11, fontWeight: 400, color: T.apricot }}>your call</span>}
                             </span>
                         </div>

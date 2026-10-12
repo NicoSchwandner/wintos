@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep } from "./reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -191,5 +191,23 @@ describe("a gh pr command moves the lane on by itself", () => {
         expect(at(reduceSession(lane, gh("view"), 5000))).toBe(0);
         const plain = setLane(run([ev(prompt)]), "blk-1", "investigate", ["Query", "Answer"]);
         expect(at(reduceSession(plain, gh("create"), 5000))).toBe(0);
+    });
+});
+
+describe("the current step's to-dos (`wintos todo`)", () => {
+    const m = setStep(setLane(run([ev(prompt)]), "blk-1", "feature", ["Build", "Test path", "Ready"]), "blk-1", "Test path")!;
+    const todos = (x: Map<string, Session>) => only(x).lane?.todos;
+    test("a list for the step now, all open", () =>
+        expect(todos(setTodo(m, "blk-1", ["Narrow list", "Name search"])!)).toEqual([{ text: "Narrow list", done: false }, { text: "Name search", done: false }]));
+    test("ticked by name, any case, or by its start; an unknown one is refused", () => {
+        const t = setTodo(m, "blk-1", ["Narrow list", "Name search"])!;
+        expect(todos(tickTodo(t, "blk-1", "name")!)).toEqual([{ text: "Narrow list", done: false }, { text: "Name search", done: true }]);
+        expect(tickTodo(t, "blk-1", "Deploy")).toBeUndefined();
+    });
+    test("without a lane there is nothing to list", () => expect(setTodo(run([ev(prompt)]), "blk-1", ["x"])).toBeUndefined());
+    test("the next step starts without them; the same step again keeps them", () => {
+        const t = setTodo(m, "blk-1", ["Narrow list"])!;
+        expect(todos(setStep(t, "blk-1", "Test path")!)).toHaveLength(1);
+        expect(todos(setStep(t, "blk-1", "Ready")!)).toBeUndefined();
     });
 });

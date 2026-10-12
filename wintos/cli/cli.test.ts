@@ -300,6 +300,15 @@ describe("wintos lane and step", () => {
             { url: "/blocks/blk-1/step", body: { step: "Build", note: "slice 2 of 3" } },
         ]);
     });
+    test("todo lists the step's to-dos; todo done ticks one", async () => {
+        const d = await fakeDaemon("");
+        expect((await cli(["todo", "Narrow list", "Name search"], d.port)).trim()).toBe("todo: Narrow list · Name search");
+        expect((await cli(["todo", "done", "Name search"], d.port)).trim()).toBe("todo done: Name search");
+        expect(d.seen).toEqual([
+            { url: "/blocks/blk-1/todo", body: { items: ["Narrow list", "Name search"] } },
+            { url: "/blocks/blk-1/todo", body: { done: "Name search" } },
+        ]);
+    });
 });
 
 describe("wintos done", () => {

@@ -23,7 +23,8 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
         <div
             data-wintos="meeting-card"
             style={{
-                position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", gap: 3, padding: "9px 11px", borderRadius: 10, background: T.card,
+                // flexShrink 0: in the sidebar's scrolling column, overflow: hidden would let it shrink to a sliver.
+                position: "relative", overflow: "hidden", flexShrink: 0, display: "flex", flexDirection: "column", gap: 3, padding: "9px 11px", borderRadius: 10, background: T.card,
                 border: `1px solid ${n.soon ? T.apricot : T.border}`, animation: n.soon ? "wintos-breathe 2.4s ease-in-out infinite" : undefined,
             }}
         >

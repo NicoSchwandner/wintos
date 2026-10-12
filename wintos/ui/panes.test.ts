@@ -23,6 +23,11 @@ describe("stripPanes", () => {
         expect(chips[0].session?.state).toBe("waiting");
     });
 
+    test("a session that keeps a status line is named by it, not its first prompt", () => {
+        const s = { ...session("s1", "b1", "working", "I'm back now, go ahead!"), status: { text: "deploying the stack to test", at: 5 } };
+        expect(stripPanes([block("b1", { view: "term" })], [s])[0].label).toBe("deploying the stack to test");
+    });
+
     test("an ended session's pane is a plain terminal again", () => {
         expect(stripPanes([block("b1", { view: "term" })], [session("s1", "b1", "ended")])[0].kind).toBe("terminal");
     });

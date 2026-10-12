@@ -1,3 +1,4 @@
+import { shelvedName, type Shelved } from "../../daemon/shelf/shelf";
 import { useAtomValue } from "jotai";
 import { memo, useEffect, useRef, useState } from "react";
 import { useZoneKeys } from "../zones";
@@ -91,7 +92,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
 NotesRail.displayName = "NotesRail";
 
 // This project's shelved sessions, newest first, each back as a pane with its key.
-export function Shelf({ shelf }: { shelf: { sessionId: string; label: string; at: number }[] }) {
+export function Shelf({ shelf }: { shelf: Shelved[] }) {
     if (!shelf.length) return null;
     const row = (k: string, text: string, onClick: () => void, key: string) => (
         <button key={key} type="button" data-key={k} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 9, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12.5, lineHeight: 1.55, color: T.quietTitle, textAlign: "left" }}>
@@ -102,7 +103,7 @@ export function Shelf({ shelf }: { shelf: { sessionId: string; label: string; at
     return (
         <div data-wintos="shelf-dock" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>Shelved</span>
-            {shelf.slice(0, 9).map((s, i) => row(`⌥⌘${i + 1}`, `${s.label} · ${relTime(Date.now() - s.at)}`, () => runKey(`unshelve-${i + 1}`), s.sessionId))}
+            {shelf.slice(0, 9).map((s, i) => row(`⌥⌘${i + 1}`, `${shelvedName(s)} · ${relTime(Date.now() - s.at)}`, () => runKey(`unshelve-${i + 1}`), s.sessionId))}
             {shelf.length > 9 && row("⇧⌘P", `${shelf.length - 9} more`, () => openPalette("shelved"), "more")}
         </div>
     );

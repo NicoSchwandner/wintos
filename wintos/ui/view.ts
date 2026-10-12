@@ -174,3 +174,6 @@ export function sessionHeader(state: WintosState, blockId: string): SessionHeade
 // The PR ⌥⌘G opens from the focused pane: the one the queue would put first.
 export const urgentPr = (h: SessionHeader | undefined) =>
     h?.prs.filter((p) => p.group).sort((a, b) => GROUPS.indexOf(a.group!) - GROUPS.indexOf(b.group!))[0] ?? h?.prs[0];
+
+// What a live session is called: the status line it keeps (`wintos status`), else its first prompt.
+export const sessionName = (s: Session) => s.status?.text ?? s.label ?? "session";

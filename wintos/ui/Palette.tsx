@@ -11,7 +11,8 @@ import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { useZoneKeys } from "./zones";
-import { ghPrs, prProjects, projectTabIds, relTime, sidebarModel, withSnoozes, type WintosState } from "./view";
+import { ghPrs, prProjects, projectTabIds, relTime, sessionName, sidebarModel, withSnoozes, type WintosState } from "./view";
+import { shelvedName } from "../daemon/shelf/shelf";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 
 const KIND_LABEL: Record<Kind, string> = { project: "Projects", pr: "PRs", session: "Sessions", action: "Do" };
@@ -208,13 +209,13 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     // Only sessions whose pane is still there: a closed pane's session is on the shelf, or gone.
     const blocksOf = Object.fromEntries(tabIds.map((id) => [id, globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", id)))?.blockids ?? []]));
     for (const s of liveSessions(state.sessions, blocksOf).filter((s) => s.state !== "ended" && tabIds.includes(s.tabId)))
-        out.push({ id: `s:${s.id}`, kind: "session", title: s.label ?? "session", subtitle: `${s.state} · ${title(s.tabId)}`, run: () => focusSession({ tabId: s.tabId, blockId: s.blockId }) });
+        out.push({ id: `s:${s.id}`, kind: "session", title: sessionName(s), subtitle: `${s.state} · ${title(s.tabId)}`, run: () => focusSession({ tabId: s.tabId, blockId: s.blockId }) });
     for (const id of tabIds)
         for (const s of state.shelf?.[id] ?? [])
             out.push({
-                id: `sh:${s.sessionId}`, kind: "session", title: s.label,
-                subtitle: [`shelved ${relTime(now - s.at)} ago`, title(id), s.gist].filter(Boolean).join(" · "),
-                fields: [{ text: s.gist ?? "", weight: 25 }], recency: s.at,
+                id: `sh:${s.sessionId}`, kind: "session", title: shelvedName(s),
+                subtitle: [`shelved ${relTime(now - s.at)} ago`, title(id), s.name && s.gist].filter(Boolean).join(" · "),
+                fields: [{ text: [s.gist, s.label].filter(Boolean).join(" "), weight: 25 }], recency: s.at,
                 run: () => focusSession({ tabId: id, blockId: "", resume: s.script }),
             });
     const here = title(activeTab);

@@ -222,7 +222,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 // A session resumed and closed again before a prompt has no label: its recap names it.
                 const gist = recapper.gistOf(sessionId);
                 const label = typeof b.label === "string" && b.label && isSafe(b.label) ? b.label.slice(0, MAX_TITLE) : (gist ?? "session");
-                saveShelf(shelve(shelf, basename(p.dir), { sessionId, script: b.script as string, label, gist, at: Date.now() }, 14));
+                const name = sessions.get(sessionId)?.status?.text;
+                saveShelf(shelve(shelf, basename(p.dir), { sessionId, script: b.script as string, label, ...(name ? { name } : {}), gist, at: Date.now() }, 14));
                 broadcast();
                 return send(res, 200, "");
             }

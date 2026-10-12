@@ -474,6 +474,14 @@ describe("the shelf", () => {
         expect(Object.keys(await shelfOf())).toEqual(["tab-2"]);
     });
 
+    test("its name is the status line the session last set, when it set one", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await post("/blocks/blk-1/status", { text: "deploying the stack to test" });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "I'm back now, go ahead!" });
+        expect((await shelfOf())["tab-1"][0]).toMatchObject({ name: "deploying the stack to test", label: "I'm back now, go ahead!" });
+    });
+
     test("a session that runs again leaves the shelf", async () => {
         await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
         await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });

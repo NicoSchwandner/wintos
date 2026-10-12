@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { inboxKind, inboxTabId, isInboxTab, prProjects, projectTabIds, projectPrList, relTime, sessionHeader, urgentPr, type WintosState } from "./view";
+import { inboxKind, inboxTabId, isInboxTab, prProjects, projectSessions, projectTabIds, projectPrList, relTime, sessionHeader, urgentPr, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -129,5 +129,22 @@ describe("sessionHeader (the header on a Claude pane)", () => {
     test("without PRs the task and branch come from where it runs", () => {
         const h = sessionHeader(st([sess()]), "b")!;
         expect([h.task, h.branch]).toEqual(["DEV-88", "DEV-88-other"]);
+    });
+});
+
+describe("projectSessions (the notes' Sessions section, and ⌥⌘1–9)", () => {
+    const st = {
+        now: 0, projects: [],
+        sessions: [
+            { id: "a", tabId: "t", blockId: "b2", state: "waiting", since: 0, lastAt: 0, status: { text: "fixing the parser", at: 0 }, prs: ["https://github.com/o/r/pull/1"] },
+            { id: "b", tabId: "t", blockId: "b1", state: "working", since: 0, lastAt: 0, label: "first" },
+            { id: "c", tabId: "t", blockId: "gone", state: "waiting", since: 0, lastAt: 0 },
+            { id: "d", tabId: "t", blockId: "b3", state: "ended", since: 0, lastAt: 0 },
+        ],
+        shelf: { t: [{ sessionId: "z", script: "s", label: "l", title: "Deploy the stack", at: 0, prs: ["https://github.com/o/r/pull/2"] }] },
+    } as unknown as WintosState;
+    test("live ones in pane order (closed panes and ended sessions left out), then the shelved, each with its PRs", () => {
+        const list = projectSessions(st, "t", ["b1", "b2", "b3"]);
+        expect(list.map((x) => [x.kind, x.name, x.prs.map((p) => p.number)])).toEqual([["live", "first", []], ["live", "fixing the parser", [1]], ["shelved", "Deploy the stack", [2]]]);
     });
 });

@@ -23,13 +23,13 @@ export const notesKeys = (tabId: string, state: ReturnType<typeof useWintos>["st
     ...Object.fromEntries(["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => [d, () => on && openProjectPr(tabId, state, Number(d))])),
 });
 
-export const PrList = memo(({ tabId, size }: { tabId: string; size: "rail" | "full" }) => {
+export const PrList = memo(({ tabId, size, label = "other pull requests" }: { tabId: string; size: "rail" | "full"; label?: string }) => {
     const { state } = useWintos();
     const rows = state ? projectPrList(state, tabId) : [];
     if (!rows.length) return null;
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.secondary }}>other pull requests</span>
+            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.secondary }}>{label}</span>
             {rows.map((r, i) => (
                 <div
                     key={r.pr.url}

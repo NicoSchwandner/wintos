@@ -10,7 +10,7 @@ import { FLAG_EVENT, mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, 
 import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, LayoutTreeActionType, NavigateDirection, type LayoutTreeSwapNodeAction } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
-import { isInboxTab, sessionHeader, urgentPr } from "./view";
+import { isInboxTab, projectSessions, sessionHeader, urgentPr } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
 import { installFocusRing } from "./focusRing";
@@ -95,7 +95,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Ctrl:Cmd:c{KeyK}", "carry-up"],
     ["Ctrl:Cmd:c{KeyL}", "carry-right"],
     // ⌥ turns a digit into another character too, so these match the key's place.
-    ...Array.from({ length: 9 }, (_, i): [string, string] => [`Option:Cmd:c{Digit${i + 1}}`, `unshelve-${i + 1}`]),
+    ...Array.from({ length: 9 }, (_, i): [string, string] => [`Option:Cmd:c{Digit${i + 1}}`, `session-${i + 1}`]),
     ["Cmd:h", "focus-left"],
     ["Cmd:l", "focus-right"],
 ];
@@ -294,7 +294,7 @@ export function runAction(action: string): void {
     if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));
     if (action === "show-snoozed") return toggleStoredFlag("wintos:show-snoozed");
     if (action === "restart-terminal") return restartTerminal();
-    if (action.startsWith("unshelve-")) return unshelve(Number(action.slice("unshelve-".length)));
+    if (action.startsWith("session-")) return toSession(Number(action.slice("session-".length)));
     if (action === "rail") return toggleRail();
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);
     if (b) createBlock(b.def, false, b.ephemeral);
@@ -332,11 +332,13 @@ export function confirmPaneClose(blockId: string | undefined): boolean {
     return false;
 }
 
-// ⌥⌘1–9: the project's shelved sessions, newest first, back as a pane.
-function unshelve(n: number): void {
+// ⌥⌘1–9: the project's sessions as its notes list them: a live one's pane, a shelved one resumed.
+function toSession(n: number): void {
     const tabId = globalStore.get(atoms.staticTabId);
-    const s = currentState()?.shelf?.[tabId]?.[n - 1];
-    if (s) focusSession({ tabId, blockId: "", resume: s.script });
+    const state = currentState();
+    const blockIds = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.blockids ?? [];
+    const x = state && projectSessions(state, tabId, blockIds)[n - 1];
+    if (x) focusSession(x.kind === "live" ? { tabId, blockId: x.session.blockId } : { tabId, blockId: "", resume: x.item.script });
 }
 
 // Closing a Claude session's pane keeps it on the project's shelf, to resume from ⇧⌘P. A session

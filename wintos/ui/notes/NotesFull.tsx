@@ -10,8 +10,8 @@ import { Key } from "../Key";
 import { ProjectNotes } from "./ProjectNotes";
 import { editingMineAtom, findInNotesAtom } from "./state";
 import { useNotes } from "./useNotes";
-import { notesKeys, PrList } from "./PrList";
-import { Shelf } from "./NotesRail";
+import { notesKeys } from "./PrList";
+import { Sessions } from "./NotesRail";
 import { useWintos } from "../useWintos";
 
 // ⇧⌘L: both files full width, side by side (NotesC).
@@ -50,8 +50,7 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
                 <div style={{ flexGrow: 1, flexBasis: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
                     <Header name="project.md" note="the sessions write this · rendered, not editable here" />
                     <div style={{ paddingTop: 18, overflowY: "auto", display: "flex", flexDirection: "column", gap: 18 }}>
-                        <PrList tabId={tabId} size="full" />
-                        <Shelf shelf={state?.shelf?.[tabId] ?? []} state={state} />
+                        <Sessions tabId={tabId} state={state} size="full" />
                         {notes?.projectMd == null ? (
                             <span style={{ fontSize: 13.5, color: notes ? T.brick : T.faint }}>{notes ? "project.md is unreadable. The next prompt asks Claude to repair it." : "No notes yet."}</span>
                         ) : (

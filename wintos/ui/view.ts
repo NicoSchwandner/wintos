@@ -126,3 +126,14 @@ export const urgentPr = (h: SessionHeader | undefined) =>
 
 // What a live session is called: the status line it keeps (`wintos status`), else its first prompt.
 export const sessionName = (s: Session) => s.status?.text ?? s.label ?? "session";
+
+// A project's sessions, as its notes list them and ⌥⌘1–9 counts them: the live ones in pane
+// order (blockIds, the tab's), then the shelved ones newest first; each with its PRs as chips.
+export type ProjectSession = { kind: "live"; session: Session; name: string; prs: PrChip[] } | { kind: "shelved"; item: Shelved; name: string; prs: PrChip[] };
+export function projectSessions(state: WintosState, tabId: string, blockIds: string[]): ProjectSession[] {
+    const live = blockIds.map((b) => liveSessionIn(state.sessions.filter((s) => s.tabId === tabId), b)).filter((s): s is Session => !!s);
+    return [
+        ...live.map((session): ProjectSession => ({ kind: "live", session, name: sessionName(session), prs: prChips(state, session.prs ?? []) })),
+        ...(state.shelf?.[tabId] ?? []).map((item): ProjectSession => ({ kind: "shelved", item, name: shelvedName(item), prs: prChips(state, item.prs ?? []) })),
+    ];
+}

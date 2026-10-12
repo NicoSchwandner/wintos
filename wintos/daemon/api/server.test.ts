@@ -482,6 +482,18 @@ describe("the shelf", () => {
         expect((await shelfOf())["tab-1"][0]).toMatchObject({ name: "deploying the stack to test", label: "I'm back now, go ahead!" });
     });
 
+    test("a 3-6 word title is written for it in the background, and shown first", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: `cat > ${join(root, "title-prompt.txt")}; echo '"Merge the two lanes."'` });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "I'm back now, go ahead!" });
+        for (let i = 0; i < 50 && !(await shelfOf())["tab-1"]?.[0]?.title; i++) await new Promise((r) => setTimeout(r, 50));
+        expect((await shelfOf())["tab-1"][0].title).toBe("Merge the two lanes");
+        expect(readFileSync(join(root, "title-prompt.txt"), "utf8")).toContain("Its first prompt: I'm back now, go ahead!");
+    });
+
     test("a session that runs again leaves the shelf", async () => {
         await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
         await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });

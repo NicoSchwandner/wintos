@@ -2,10 +2,13 @@
 // session that runs again (resumed from here or by hand) leaves. Keyed by the project's folder,
 // so a project closed and reopened in a new tab keeps its shelf.
 
-// name: the session's own status line when it was shelved; the clearest of the three, then the
-// gist of its last recap, then label (its first prompt).
-export type Shelved = { sessionId: string; script: string; label: string; name?: string; gist?: string; at: number };
-export const shelvedName = (s: Shelved) => s.name ?? s.gist ?? s.label;
+// What a row shows, clearest first: title (3 to 6 words, written after shelving), name (the
+// session's status line then), the gist of its last recap, label (its first prompt).
+export type Shelved = { sessionId: string; script: string; label: string; title?: string; name?: string; gist?: string; at: number };
+export const shelvedName = (s: Shelved) => s.title ?? s.name ?? s.gist ?? s.label;
+
+export const withTitle = (shelf: Shelf, sessionId: string, title: string): Shelf =>
+    Object.fromEntries(Object.entries(shelf).map(([f, l]) => [f, l.map((i) => (i.sessionId === sessionId ? { ...i, title } : i))]));
 export type Shelf = Record<string, Shelved[]>; // folder → newest first
 
 // The resume command the hook writes on a session's pane (wintos-hook.sh), and only that: the

@@ -11,7 +11,8 @@ import type { Journal } from "../journal/journal";
 import { formatMarkdown } from "../markdown";
 import { dayRecapper } from "../recap/day";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
-import { resumedSession, shelve, unshelve, type Shelf } from "../shelf/shelf";
+import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
+import { titlePrompt, writeTitle } from "../shelf/title";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
@@ -52,6 +53,18 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const shelfFile = join(opts.root, ".shelf.json");
     let shelf = readJson<Shelf>(shelfFile, {});
     const saveShelf = (next: Shelf) => ((shelf = next), writeFileSync(shelfFile, JSON.stringify(shelf)));
+    // One at a time: a title is one model call, and a backlog of them must not run at once.
+    let titling = Promise.resolve();
+    const titleShelved = (item: Shelved, project?: string) => {
+        const cmd = opts.recapCmd;
+        if (!cmd || item.title) return;
+        titling = titling.then(async () => {
+            const title = await writeTitle(cmd, titlePrompt({ project, gist: item.gist, status: item.name, label: item.label }));
+            if (!title) return;
+            saveShelf(withTitle(shelf, item.sessionId, title));
+            broadcast();
+        });
+    };
     const sockets = new Set<WebSocket>();
     let port = opts.port;
 
@@ -76,6 +89,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const frame = JSON.stringify(state());
         for (const s of sockets) s.send(frame);
     };
+    // Sessions shelved before titles existed get theirs now.
+    for (const list of Object.values(shelf)) for (const item of list) titleShelved(item);
 
     // Kept next to the projects: a file there is not a project (those are folders).
     const snoozeFile = join(opts.root, ".snoozes.json");
@@ -223,7 +238,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const gist = recapper.gistOf(sessionId);
                 const label = typeof b.label === "string" && b.label && isSafe(b.label) ? b.label.slice(0, MAX_TITLE) : (gist ?? "session");
                 const name = sessions.get(sessionId)?.status?.text;
-                saveShelf(shelve(shelf, basename(p.dir), { sessionId, script: b.script as string, label, ...(name ? { name } : {}), gist, at: Date.now() }, 14));
+                const item: Shelved = { sessionId, script: b.script as string, label, ...(name ? { name } : {}), gist, at: Date.now() };
+                saveShelf(shelve(shelf, basename(p.dir), item, 14));
+                titleShelved(item, p.title);
                 broadcast();
                 return send(res, 200, "");
             }

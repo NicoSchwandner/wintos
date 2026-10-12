@@ -71,21 +71,23 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:o", "panel"],
     ["Shift:Cmd:b", "browser"],
     ["Shift:Cmd:f", "files"],
-    // ⌥ turns a letter into another character on macOS (⌥J is º), so these match the key's
-    // place; j and k sit in the same place on QWERTY and QWERTZ.
+    // ⌥ turns a letter into another character on macOS (⌥J is º, ⌥G is ©), so every ⌥⌘ letter
+    // matches the key's place; all but Z sit in the same place on QWERTY and QWERTZ.
     ["Option:Cmd:c{KeyJ}", "pane-down"],
     ["Option:Cmd:c{KeyK}", "pane-up"],
     ["Shift:Cmd:c", "copy-url"],
-    ["Option:Cmd:z", "snooze-project"],
-    ["Option:Cmd:p", "park-session"],
-    ["Option:Cmd:g", "open-pane-pr"],
+    // Z sits where Y is on QWERTZ: either place snoozes.
+    ["Option:Cmd:c{KeyZ}", "snooze-project"],
+    ["Option:Cmd:c{KeyY}", "snooze-project"],
+    ["Option:Cmd:c{KeyP}", "park-session"],
+    ["Option:Cmd:c{KeyG}", "open-pane-pr"],
     ["Shift:Cmd:j", "join-meeting"],
     ["Shift:Cmd:y", "day"],
     ["Shift:Cmd:i", "keyboard"],
     ["Shift:Cmd:u", "open-external"],
-    ["Option:Cmd:s", "show-snoozed"],
-    ["Option:Cmd:r", "restart-terminal"],
-    ["Option:Cmd:x", "tick"],
+    ["Option:Cmd:c{KeyS}", "show-snoozed"],
+    ["Option:Cmd:c{KeyR}", "restart-terminal"],
+    ["Option:Cmd:c{KeyX}", "tick"],
     ["Option:Cmd:c{KeyL}", "rail"],
     ["Ctrl:Cmd:c{KeyH}", "carry-left"],
     ["Ctrl:Cmd:c{KeyJ}", "carry-down"],

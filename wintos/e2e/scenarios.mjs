@@ -375,7 +375,7 @@ await scenario("14 · ⌥⌘P parks the session waiting in a pane just opened", 
     await post("Stop");
     const state = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((s) => s.id === "e2e-park")?.state;
     await until("the session waiting", async () => (await state()) === "waiting");
-    await press(t, "p", { code: "KeyP", keyCode: 80, mods: ["alt", "meta"] });
+    await press(t, "π", { code: "KeyP", keyCode: 80, mods: ["alt", "meta"] }); // what macOS sends for ⌥P
     await until("the session parked", async () => (await state()) === "parked");
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
 });

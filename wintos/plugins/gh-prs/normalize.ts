@@ -19,6 +19,7 @@ export type Node = {
     commits: { nodes: { commit: { statusCheckRollup: { state: string } | null } }[] };
     reviewRequests: { nodes: { requestedReviewer: Reviewer | null }[] };
     latestReviews: { nodes: { author: { login: string } | null; state: string; submittedAt: string }[] };
+    reviewThreads?: { nodes: { isResolved: boolean }[] };
     mergedAt?: string | null;
     mergeCommit?: { oid: string } | null;
 };
@@ -58,6 +59,8 @@ export function normalize(n: Node, me: string, asked: { requestedMe: boolean; re
     if (n.reviewDecision) pr.reviewDecision = n.reviewDecision;
     if (checks) pr.checks = checks;
     if (n.mergeStateStatus) pr.mergeState = n.mergeStateStatus;
+    const openThreads = n.reviewThreads?.nodes.filter((t) => !t.isResolved).length;
+    if (openThreads) pr.openThreads = openThreads;
     if (latest) pr.lastReviewAt = latest;
     const changes = reviews.filter((r) => r.state === "CHANGES_REQUESTED").pop();
     if (changes) pr.changesRequestedBy = changes.author!.login;

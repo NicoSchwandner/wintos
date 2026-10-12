@@ -12,6 +12,7 @@ export type PR = {
     checks?: string; // statusCheckRollup state: SUCCESS, FAILURE, ERROR, PENDING, EXPECTED
     conflict: boolean;
     mergeState?: string; // mergeStateStatus: CLEAN, BLOCKED, BEHIND, UNSTABLE, DIRTY, …
+    openThreads?: number; // unresolved review threads
     requestedMe: boolean; // asked of me personally
     requestedTeam: boolean; // asked of one of my teams
     reviewedByMe: boolean;
@@ -79,9 +80,11 @@ export function groupOf(pr: PR, me: string, now: number): Group {
     const mine = pr.author === me;
     const approved = pr.reviewDecision === "APPROVED";
     // No CI at all is green: a repo without checks must still reach Merge. BLOCKED is GitHub
-    // saying no: an approval alone does not satisfy code owners.
+    // saying no: an approval alone does not satisfy code owners. Approved and blocked with
+    // threads open is the conversation rule, which the author clears by resolving them.
     const green = pr.checks === undefined || pr.checks === "SUCCESS";
-    if (mine && approved && green && !pr.isDraft && !pr.conflict && pr.mergeState !== "BLOCKED" && !isStacked(pr)) return "merge";
+    const blocked = pr.mergeState === "BLOCKED" && !pr.openThreads;
+    if (mine && approved && green && !pr.isDraft && !pr.conflict && !blocked && !isStacked(pr)) return "merge";
     // Red CI on a draft is work in progress; the draft keeps its own, longer clock.
     // Changes requested stays GitHub's decision until the reviewer reviews again; once you have
     // asked every one of them again, the next move is theirs.
@@ -95,7 +98,7 @@ export function groupOf(pr: PR, me: string, now: number): Group {
 
 // reviewers: false leaves out who it waits on, for views that show reviewers themselves.
 export function qualifier(pr: PR, group: Group, opts: { reviewers?: boolean } = {}): { text: string; brick?: boolean } | undefined {
-    if (group === "merge") return undefined;
+    if (group === "merge") return pr.openThreads ? { text: `resolve ${pr.openThreads} thread${pr.openThreads === 1 ? "" : "s"} first` } : undefined;
     if (pr.mergedAt) return { text: "merged, not on main" };
     if (group === "fix") {
         if (pr.reviewDecision === "CHANGES_REQUESTED") return { text: pr.changesRequestedBy ? `changes requested by ${pr.changesRequestedBy}` : "changes requested" };

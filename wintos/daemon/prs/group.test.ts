@@ -22,6 +22,8 @@ describe("groupOf (spec §4, first match wins)", () => {
         expect(groupOf(pr({ reviewDecision: "APPROVED", checks: "SUCCESS", conflict: true }), "me", MON)).toBe("fix"));
     test("GitHub blocking the merge (code owners still owed) keeps it out of merge", () =>
         expect(groupOf(pr({ reviewDecision: "APPROVED", checks: "SUCCESS", mergeState: "BLOCKED" }), "me", MON)).not.toBe("merge"));
+    test("approved, green and blocked only by open comment threads is yours to merge", () =>
+        expect(groupOf(pr({ reviewDecision: "APPROVED", checks: "SUCCESS", mergeState: "BLOCKED", openThreads: 2 }), "me", MON)).toBe("merge"));
     test("red CI on a draft is work in progress, not a fix", () =>
         expect(groupOf(pr({ isDraft: true, checks: "FAILURE" }), "me", MON)).toBe("waiting"));
     test("fix: changes requested", () => expect(groupOf(pr({ reviewDecision: "CHANGES_REQUESTED" }), "me", MON)).toBe("fix"));
@@ -59,6 +61,7 @@ describe("qualifier", () => {
     test("a chased PR with nobody on it says so", () => expect(qualifier(pr(), "chase")).toEqual({ text: "no reviewer assigned" }));
     test("otherwise it names who it waits on", () => expect(qualifier(pr({ reviewers: ["ana.b"] }), "team")).toEqual({ text: "waiting on ana.b" }));
     test("merge needs no qualifier", () => expect(qualifier(pr(), "merge")).toBeUndefined());
+    test("merge with open threads says to resolve them first", () => expect(qualifier(pr({ openThreads: 2 }), "merge")).toEqual({ text: "resolve 2 threads first" }));
     test("approved but blocked says why it can't merge", () =>
         expect(qualifier(pr({ reviewDecision: "APPROVED", mergeState: "BLOCKED" }), "team")).toEqual({ text: "approved · blocked by required reviews" }));
     test("approved with pending checks says so", () =>

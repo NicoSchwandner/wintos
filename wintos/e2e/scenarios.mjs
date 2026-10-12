@@ -306,7 +306,7 @@ await scenario("11 · ⇧⌘Y in a project and in the Inbox shows the Today page
     }
 });
 
-await scenario("12 · ⌘W on a working session warns first, then shelves it into the notes, and ⌥⌘1 resumes it as a new pane", async () => {
+await scenario("12 · ⌘W on a working session warns first, then shelves it into the notes and the full project view, and ⌥⌘1 resumes it as a new pane", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const shelf = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).shelf?.[tabId] ?? [];
@@ -337,6 +337,10 @@ await scenario("12 · ⌘W on a working session warns first, then shelves it int
     await until("the session on the shelf", async () => (await shelf()).some((s) => s.sessionId === "e2e-shelf"));
     await until("the pane closed", () => panes() !== before);
     await until("its row in the notes", () => evalIn(t, `document.querySelector("[data-wintos=shelf-dock]")?.innerText.includes("e2e shelf")`));
+    await press(t, "l", { mods: ["meta", "shift"] });
+    await until("its row in the full project view", () => evalIn(t, `document.querySelector("[data-wintos=notes-full] [data-wintos=shelf-dock]")?.innerText.includes("e2e shelf")`));
+    await press(t, "Escape", { keyCode: 27 });
+    await until("the full view closed", async () => !(await evalIn(t, `!!document.querySelector("[data-wintos=notes-full]")`)));
     await press(t, "¡", { code: "Digit1", keyCode: 49, mods: ["alt", "meta"] });
     await until("a new pane resuming it", () => sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j, db_block b where t.oid='${tabId}' and b.oid=j.value and b.data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`) === "1");
 });

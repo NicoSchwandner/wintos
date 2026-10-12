@@ -91,7 +91,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
 NotesRail.displayName = "NotesRail";
 
 // This project's shelved sessions, newest first, each back as a pane with its key.
-function Shelf({ shelf }: { shelf: { sessionId: string; label: string; at: number }[] }) {
+export function Shelf({ shelf }: { shelf: { sessionId: string; label: string; at: number }[] }) {
     if (!shelf.length) return null;
     const row = (k: string, text: string, onClick: () => void, key: string) => (
         <button key={key} type="button" data-key={k} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 9, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12.5, lineHeight: 1.55, color: T.quietTitle, textAlign: "left" }}>

@@ -64,3 +64,9 @@ export function parseBullets(out: string): string[] {
         .map(noTickets)
         .slice(0, MAX);
 }
+
+// The day a summary is about: the last workday before today with work in it. A weekend's
+// sessions are not the day Monday carries on from (the journal skips them too).
+export function lastWorkday(days: string[], today: string): string | undefined {
+    return days.filter((d) => d < today && ![0, 6].includes(new Date(`${d}T12:00:00`).getDay())).sort().pop();
+}

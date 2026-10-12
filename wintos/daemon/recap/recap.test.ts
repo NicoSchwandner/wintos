@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { cutBullets, lastRecaps, parseBullets, recordActivity, recapPrompt, type Activity } from "./recap";
+import { cutBullets, lastRecaps, lastWorkday, parseBullets, recordActivity, recapPrompt, type Activity } from "./recap";
 
 describe("recordActivity", () => {
     test("a session's project and transcript, per day; prompts counted; old days dropped", () => {
@@ -43,5 +43,13 @@ describe("bullets", () => {
         expect(p).toContain("Idea skill (22 prompts)");
         expect(p).toContain("at most 5");
         expect(p).toContain("ticket");
+    });
+});
+
+describe("lastWorkday", () => {
+    test("Monday reads Friday, not a Saturday with sessions in it", () => expect(lastWorkday(["2026-10-08", "2026-10-09", "2026-10-10"], "2026-10-12")).toBe("2026-10-09"));
+    test("never today, and nothing when only weekends are left", () => {
+        expect(lastWorkday(["2026-10-09"], "2026-10-09")).toBeUndefined();
+        expect(lastWorkday(["2026-10-10", "2026-10-11"], "2026-10-12")).toBeUndefined();
     });
 });

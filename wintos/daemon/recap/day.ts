@@ -1,7 +1,7 @@
 import { execFile } from "child_process";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { cutBullets, gist, lastRecaps, parseBullets, recapPrompt, recordActivity, type Activity, type RecapItem } from "./recap";
+import { cutBullets, gist, lastRecaps, lastWorkday, parseBullets, recapPrompt, recordActivity, type Activity, type RecapItem } from "./recap";
 
 const KEEP_DAYS = 14;
 const isoDay = (t: number) => {
@@ -44,13 +44,13 @@ export function dayRecapper(root: string, cmd?: string, extra?: string) {
             child.stdin?.end(recapPrompt(day, items, extra));
         });
 
-    // The last day before today with any work in it (a Monday reads the Friday). One run at a
+    // The last workday before today with any work in it (a Monday reads the Friday, never the weekend). One run at a
     // time: the windows ask together, and the summarizer takes seconds.
     let running: Promise<{ date: string; bullets: string[] } | null> | undefined;
     const recap = (now: number) => (running ??= build(now).finally(() => (running = undefined)));
     const build = async (now: number): Promise<{ date: string; bullets: string[] } | null> => {
         const today = isoDay(now);
-        const day = Object.keys(activity).filter((d) => d < today).sort().pop();
+        const day = lastWorkday(Object.keys(activity), today);
         if (!day) return null;
         const cached = read<Record<string, string[]>>(recapFile, {});
         if (cached[day]) return { date: day, bullets: cached[day] };

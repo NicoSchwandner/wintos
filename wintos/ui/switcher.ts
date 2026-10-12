@@ -1,3 +1,4 @@
+import { getApi } from "@/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { atom } from "jotai";
 import { enterProject, focusArea, whereYouAre } from "./focus";
@@ -51,8 +52,7 @@ function commit(why = "⌘ released"): void {
     go(target);
 }
 
-// macOS never hands Esc to an app while ⌘ is held, so a walk cannot be cancelled before it
-// lands. Esc right after it lands takes it back instead. The walk ends in another tab, another
+// A walk is cancelled with ⌘Esc (see listen), and Esc right after it lands takes it back too. The walk ends in another tab, another
 // renderer, so the way back travels in localStorage.
 const UNDO = "wintos:walk-undo";
 const UNDO_MS = 1500;
@@ -100,7 +100,11 @@ const onKeyDown = (e: KeyboardEvent) => {
 
 const onBlur = () => end("window blur");
 
+// ⌘Esc during a walk comes from the main process, which holds it while the walk runs.
+getApi().onWintosWalkEsc?.(() => end("⌘esc"));
+
 function listen(on: boolean): void {
+    getApi().setWintosWalking?.(on);
     const f = (on ? window.addEventListener : window.removeEventListener).bind(window);
     f("keyup", onKeyUp, true);
     f("keydown", onKeyDown, true);

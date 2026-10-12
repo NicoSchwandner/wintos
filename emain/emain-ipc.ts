@@ -293,6 +293,17 @@ export function initIpcHandlers() {
     // There the page keeps its own editing keys, though WintOS binds them elsewhere.
     const editingPages = new Set<number>();
     const PAGE_EDIT_KEYS = ["Escape", "Cmd:Enter", "Cmd:k", "Cmd:e", "Cmd:i", "Cmd:b", "Shift:Cmd:p"];
+    // WintOS: macOS never hands ⌘Esc to the window, so while a ⌘J/⌘K walk runs, the app takes it
+    // system-wide, for that moment only. The timeout lets go of it should the walk never end.
+    let walkEscTimer: NodeJS.Timeout | undefined;
+    const releaseWalkEsc = () => (clearTimeout(walkEscTimer), electron.globalShortcut.unregister("Command+Escape"));
+    electron.ipcMain.on("wintos-walking", (event: Electron.IpcMainEvent, on: boolean) => {
+        releaseWalkEsc();
+        if (!on) return;
+        const sender = event.sender;
+        electron.globalShortcut.register("Command+Escape", () => (releaseWalkEsc(), sender.isDestroyed() || sender.send("wintos-walk-esc")));
+        walkEscTimer = setTimeout(releaseWalkEsc, 15_000);
+    });
     electron.ipcMain.on("wintos-page-editing", (event: Electron.IpcMainEvent, editing: boolean) => {
         if (editing) editingPages.add(event.sender.id);
         else editingPages.delete(event.sender.id);

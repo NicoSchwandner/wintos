@@ -23,8 +23,6 @@ describe("normalize", () => {
 
     test("GitHub's merge state is carried", () =>
         expect(normalize(node({ mergeStateStatus: "BLOCKED" }), "me", { requestedMe: false, requestedTeam: false }).mergeState).toBe("BLOCKED"));
-    test("counts the unresolved review threads", () =>
-        expect(normalize(node({ reviewThreads: { nodes: [{ isResolved: false }, { isResolved: true }, { isResolved: false }] } }), "me", { requestedMe: false, requestedTeam: false }).openThreads).toBe(2));
 
     test("bots never count as reviewers or review activity", () => {
         const p = normalize(node({

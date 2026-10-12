@@ -8,8 +8,7 @@ const FIELDS = `number title url isDraft createdAt author{login} repository{name
   reviewDecision mergeable mergeStateStatus additions deletions
   commits(last:1){nodes{commit{statusCheckRollup{state}}}}
   reviewRequests(first:10){nodes{requestedReviewer{__typename ... on User{login} ... on Team{name} ... on Bot{login}}}}
-  latestReviews(first:20){nodes{author{login} state submittedAt}}
-  reviewThreads(first:50){nodes{isResolved}}`;
+  latestReviews(first:20){nodes{author{login} state submittedAt}}`;
 const query = (fields: string) => `query($q:String!){search(query:$q,type:ISSUE,first:100){nodes{... on PullRequest{${fields}}}}}`;
 // Merged PRs need little, and the full field set over a month of merges makes GitHub time out.
 const MERGED_FIELDS = `number title url isDraft createdAt author{login} repository{nameWithOwner defaultBranchRef{name}} headRefName baseRefName additions deletions mergedAt mergeCommit{oid}`;
@@ -50,4 +49,16 @@ const byUrl = new Map<string, ReturnType<typeof normalize>>();
 const directUrls = new Set(direct.map((n) => n.url));
 for (const n of [...unreleased(merged, ahead), ...mine, ...teams, ...direct])
     byUrl.set(n.url, normalize(n, me, { requestedMe: directUrls.has(n.url), requestedTeam: !directUrls.has(n.url) && teams.some((t) => t.url === n.url) }));
+// Open threads only matter for your approved PRs GitHub blocks (the conversation rule); asking
+// for them in the search made it too heavy for GitHub (HTTP 502). Fail-open: a miss keeps it blocked.
+for (const pr of byUrl.values()) {
+    if (pr.author !== me || pr.reviewDecision !== "APPROVED" || pr.mergeState !== "BLOCKED") continue;
+    const [owner, name] = pr.repo.split("/");
+    try {
+        const open = Number(gh(["api", "graphql", "-F", `n=${pr.number}`, "-f", `o=${owner}`, "-f", `r=${name}`, "-f",
+            "query=query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved}}}}}",
+            "--jq", "[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)] | length"]));
+        if (open) pr.openThreads = open;
+    } catch {}
+}
 process.stdout.write(JSON.stringify({ me, prs: linkStacks([...byUrl.values()]) }));

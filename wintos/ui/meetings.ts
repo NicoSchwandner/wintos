@@ -20,23 +20,26 @@ export function meetingsFrom(plugins: Record<string, { ok?: boolean; at?: number
     return out.sort((a, b) => a.start - b.start);
 }
 
-// Today's, by the local clock: the one on now, the next to start and the one after it. soon: the
-// next starts within WARN_MS, which is when the card and the window's edge warn.
-export function nextMeetings(list: Meeting[], now: number): { now?: Meeting; next?: Meeting; after?: Meeting; msLeft?: number; soon: boolean } {
+// Today's, by the local clock: the ones on now (earliest first), the next to start with any
+// starting with it, and the first to start after those. soon: the next starts within WARN_MS,
+// which is when the card and the window's edge warn.
+export function nextMeetings(list: Meeting[], now: number): { now?: Meeting; nowAll: Meeting[]; next?: Meeting; nextAll: Meeting[]; after?: Meeting; msLeft?: number; soon: boolean } {
     const day = new Date(now).toDateString();
     const today = list.filter((m) => new Date(m.start).toDateString() === day);
     const upcoming = today.filter((m) => m.start > now);
     const next = upcoming[0];
+    const nextAll = next ? upcoming.filter((m) => m.start === next.start) : [];
+    const nowAll = today.filter((m) => m.start <= now && now < m.end);
     const msLeft = next ? next.start - now : undefined;
-    return { now: today.find((m) => m.start <= now && now < m.end), next, after: upcoming[1], msLeft, soon: msLeft !== undefined && msLeft <= WARN_MS };
+    return { now: nowAll[0], nowAll, next, nextAll, after: upcoming.find((m) => m.start > next!.start), msLeft, soon: msLeft !== undefined && msLeft <= WARN_MS };
 }
 
-// The renderer's latest list, for ⇧⌘J: join the one on now, else the next.
+// The renderer's latest list, for ⇧⌘J: join one on now that has a link, else the next one that has.
 let latest: Meeting[] = [];
 export const setLatestMeetings = (list: Meeting[]) => (latest = list);
 export function meetingToJoin(now: number): Meeting | undefined {
     const n = nextMeetings(latest, now);
-    return n.now?.url ? n.now : n.next?.url ? n.next : undefined;
+    return n.nowAll.find((m) => m.url) ?? n.nextAll.find((m) => m.url);
 }
 
 export const clock = (t: number) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });

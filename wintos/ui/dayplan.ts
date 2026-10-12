@@ -13,7 +13,33 @@ export function parseSpan(v: string | undefined): [number, number] | undefined {
     return a < b ? [a, b] : undefined;
 }
 
-export type Block = { kind: "meeting" | "lunch" | "free"; start: number; end: number; title?: string };
+// col/cols: a meeting's column among those it overlaps with, so they sit side by side.
+export type Block = { kind: "meeting" | "lunch" | "free"; start: number; end: number; title?: string; col?: number; cols?: number };
+
+// Meetings that overlap, directly or through another, share columns: each takes the first column
+// free at its start, and the group is as wide as it needed.
+function sideBySide(meetings: Block[]): Block[] {
+    const out: Block[] = [];
+    let group: Block[] = [];
+    let ends: number[] = [];
+    let groupEnd = -Infinity;
+    const close = () => out.push(...group.map((b) => ({ ...b, cols: ends.length })));
+    for (const m of [...meetings].sort((a, b) => a.start - b.start)) {
+        if (m.start >= groupEnd) {
+            close();
+            group = [];
+            ends = [];
+            groupEnd = -Infinity;
+        }
+        let col = ends.findIndex((e) => e <= m.start);
+        if (col < 0) col = ends.push(0) - 1;
+        ends[col] = m.end;
+        group.push({ ...m, col });
+        groupEnd = Math.max(groupEnd, m.end);
+    }
+    close();
+    return out;
+}
 
 // Time in [from, to) not covered by any of the spans.
 function gaps(spans: { start: number; end: number }[], from: number, to: number): { start: number; end: number }[] {
@@ -32,7 +58,7 @@ export function dayTimeline(meetings: Meeting[], lunch: [number, number] | undef
     const at = (min: number) => new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, min).getTime();
     const from = at(workday[0]);
     const to = at(workday[1]);
-    const today = meetings.filter((m) => m.end > from && m.start < to).map((m): Block => ({ kind: "meeting", start: Math.max(m.start, from), end: Math.min(m.end, to), title: m.title }));
+    const today = sideBySide(meetings.filter((m) => m.end > from && m.start < to).map((m): Block => ({ kind: "meeting", start: Math.max(m.start, from), end: Math.min(m.end, to), title: m.title })));
     // Lunch is what meetings leave of it; free time is what meetings and lunch leave of the day.
     const lunchBlocks = lunch ? gaps(today, at(lunch[0]), at(lunch[1])).map((g): Block => ({ kind: "lunch", ...g })) : [];
     const free = gaps([...today, ...lunchBlocks], from, to).filter((g) => g.end - g.start >= MIN_FREE_MS).map((g): Block => ({ kind: "free", ...g }));

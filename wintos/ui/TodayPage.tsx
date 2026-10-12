@@ -175,7 +175,7 @@ function Timeline({ now }: { now: number }) {
                     <span key={h} style={{ position: "absolute", left: -34, top: pct(h), transform: "translateY(-50%)", fontFamily: T.mono, fontSize: 9.5, color: T.faint }}>{i % 2 === 0 ? hm(h).slice(0, 2) : ""}</span>
                 ))}
                 {blocks.map((b) => (
-                    <TimeBlock key={`${b.kind}${b.start}`} b={b} top={pct(b.start)} height={`${((b.end - b.start) / (to - from)) * 100}%`} />
+                    <TimeBlock key={`${b.kind}${b.start}${b.col ?? ""}`} b={b} top={pct(b.start)} height={`${((b.end - b.start) / (to - from)) * 100}%`} />
                 ))}
                 {now >= from && now <= to && <span style={{ position: "absolute", left: -3, right: 0, top: pct(now), height: 2, background: T.emphasis }} />}
             </div>
@@ -184,7 +184,10 @@ function Timeline({ now }: { now: number }) {
 }
 
 function TimeBlock({ b, top, height }: { b: Block; top: string; height: string }) {
-    const base: React.CSSProperties = { position: "absolute", left: 6, right: 4, top, height, borderRadius: 5, padding: "1px 7px", overflow: "hidden", fontSize: 11, lineHeight: 1.35, boxSizing: "border-box" };
+    // Overlapping meetings split the lane's width between them.
+    const cols = b.cols ?? 1;
+    const across: React.CSSProperties = cols > 1 ? { left: `calc(6px + (100% - 10px) * ${b.col ?? 0} / ${cols})`, width: `calc((100% - 10px) / ${cols} - 2px)` } : { left: 6, right: 4 };
+    const base: React.CSSProperties = { position: "absolute", ...across, top, height, borderRadius: 5, padding: "1px 7px", overflow: "hidden", fontSize: 11, lineHeight: 1.35, boxSizing: "border-box" };
     if (b.kind === "meeting") return <div style={{ ...base, background: T.cardActive, border: `1px solid ${T.borderActive}`, color: T.secondary }}><span style={{ fontFamily: T.mono, fontSize: 9.5, color: T.muted }}>{hm(b.start)} </span>{b.title}</div>;
     if (b.kind === "lunch") return <div style={{ ...base, background: "repeating-linear-gradient(135deg, #32302f 0 6px, #2b2a29 6px 12px)", color: T.faint }}>Lunch</div>;
     return <div style={{ ...base, border: `1px dashed ${T.borderActive}`, color: T.moss, fontFamily: T.mono, fontSize: 9.5 }}>{span(b.end - b.start)} free</div>;

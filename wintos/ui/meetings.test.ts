@@ -36,6 +36,16 @@ describe("nextMeetings", () => {
         expect([n.now?.title, n.next?.title, n.soon]).toEqual(["Refinement", "1:1", false]);
     });
 
+    test("two starting together: both are next, and the one after starts later", () => {
+        const n = nextMeetings(meetingsFrom({ c: { data: { meetings: [m("A", "14:00", "14:30"), m("B", "14:00", "15:00"), m("C", "15:00", "15:30")] } } }), Date.parse(at("13:00")));
+        expect([n.nextAll.map((x) => x.title), n.after?.title]).toEqual([["A", "B"], "C"]);
+    });
+
+    test("every meeting on now is listed, the earliest first", () => {
+        const n = nextMeetings(meetingsFrom({ c: { data: { meetings: [m("Long", "13:00", "15:00"), m("Overlap", "13:30", "14:00")] } } }), Date.parse(at("13:40")));
+        expect([n.now?.title, n.nowAll.map((x) => x.title)]).toEqual(["Long", ["Long", "Overlap"]]);
+    });
+
     test("only today's: after the last one there is nothing next", () => expect(nextMeetings(list, Date.parse(at("16:00"))).next).toBeUndefined());
 });
 
@@ -58,5 +68,10 @@ describe("meetingToJoin", () => {
         expect(meetingToJoin(Date.parse(at("13:20")))?.title).toBe("On now");
         expect(meetingToJoin(Date.parse(at("13:50")))?.title).toBe("Next");
         expect(meetingToJoin(Date.parse(at("14:40")))).toBeUndefined();
+    });
+
+    test("of two on now, the one with a link, before anything next", () => {
+        setLatestMeetings(meetingsFrom({ c: { data: { meetings: [m("Room only", "13:00", "14:00"), m("Call", "13:15", "13:45", { url: "https://meet.google.com/call" }), m("Later", "13:50", "14:30", { url: "https://meet.google.com/later" })] } } }));
+        expect(meetingToJoin(Date.parse(at("13:20")))?.title).toBe("Call");
     });
 });

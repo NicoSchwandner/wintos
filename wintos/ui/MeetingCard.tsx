@@ -15,6 +15,10 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
     if (!shown) return null;
     const on = shown === n.now;
     const then = on ? n.next : n.after;
+    const together = on ? n.nowAll : n.nextAll;
+    const alongside = together.length - 1;
+    // ⇧⌘J joins whichever of them has a link, so the key shows when any does.
+    const joinable = together.some((m) => m.url);
     return (
         <div
             data-wintos="meeting-card"
@@ -32,10 +36,11 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
                 <span style={{ color: n.soon ? T.apricot : on ? T.emphasis : T.muted }}>{on ? `ends ${countdown(shown.end - now)}` : countdown(n.msLeft!)}</span>
             </div>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shown.title}</span>
-            {(then || shown.url) && (
+            {alongside > 0 && <span style={{ fontSize: 11, color: T.apricot }}>+{alongside} at the same time</span>}
+            {(then || joinable) && (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 11, color: T.faint }}>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{then ? `then ${clock(then.start)} ${then.title}` : ""}</span>
-                    {shown.url && <Key k="⇧⌘J" label="join" />}
+                    {joinable && <Key k="⇧⌘J" label="join" />}
                 </div>
             )}
             {on && <div aria-hidden style={{ position: "absolute", left: 0, bottom: 0, height: 2, width: `${Math.min(100, ((now - shown.start) / (shown.end - shown.start)) * 100)}%`, background: T.emphasis, opacity: 0.5 }} />}

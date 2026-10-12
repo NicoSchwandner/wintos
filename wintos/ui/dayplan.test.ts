@@ -32,6 +32,11 @@ describe("dayTimeline", () => {
         // B covers the lunch break too, so no lunch shows; meetings keep their own order.
         expect(blocks.map((b) => [b.kind, b.title])).toEqual([["meeting", "A"], ["meeting", "B"], ["meeting", "Lunch talk"]]);
     });
+
+    test("overlapping meetings sit side by side; one alone keeps the full width", () => {
+        const { blocks } = dayTimeline([{ title: "A", start: t(9), end: t(10) }, { title: "B", start: t(9, 30), end: t(10, 30) }, { title: "C", start: t(10), end: t(11) }, { title: "D", start: t(14), end: t(15) }], undefined, DAY, [480, 1080]);
+        expect(blocks.filter((b) => b.kind === "meeting").map((b) => [b.title, b.col, b.cols])).toEqual([["A", 0, 2], ["B", 1, 2], ["C", 0, 2], ["D", 0, 1]]);
+    });
 });
 
 test("the workday defaults to 08:00-17:00 and ends the timeline", () => {
@@ -53,4 +58,5 @@ describe("openFocus", () => {
     const text = "- [x] Ship it\n  - [ ] tell the team\n  - [x] tag\n- [x] Done and dusted\n  - [x] all of it\n- [ ] Open";
     test("the open items, and a ticked one only while something under it is open", () =>
         expect(openFocus(focusList(text)).map((i) => `${i.text}${i.done ? " (done)" : ""}`)).toEqual(["Ship it (done)", "tell the team", "Open"]));
+
 });

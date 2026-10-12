@@ -52,7 +52,7 @@ describe("rowView", () => {
 });
 
 describe("rowView with PRs", () => {
-    const blocked = { items: [{ pr: { number: 4803, branch: "fix/bank-retry" } as never, group: "chase" as const }], blocked: { since: NOW, text: "Nobody has looked at #4803 in 4 working days", tone: "brick" as const } };
+    const blocked = { items: [{ pr: { number: 4803, branch: "fix/bank-retry" } as never, group: "chase" as const }], blocked: { since: NOW, text: "Nobody has looked at #4803 in 4 working days", tone: "brick" as const, url: "https://github.com/o/r/pull/4803" } };
     test("a rotting PR speaks in brick when no session is waiting", () =>
         expect(rowView(row("needs", { waitingSince: NOW }), { dir: "/p", mtime: 0 }, "T", NOW, blocked)).toMatchObject({ next: "Nobody has looked at #4803 in 4 working days", tone: "brick", meta: "#4803 · fix/bank-retry" }));
     test("a waiting session still wins the next-action line", () =>
@@ -84,6 +84,19 @@ describe("sidebarModel", () => {
     test("the project file's mtime counts as activity", () => {
         const m = sidebarModel(["a"], { now: NOW, sessions: [], projects: [{ id: "a", dir: "/p", mtime: NOW - 5 }] });
         expect(m.quiet[0].lastAt).toBe(NOW - 5);
+    });
+});
+
+describe("prsByTab: the PRs its sessions own count too, and the reason names the owner", () => {
+    const red = { repo: "acme/api", number: 5, url: "https://github.com/acme/api/pull/5", title: "t", author: "me", isDraft: false, createdAt: "2026-09-28T08:00:00Z", conflict: false, checks: "FAILURE", requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b" };
+    const base = { now: Date.parse("2026-09-28T09:00:00Z"), projects: [{ id: "t1", title: "x", titleLocked: false, pr: [], dir: "/d", mtime: 0 }], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs: [red] } } } };
+    test("a live session's PR, named by its status line", () => {
+        const state = { ...base, sessions: [{ id: "s", tabId: "t1", blockId: "b1", state: "parked", since: 0, lastAt: 0, prs: [red.url], status: { text: "deploying the stack", at: 0 } }] } as unknown as WintosState;
+        expect(prsByTab(["t1"], state).t1.blocked).toMatchObject({ text: "#5: CI red · deploying the stack", owner: { name: "deploying the stack", blockId: "b1" } });
+    });
+    test("a shelved session's PR, named by its title, resumable", () => {
+        const state = { ...base, sessions: [], shelf: { t1: [{ sessionId: "z", script: "cd '/w' && claude --resume 'z'", label: "l", title: "Deploy stack to test", prs: [red.url], at: 0 }] } } as unknown as WintosState;
+        expect(prsByTab(["t1"], state).t1.blocked).toMatchObject({ text: "#5: CI red · shelved: Deploy stack to test", owner: { name: "Deploy stack to test", resume: "cd '/w' && claude --resume 'z'" } });
     });
 });
 

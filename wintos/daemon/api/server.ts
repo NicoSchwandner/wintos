@@ -11,9 +11,9 @@ import type { Journal } from "../journal/journal";
 import { formatMarkdown } from "../markdown";
 import { dayRecapper } from "../recap/day";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
-import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
+import { releasePrs, resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { titlePrompt, writeTitle } from "../shelf/title";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo } from "../sessions/reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -173,10 +173,18 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (![ev?.tabId, ev?.blockId, p?.session_id, p?.hook_event_name].every(isSafe))
                     return send(res, 400, "need string tabId, blockId, payload.session_id, payload.hook_event_name");
                 sessions = reduceSession(sessions, ev, Date.now());
-                saveSessions();
                 // Running again: started or prompted. Closing its pane ends it (SessionEnd) on the way onto the shelf.
+                // Off the shelf, it takes back the PRs it had there.
                 const runs = p.hook_event_name === "SessionStart" || p.hook_event_name === "UserPromptSubmit";
-                if (runs && Object.values(shelf).some((l) => l.some((i) => i.sessionId === p.session_id))) saveShelf(unshelve(shelf, p.session_id));
+                const shelved = Object.values(shelf).flat().find((i) => i.sessionId === p.session_id);
+                if (runs && shelved) {
+                    saveShelf(unshelve(shelf, p.session_id));
+                    if (shelved.prs?.length) sessions = claimPrs(sessions, ev.blockId, shelved.prs) ?? sessions;
+                }
+                // A PR this session touched leaves any shelved session that had it.
+                const touched = p.hook_event_name === "PostToolUse" ? (sessions.get(p.session_id)?.prs ?? []) : [];
+                if (touched.length && releasePrs(shelf, touched) !== shelf) saveShelf(releasePrs(shelf, touched));
+                saveSessions();
                 const tp = (p as { transcript_path?: unknown }).transcript_path;
                 recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now());
                 if (p.hook_event_name === "UserPromptSubmit") markSeen(ev.tabId); // you read it to answer it
@@ -239,7 +247,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const gist = recapper.gistOf(sessionId);
                 const label = typeof b.label === "string" && b.label && isSafe(b.label) ? b.label.slice(0, MAX_TITLE) : (gist ?? "session");
                 const name = sessions.get(sessionId)?.status?.text;
-                const item: Shelved = { sessionId, script: b.script as string, label, ...(name ? { name } : {}), gist, at: Date.now() };
+                const owned = sessions.get(sessionId)?.prs;
+                const item: Shelved = { sessionId, script: b.script as string, label, ...(name ? { name } : {}), gist, ...(owned?.length ? { prs: owned } : {}), at: Date.now() };
                 saveShelf(shelve(shelf, basename(p.dir), item, 14));
                 titleShelved(item, p.title);
                 broadcast();
@@ -334,6 +343,20 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");
+            }
+            const claimed = /^\/blocks\/([^/]+)\/pr$/.exec(url.pathname);
+            if (req.method === "POST" && claimed) {
+                const blockId = decodeURIComponent(claimed[1]);
+                const b = (await body(req)) as { ref?: unknown };
+                const link = typeof b?.ref === "string" ? prLink(b.ref) : undefined;
+                if (!isSafe(blockId) || !link) return send(res, 400, "need a PR link or owner/repo#number");
+                const next = claimPrs(sessions, blockId, [link]);
+                if (!next) return send(res, 400, "no live session in this pane");
+                sessions = next;
+                if (releasePrs(shelf, [link]) !== shelf) saveShelf(releasePrs(shelf, [link]));
+                saveSessions();
+                broadcast();
+                return send(res, 200, link);
             }
             const todo = /^\/blocks\/([^/]+)\/todo$/.exec(url.pathname);
             if (req.method === "POST" && todo) {
@@ -444,4 +467,12 @@ function readJson<T>(file: string, fallback: T): T {
     } catch {
         return fallback;
     }
+}
+
+// A PR as the session names it: its link, or owner/repo#number.
+function prLink(ref: string): string | undefined {
+    const url = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/.exec(ref.trim());
+    const short = /^([\w.-]+\/[\w.-]+)#(\d+)$/.exec(ref.trim());
+    const m = url ?? short;
+    return m ? `https://github.com/${m[1]}/pull/${m[2]}` : undefined;
 }

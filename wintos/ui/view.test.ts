@@ -52,6 +52,11 @@ describe("projectPrList (the notes' Pull requests section)", () => {
     const st = (prs: object[], snoozes = {}) =>
         ({ now: Date.parse("2026-09-28T09:00:00Z"), sessions: [], projects: [{ id: "t1", title: "x", titleLocked: false, pr: ["acme/api#1", "acme/api#2", "acme/api#3"], dir: "/d", mtime: 0 }], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs } } }, snoozes }) as unknown as WintosState;
 
+    test("a PR a shelved session owns is on its shelf row, not here", () => {
+        const state = { ...st([p(1), p(2)]), shelf: { t1: [{ sessionId: "z", script: "s", label: "l", at: 0, prs: ["https://github.com/acme/api/pull/2"] }] } } as WintosState;
+        expect(projectPrList(state, "t1").map((r) => r.pr.number)).toEqual([1]);
+    });
+
     test("the project's PRs, most urgent group first, with what each one waits on", () => {
         const list = projectPrList(st([p(1, { reviewers: ["ana"] }), p(2, { checks: "FAILURE" }), p(3, { reviewDecision: "APPROVED", checks: "SUCCESS" })]), "t1");
         expect(list.map((r) => [r.pr.number, r.group, r.note])).toEqual([

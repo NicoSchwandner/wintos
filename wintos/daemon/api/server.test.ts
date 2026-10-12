@@ -464,6 +464,29 @@ describe("the shelf", () => {
     const script = (id: string) => `cd '/w' && claude --resume '${id}'`;
     const shelfOf = async () => (await (await fetch(base + "/state")).json()).shelf;
 
+    test("a shelved session keeps its PRs until another session touches one, and takes them back when it runs", async () => {
+        const A = "https://github.com/o/r/pull/1", B = "https://github.com/o/r/pull/2";
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A, B] });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
+        expect((await shelfOf())["tab-1"][0].prs).toEqual([A, B]);
+        await post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { hook_event_name: "PostToolUse", session_id: "other", prs: [A] } });
+        expect((await shelfOf())["tab-1"][0].prs).toEqual([B]);
+        await event({ ...prompt, hook_event_name: "SessionStart" });
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions.find((x: { id: string }) => x.id === prompt.session_id).prs).toEqual([B]);
+    });
+
+    test("`wintos pr` claims a PR named by link or owner/repo#n for the pane's session", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/pr", { ref: "o/r#7" })).status).toBe(200);
+        expect((await post("/blocks/blk-1/pr", { ref: "#7" })).status).toBe(400);
+        expect((await post("/blocks/nope/pr", { ref: "o/r#7" })).status).toBe(400);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].prs).toEqual(["https://github.com/o/r/pull/7"]);
+    });
+
     test("a closed session is kept with its project, its label and what it was last about", async () => {
         const transcript = join(root, "t.jsonl");
         writeFileSync(transcript, JSON.stringify({ timestamp: "2026-10-06T15:00:00Z", type: "system", subtype: "away_summary", content: "We merged the two lanes. Next, rerun it." }));

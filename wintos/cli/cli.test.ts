@@ -300,6 +300,11 @@ describe("wintos lane and step", () => {
             { url: "/blocks/blk-1/step", body: { step: "Build", note: "slice 2 of 3" } },
         ]);
     });
+    test("pr claims a PR for this pane's session, by link or owner/repo#n", async () => {
+        const d = await fakeDaemon("https://github.com/o/r/pull/7");
+        expect((await cli(["pr", "o/r#7"], d.port)).trim()).toBe("pr: https://github.com/o/r/pull/7");
+        expect(d.seen).toEqual([{ url: "/blocks/blk-1/pr", body: { ref: "o/r#7" } }]);
+    });
     test("todo lists the step's to-dos; todo done ticks one", async () => {
         const d = await fakeDaemon("");
         expect((await cli(["todo", "Narrow list", "Name search"], d.port)).trim()).toBe("todo: Narrow list · Name search");

@@ -51,7 +51,7 @@ export const NotesFull = memo(({ tabId }: { tabId: string }) => {
                     <Header name="project.md" note="the sessions write this · rendered, not editable here" />
                     <div style={{ paddingTop: 18, overflowY: "auto", display: "flex", flexDirection: "column", gap: 18 }}>
                         <PrList tabId={tabId} size="full" />
-                        <Shelf shelf={state?.shelf?.[tabId] ?? []} />
+                        <Shelf shelf={state?.shelf?.[tabId] ?? []} state={state} />
                         {notes?.projectMd == null ? (
                             <span style={{ fontSize: 13.5, color: notes ? T.brick : T.faint }}>{notes ? "project.md is unreadable. The next prompt asks Claude to repair it." : "No notes yet."}</span>
                         ) : (

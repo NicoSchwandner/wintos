@@ -81,6 +81,14 @@ step)
         die "wintosd refused the step: not in this session's lane (run wintos lane first), or not reachable on port $PORT"
     echo "step: $step${*:+ ($*)}"
     ;;
+pr)
+    shift
+    [ $# -eq 1 ] || die "usage: wintos pr <PR link | owner/repo#number>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    link=$(jq -n --arg r "$1" '{ref: $r}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/pr") ||
+        die "wintosd refused it: name the PR by its link or owner/repo#number, from a session's pane (port $PORT)"
+    echo "pr: $link"
+    ;;
 todo)
     shift
     [ $# -gt 0 ] || die "usage: wintos todo <to-do>… | wintos todo done <to-do>"
@@ -127,5 +135,5 @@ hooks)
     *) die "usage: wintos hooks install|uninstall [<claude config dir>]" ;;
     esac
     ;;
-*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos status <line> | wintos lane <name> <step…> | wintos step <step> [note] | wintos todo <to-do>… | wintos todo done <to-do> | wintos hooks install|uninstall [<claude config dir>]" ;;
+*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos status <line> | wintos lane <name> <step…> | wintos step <step> [note] | wintos todo <to-do>… | wintos todo done <to-do> | wintos pr <link|owner/repo#n> | wintos hooks install|uninstall [<claude config dir>]" ;;
 esac

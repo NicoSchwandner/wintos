@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { resumedSession, shelve, unshelve, type Shelf } from "./shelf";
+import { releasePrs, resumedSession, shelve, unshelve, type Shelf } from "./shelf";
 
 const item = (sessionId: string, at: number) => ({ sessionId, script: `cd '/w' && claude --resume '${sessionId}'`, label: sessionId, at });
 const DAY = 86_400_000;
@@ -31,4 +31,11 @@ describe("the shelf", () => {
     test("a session that runs again leaves the shelf, wherever it was", () => {
         expect(unshelve({ idea: [item("a", 1), item("b", 1)], other: [item("a", 1)] }, "a")).toEqual({ idea: [item("b", 1)] });
     });
+});
+
+describe("releasePrs", () => {
+    const A = "https://github.com/o/r/pull/1", B = "https://github.com/o/r/pull/2";
+    const shelf: Shelf = { p: [{ sessionId: "s", script: "x", label: "l", at: 1, prs: [A, B] }] };
+    test("a PR another session took leaves the shelved one that had it", () => expect(releasePrs(shelf, [A]).p[0].prs).toEqual([B]));
+    test("nothing changes, the same shelf comes back", () => expect(releasePrs(shelf, ["https://github.com/o/r/pull/9"])).toBe(shelf));
 });

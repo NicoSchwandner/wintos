@@ -4,7 +4,7 @@ import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
 import { byUrgency, GROUPS, groupOf, isSnoozed, isStacked, projectPrs, qualifier, type Group, type PR, type Snoozes } from "../daemon/prs/group";
 import { liveSessionIn, type Session } from "../daemon/sessions/reduce";
-import type { Shelved } from "../daemon/shelf/shelf";
+import { shelvedName, type Shelved } from "../daemon/shelf/shelf";
 
 export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; projectSnoozes?: Record<string, number>; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]> };
 export type Tone = "apricot" | "brick" | "secondary";
@@ -36,6 +36,16 @@ const oldPlaceholder = (tab: Tab | undefined) => tab?.meta?.["wintos:blank"] ===
 export const projectTabIds = (ids: string[], tabs: Record<string, Tab | undefined>) => ids.filter((id) => !isInboxTab(tabs[id]) && !oldPlaceholder(tabs[id]));
 export const inboxTabId = (ids: string[], tabs: Record<string, Tab | undefined>, list: InboxList) => ids.find((id) => inboxKind(tabs[id]) === list);
 
+// Who owns a PR in a project: the live session there that touched it last, else a shelved one
+// (resumed by its script). One owner each; the daemon moves a PR to whoever touches it.
+export type Owner = { name: string; blockId: string } | { name: string; resume: string };
+export function prOwners(state: WintosState, tabId: string): Map<string, Owner> {
+    const owners = new Map<string, Owner>();
+    for (const s of state.shelf?.[tabId] ?? []) for (const u of s.prs ?? []) owners.set(u, { name: shelvedName(s), resume: s.script });
+    for (const s of state.sessions.filter((s) => s.tabId === tabId && s.state !== "ended")) for (const u of s.prs ?? []) owners.set(u, { name: sessionName(s), blockId: s.blockId });
+    return owners;
+}
+
 // The notes' Pull requests section: every PR of the project, snoozed ones included (marked,
 // last), most urgent group first, each with what it waits on.
 export type ProjectPrRow = { pr: PR; group: Group; note?: string; snoozed: boolean };
@@ -45,8 +55,8 @@ export function projectPrList(state: WintosState, tabId: string): ProjectPrRow[]
     const project = state.projects.find((p) => p.id === tabId);
     if (!gh || !project) return [];
     const numbers = new Map(gh.prs.map((p) => [p.url, p.number]));
-    // A PR a session here owns is on that session's pane header instead.
-    const owned = new Set(state.sessions.filter((s) => s.tabId === tabId && s.state !== "ended").flatMap((s) => s.prs ?? []));
+    // A PR a session here owns is on that session's pane header, or its shelf row, instead.
+    const owned = new Set(prOwners(state, tabId).keys());
     const rows = projectPrs(project, gh.prs.filter((p) => !owned.has(p.url)), gh.me, state.now).items.map(({ pr, group }): ProjectPrRow => {
         const on = !isStacked(pr) ? undefined : pr.stackedOn && numbers.has(pr.stackedOn) ? `#${numbers.get(pr.stackedOn)}` : pr.base;
         const note = [qualifier(pr, group)?.text, on && `stacked on ${on}`].filter(Boolean).join(" · ") || undefined;
@@ -63,7 +73,7 @@ export function prProjects(tabIds: string[], state: WintosState): Map<string, st
     if (!gh) return out;
     for (const id of tabIds) {
         const p = state.projects.find((x) => x.id === id);
-        if (p) for (const { pr } of projectPrs(p, gh.prs, gh.me, state.now).items) if (!out.has(pr.url)) out.set(pr.url, id);
+        if (p) for (const { pr } of projectPrs({ ...p, pr: [...(p.pr ?? []), ...prOwners(state, id).keys()] }, gh.prs, gh.me, state.now).items) if (!out.has(pr.url)) out.set(pr.url, id);
     }
     return out;
 }
@@ -73,7 +83,7 @@ export type SessionHeader = {
     session: Session;
     task?: string;
     branch?: string;
-    prs: { url: string; number: number; group?: Group; why?: string }[];
+    prs: PrChip[];
     tone?: "apricot" | "brick"; // a PR here needs a fix (apricot) or is past the SLA (brick)
 };
 
@@ -84,14 +94,7 @@ export function sessionHeader(state: WintosState, blockId: string): SessionHeade
     if (!session) return undefined;
     const gh = ghPrs(state);
     const byUrl = new Map((gh?.prs ?? []).map((p) => [p.url, p]));
-    const prs = (session.prs ?? []).map((url) => {
-        const pr = byUrl.get(url);
-        const number = Number(url.split("/").pop());
-        if (!pr || !gh) return { url, number };
-        const group = groupOf(pr, gh.me, state.now);
-        const why = qualifier(pr, group)?.text;
-        return why ? { url, number, group, why } : { url, number, group };
-    });
+    const prs = prChips(state, session.prs ?? []);
     const open = (session.prs ?? []).map((u) => byUrl.get(u)).filter((p): p is PR => !!p);
     const where = session.cwd?.split("/").pop();
     const branch = open[0]?.branch ?? where;
@@ -99,6 +102,22 @@ export function sessionHeader(state: WintosState, blockId: string): SessionHeade
     const groups = prs.map((p) => p.group);
     const tone = groups.some((g) => g === "chase" || g === "release") ? "brick" : groups.includes("fix") ? "apricot" : undefined;
     return { session, ...(task && { task }), ...(branch && { branch }), prs, ...(tone && { tone }) };
+}
+
+// A session's PRs as chips: the number, the queue group and what it waits on. A PR the PR
+// list doesn't show (closed, or not fetched yet) is the bare number.
+export type PrChip = { url: string; number: number; group?: Group; why?: string };
+export function prChips(state: WintosState, urls: string[]): PrChip[] {
+    const gh = ghPrs(state);
+    const byUrl = new Map((gh?.prs ?? []).map((p) => [p.url, p]));
+    return urls.map((url) => {
+        const pr = byUrl.get(url);
+        const number = Number(url.split("/").pop());
+        if (!pr || !gh) return { url, number };
+        const group = groupOf(pr, gh.me, state.now);
+        const why = qualifier(pr, group)?.text;
+        return why ? { url, number, group, why } : { url, number, group };
+    });
 }
 
 // The PR ⌥⌘G opens from the focused pane: the one the queue would put first.

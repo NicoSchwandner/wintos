@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo } from "./reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -155,6 +155,15 @@ describe("a session's PRs (PostToolUse on gh pr)", () => {
         expect(only(run([ev(prompt), ev(tool([A, B, "https://github.com/o/r/pull/3", "https://github.com/o/r/pull/4"]))])).prs).toBeUndefined());
     test("a tool call never changes the state", () => expect(only(run([ev(stop), ev(tool([A]))])).state).toBe("waiting"));
     test("the PRs outlive the turn", () => expect(only(run([ev(tool([A])), ev(stop), ev(prompt)])).prs).toEqual([A]));
+    test("a PR has one owner: the last session that touched it takes it from the other", () => {
+        const m = run([ev(prompt), ev(tool([A, B])), ev({ ...prompt, session_id: "other" }, "tab-1", "blk-2"), ev({ ...tool([A]), session_id: "other" }, "tab-1", "blk-2")]);
+        expect([m.get(prompt.session_id)?.prs, m.get("other")?.prs]).toEqual([[B], [A]]);
+    });
+    test("`wintos pr` claims the same way, for the block's live session", () => {
+        const m = claimPrs(run([ev(prompt), ev(tool([A])), ev({ ...prompt, session_id: "other" }, "tab-1", "blk-2")]), "blk-2", [A])!;
+        expect([m.get(prompt.session_id)?.prs, m.get("other")?.prs]).toEqual([[], [A]]);
+    });
+    test("claiming without a live session there is refused", () => expect(claimPrs(run([ev(prompt)]), "nope", [A])).toBeUndefined());
 });
 
 describe("setStatus (`wintos status`)", () => {

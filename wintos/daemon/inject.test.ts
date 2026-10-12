@@ -27,6 +27,7 @@ describe("injection", () => {
         expect(injection(project as never, { text: "m" })).toContain('wintos status "');
         expect(injection(project as never, { text: "m" })).toContain("wintos lane");
         expect(injection(project as never, { text: "m" })).toContain("wintos todo");
+        expect(injection(project as never, { text: "m" })).toContain("wintos pr <link");
     });
 
     test("no project at all asks for a title", () => {

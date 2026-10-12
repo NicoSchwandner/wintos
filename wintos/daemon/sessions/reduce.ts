@@ -32,10 +32,27 @@ const LABEL_MAX = 24;
 const MAX_PRS_PER_CALL = 3;
 const PR_LINK = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/;
 
-function withPrs(prev: string[] | undefined, named: unknown): string[] | undefined {
+// The PR links a call names, if it names few enough to be about them.
+function prLinks(named: unknown): string[] {
     const links = Array.isArray(named) ? named.filter((u): u is string => typeof u === "string" && PR_LINK.test(u)) : [];
-    if (!links.length || links.length > MAX_PRS_PER_CALL) return prev;
-    return [...(prev ?? []).filter((u) => !links.includes(u)), ...links];
+    return links.length > MAX_PRS_PER_CALL ? [] : links;
+}
+
+// A PR has one owner, the last session that touched it: claiming takes it from every other one.
+function claim(sessions: Map<string, Session>, ownerId: string, links: string[]): Map<string, Session> {
+    if (!links.length) return sessions;
+    const out = new Map(sessions);
+    for (const [id, s] of sessions) {
+        if (id === ownerId) out.set(id, { ...s, prs: [...(s.prs ?? []).filter((u) => !links.includes(u)), ...links] });
+        else if (s.prs?.some((u) => links.includes(u))) out.set(id, { ...s, prs: s.prs.filter((u) => !links.includes(u)) });
+    }
+    return out;
+}
+
+// `wintos pr <link>` from inside a session. undefined: no live session in that block.
+export function claimPrs(sessions: Map<string, Session>, blockId: string, links: string[]): Map<string, Session> | undefined {
+    const live = liveIn(sessions, blockId);
+    return live ? claim(sessions, live.id, links) : undefined;
 }
 // The lane steps a gh pr command proves were reached, so they move even when the session forgets.
 const PR_STEPS: Record<string, RegExp> = { create: /\bprs?\b/, ready: /^ready$/ };
@@ -83,15 +100,15 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
         donePending: next ? undefined : prev?.donePending,
         turnEndedAt: name === "Stop" ? now : prev?.turnEndedAt,
     };
-    const owned = name === "PostToolUse" ? withPrs(prev?.prs, prs) : prev?.prs;
-    if (owned) session.prs = owned;
+    if (prev?.prs) session.prs = prev.prs;
     if (prev?.status) session.status = prev.status;
     const lane = name === "PostToolUse" ? withPrStep(prev?.lane, pr_verb) : prev?.lane;
     if (lane) session.lane = lane;
     const out = new Map(sessions);
     // The block's saved entry is replaced by whatever session now reports from it.
     for (const s of sessions.values()) if (s.restored && s.blockId === ev.blockId && s.id !== id) out.delete(s.id);
-    return out.set(id, session);
+    out.set(id, session);
+    return name === "PostToolUse" ? claim(out, id, prLinks(prs)) : out;
 }
 
 // Sessions saved at the last quit. The restart cut off any turn in progress; ended ones are gone.

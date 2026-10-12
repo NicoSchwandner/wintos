@@ -1,19 +1,27 @@
 import { QUIET_CAP, rank, type Ranking, type Row } from "../daemon/ranking/rank";
 import type { Project } from "../daemon/projects/store";
 import { isSnoozed, projectPrs, type ProjectPrs } from "../daemon/prs/group";
-import { ghPrs, relTime, type RowView, type WintosState } from "./view";
+import { ghPrs, prOwners, relTime, type Owner, type RowView, type WintosState } from "./view";
 
 // Which projects need you, why, and in what order: the one place that decides it. The sidebar,
 // the palette and ⌃⇥ read it; it is given live sessions (those whose pane still exists).
 
-export function prsByTab(tabIds: string[], state: WintosState): Record<string, ProjectPrs> {
+export type AttentionPrs = ProjectPrs & { blocked?: ProjectPrs["blocked"] & { owner?: Owner } };
+
+// A project's PRs: those its notes name (project.md, the ticket id) and those its sessions own,
+// live or shelved. The one that needs you names who owns it.
+export function prsByTab(tabIds: string[], state: WintosState): Record<string, AttentionPrs> {
     const gh = ghPrs(state);
     if (!gh) return {};
-    const out: Record<string, ProjectPrs> = {};
+    const out: Record<string, AttentionPrs> = {};
     const awake = gh.prs.filter((pr) => !isSnoozed(pr, state.snoozes ?? {}, state.now));
     for (const id of tabIds) {
         const p = state.projects.find((x) => x.id === id);
-        if (p) out[id] = projectPrs(p, awake, gh.me, state.now);
+        if (!p) continue;
+        const owners = prOwners(state, id);
+        const prs = projectPrs({ ...p, pr: [...(p.pr ?? []), ...owners.keys()] }, awake, gh.me, state.now);
+        const owner = prs.blocked && owners.get(prs.blocked.url);
+        out[id] = owner ? { ...prs, blocked: { ...prs.blocked!, owner, text: `${prs.blocked!.text} · ${"resume" in owner ? "shelved: " : ""}${owner.name}` } } : prs;
     }
     return out;
 }
@@ -74,7 +82,7 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
 
 // Everything the sidebar and the palette show about the projects, computed once: the bands
 // (snoozes applied), each row's text and each project's PRs. `now` ticks the ages.
-export type Attention = SidebarSplit & { views: Record<string, RowView>; prs: Record<string, ProjectPrs> };
+export type Attention = SidebarSplit & { views: Record<string, RowView>; prs: Record<string, AttentionPrs> };
 export function attention(tabIds: string[], state: WintosState, names: Record<string, string | undefined>, now: number): Attention {
     const prs = prsByTab(tabIds, state);
     const split = withSnoozes(sidebarModel(tabIds, state, prs), state.projectSnoozes);

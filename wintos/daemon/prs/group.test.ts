@@ -102,7 +102,7 @@ describe("projectPrs", () => {
         const r = projectPrs({ pr: [], title: "DEV-9" }, prs, "me", MON);
         expect(r.items.map((i) => [i.pr.number, i.group])).toEqual([[1, "fix"], [2, "chase"], [3, "waiting"]]);
         expect(r.blocked).toMatchObject({ text: "#1: changes requested by ana.b", tone: "apricot" });
-        expect(projectPrs({ pr: [], title: "DEV-9" }, [prs[1], prs[2]], "me", MON).blocked).toEqual({ since: Date.parse("2026-09-21T09:00:00Z"), text: "Nobody has looked at #2 in 5 working days", tone: "brick" });
+        expect(projectPrs({ pr: [], title: "DEV-9" }, [prs[1], prs[2]], "me", MON).blocked).toMatchObject({ since: Date.parse("2026-09-21T09:00:00Z"), text: "Nobody has looked at #2 in 5 working days", tone: "brick" });
     });
     test("a fix is yours to do: apricot, naming what happened", () => {
         const r = projectPrs({ pr: [], title: "DEV-9" }, [prs[0]], "me", MON);
@@ -166,7 +166,7 @@ describe("a merged PR not yet on the release branch", () => {
     test("its age counts from the merge", () => expect(ageLabel(merged(), MON).text).toBe("3 wd"));
     test("it says it is not released", () => expect(qualifier(merged(), "release")?.text).toBe("merged, not on main"));
     test("it marks its project", () =>
-        expect(projectPrs({ pr: [], title: "DEV-9" }, [{ ...merged(), number: 5, title: "DEV-9 x" }], "me", MON).blocked).toEqual({
+        expect(projectPrs({ pr: [], title: "DEV-9" }, [{ ...merged(), number: 5, title: "DEV-9 x" }], "me", MON).blocked).toMatchObject({
             since: Date.parse("2026-09-23T09:00:00Z"), text: "#5 merged 3 working days ago, not on main", tone: "brick",
         }));
 });

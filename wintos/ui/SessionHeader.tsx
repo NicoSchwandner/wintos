@@ -8,7 +8,7 @@ import { SESSION_DOT, T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
 import type { Lane } from "../daemon/sessions/reduce";
-import { relTime, sessionHeader, urgentPr } from "./view";
+import { relTime, sessionHeader, urgentPr, type PrChip } from "./view";
 
 
 // Above a Claude pane: its state, what it works on, its own status line and its PRs' verdicts.
@@ -45,31 +45,33 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
             )}
             {h.prs.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                    {h.prs.map((p) => {
-                        const head = p.group ? HEADERS[p.group] : undefined;
-                        return (
-                            <button
-                                key={p.url}
-                                type="button"
-                                tabIndex={-1}
-                                title={p.url}
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => runAction(`open-page:${p.url}`)}
-                                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 7px", borderRadius: 6, border: `1px solid ${head && p.group !== "waiting" && p.group !== "team" ? head.color : T.border}`, background: "transparent", cursor: "pointer", fontFamily: T.ui, fontSize: 11.5, whiteSpace: "nowrap" }}
-                            >
-                                <span style={{ fontFamily: T.mono, color: T.title }}>#{p.number}</span>
-                                {head && <span style={{ color: head.color, fontWeight: 600 }}>{head.label}</span>}
-                                {p.why && <span style={{ color: T.muted }}>{p.why}</span>}
-                                {focused && p === urgent && <Key k="⌥⌘G" label="" />}
-                            </button>
-                        );
-                    })}
+                    {h.prs.map((p) => <PrChipButton key={p.url} chip={p} keyHint={focused && p === urgent ? "⌥⌘G" : undefined} />)}
                 </div>
             )}
         </div>
     );
 });
 SessionHeader.displayName = "SessionHeader";
+
+// One PR as a chip: its number, its queue group and what it waits on; a click opens the PR.
+export function PrChipButton({ chip: p, keyHint, small }: { chip: PrChip; keyHint?: string; small?: boolean }) {
+    const head = p.group ? HEADERS[p.group] : undefined;
+    return (
+        <button
+            type="button"
+            tabIndex={-1}
+            title={p.url}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => runAction(`open-page:${p.url}`)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: small ? "1px 6px" : "2px 7px", borderRadius: 6, border: `1px solid ${head && p.group !== "waiting" && p.group !== "team" ? head.color : T.border}`, background: "transparent", cursor: "pointer", fontFamily: T.ui, fontSize: small ? 10.5 : 11.5, whiteSpace: "nowrap" }}
+        >
+            <span style={{ fontFamily: T.mono, color: T.title }}>#{p.number}</span>
+            {head && <span style={{ color: head.color, fontWeight: 600 }}>{head.label}</span>}
+            {p.why && <span style={{ color: T.muted }}>{p.why}</span>}
+            {keyHint && <Key k={keyHint} label="" />}
+        </button>
+    );
+}
 
 const gate = (step: string) => step.startsWith("?");
 const stepName = (step: string) => step.replace(/^\?\s*/, "");

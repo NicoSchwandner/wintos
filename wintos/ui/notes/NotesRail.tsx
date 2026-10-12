@@ -15,7 +15,8 @@ import { notesKeys, PrList } from "./PrList";
 import { useWintos } from "../useWintos";
 import { runKey } from "../menu";
 import { openPalette } from "../Palette";
-import { relTime } from "../view";
+import { prChips, relTime, type WintosState } from "../view";
+import { PrChipButton } from "../SessionHeader";
 
 // The notes rail beside the terminal (MainC): next action, project.md, mine.md.
 export const NotesRail = memo(({ tabId }: { tabId: string }) => {
@@ -71,7 +72,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
                 <Mine text={notes?.mine ?? ""} mtime={notes?.mineMtime ?? 0} canEdit={!!notes} save={save} size="rail" />
             </div>
             <PrList tabId={tabId} size="rail" />
-            <Shelf shelf={state?.shelf?.[tabId] ?? []} />
+            <Shelf shelf={state?.shelf?.[tabId] ?? []} state={state} />
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.secondary }}>project.md</span>
@@ -92,7 +93,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
 NotesRail.displayName = "NotesRail";
 
 // This project's shelved sessions, newest first, each back as a pane with its key.
-export function Shelf({ shelf }: { shelf: Shelved[] }) {
+export function Shelf({ shelf, state }: { shelf: Shelved[]; state?: WintosState }) {
     if (!shelf.length) return null;
     const row = (k: string, text: string, onClick: () => void, key: string) => (
         <button key={key} type="button" data-key={k} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 9, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12.5, lineHeight: 1.55, color: T.quietTitle, textAlign: "left" }}>
@@ -103,7 +104,16 @@ export function Shelf({ shelf }: { shelf: Shelved[] }) {
     return (
         <div data-wintos="shelf-dock" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>Shelved</span>
-            {shelf.slice(0, 9).map((s, i) => row(`⌥⌘${i + 1}`, `${shelvedName(s)} · ${relTime(Date.now() - s.at)}`, () => runKey(`unshelve-${i + 1}`), s.sessionId))}
+            {shelf.slice(0, 9).map((s, i) => (
+                <div key={s.sessionId} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    {row(`⌥⌘${i + 1}`, `${shelvedName(s)} · ${relTime(Date.now() - s.at)}`, () => runKey(`unshelve-${i + 1}`), s.sessionId)}
+                    {state && !!s.prs?.length && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, paddingLeft: 38 }}>
+                            {prChips(state, s.prs).map((c) => <PrChipButton key={c.url} chip={c} small />)}
+                        </div>
+                    )}
+                </div>
+            ))}
             {shelf.length > 9 && row("⇧⌘P", `${shelf.length - 9} more`, () => openPalette("shelved"), "more")}
         </div>
     );

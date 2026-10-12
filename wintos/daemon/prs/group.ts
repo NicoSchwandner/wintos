@@ -146,7 +146,7 @@ function parseRef(ref: string): { repo: string; number: number } | undefined {
 
 export type ProjectPrs = {
     items: { pr: PR; group: Group }[];
-    blocked?: { since: number; text: string; tone: "apricot" | "brick" };
+    blocked?: { since: number; text: string; tone: "apricot" | "brick"; url: string };
     reason?: string; // the quiet row's right column
 };
 
@@ -158,10 +158,10 @@ export function projectPrs(project: { pr?: string[]; title?: string }, prs: PR[]
     if (urgent) {
         const { pr, group } = urgent;
         const since = Date.parse(lastMovement(pr));
-        if (group === "fix") return { items, blocked: { since, text: `#${pr.number}: ${qualifier(pr, group)?.text ?? "needs a fix"}`, tone: "apricot" } };
+        if (group === "fix") return { items, blocked: { since, text: `#${pr.number}: ${qualifier(pr, group)?.text ?? "needs a fix"}`, tone: "apricot", url: pr.url } };
         const wd = workingDaysBetween(lastMovement(pr), now);
-        if (group === "release") return { items, blocked: { since, text: `#${pr.number} merged ${wd} working days ago, not on main`, tone: "brick" } };
-        return { items, blocked: { since, text: `Nobody has looked at #${pr.number} in ${wd} working days`, tone: "brick" } };
+        if (group === "release") return { items, blocked: { since, text: `#${pr.number} merged ${wd} working days ago, not on main`, tone: "brick", url: pr.url } };
+        return { items, blocked: { since, text: `Nobody has looked at #${pr.number} in ${wd} working days`, tone: "brick", url: pr.url } };
     }
     const first = [...items].sort(byUrgency)[0]?.pr;
     if (!first) return { items };

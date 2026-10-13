@@ -12,8 +12,9 @@ payload="$(cat)"
 # Only an interactive session you started owns its block: a `claude -p` run from inside it
 # (CLAUDE_CODE_ENTRYPOINT=sdk-cli) inherits the block id and would otherwise make the next
 # launch resume a throwaway session. CLAUDE_CODE_CHILD_SESSION can't tell them apart: Claude
-# sets it for everything it spawns, the interactive session's own hooks included.
-if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" != "sdk-cli" ]; then
+# sets it for everything it spawns, the interactive session's own hooks included. Nor does a fork
+# Claude Code runs in the background (CLAUDE_CODE_SESSION_KIND=bg): it inherits the pane's id too.
+if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" != "sdk-cli" ] && [ "${CLAUDE_CODE_SESSION_KIND:-}" != "bg" ]; then
     wsh="${WAVETERM_WSHBINDIR:+$WAVETERM_WSHBINDIR/}wsh"
     case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.reason // .source // "")' 2>/dev/null)" in
     UserPromptSubmit:* | SessionStart:resume)

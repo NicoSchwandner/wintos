@@ -119,6 +119,12 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         expect(w.calls()).toBe("");
     });
 
+    test("nor does a fork Claude Code runs in the background: it shares the pane, the pane is its parent's", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir, { CLAUDE_CODE_SESSION_KIND: "bg" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "fork", cwd: "/x" }));
+        expect(w.calls()).toBe("");
+    });
+
     test("a new session's start does not, since Claude saves nothing to resume before the first prompt", () => {
         const w = fakeWsh();
         runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", source: "startup", session_id: "s-1", cwd: "/x" }));
@@ -264,10 +270,10 @@ describe("wintos wait", () => {
     test("parks this block's session on what it waits for", async () => {
         const d = await fakeDaemon("");
         const out = await new Promise<string>((resolve) =>
-            require("child_process").execFile(CLI, ["wait", "CI", "on", "#1479"], { env: { ...process.env, WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+            require("child_process").execFile(CLI, ["wait", "CI", "on", "#1479"], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
         );
         expect(out.trim()).toBe("waiting on: CI on #1479");
-        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/wait", body: { reason: "CI on #1479" } });
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/wait?session=s-1", body: { reason: "CI on #1479" } });
     });
 
     test("outside WintOS it explains instead of guessing", () => {
@@ -281,37 +287,37 @@ describe("wintos status", () => {
     test("sets this block's session's line", async () => {
         const d = await fakeDaemon("");
         const out = await new Promise<string>((resolve) =>
-            require("child_process").execFile(CLI, ["status", "Walking", "the", "plan"], { env: { ...process.env, WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+            require("child_process").execFile(CLI, ["status", "Walking", "the", "plan"], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
         );
         expect(out.trim()).toBe("status: Walking the plan");
-        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/status", body: { text: "Walking the plan" } });
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/status?session=s-1", body: { text: "Walking the plan" } });
     });
 });
 
 describe("wintos lane and step", () => {
     const cli = (args: string[], port: number) =>
-        new Promise<string>((resolve) => require("child_process").execFile(CLI, args, { env: { ...process.env, WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(port) } }, (_e: unknown, so: string) => resolve(so)));
+        new Promise<string>((resolve) => require("child_process").execFile(CLI, args, { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(port) } }, (_e: unknown, so: string) => resolve(so)));
     test("lane sends the name and steps; step the step and its note", async () => {
         const d = await fakeDaemon("");
         expect((await cli(["lane", "feature", "Design", "?Approve spec", "Build"], d.port)).trim()).toBe("lane: feature (Design · ?Approve spec · Build)");
         expect((await cli(["step", "Build", "slice", "2", "of", "3"], d.port)).trim()).toBe("step: Build (slice 2 of 3)");
         expect(d.seen).toEqual([
-            { url: "/blocks/blk-1/lane", body: { name: "feature", steps: ["Design", "?Approve spec", "Build"] } },
-            { url: "/blocks/blk-1/step", body: { step: "Build", note: "slice 2 of 3" } },
+            { url: "/blocks/blk-1/lane?session=s-1", body: { name: "feature", steps: ["Design", "?Approve spec", "Build"] } },
+            { url: "/blocks/blk-1/step?session=s-1", body: { step: "Build", note: "slice 2 of 3" } },
         ]);
     });
     test("pr claims a PR for this pane's session, by link or owner/repo#n", async () => {
         const d = await fakeDaemon("https://github.com/o/r/pull/7");
         expect((await cli(["pr", "o/r#7"], d.port)).trim()).toBe("pr: https://github.com/o/r/pull/7");
-        expect(d.seen).toEqual([{ url: "/blocks/blk-1/pr", body: { ref: "o/r#7" } }]);
+        expect(d.seen).toEqual([{ url: "/blocks/blk-1/pr?session=s-1", body: { ref: "o/r#7" } }]);
     });
     test("todo lists the step's to-dos; todo done ticks one", async () => {
         const d = await fakeDaemon("");
         expect((await cli(["todo", "Narrow list", "Name search"], d.port)).trim()).toBe("todo: Narrow list · Name search");
         expect((await cli(["todo", "done", "Name search"], d.port)).trim()).toBe("todo done: Name search");
         expect(d.seen).toEqual([
-            { url: "/blocks/blk-1/todo", body: { items: ["Narrow list", "Name search"] } },
-            { url: "/blocks/blk-1/todo", body: { done: "Name search" } },
+            { url: "/blocks/blk-1/todo?session=s-1", body: { items: ["Narrow list", "Name search"] } },
+            { url: "/blocks/blk-1/todo?session=s-1", body: { done: "Name search" } },
         ]);
     });
 });
@@ -320,9 +326,9 @@ describe("wintos done", () => {
     test("ends this block's session turn as done", async () => {
         const d = await fakeDaemon("");
         const out = await new Promise<string>((resolve) =>
-            require("child_process").execFile(CLI, ["done"], { env: { ...process.env, WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+            require("child_process").execFile(CLI, ["done"], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
         );
         expect(out.trim()).toBe("done: nothing waits on the developer");
-        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/done", body: {} });
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/done?session=s-1", body: {} });
     });
 });

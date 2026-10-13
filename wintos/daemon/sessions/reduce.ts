@@ -20,6 +20,7 @@ export type Session = {
     status?: { text: string; at: number }; // its own line on what it is doing (`wintos status`)
     lane?: Lane; // the process it follows and where it is in it (`wintos lane`, `wintos step`)
     turnEndedAt?: number; // the last Stop: a reply the developer may not have read yet
+    promptAt?: number; // the last prompt: in a pane running two sessions, the one you talk to
 };
 
 // A step starting with ? is the developer's call: the session stops there.
@@ -50,8 +51,8 @@ function claim(sessions: Map<string, Session>, ownerId: string, links: string[])
 }
 
 // `wintos pr <link>` from inside a session. undefined: no live session in that block.
-export function claimPrs(sessions: Map<string, Session>, blockId: string, links: string[]): Map<string, Session> | undefined {
-    const live = liveIn(sessions, blockId);
+export function claimPrs(sessions: Map<string, Session>, blockId: string, links: string[], sessionId?: string): Map<string, Session> | undefined {
+    const live = liveIn(sessions, blockId, sessionId);
     return live ? claim(sessions, live.id, links) : undefined;
 }
 // The lane steps a gh pr command proves were reached, so they move even when the session forgets.
@@ -99,6 +100,7 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
         parkPending: next ? undefined : prev?.parkPending,
         donePending: next ? undefined : prev?.donePending,
         turnEndedAt: name === "Stop" ? now : prev?.turnEndedAt,
+        promptAt: name === "UserPromptSubmit" ? now : prev?.promptAt,
     };
     if (prev?.prs) session.prs = prev.prs;
     if (prev?.status) session.status = prev.status;
@@ -123,29 +125,29 @@ export function restoreSessions(saved: Session[]): Map<string, Session> {
 
 // `wintos wait` from inside a session (the turn's Stop parks), or the developer parking a turn
 // that already ended (⌥⌘P).
-export function parkSession(sessions: Map<string, Session>, blockId: string, reason: string, now: number): Map<string, Session> {
-    const live = liveIn(sessions, blockId);
+export function parkSession(sessions: Map<string, Session>, blockId: string, reason: string, now: number, sessionId?: string): Map<string, Session> {
+    const live = liveIn(sessions, blockId, sessionId);
     if (!live) return sessions;
     // A turn that already ended waiting on the developer parks now: they parked it from WintOS.
     if (live.state === "waiting") return new Map(sessions).set(live.id, { ...live, state: "parked", since: now, parkedOn: reason, parkPending: undefined, donePending: undefined, lastAt: now });
     return new Map(sessions).set(live.id, { ...live, parkedOn: reason, parkPending: true, donePending: undefined, lastAt: now });
 }
 
-export function setStatus(sessions: Map<string, Session>, blockId: string, text: string, now: number): Map<string, Session> {
-    const live = liveIn(sessions, blockId);
+export function setStatus(sessions: Map<string, Session>, blockId: string, text: string, now: number, sessionId?: string): Map<string, Session> {
+    const live = liveIn(sessions, blockId, sessionId);
     if (!live) return sessions;
     return new Map(sessions).set(live.id, { ...live, status: { text, at: now } });
 }
 
-export function setLane(sessions: Map<string, Session>, blockId: string, name: string, steps: string[]): Map<string, Session> {
-    const live = liveIn(sessions, blockId);
+export function setLane(sessions: Map<string, Session>, blockId: string, name: string, steps: string[], sessionId?: string): Map<string, Session> {
+    const live = liveIn(sessions, blockId, sessionId);
     if (!live) return sessions;
     return new Map(sessions).set(live.id, { ...live, lane: { name, steps, at: 0 } });
 }
 
 // undefined: no such step in the session's lane, so the caller can say so.
-export function setStep(sessions: Map<string, Session>, blockId: string, step: string, note?: string): Map<string, Session> | undefined {
-    const live = liveIn(sessions, blockId);
+export function setStep(sessions: Map<string, Session>, blockId: string, step: string, note?: string, sessionId?: string): Map<string, Session> | undefined {
+    const live = liveIn(sessions, blockId, sessionId);
     if (!live?.lane) return undefined;
     const bare = (s: string) => s.replace(/^\?\s*/, "").toLowerCase();
     const want = bare(step);
@@ -158,15 +160,15 @@ export function setStep(sessions: Map<string, Session>, blockId: string, step: s
 }
 
 // undefined: the session has no lane yet, so the caller can say so.
-export function setTodo(sessions: Map<string, Session>, blockId: string, items: string[]): Map<string, Session> | undefined {
-    const live = liveIn(sessions, blockId);
+export function setTodo(sessions: Map<string, Session>, blockId: string, items: string[], sessionId?: string): Map<string, Session> | undefined {
+    const live = liveIn(sessions, blockId, sessionId);
     if (!live?.lane) return undefined;
     return new Map(sessions).set(live.id, { ...live, lane: { ...live.lane, todos: items.map((text) => ({ text, done: false })) } });
 }
 
 // Matched like a step: by name in any case, else by its start. undefined: no such to-do.
-export function tickTodo(sessions: Map<string, Session>, blockId: string, item: string): Map<string, Session> | undefined {
-    const live = liveIn(sessions, blockId);
+export function tickTodo(sessions: Map<string, Session>, blockId: string, item: string, sessionId?: string): Map<string, Session> | undefined {
+    const live = liveIn(sessions, blockId, sessionId);
     const todos = live?.lane?.todos;
     if (!live?.lane || !todos) return undefined;
     const want = item.toLowerCase();
@@ -177,13 +179,21 @@ export function tickTodo(sessions: Map<string, Session>, blockId: string, item: 
 }
 
 // `wintos done` from inside a session: the block's live session ends this turn done.
-export function finishSession(sessions: Map<string, Session>, blockId: string, now: number): Map<string, Session> {
-    const live = liveIn(sessions, blockId);
+export function finishSession(sessions: Map<string, Session>, blockId: string, now: number, sessionId?: string): Map<string, Session> {
+    const live = liveIn(sessions, blockId, sessionId);
     if (!live) return sessions;
     return new Map(sessions).set(live.id, { ...live, donePending: true, parkPending: undefined, lastAt: now });
 }
 
-// The session a pane runs now: not ended, the latest to report from it.
-export const liveSessionIn = (sessions: Iterable<Session>, blockId: string): Session | undefined =>
-    [...sessions].filter((s) => s.blockId === blockId && s.state !== "ended").sort((a, b) => b.lastAt - a.lastAt)[0];
-const liveIn = (sessions: Map<string, Session>, blockId: string) => liveSessionIn(sessions.values(), blockId);
+// The sessions a pane runs, not ended: usually one; a fork Claude Code runs in the background
+// shares its parent's pane. The one you last prompted first: that is the one you talk to there.
+export const liveSessionsIn = (sessions: Iterable<Session>, blockId: string): Session[] =>
+    [...sessions].filter((s) => s.blockId === blockId && s.state !== "ended").sort((a, b) => (b.promptAt ?? b.lastAt) - (a.promptAt ?? a.lastAt) || b.lastAt - a.lastAt);
+export const liveSessionIn = (sessions: Iterable<Session>, blockId: string): Session | undefined => liveSessionsIn(sessions, blockId)[0];
+// The session a `wintos` call comes from: the one it names (CLAUDE_CODE_SESSION_ID), so a pane
+// running several (a fork Claude Code runs in the background shares its pane) never mixes them
+// up; without a name, the pane's.
+const liveIn = (sessions: Map<string, Session>, blockId: string, sessionId?: string) => {
+    const named = sessionId ? sessions.get(sessionId) : undefined;
+    return named && named.state !== "ended" ? named : liveSessionIn(sessions.values(), blockId);
+};

@@ -3,7 +3,7 @@ import type { KeyStats } from "../daemon/keyboard/keyboard";
 import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
 import { byUrgency, GROUPS, groupOf, isSnoozed, isStacked, projectPrs, qualifier, type Group, type PR, type Snoozes } from "../daemon/prs/group";
-import { liveSessionIn, type Session } from "../daemon/sessions/reduce";
+import { liveSessionIn, liveSessionsIn, type Session } from "../daemon/sessions/reduce";
 import { shelvedName, type Shelved } from "../daemon/shelf/shelf";
 
 export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; projectSnoozes?: Record<string, number>; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]> };
@@ -131,7 +131,7 @@ export const sessionName = (s: Session) => s.status?.text ?? s.label ?? "session
 // order (blockIds, the tab's), then the shelved ones newest first; each with its PRs as chips.
 export type ProjectSession = { kind: "live"; session: Session; name: string; prs: PrChip[] } | { kind: "shelved"; item: Shelved; name: string; prs: PrChip[] };
 export function projectSessions(state: WintosState, tabId: string, blockIds: string[]): ProjectSession[] {
-    const live = blockIds.map((b) => liveSessionIn(state.sessions.filter((s) => s.tabId === tabId), b)).filter((s): s is Session => !!s);
+    const live = blockIds.flatMap((b) => liveSessionsIn(state.sessions.filter((s) => s.tabId === tabId), b));
     return [
         ...live.map((session): ProjectSession => ({ kind: "live", session, name: sessionName(session), prs: prChips(state, session.prs ?? []) })),
         ...(state.shelf?.[tabId] ?? []).map((item): ProjectSession => ({ kind: "shelved", item, name: shelvedName(item), prs: prChips(state, item.prs ?? []) })),

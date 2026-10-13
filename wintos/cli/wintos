@@ -11,6 +11,8 @@
 #                                      one account each, named explicitly
 set -eu
 PORT="${WINTOS_PORT:-7730}"
+# The session this runs in, so a pane running two (a fork in the background) never mixes them up.
+SESSION_Q="${CLAUDE_CODE_SESSION_ID:+?session=$CLAUDE_CODE_SESSION_ID}"
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 HOOK="$HERE/../hooks/wintos-hook.sh"
 SETTINGS="${WINTOS_CLAUDE_SETTINGS:-${HOME:-~}/.claude/settings.json}"
@@ -46,7 +48,7 @@ wait)
     [ $# -gt 0 ] || die "usage: wintos wait <what you are waiting on>"
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     jq -n --arg r "$*" '{reason: $r}' |
-        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/wait" >/dev/null ||
+        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/wait$SESSION_Q" >/dev/null ||
         die "wintosd not reachable on port $PORT, or it refused the reason"
     echo "waiting on: $*"
     ;;
@@ -55,7 +57,7 @@ status)
     [ $# -gt 0 ] || die "usage: wintos status <what this session is doing>"
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     jq -n --arg t "$*" '{text: $t}' |
-        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/status" >/dev/null ||
+        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/status$SESSION_Q" >/dev/null ||
         die "wintosd not reachable on port $PORT, or it refused the line"
     echo "status: $*"
     ;;
@@ -66,7 +68,7 @@ lane)
     name="$1"
     shift
     jq -n --arg n "$name" '{name: $n, steps: $ARGS.positional}' --args "$@" |
-        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/lane" >/dev/null ||
+        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/lane$SESSION_Q" >/dev/null ||
         die "wintosd not reachable on port $PORT, or it refused the lane"
     echo "lane: $name ($(printf '%s\n' "$@" | paste -sd'|' - | sed 's/|/ · /g'))"
     ;;
@@ -77,7 +79,7 @@ step)
     step="$1"
     shift
     jq -n --arg s "$step" --arg n "$*" '{step: $s} + (if $n != "" then {note: $n} else {} end)' |
-        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/step" >/dev/null ||
+        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/step$SESSION_Q" >/dev/null ||
         die "wintosd refused the step: not in this session's lane (run wintos lane first), or not reachable on port $PORT"
     echo "step: $step${*:+ ($*)}"
     ;;
@@ -85,7 +87,7 @@ pr)
     shift
     [ $# -eq 1 ] || die "usage: wintos pr <PR link | owner/repo#number>"
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
-    link=$(jq -n --arg r "$1" '{ref: $r}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/pr") ||
+    link=$(jq -n --arg r "$1" '{ref: $r}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/pr$SESSION_Q") ||
         die "wintosd refused it: name the PR by its link or owner/repo#number, from a session's pane (port $PORT)"
     echo "pr: $link"
     ;;
@@ -95,18 +97,18 @@ todo)
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     if [ "$1" = done ] && [ $# -gt 1 ]; then
         shift
-        jq -n --arg d "$*" '{done: $d}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/todo" >/dev/null ||
+        jq -n --arg d "$*" '{done: $d}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/todo$SESSION_Q" >/dev/null ||
             die "wintosd refused it: no such to-do in this step, or not reachable on port $PORT"
         echo "todo done: $*"
     else
-        jq -n '{items: $ARGS.positional}' --args "$@" | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/todo" >/dev/null ||
+        jq -n '{items: $ARGS.positional}' --args "$@" | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/todo$SESSION_Q" >/dev/null ||
             die "wintosd refused the to-dos: no lane in this session (run wintos lane first), or not reachable on port $PORT"
         echo "todo: $(printf '%s\n' "$@" | paste -sd'|' - | sed 's/|/ · /g')"
     fi
     ;;
 done)
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
-    echo '{}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/done" >/dev/null ||
+    echo '{}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/done$SESSION_Q" >/dev/null ||
         die "wintosd not reachable on port $PORT"
     echo "done: nothing waits on the developer"
     ;;

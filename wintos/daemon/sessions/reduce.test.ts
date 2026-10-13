@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs } from "./reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, liveSessionsIn } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -218,5 +218,18 @@ describe("the current step's to-dos (`wintos todo`)", () => {
         const t = setTodo(m, "blk-1", ["Narrow list"])!;
         expect(todos(setStep(t, "blk-1", "Test path")!)).toHaveLength(1);
         expect(todos(setStep(t, "blk-1", "Ready")!)).toBeUndefined();
+    });
+});
+
+describe("a pane running two sessions (a fork in the background)", () => {
+    const two = run([ev(prompt), ev({ ...prompt, session_id: "fork" })]);
+    test("a `wintos` call that names its session reaches that one, not the pane's latest", () => {
+        const m = setStatus(two, "blk-1", "the fork's line", 5000, prompt.session_id);
+        expect([m.get(prompt.session_id)?.status?.text, m.get("fork")?.status]).toEqual(["the fork's line", undefined]);
+    });
+    test("without a name, the one you last prompted there", () => {
+        const m = run([ev(prompt), ev({ ...prompt, session_id: "fork" }), ev({ ...stop, session_id: "fork" }), ev({ ...stop, hook_event_name: "PostToolUse", session_id: prompt.session_id })]);
+        expect(setStatus(m, "blk-1", "x", 9000).get("fork")?.status?.text).toBe("x");
+        expect(liveSessionsIn(m.values(), "blk-1").map((s) => s.id)).toEqual(["fork", prompt.session_id]);
     });
 });

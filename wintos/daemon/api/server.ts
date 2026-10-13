@@ -159,6 +159,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         }
         try {
             const url = new URL(req.url ?? "/", "http://x");
+            // The session a `wintos` call names (?session=), for the block routes.
+            const sid = isSafe(url.searchParams.get("session")) ? url.searchParams.get("session")! : undefined;
             if (req.method === "OPTIONS") {
                 res.setHeader("Access-Control-Allow-Headers", "content-type, x-wintos-token");
                 res.setHeader("Access-Control-Allow-Methods", "GET, POST");
@@ -303,7 +305,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             if (req.method === "POST" && done) {
                 const blockId = decodeURIComponent(done[1]);
                 if (!isSafe(blockId)) return send(res, 400, "bad block id");
-                sessions = finishSession(sessions, blockId, Date.now());
+                sessions = finishSession(sessions, blockId, Date.now(), sid);
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");
@@ -315,7 +317,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const reason = typeof b?.reason === "string" ? b.reason.trim() : "";
                 if (!isSafe(blockId) || !reason || !isSafe(reason) || reason.length > MAX_TITLE)
                     return send(res, 400, `need a one-line reason up to ${MAX_TITLE} characters`);
-                sessions = parkSession(sessions, blockId, reason, Date.now());
+                sessions = parkSession(sessions, blockId, reason, Date.now(), sid);
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");
@@ -327,7 +329,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const text = typeof b?.text === "string" ? b.text.trim() : "";
                 if (!isSafe(blockId) || !text || !isSafe(text) || text.length > MAX_STATUS)
                     return send(res, 400, `need a one-line status up to ${MAX_STATUS} characters`);
-                sessions = setStatus(sessions, blockId, text, Date.now());
+                sessions = setStatus(sessions, blockId, text, Date.now(), sid);
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");
@@ -339,7 +341,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const steps = Array.isArray(b?.steps) ? b.steps.map((s) => (typeof s === "string" ? s.trim() : "")) : [];
                 const ok = isSafe(blockId) && isSafe(b?.name) && b.name.length <= MAX_STEP && steps.length > 0 && steps.length <= MAX_STEPS && steps.every((s) => s && isSafe(s) && s.length <= MAX_STEP);
                 if (!ok) return send(res, 400, `need a lane name and 1-${MAX_STEPS} one-line steps up to ${MAX_STEP} characters`);
-                sessions = setLane(sessions, blockId, b.name as string, steps);
+                sessions = setLane(sessions, blockId, b.name as string, steps, sid);
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");
@@ -350,7 +352,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const b = (await body(req)) as { ref?: unknown };
                 const link = typeof b?.ref === "string" ? prLink(b.ref) : undefined;
                 if (!isSafe(blockId) || !link) return send(res, 400, "need a PR link or owner/repo#number");
-                const next = claimPrs(sessions, blockId, [link]);
+                const next = claimPrs(sessions, blockId, [link], sid);
                 if (!next) return send(res, 400, "no live session in this pane");
                 sessions = next;
                 if (releasePrs(shelf, [link]) !== shelf) saveShelf(releasePrs(shelf, [link]));
@@ -365,7 +367,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const items = Array.isArray(b?.items) ? b.items.map((s) => (typeof s === "string" ? s.trim() : "")) : undefined;
                 const okItems = items && items.length > 0 && items.length <= MAX_STEPS && items.every((s) => s && isSafe(s) && s.length <= MAX_TODO);
                 if (!isSafe(blockId) || (!okItems && !isSafe(b?.done))) return send(res, 400, `need 1-${MAX_STEPS} one-line to-dos up to ${MAX_TODO} characters, or the one done`);
-                const next = okItems ? setTodo(sessions, blockId, items!) : tickTodo(sessions, blockId, b.done as string);
+                const next = okItems ? setTodo(sessions, blockId, items!, sid) : tickTodo(sessions, blockId, b.done as string, sid);
                 if (!next) return send(res, 400, okItems ? "no lane in this session; run wintos lane first" : "no such to-do in this step");
                 sessions = next;
                 saveSessions();
@@ -379,7 +381,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const note = typeof b?.note === "string" && b.note.trim() ? b.note.trim() : undefined;
                 if (!isSafe(blockId) || !isSafe(b?.step) || (note !== undefined && (!isSafe(note) || note.length > MAX_STATUS)))
                     return send(res, 400, "need a step name and an optional one-line note");
-                const next = setStep(sessions, blockId, b.step as string, note);
+                const next = setStep(sessions, blockId, b.step as string, note, sid);
                 if (!next) return send(res, 400, "no such step in this session's lane; run wintos lane first");
                 sessions = next;
                 saveSessions();

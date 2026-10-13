@@ -143,6 +143,11 @@ describe("projectSessions (the notes' Sessions section, and ⌥⌘1–9)", () =>
         ],
         shelf: { t: [{ sessionId: "z", script: "s", label: "l", title: "Deploy the stack", at: 0, prs: ["https://github.com/o/r/pull/2"] }] },
     } as unknown as WintosState;
+    test("a pane running two sessions (a fork in the background) lists both", () => {
+        const both = { ...st, sessions: [...(st.sessions as never[]), { id: "f", tabId: "t", blockId: "b1", state: "waiting", since: 0, lastAt: 0, label: "the fork" }] } as unknown as WintosState;
+        expect(projectSessions(both, "t", ["b1"]).filter((x) => x.kind === "live").map((x) => x.name)).toEqual(["first", "the fork"]);
+    });
+
     test("live ones in pane order (closed panes and ended sessions left out), then the shelved, each with its PRs", () => {
         const list = projectSessions(st, "t", ["b1", "b2", "b3"]);
         expect(list.map((x) => [x.kind, x.name, x.prs.map((p) => p.number)])).toEqual([["live", "first", []], ["live", "fixing the parser", [1]], ["shelved", "Deploy the stack", [2]]]);

@@ -81,6 +81,9 @@ export function installKeyGame(): void {
             flog(`click ${where(e.target as Element | null)} "${text}" ${key ? `slip ${key}, streak ${streak} lost` : el ? "no slip" : "no key"}`);
             if (!el || !key) return;
             report("click", key);
+            // Told only when it costs a streak: clicking your way around (no streak to lose) is
+            // a way to use WintOS, not a slip to flash at every time.
+            if (streak <= 0) return;
             showNotice({ kind: "slip", key, streak, at: Date.now() });
             el.animate([{ boxShadow: "0 0 0 2px #fb4934aa" }, { boxShadow: "0 0 0 2px #fb493400" }], { duration: 3000 });
         },

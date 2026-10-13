@@ -416,6 +416,30 @@ await scenario("16 · a shelved session owning a red PR: the project stays out o
     await until("a pane resuming it", () => panes() === before + 1);
 });
 
+await scenario("17 · a click on WintOS itself is mouse mode: no pane frame; a click in the terminal keeps the mode; a shortcut brings the frame back", async () => {
+    const t = await toProject();
+    const click = async (selector) => {
+        const r = await evalIn(t, `(() => { const b = document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect(); return b && [b.left + 4, b.top + 4]; })()`);
+        if (!r) throw new Error(`nothing to click at ${selector}`);
+        for (const type of ["mousePressed", "mouseReleased"]) await cdp(t, "Input.dispatchMouseEvent", { type, x: r[0], y: r[1], button: "left", clickCount: 1 });
+    };
+    const mode = () => evalIn(t, "document.documentElement.dataset.wintosInput");
+    const frame = () => evalIn(t, `getComputedStyle(document.querySelector(".block.block-focused .block-mask")).borderTopColor`);
+    await until("a focused pane", () => evalIn(t, `!!document.querySelector(".block.block-focused .block-mask")`));
+    await press(t, "l", { code: "KeyL", keyCode: 76, mods: ["alt", "meta"] });
+    await press(t, "l", { code: "KeyL", keyCode: 76, mods: ["alt", "meta"] });
+    await until("keyboard mode", async () => (await mode()) === "keyboard");
+    await click("[data-band-group] > div");
+    await until("mouse mode", async () => (await mode()) === "mouse");
+    await until("no pane frame", async () => (await frame()) === "rgba(0, 0, 0, 0)");
+    await click(".block.block-focused .block-content");
+    await sleep(300);
+    if ((await mode()) !== "mouse") throw new Error("a click in the terminal left mouse mode");
+    await press(t, "l", { code: "KeyL", keyCode: 76, mods: ["alt", "meta"] });
+    await press(t, "l", { code: "KeyL", keyCode: 76, mods: ["alt", "meta"] });
+    await until("keyboard mode again", async () => (await mode()) === "keyboard");
+});
+
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
 // must not cost the run its results.
 await scenario("clean-up · the panes this run opened are closed", async () => {

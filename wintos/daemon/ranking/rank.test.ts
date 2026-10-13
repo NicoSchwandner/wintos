@@ -61,15 +61,6 @@ describe("rank", () => {
         expect(r.quiet[0].lastAt).toBe(NOW - DAY);
     });
 
-    test("a PR that needs you lifts a quiet project into needs you", () => {
-        const r = rank(["t"], [s("t", "idle", NOW - 5)], NOW, {}, { t: NOW - 3 * DAY });
-        expect(r.needs.map((x) => [x.tabId, x.waitingSince])).toEqual([["t", NOW - 3 * DAY]]);
-    });
-
-    test("the older of a waiting session and a rotting PR sets the wait", () => {
-        const r = rank(["t"], [s("t", "waiting", NOW - 10)], NOW, {}, { t: NOW - DAY });
-        expect(r.needs[0].waitingSince).toBe(NOW - DAY);
-    });
 
     test("sessions of tabs outside the workspace are ignored", () => {
         const r = rank(["t"], [s("gone", "waiting", NOW)], NOW);
@@ -93,20 +84,20 @@ describe("unread", () => {
     const ended = (tabId: string, state: Session["state"], turnEndedAt: number): Session => ({ ...s(tabId, state, turnEndedAt), turnEndedAt });
 
     test("a reply you haven't seen keeps the project in Needs you, a done one included", () => {
-        const r = rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, {}, { t: NOW - 100 });
+        const r = rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, { t: NOW - 100 });
         expect(r.needs).toEqual([expect.objectContaining({ tabId: "t", unread: true, waitingSince: NOW - 50 })]);
     });
 
     test("once seen, it falls to where it belongs: done and parked are quiet", () => {
-        expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
-        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
+        expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
+        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
     });
 
     test("a parked turn is no reply to read: you parked it, it waits on something else", () =>
-        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, {}, { t: NOW - 100 }).needs).toEqual([]));
+        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, { t: NOW - 100 }).needs).toEqual([]));
 
     test("latestNeed is when the newest need began, so a snooze can tell a new one from an old one", () => {
-        const r = rank(["t"], [s("t", "waiting", NOW - 10)], NOW, {}, { t: NOW - 500 });
+        const r = rank(["t"], [s("t", "waiting", NOW - 500), { ...s("t", "waiting", NOW - 10), id: "b", blockId: "b2" }], NOW);
         expect([r.needs[0].waitingSince, r.needs[0].latestNeed]).toEqual([NOW - 500, NOW - 10]);
     });
 

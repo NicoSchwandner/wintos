@@ -27,10 +27,9 @@ export function prsByTab(tabIds: string[], state: WintosState): Record<string, A
     return out;
 }
 
-export function sidebarModel(tabIds: string[], state: WintosState, byTab = prsByTab(tabIds, state)): Ranking {
+export function sidebarModel(tabIds: string[], state: WintosState): Ranking {
     const touched = Object.fromEntries(state.projects.filter((p) => p.id).map((p) => [p.id!, p.mtime]));
-    const blocked = Object.fromEntries(Object.entries(byTab).filter(([, v]) => v.blocked).map(([k, v]) => [k, v.blocked!.since]));
-    return rank(tabIds, state.sessions, state.now, touched, blocked, state.seen);
+    return rank(tabIds, state.sessions, state.now, touched, state.seen);
 }
 
 // Snoozed projects (done, but may need re-work) leave the bands and the ⌘J/⌘K walk for their own
@@ -69,8 +68,6 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     if (row.band === "needs") {
         const sessionWaiting = row.sessions.some((s) => s.state === "waiting");
         if (!sessionWaiting && row.unread) return { title, next: project?.next ? `New reply · ${project.next}` : "New reply", tone: "apricot", age, meta };
-        // A PR keeps it here; a deploy done by hand may never turn it green, so ⌥⌘Z lets it sleep.
-        if (!sessionWaiting && prs?.blocked) return { title, next: prs.blocked.text, tone: prs.blocked.tone, age, meta, sleepable: true };
         return { title, next: project?.next ?? "Your turn", tone: "apricot", age, meta };
     }
     if (row.band === "running") {
@@ -79,26 +76,24 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
         return { title, next: parkedOn ? `Waiting on ${parkedOn}` : (project?.next ?? "Claude is working"), tone: "secondary", age, meta };
     }
     const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
-    return { title, age, reason: parkedOn ? `waiting on ${parkedOn}` : (prs?.reason ?? meta ?? age) };
+    // A PR that needs you no longer lifts the project: its line says so, quietly.
+    return { title, age, reason: parkedOn ? `waiting on ${parkedOn}` : (prs?.blocked?.text ?? prs?.reason ?? meta ?? age) };
 }
 
 // Everything the sidebar and the palette show about the projects, computed once: the bands
 // (snoozes applied), each row's text and each project's PRs. `now` ticks the ages.
-// targets: where opening a project that needs you lands, the session behind the need: the one
-// waiting longest, else the one (live, or shelved and resumed) owning the PR that needs you.
+// targets: where opening a project that needs you lands: the session waiting longest.
 export type Attention = SidebarSplit & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target> };
 export function attention(tabIds: string[], state: WintosState, names: Record<string, string | undefined>, now: number): Attention {
     const prs = prsByTab(tabIds, state);
-    const split = withSnoozes(sidebarModel(tabIds, state, prs), state.projectSnoozes);
+    const split = withSnoozes(sidebarModel(tabIds, state), state.projectSnoozes);
     const rows = [...split.needs, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale, ...split.snoozed];
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const views = Object.fromEntries(rows.map((r) => [r.tabId, rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId])]));
     const targets: Record<string, Target> = {};
     for (const r of rows.filter((r) => r.band === "needs")) {
         const waiting = r.sessions.filter((s) => s.state === "waiting").sort((a, b) => a.since - b.since)[0];
-        const owner = prs[r.tabId]?.blocked?.owner;
         if (waiting) targets[r.tabId] = { tabId: r.tabId, blockId: waiting.blockId };
-        else if (owner) targets[r.tabId] = "resume" in owner ? { tabId: r.tabId, blockId: "", resume: owner.resume } : { tabId: r.tabId, blockId: owner.blockId };
     }
     return { ...split, views, prs, targets };
 }

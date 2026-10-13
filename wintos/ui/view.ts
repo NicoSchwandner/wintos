@@ -8,7 +8,7 @@ import { shelvedName, type Shelved } from "../daemon/shelf/shelf";
 
 export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; projectSnoozes?: Record<string, number>; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]> };
 export type Tone = "apricot" | "brick" | "secondary";
-export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string; sleepable?: boolean };
+export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
 
 export function relTime(ms: number): string {
     const s = Math.max(0, Math.floor(ms / 1000));

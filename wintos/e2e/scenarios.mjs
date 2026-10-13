@@ -392,7 +392,7 @@ await scenario("15 · carrying last workday's sub-item into today brings its par
     await press(t, "y", { mods: ["meta", "shift"] });
 });
 
-await scenario("16 · a shelved session owning a red PR: Needs you names it, ⌥⌘Z sleeps the project, and a click resumes that session", async () => {
+await scenario("16 · a shelved session owning a red PR: the project stays out of Needs you, its Sessions row shows the PR, and ⌥⌘1 resumes it", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const st = async () => await (await fetch("http://127.0.0.1:7731/state")).json();
@@ -402,25 +402,18 @@ await scenario("16 · a shelved session owning a red PR: Needs you names it, ⌥
     const ev = (hook_event_name, extra = {}) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId: "e2e-gone", payload: { session_id: "e2e-own", hook_event_name, ...extra } }) });
     await ev("UserPromptSubmit", { prompt: "e2e own" });
     await ev("PostToolUse", { prs: [red.url] });
-    const script = "cd '/tmp' && claude --resume 'e2e-own'";
-    await fetch(`http://127.0.0.1:7731/projects/${tabId}/shelf`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ script, label: "e2e own" }) });
+    await fetch(`http://127.0.0.1:7731/projects/${tabId}/shelf`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ script: "cd '/tmp' && claude --resume 'e2e-own'", label: "e2e own" }) });
     await ev("SessionEnd");
-    const row = () => evalIn(t, `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-tabid='${tabId}']")].map((e) => e.innerText).join("")`);
-    await until("the row naming the PR and its shelved owner", async () => (await row()).includes(`#${red.number}`) && (await row()).includes("shelved:"));
-    await press(t, "Ω", { code: "KeyZ", keyCode: 90, mods: ["alt", "meta"] }); // what macOS sends for ⌥Z
-    await until("the project asleep", async () => tabId in ((await st()).projectSnoozes ?? {}));
-    await sleep(1500); // ⌥⌘Z toggles from what the sidebar last showed
-    await press(t, "Ω", { code: "KeyZ", keyCode: 90, mods: ["alt", "meta"] });
-    await until("the project awake", async () => !(tabId in ((await st()).projectSnoozes ?? {})));
+    await until("its PR on the shelved row", () => evalIn(t, `[...document.querySelectorAll("[data-wintos=shelf-dock]")].some((e) => e.innerText.includes("#${red.number}"))`));
+    const needs = await evalIn(t, `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-tabid='${tabId}']")].some((e) => e.closest("[data-band-group=needs]"))`);
+    if (needs) throw new Error("a red PR put the project in Needs you");
     // The resumed Claude has no such session on dev and exits, clearing the pane's resume
     // command (the hook does on exit), so the new pane is counted rather than its command read.
     const panes = () => Number(sql(`select json_array_length(data->'blockids') from db_tab where oid='${tabId}'`));
+    const n = await evalIn(t, `[...document.querySelectorAll("[data-wintos=sessions] [data-key^='⌥⌘']")].findIndex((e) => e.closest("[data-wintos=shelf-dock]")?.innerText.includes("#${red.number}")) + 1`);
     const before = panes();
-    await evalIn(t, `document.querySelector("[data-wintos=sidebar-list] [data-tabid='${tabId}']").click()`);
+    await press(t, "¡", { code: `Digit${n}`, keyCode: 48 + n, mods: ["alt", "meta"] });
     await until("a pane resuming it", () => panes() === before + 1);
-    await evalIn(t, `document.querySelector("[data-wintos=sidebar-list] [data-tabid='${tabId}']").click()`);
-    await sleep(800);
-    if (panes() !== before + 1) throw new Error("a second click resumed it again");
 });
 
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up

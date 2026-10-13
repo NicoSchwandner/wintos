@@ -242,7 +242,7 @@ function Band({ kind, count, shown, children }: { kind: keyof typeof BAND_STYLE;
     if (!count) return null;
     const s = BAND_STYLE[kind];
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: kind === "quiet" ? 3 : 7 }}>
+        <div data-band-group={kind} style={{ display: "flex", flexDirection: "column", gap: kind === "quiet" ? 3 : 7 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px" }}>
                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: kind === "quiet" ? "#3c3836" : s.color }} />
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: s.color }}>{s.label}</span>
@@ -322,7 +322,6 @@ function CardRow(p: RowProps) {
             </div>
             {v.next && <div style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty" } as React.CSSProperties}><Rich text={v.next} size="rail" links={false} /></div>}
             {v.meta && <div style={{ fontFamily: T.mono, fontSize: 9.5, color: T.muted }}>{v.meta}</div>}
-            {p.active && v.sleepable && <span style={{ alignSelf: "flex-start" }}><Key k="⌥⌘Z" label="sleep" /></span>}
         </div>
     );
 }

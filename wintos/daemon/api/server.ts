@@ -13,7 +13,7 @@ import { dayRecapper } from "../recap/day";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { releasePrs, resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { titlePrompt, writeTitle } from "../shelf/title";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, leavingFor, unparkSession } from "../sessions/reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, endSessions, leavingFor, unparkSession } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -42,7 +42,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const uiOrigins = new Set(opts.uiOrigins ?? [...DEFAULT_UI_ORIGINS, ...(process.env.WINTOS_UI_ORIGINS?.split(",") ?? [])]);
     // Saved on every change and restored at start, so a restart doesn't forget who waits on you.
     const sessionFile = join(opts.root, ".sessions.json");
-    let sessions = restoreSessions(readJson<Session[]>(sessionFile, []));
+    let sessions = restoreSessions(readJson<Session[]>(sessionFile, []), Date.now());
     const saveSessions = () => writeFileSync(sessionFile, JSON.stringify([...sessions.values()]));
     // When the developer last looked at each project: a reply after that is unread.
     const seenFile = join(opts.root, ".seen.json");
@@ -260,7 +260,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
             if (req.method === "POST" && shelveAll) {
                 const tabId = decodeURIComponent(shelveAll[1]);
                 if (!store.byTab(tabId)) return send(res, 404, "no project for this tab");
-                for (const s of sessions.values()) if (s.tabId === tabId && s.state !== "ended") shelveLive(s);
+                const closing = [...sessions.values()].filter((s) => s.tabId === tabId && s.state !== "ended");
+                for (const s of closing) shelveLive(s);
+                sessions = endSessions(sessions, closing.map((s) => s.id), Date.now());
+                saveSessions();
                 broadcast();
                 return send(res, 200, "");
             }
@@ -271,6 +274,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!sessionId) return send(res, 400, "need the pane's resume command");
                 const label = typeof b.label === "string" && b.label && isSafe(b.label) ? b.label.slice(0, MAX_TITLE) : undefined;
                 if (!shelveSession(decodeURIComponent(toShelf[1]), sessionId, b.script as string, label)) return send(res, 404, "no project for this tab");
+                sessions = endSessions(sessions, [sessionId], Date.now());
+                saveSessions();
                 broadcast();
                 return send(res, 200, "");
             }

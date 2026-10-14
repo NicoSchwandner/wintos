@@ -561,6 +561,25 @@ describe("the shelf", () => {
         expect((await post("/projects/tab-9/shelve-all", {})).status).toBe(404);
     });
 
+    test("a restart keeps a session's PRs: quitting ends nothing, the resumed session finds them again", async () => {
+        const A = "https://github.com/o/r/pull/1";
+        await event({ ...prompt, resume: script(prompt.session_id) });
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A] });
+        await event({ ...prompt, hook_event_name: "SessionEnd", reason: "other" });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event({ ...prompt, hook_event_name: "SessionStart", source: "resume", resume: script(prompt.session_id) });
+        expect((await (await fetch(base + "/state")).json()).sessions).toEqual([expect.objectContaining({ id: prompt.session_id, prs: [A] })]);
+    });
+
+    test("⌘W's shelving ends the session: its pane is going", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
+        expect((await (await fetch(base + "/state")).json()).sessions[0].state).toBe("ended");
+    });
+
     test("a background fork's events (no resume command) shelve nothing", async () => {
         await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
         await event({ ...prompt, session_id: "main", resume: script("main") });

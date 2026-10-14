@@ -1,4 +1,4 @@
-export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string };
+export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string; reason?: string };
 export type HookEvent = { tabId: string; blockId: string; payload: HookPayload };
 // parked: the turn ended waiting on something outside (CI, a review), not on the developer.
 // done: the turn ended with the goal met and nothing asked of the developer.
@@ -82,8 +82,11 @@ const TRANSITIONS: Record<string, SessionState> = {
 export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now: number): Map<string, Session> {
     const { session_id: id, hook_event_name: name, cwd, prompt, prs, pr_verb } = ev.payload;
     const prev = sessions.get(id);
-    // A resumed session starting up is still where it was at quit (a turn waiting on you).
-    const next = prev?.restored && name === "SessionStart" ? undefined : TRANSITIONS[name];
+    // A resumed session starting up is still where it was at quit (a turn waiting on you). Quitting
+    // WintOS ends every Claude with reason "other": that ends nothing, so the restart finds the
+    // session with its PRs, lane and status. A pane WintOS closes ends its session itself (endSessions).
+    const quits = name === "SessionEnd" && ev.payload.reason === "other";
+    const next = (prev?.restored && name === "SessionStart") || quits ? undefined : TRANSITIONS[name];
     const parks = name === "Stop" && prev?.parkPending;
     const finishes = name === "Stop" && prev?.donePending;
     const state = parks ? "parked" : finishes ? "done" : (next ?? prev?.state ?? "idle");
@@ -124,11 +127,23 @@ export function leavingFor(sessions: Map<string, Session>, ev: HookEvent): Sessi
     return [...sessions.values()].filter((s) => s.blockId === ev.blockId && s.id !== id && (s.restored || (switched && !!s.resume && s.state !== "ended")));
 }
 
-// Sessions saved at the last quit. The restart cut off any turn in progress; ended ones are gone.
-export function restoreSessions(saved: Session[]): Map<string, Session> {
+// ⌘W or ⇧⌘W: the panes are going, and the sessions in them with them.
+export function endSessions(sessions: Map<string, Session>, ids: string[], now: number): Map<string, Session> {
+    const out = new Map(sessions);
+    for (const id of ids) {
+        const s = sessions.get(id);
+        if (s) out.set(id, { ...s, state: "ended", since: now, lastAt: now });
+    }
+    return out;
+}
+
+// Sessions saved at the last quit. The restart cut off any turn in progress; ended ones are gone,
+// and, given the time, those not seen for two weeks: a pane closed outside WintOS left them behind.
+const RESTORE_MAX_AGE_MS = 14 * 86_400_000;
+export function restoreSessions(saved: Session[], now?: number): Map<string, Session> {
     const out = new Map<string, Session>();
     for (const s of saved) {
-        if (s.state === "ended") continue;
+        if (s.state === "ended" || (now !== undefined && now - s.lastAt > RESTORE_MAX_AGE_MS)) continue;
         out.set(s.id, { ...s, state: s.state === "working" ? "idle" : s.state, restored: true });
     }
     return out;

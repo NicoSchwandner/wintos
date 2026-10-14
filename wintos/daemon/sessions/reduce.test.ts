@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { finishSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, liveSessionsIn } from "./reduce";
+import { endSessions, finishSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, liveSessionsIn } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -129,6 +129,24 @@ describe("a pane switched to another session", () => {
     });
 });
 
+describe("SessionEnd", () => {
+    test("quitting WintOS (reason other) ends nothing: the session keeps its state and PRs for the restart", () => {
+        const m = run([ev(prompt), ev({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: ["https://github.com/o/r/pull/1"] }), ev(stop), ev({ ...stop, hook_event_name: "SessionEnd", reason: "other" })]);
+        expect(only(m)).toMatchObject({ state: "waiting", prs: ["https://github.com/o/r/pull/1"] });
+    });
+
+    test.each(["prompt_input_exit", "logout", "clear"])("a deliberate end (%s) ends it", (reason) => {
+        expect(only(run([ev(prompt), ev({ ...stop, hook_event_name: "SessionEnd", reason })])).state).toBe("ended");
+    });
+});
+
+describe("endSessions (closed from WintOS: ⌘W, ⇧⌘W)", () => {
+    test("ends the named ones only", () => {
+        const m = endSessions(run([ev(prompt), ev({ ...prompt, session_id: "other" })]), [prompt.session_id], 9);
+        expect([m.get(prompt.session_id)?.state, m.get("other")?.state]).toEqual(["ended", "working"]);
+    });
+});
+
 describe("restoreSessions (after a WintOS restart)", () => {
     const s = (id: string, state: Session["state"], blockId = "blk-1"): Session => ({ id, tabId: "tab-1", blockId, state, since: 1, lastAt: 1 });
 
@@ -139,6 +157,12 @@ describe("restoreSessions (after a WintOS restart)", () => {
             ["b", "idle", true],
             ["c", "parked", true],
         ]);
+    });
+
+    test("given the time, one not seen for two weeks is gone: a pane closed some other way leaves no session for good", () => {
+        const DAY = 86_400_000;
+        const m = restoreSessions([{ ...s("old", "waiting"), lastAt: 0 }, { ...s("new", "waiting", "blk-2"), lastAt: 13 * DAY }], 15 * DAY);
+        expect([...m.keys()]).toEqual(["new"]);
     });
 
     test("the resumed session's first event takes over its block, even under a new id", () => {

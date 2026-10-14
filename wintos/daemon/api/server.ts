@@ -13,7 +13,7 @@ import { dayRecapper } from "../recap/day";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { releasePrs, resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { titlePrompt, writeTitle } from "../shelf/title";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, leavingFor } from "../sessions/reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, leavingFor, unparkSession } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -313,6 +313,13 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const blockId = decodeURIComponent(done[1]);
                 if (!isSafe(blockId)) return send(res, 400, "bad block id");
                 sessions = finishSession(sessions, blockId, Date.now(), sid);
+                saveSessions();
+                broadcast();
+                return send(res, 200, "");
+            }
+            const unpark = /^\/sessions\/([^/]+)\/unpark$/.exec(url.pathname);
+            if (req.method === "POST" && unpark) {
+                sessions = unparkSession(sessions, decodeURIComponent(unpark[1]), Date.now());
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");

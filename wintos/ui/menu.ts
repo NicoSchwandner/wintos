@@ -3,15 +3,16 @@ import { atom } from "jotai";
 import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, getBlockComponentModel, isDev } from "@/store/global";
-import { closeOverlay, editMine, enterProject, focusArea, focusSession, takeReopen, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
+import { closeOverlay, editMine, enterProject, focusArea, focusSession, reopenProject, takeReopen, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
 import { closeWarning, paneCloseWarns } from "./sessions";
 import { toggleInbox } from "./inbox";
 import { mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, tickModeAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, LayoutTreeActionType, NavigateDirection, type LayoutTreeSwapNodeAction } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
-import { isInboxTab, projectSessions, sessionHeader, urgentPr } from "./view";
-import { closeAction, escapeAction, zoneOf } from "./zones";
+import { isInboxTab, projectSessions, sessionHeader, sessionName, urgentPr } from "./view";
+import { rememberUndo, takeUndo } from "./undo";
+import { closeAction, escapeAction, isTextField, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
 import { installFocusRing } from "./focusRing";
 import { currentState, daemonFetch, parkBlock } from "./useWintos";
@@ -239,6 +240,7 @@ export function runAction(action: string): void {
     if (action === "switch-next" || action === "switch-prev") return switchProject(action === "switch-next" ? 1 : -1, false);
     if (action === "project") return void createTab();
     if (action === "close-project") return closeProject();
+    if (action === "undo") return undo();
     if (action === "edit-mine") return editMine(true);
     // Wave's own new-terminal def: the focused terminal's directory and connection.
     if (action === "terminal") return void createBlock(getDefaultNewBlockDef());
@@ -266,7 +268,10 @@ export function runAction(action: string): void {
         const tabId = globalStore.get(atoms.staticTabId);
         const waiting = latestSessions().filter((s) => s.tabId === tabId && s.state === "waiting");
         const focused = focusedSession();
-        for (const s of focused?.state === "waiting" ? [focused] : waiting) void parkBlock(s.blockId);
+        for (const s of focused?.state === "waiting" ? [focused] : waiting) {
+            void parkBlock(s.blockId);
+            rememberUndo({ kind: "park", sessionId: s.id, label: `Parked ${sessionName(s)}` });
+        }
         return;
     }
     // ⌘H / ⌘L: the left and the right area, the same in every tab (the sidebar never takes
@@ -333,10 +338,15 @@ function toSession(n: number): void {
 
 // Closing a Claude session's pane keeps it on the project's shelf, to resume from ⇧⌘P. A session
 // you ended with /exit has no resume command (the hook clears it) and just closes.
+// Any pane closed by ⌘W is ⌘Z's to bring back: a session resumes, a page reopens, a terminal
+// starts again in its directory.
 export function shelvePane(blockId: string | undefined): void {
-    const script = blockId && shelvable(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId)))?.meta);
+    const meta = blockId && globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId)))?.meta;
+    const session = blockId && liveSessionIn(currentState()?.sessions ?? [], blockId);
+    if (meta) rememberUndo({ kind: "pane", tabId: globalStore.get(atoms.staticTabId), meta, label: `Closed ${session ? sessionName(session) : meta.view === "web" ? "the page" : "the terminal"}` });
+    const script = shelvable(meta || undefined);
     if (!script) return;
-    const label = liveSessionIn(currentState()?.sessions ?? [], blockId)?.label;
+    const label = session ? session.label : undefined;
     void daemonFetch(`/projects/${encodeURIComponent(globalStore.get(atoms.staticTabId))}/shelf`, { method: "POST", body: { script, label } });
 }
 export const shelvable = (meta: MetaType | undefined): string | undefined => {
@@ -395,6 +405,22 @@ function openPage(url: string): void {
         .finally(() => opening.delete(url));
 }
 
+// ⌘Z (the app menu's Undo): a text field keeps its own undo; anywhere else, a terminal included,
+// the last thing WintOS put away comes back.
+function undo(): void {
+    const active = document.activeElement;
+    if (isTextField(active) && !active!.classList.contains("xterm-helper-textarea")) return getApi().nativeUndo();
+    const u = takeUndo();
+    flog(u ? `undo ${u.kind}: ${u.label}` : "undo: nothing to undo");
+    if (!u) return;
+    if (u.kind === "pr-snooze") return void daemonFetch("/prs/snooze", { method: "POST", body: { url: u.url, until: null } });
+    if (u.kind === "park") return void daemonFetch(`/sessions/${encodeURIComponent(u.sessionId)}/unpark`, { method: "POST", body: {} });
+    if (u.kind === "project") return reopenProject(u.projectId, u.metas);
+    // A pane whose project was closed since comes back with the project.
+    if (globalStore.get(atoms.workspace)?.tabids?.includes(u.tabId)) return focusSession({ tabId: u.tabId, blockId: "", restore: u.meta });
+    reopenProject(u.tabId, [u.meta]);
+}
+
 // ⇧⌘W: asks first when Claude sessions would stop; ⇧⌘W again confirms.
 function closeProject(): void {
     const tabId = globalStore.get(atoms.staticTabId);
@@ -408,6 +434,9 @@ function closeProject(): void {
 export function closeProjectTab(tabId: string, confirm: boolean): void {
     const top = tabId === globalStore.get(atoms.staticTabId) ? topProject(tabId) : undefined;
     if (top) enterProject(top);
+    const tab = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)));
+    const metas = (tab?.blockids ?? []).map((id) => globalStore.get(getWaveObjectAtom<Block>(makeORef("block", id)))?.meta).filter((m): m is MetaType => !!m);
+    rememberUndo({ kind: "project", projectId: tabId, metas, label: `Closed ${currentState()?.projects.find((p) => p.id === tabId)?.title ?? tab?.name ?? "the project"}` });
     // Its sessions go on the shelf first: the resume commands live on the panes the close takes.
     const close = () => void getApi().closeTab(globalStore.get(atoms.workspace).oid, tabId, confirm);
     daemonFetch(`/projects/${encodeURIComponent(tabId)}/shelve-all`, { method: "POST", body: {} }).then(close, close);

@@ -144,6 +144,14 @@ export function parkSession(sessions: Map<string, Session>, blockId: string, rea
     return new Map(sessions).set(live.id, { ...live, parkedOn: reason, parkPending: true, donePending: undefined, lastAt: now });
 }
 
+// ⌘Z after a park: the turn is yours again.
+export function unparkSession(sessions: Map<string, Session>, sessionId: string, now: number): Map<string, Session> {
+    const s = sessions.get(sessionId);
+    if (!s || (s.state !== "parked" && !s.parkPending)) return sessions;
+    const { parkedOn: _on, parkPending: _pending, ...rest } = s;
+    return new Map(sessions).set(s.id, s.state === "parked" ? { ...rest, state: "waiting", since: now, lastAt: now } : rest);
+}
+
 export function setStatus(sessions: Map<string, Session>, blockId: string, text: string, now: number, sessionId?: string): Map<string, Session> {
     const live = liveIn(sessions, blockId, sessionId);
     if (!live) return sessions;

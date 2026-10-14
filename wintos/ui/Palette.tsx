@@ -1,7 +1,7 @@
 import { globalStore } from "@/app/store/jotaiStore";
 import { atoms } from "@/store/global";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { closeOverlay, enterProject, focusSession, reopenProject, toggleOverlay } from "./focus";
+import { closeOverlay, enterProject, focusSession, reopenProject, resumePane, toggleOverlay } from "./focus";
 import { liveSessions } from "./sessions";
 import { runAction, runKey } from "./menu";
 import { groupHits, searchPalette, type Field, type Hit, type Kind, type PaletteItem } from "./palette-search";
@@ -202,7 +202,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
         // Shelved: closed with sessions on its shelf. It reopens on the newest; the rest stay shelved.
         const shelf = state.shelf?.[p.id] ?? [];
         const status = shelf.length ? `shelved · ${shelf.length} session${shelf.length === 1 ? "" : "s"} · ⏎ reopens it on the newest` : "closed · ⏎ reopens it";
-        out.push({ id: `c:${p.id}`, kind: "project", title: p.title, subtitle: [status, p.next].filter(Boolean).join(" · "), fields: fields(p.id), recency: (p.mtime ?? 0) / 2, run: () => reopenProject(p.id!, shelf[0]?.script) });
+        out.push({ id: `c:${p.id}`, kind: "project", title: p.title, subtitle: [status, p.next].filter(Boolean).join(" · "), fields: fields(p.id), recency: (p.mtime ?? 0) / 2, run: () => reopenProject(p.id!, shelf[0] ? [resumePane(shelf[0].script)] : []) });
     }
     for (const pr of gh?.prs ?? []) {
         const tab = prOf.get(pr.url);
@@ -223,7 +223,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
                 id: `sh:${s.sessionId}`, kind: "session", title: shelvedName(s),
                 subtitle: [`shelved ${relTime(now - s.at)} ago`, title(id), s.name && s.gist].filter(Boolean).join(" · "),
                 fields: [{ text: [s.gist, s.label].filter(Boolean).join(" "), weight: 25 }], recency: s.at,
-                run: () => (closed.has(id) ? reopenProject(id, s.script) : focusSession({ tabId: id, blockId: "", resume: s.script })),
+                run: () => (closed.has(id) ? reopenProject(id, [resumePane(s.script)]) : focusSession({ tabId: id, blockId: "", resume: s.script })),
             });
     const here = title(activeTab);
     // The key's own path (runKey), so an action does from here exactly what its key does.

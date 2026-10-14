@@ -1,3 +1,4 @@
+import { rememberUndo } from "./undo";
 import { useFocusOnMount } from "./useFocusOnMount";
 import { useZoneKeys } from "./zones";
 import { wantPane } from "./focusOwner";
@@ -63,8 +64,10 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     }, [urls.join(" ")]);
     const step = (d: number) => setSelected(urls[Math.max(0, Math.min(cursor + d, urls.length - 1))]);
     // z: looked at, handed on. Back at the next working day, or as soon as the PR moves.
-    const toggleSnooze = (r: QueueRow) =>
-        daemonFetch("/prs/snooze", { method: "POST", body: snoozedUrls.has(r.pr.url) ? { url: r.pr.url, until: null } : { url: r.pr.url, until: nextWorkingDayStart(Date.now()), movedAt: lastMovement(r.pr) } }).catch(() => {});
+    const toggleSnooze = (r: QueueRow) => (
+        snoozedUrls.has(r.pr.url) || rememberUndo({ kind: "pr-snooze", url: r.pr.url, label: `Snoozed #${r.pr.number}` }),
+        daemonFetch("/prs/snooze", { method: "POST", body: snoozedUrls.has(r.pr.url) ? { url: r.pr.url, until: null } : { url: r.pr.url, until: nextWorkingDayStart(Date.now()), movedAt: lastMovement(r.pr) } }).catch(() => {})
+    );
 
     const openPr = (r: QueueRow) => runAction(`open-page:${r.pr.url}`);
     const tabIds = useAtomValue(atoms.workspace)?.tabids ?? [];

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, liveSessionsIn } from "./reduce";
+import { finishSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, liveSessionsIn } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -56,6 +56,22 @@ describe("reduceSession", () => {
         const snapshot = JSON.stringify([...before]);
         reduceSession(before, ev(stop), 5000);
         expect(JSON.stringify([...before])).toBe(snapshot);
+    });
+});
+
+describe("unparkSession (⌘Z after a park)", () => {
+    test("a parked turn waits on you again, its reason gone", () => {
+        const m = unparkSession(parkSession(run([ev(stop)]), "blk-1", "CI", 5000), stop.session_id, 6000);
+        expect(only(m)).toMatchObject({ state: "waiting", since: 6000 });
+        expect(only(m).parkedOn).toBeUndefined();
+    });
+
+    test("a park still pending (the turn runs on) is dropped, and anything else is left alone", () => {
+        const working = run([ev(prompt)]);
+        const back = only(unparkSession(parkSession(working, "blk-1", "CI", 5000), prompt.session_id, 6000));
+        expect([back.state, back.parkPending, back.parkedOn]).toEqual(["working", undefined, undefined]);
+        expect(unparkSession(working, prompt.session_id, 6000)).toBe(working);
+        expect(unparkSession(working, "nobody", 6000)).toBe(working);
     });
 });
 

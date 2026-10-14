@@ -20,7 +20,7 @@ export function useZoneKeys(ref: RefObject<HTMLElement>, table: KeyTable): void 
     });
 }
 
-const isTextField = (el: Element | null) => el?.tagName === "INPUT" || el?.tagName === "TEXTAREA" || (el as HTMLElement | null)?.isContentEditable === true;
+export const isTextField = (el: Element | null) => el?.tagName === "INPUT" || el?.tagName === "TEXTAREA" || (el as HTMLElement | null)?.isContentEditable === true;
 
 // "handled": the zone ran it. "typing": a text field keeps it (the browser types or edits), and
 // neither Wave's keys nor the pane behind the field see it. false: it goes on to Wave.

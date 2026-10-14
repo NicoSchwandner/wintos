@@ -10,6 +10,8 @@ import { Keymap } from "./Keymap";
 import { useSeenReporter } from "./useSeenReporter";
 import { useNewProjectPaste } from "./newproject";
 import { useWintos } from "./useWintos";
+import { rememberUndo } from "./undo";
+import { UndoToast } from "./UndoToast";
 import { NotesFull } from "./notes/NotesFull";
 import { NotesRail } from "./notes/NotesRail";
 import { isPage, mainViewAtom, overlayAtom } from "./notes/state";
@@ -68,6 +70,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
             {overlay === "palette" && <Palette names={names} />}
             {overlay === "keymap" && <Keymap />}
             {overlay === "confirm-close" && <ConfirmClose />}
+            <UndoToast />
         </div>
     );
 });
@@ -88,11 +91,17 @@ function useMagnifyFollowsFocus(): void {
 // Closing the last pane leaves the project open; say what to do next. Leaving it empty shelves
 // it: the tab closes, its folder and shelf stay, and ⇧⌘P opens it again on its newest session.
 function EmptyProject({ tabId }: { tabId: string }) {
-    const shelved = useWintos().state?.shelf?.[tabId]?.length ?? 0;
+    const { state } = useWintos();
+    const shelved = state?.shelf?.[tabId]?.length ?? 0;
+    const title = state?.projects.find((p) => p.id === tabId)?.title;
     // Left: another tab is the active one. Not page visibility, which a covered window shares.
     const ws = useAtomValue(atoms.workspace);
     const left = !!ws?.activetabid && ws.activetabid !== tabId;
-    useEffect(() => void (left && getApi().closeTab(ws.oid, tabId, false)), [left]);
+    useEffect(() => {
+        if (!left) return;
+        rememberUndo({ kind: "project", projectId: tabId, metas: [], label: `Shelved ${title ?? "the project"}` });
+        void getApi().closeTab(ws.oid, tabId, false);
+    }, [left]);
     const keys: [string, string][] = [...(shelved ? [["⌥⌘1", shelved > 1 ? `the newest of ${shelved} shelved sessions back (in the notes)` : "the shelved session back (in the notes)"] as [string, string]] : []), ["⇧⌘T", "new Claude session"], ["⌘T", "new terminal"], ["⌘J ⌘K", "another project"], ["⇧⌘W", "close this project"]];
     return (
         <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, fontFamily: T.ui, color: T.muted }}>

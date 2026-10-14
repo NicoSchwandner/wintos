@@ -479,6 +479,39 @@ await scenario("19 · an empty project closes when you leave it (⇧⌘G here), 
     if (!(await (await fetch("http://127.0.0.1:7731/state")).json()).projects.some((p) => p.id === tabId)) throw new Error("its project is gone");
 });
 
+// The app menu's Undo item hands ⌘Z to the window; CDP keys skip the menu, so the action is run.
+await scenario("20 · ⌘Z brings back the pane ⌘W closed, and the project ⇧⌘W closed with its panes; a toast says so", async () => {
+    let t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const st = async () => await (await fetch("http://127.0.0.1:7731/state")).json();
+    const title = (await st()).projects.find((p) => p.id === tabId)?.title;
+    const panes = (id) => Number(sql(`select coalesce(json_array_length(data->'blockids'), 0) from db_tab where oid='${id}'`));
+    for (let n = panes(tabId); n < 2; n++) {
+        await press(t, "d", { mods: ["meta"] });
+        await until("a split", () => panes(tabId) === n + 1);
+    }
+    const before = panes(tabId);
+    await until("a focused pane", () => evalIn(t, `!!document.querySelector('button[data-key="⌘W"]')`));
+    await evalIn(t, `document.querySelector('button[data-key="⌘W"]').click()`);
+    await until("the pane closed", () => panes(tabId) === before - 1);
+    await until("the toast", () => evalIn(t, `document.querySelector("[data-wintos=undo-toast]")?.innerText.includes("Closed")`));
+    await evalIn(t, `window.wintosAction("undo")`);
+    await until("the pane back", () => panes(tabId) === before);
+    await sleep(500);
+    await press(t, "w", { mods: ["meta", "shift"] });
+    if (await evalIn(t, `!!document.querySelector("[data-wintos=confirm-close]")`)) await press(t, "w", { mods: ["meta", "shift"] });
+    await until("the tab closed", () => sql(`select count(*) from db_tab where oid='${tabId}'`) === "0");
+    const v = await visible();
+    await until("the toast in the tab you land in", () => evalIn(v, `document.querySelector("[data-wintos=undo-toast]")?.innerText.includes(${JSON.stringify(`Closed ${title}`)})`));
+    await evalIn(v, `window.wintosAction("undo")`);
+    let seen = "";
+    await until("the project back with its panes", async () => {
+        const id = (await st()).projects.find((p) => p.title === title)?.id;
+        seen = `${id?.slice(0, 8)} with ${id ? panes(id) : "-"} panes, want ${before}`;
+        return id && id !== tabId && panes(id) === before;
+    }, 20000).catch((e) => { throw new Error(`${e.message}: ${seen}`); });
+});
+
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
 // must not cost the run its results.
 await scenario("clean-up · the panes this run opened are closed", async () => {

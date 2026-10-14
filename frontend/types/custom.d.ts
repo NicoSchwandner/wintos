@@ -113,6 +113,7 @@ declare global {
         onWintosOpenPane: (callback: (url: string) => void) => void; // wintos-open-pane
         onWintosWindowFocus: (callback: (focused: boolean) => void) => void; // wintos-window-focus
         setWintosWalking: (on: boolean) => void; // wintos-walking
+        nativeUndo: () => void; // wintos-native-undo
         onWintosWalkEsc: (callback: () => void) => void; // wintos-walk-esc
         getWintosFullScreen: () => boolean; // wintos-is-fullscreen
         updateWindowControlsOverlay: (rect: Dimensions) => void; // update-window-controls-overlay

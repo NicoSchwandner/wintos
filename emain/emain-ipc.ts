@@ -304,6 +304,7 @@ export function initIpcHandlers() {
         electron.globalShortcut.register("Command+Escape", () => (releaseWalkEsc(), sender.isDestroyed() || sender.send("wintos-walk-esc")));
         walkEscTimer = setTimeout(releaseWalkEsc, 15_000);
     });
+    electron.ipcMain.on("wintos-native-undo", (event: Electron.IpcMainEvent) => event.sender.undo());
     electron.ipcMain.on("wintos-page-editing", (event: Electron.IpcMainEvent, editing: boolean) => {
         if (editing) editingPages.add(event.sender.id);
         else editingPages.delete(event.sender.id);

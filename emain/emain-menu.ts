@@ -91,9 +91,16 @@ function makeEditMenu(fullConfig?: FullConfigType): Electron.MenuItemConstructor
         }
     }
     return [
+        // WintOS: ⌘Z undoes what WintOS last put away (a pane, a project); the window decides, and
+        // hands a text field's undo back (wintos-native-undo). A web page keeps its own.
         {
-            role: "undo",
+            label: "Undo",
             accelerator: unamePlatform === "darwin" ? "Command+Z" : "",
+            click: () => {
+                const wc = electron.webContents.getFocusedWebContents();
+                if (wc?.getType() === "webview") wc.undo();
+                else wc?.send("wintos-menu", "undo");
+            },
         },
         {
             role: "redo",

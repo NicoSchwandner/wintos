@@ -57,22 +57,33 @@ export function enterProject(tabId: string, find?: string): void {
 }
 
 // A closed project comes back in a new tab: the tab is created here, and its renderer, the
-// only one starting up just then, takes the project's folder over (takeReopen) and resumes the
-// shelved session asked for.
+// only one starting up just then, takes the project's folder over (takeReopen) and opens the
+// panes asked for: the shelved session to resume, or all it had (⌘Z after closing it).
 const REOPEN = "wintos:reopen";
-export function reopenProject(projectId: string, resume?: string): void {
-    localStorage.setItem(REOPEN, JSON.stringify({ projectId, resume, at: Date.now() }));
+export function reopenProject(projectId: string, panes: MetaType[] = []): void {
+    localStorage.setItem(REOPEN, JSON.stringify({ projectId, panes, at: Date.now() }));
     getApi().createTab();
 }
+export const resumePane = (script: string): MetaType => ({ view: "term", controller: "shell", "cmd:initscript": script });
 export function takeReopen(): void {
     const raw = localStorage.getItem(REOPEN);
     if (!raw) return;
     localStorage.removeItem(REOPEN);
-    const r = JSON.parse(raw) as { projectId: string; resume?: string; at: number };
+    const r = JSON.parse(raw) as { projectId: string; panes: MetaType[]; at: number };
     if (Date.now() - r.at >= HANDOFF_TTL_MS) return;
     const tabId = globalStore.get(atoms.staticTabId);
     flog(`reopen project ${r.projectId.slice(0, 6)} in this tab`);
-    void daemonFetch(`/projects/${encodeURIComponent(r.projectId)}/reopen`, { method: "POST", body: { tabId } }).then(() => r.resume && landOn({ tabId, blockId: "", resume: r.resume }));
+    void daemonFetch(`/projects/${encodeURIComponent(r.projectId)}/reopen`, { method: "POST", body: { tabId } }).then(async () => {
+        if (!r.panes.length) return;
+        // The new tab's own starter terminal goes once the panes asked for are there.
+        const starter = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.blockids ?? [];
+        for (const meta of r.panes) await createBlock({ meta });
+        const lm = getLayoutModelForStaticTab();
+        for (const id of starter) {
+            const node = lm?.getNodeByBlockId(id);
+            if (node) await lm.closeNode(node.id);
+        }
+    });
 }
 
 export function focusSession(t: Target): void {
@@ -83,21 +94,22 @@ export function focusSession(t: Target): void {
 
 // Arriving in a project: on the session asked for, else back in an unsaved mine.md edit (its
 // view left as it was, so the draft stays), else on the terminals.
-function landOn({ blockId, find, resume }: Target): void {
+function landOn({ blockId, find, resume, restore }: Target): void {
     if (find) {
         rememberReturn();
         globalStore.set(findInNotesAtom, find);
         return globalStore.set(mainViewAtom, "notes");
     }
-    if (!blockId && mineEditor() && !resume) return focusMineEditor();
+    if (!blockId && mineEditor() && !resume && !restore) return focusMineEditor();
     globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
+    if (restore) return void createBlock({ meta: restore });
     // Resumed once: a second click while it starts lands on the pane already resuming it.
     if (resume) {
         const lm = getLayoutModelForStaticTab();
         const tab = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))));
         const there = tab?.blockids?.find((id) => globalStore.get(getWaveObjectAtom<Block>(makeORef("block", id)))?.meta?.["cmd:initscript"] === resume);
         if (there && lm) return focusBlock(there);
-        return void createBlock({ meta: { view: "term", controller: "shell", "cmd:initscript": resume } });
+        return void createBlock({ meta: resumePane(resume) });
     }
     wantPane(blockId ? "landing on a session" : "landing on the terminals");
     if (!blockId) return focusArea("terminal");

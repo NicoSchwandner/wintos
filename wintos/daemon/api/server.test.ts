@@ -25,6 +25,13 @@ const post = (path: string, body: unknown, headers: Record<string, string> = JSO
 const event = (payload: object, tabId = "tab-1") => post("/events", { tabId, blockId: "blk-1", payload });
 
 describe("wintosd API", () => {
+    test("⌘Z after a park: /sessions/:id/unpark makes the turn yours again", async () => {
+        await event({ ...prompt, hook_event_name: "Stop" });
+        await post("/blocks/blk-1/wait", { reason: "CI" });
+        expect((await post(`/sessions/${prompt.session_id}/unpark`, {})).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).sessions[0]).toMatchObject({ state: "waiting" });
+    });
+
     test("`wintos lane` then `wintos step` show in /state; an unknown step is a 400", async () => {
         await event(prompt);
         expect((await post("/blocks/blk-1/lane", { name: "fast", steps: ["Test", "Fix", "?Your OK"] })).status).toBe(200);

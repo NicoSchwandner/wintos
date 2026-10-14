@@ -95,6 +95,24 @@ describe("parkSession (`wintos wait`)", () => {
     });
 });
 
+describe("a pane switched to another session", () => {
+    const p = (id: string, name: string, resume?: string) => ev({ hook_event_name: name, session_id: id, ...(resume ? { resume } : {}) });
+
+    test.each(["UserPromptSubmit", "SessionStart"])("the pane's session (%s with a resume command) puts the one it ran before out", (name) => {
+        const m = run([p("fork", "UserPromptSubmit", "r-fork"), p("fork", "Stop"), p("main", name, "r-main")]);
+        expect([...m.keys()]).toEqual(["main"]);
+    });
+
+    test("a background session (no resume command) stays beside it, and its events put nothing out", () => {
+        expect([...run([p("bg", "UserPromptSubmit"), p("main", "UserPromptSubmit", "r-main"), p("bg", "UserPromptSubmit")]).keys()].sort()).toEqual(["bg", "main"]);
+    });
+
+    test("other events of the pane's session put nothing out, nor does an ended one count", () => {
+        expect([...run([p("a", "UserPromptSubmit", "r-a"), p("b", "UserPromptSubmit"), p("b", "Stop", "r-b")]).keys()].sort()).toEqual(["a", "b"]);
+        expect(run([p("a", "UserPromptSubmit", "r-a"), p("a", "SessionEnd"), p("b", "UserPromptSubmit", "r-b")]).get("a")?.state).toBe("ended");
+    });
+});
+
 describe("restoreSessions (after a WintOS restart)", () => {
     const s = (id: string, state: Session["state"], blockId = "blk-1"): Session => ({ id, tabId: "tab-1", blockId, state, since: 1, lastAt: 1 });
 

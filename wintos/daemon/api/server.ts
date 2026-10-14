@@ -13,7 +13,7 @@ import { dayRecapper } from "../recap/day";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { releasePrs, resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { titlePrompt, writeTitle } from "../shelf/title";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs } from "../sessions/reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, leavingFor } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -65,6 +65,19 @@ export async function startServer(opts: { root: string; port: number; host?: str
             saveShelf(withTitle(shelf, item.sessionId, title));
             broadcast();
         });
+    };
+    // false: no project on that tab.
+    const shelveSession = (tabId: string, sessionId: string, script: string, label?: string) => {
+        const p = store.byTab(tabId);
+        if (!p) return false;
+        // A session resumed and closed again before a prompt has no label: its recap names it.
+        const gist = recapper.gistOf(sessionId);
+        const name = sessions.get(sessionId)?.status?.text;
+        const owned = sessions.get(sessionId)?.prs;
+        const item: Shelved = { sessionId, script, label: label ?? gist ?? "session", ...(name ? { name } : {}), gist, ...(owned?.length ? { prs: owned } : {}), at: Date.now() };
+        saveShelf(shelve(shelf, basename(p.dir), item, 14));
+        titleShelved(item, p.title);
+        return true;
     };
     const sockets = new Set<WebSocket>();
     let port = opts.port;
@@ -174,6 +187,13 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const p = ev?.payload;
                 if (![ev?.tabId, ev?.blockId, p?.session_id, p?.hook_event_name].every(isSafe))
                     return send(res, 400, "need string tabId, blockId, payload.session_id, payload.hook_event_name");
+                const left = leavingFor(sessions, ev);
+                // Shelved before the reduce drops them, while their status and PRs are still on hand.
+                // One saved before sessions carried their resume command resumes from its directory.
+                for (const l of left) {
+                    const script = l.resume ?? (l.cwd && `cd '${l.cwd.replaceAll("'", "'\\''")}' && claude --resume '${l.id}'`);
+                    if (script && resumedSession(script) === l.id) shelveSession(l.tabId, l.id, script, l.label);
+                }
                 sessions = reduceSession(sessions, ev, Date.now());
                 // Running again: started or prompted. Closing its pane ends it (SessionEnd) on the way onto the shelf.
                 // Off the shelf, it takes back the PRs it had there.
@@ -243,16 +263,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const b = (await body(req)) as { script?: unknown; label?: unknown };
                 const sessionId = typeof b?.script === "string" ? resumedSession(b.script) : undefined;
                 if (!sessionId) return send(res, 400, "need the pane's resume command");
-                const p = store.byTab(decodeURIComponent(toShelf[1]));
-                if (!p) return send(res, 404, "no project for this tab");
-                // A session resumed and closed again before a prompt has no label: its recap names it.
-                const gist = recapper.gistOf(sessionId);
-                const label = typeof b.label === "string" && b.label && isSafe(b.label) ? b.label.slice(0, MAX_TITLE) : (gist ?? "session");
-                const name = sessions.get(sessionId)?.status?.text;
-                const owned = sessions.get(sessionId)?.prs;
-                const item: Shelved = { sessionId, script: b.script as string, label, ...(name ? { name } : {}), gist, ...(owned?.length ? { prs: owned } : {}), at: Date.now() };
-                saveShelf(shelve(shelf, basename(p.dir), item, 14));
-                titleShelved(item, p.title);
+                const label = typeof b.label === "string" && b.label && isSafe(b.label) ? b.label.slice(0, MAX_TITLE) : undefined;
+                if (!shelveSession(decodeURIComponent(toShelf[1]), sessionId, b.script as string, label)) return send(res, 404, "no project for this tab");
                 broadcast();
                 return send(res, 200, "");
             }

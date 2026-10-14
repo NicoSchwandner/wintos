@@ -65,6 +65,22 @@ describe("wintos-hook.sh", () => {
     });
 });
 
+describe("wintos-hook.sh tells the daemon which session the pane runs", () => {
+    const env = (port: number, extra: Record<string, string> = {}) => ({ CLAUDE_CODE_ENTRYPOINT: "cli", WAVETERM_TABID: "t", WAVETERM_BLOCKID: "blk", WAVETERM_WSHBINDIR: tmp(), WINTOS_PORT: String(port), ...extra });
+
+    test("its prompt carries the resume command", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync(env(d.port), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/x" }));
+        expect(d.seen[0].body.payload.resume).toBe("cd '/x' && claude --resume 's-1'");
+    });
+
+    test("a background fork's carries none", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync(env(d.port, { CLAUDE_CODE_SESSION_KIND: "bg" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "fork", cwd: "/x" }));
+        expect(d.seen[0].body.payload).not.toHaveProperty("resume");
+    });
+});
+
 describe("wintos-hook.sh keeps the block's resume command", () => {
     // A fake wsh that records its arguments, one call per line.
     const fakeWsh = () => {

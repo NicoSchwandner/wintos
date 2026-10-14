@@ -1,4 +1,4 @@
-export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string };
+export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string };
 export type HookEvent = { tabId: string; blockId: string; payload: HookPayload };
 // parked: the turn ended waiting on something outside (CI, a review), not on the developer.
 // done: the turn ended with the goal met and nothing asked of the developer.
@@ -21,6 +21,7 @@ export type Session = {
     lane?: Lane; // the process it follows and where it is in it (`wintos lane`, `wintos step`)
     turnEndedAt?: number; // the last Stop: a reply the developer may not have read yet
     promptAt?: number; // the last prompt: in a pane running two sessions, the one you talk to
+    resume?: string; // the pane's resume command for it: only the session the pane runs sends one
 };
 
 // A step starting with ? is the developer's call: the session stops there.
@@ -102,15 +103,25 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
         turnEndedAt: name === "Stop" ? now : prev?.turnEndedAt,
         promptAt: name === "UserPromptSubmit" ? now : prev?.promptAt,
     };
+    const resume = typeof ev.payload.resume === "string" ? ev.payload.resume : prev?.resume;
+    if (resume) session.resume = resume;
     if (prev?.prs) session.prs = prev.prs;
     if (prev?.status) session.status = prev.status;
     const lane = name === "PostToolUse" ? withPrStep(prev?.lane, pr_verb) : prev?.lane;
     if (lane) session.lane = lane;
     const out = new Map(sessions);
-    // The block's saved entry is replaced by whatever session now reports from it.
-    for (const s of sessions.values()) if (s.restored && s.blockId === ev.blockId && s.id !== id) out.delete(s.id);
+    for (const s of leavingFor(sessions, ev)) out.delete(s.id);
     out.set(id, session);
     return name === "PostToolUse" ? claim(out, id, prLinks(prs)) : out;
+}
+
+// The sessions an event puts out of its block. A saved one goes when anything reports from the
+// block. A pane runs one interactive Claude, and switching it to another session (/resume, a
+// fork) ends nothing, so the one it ran goes when the pane's session starts or is prompted.
+export function leavingFor(sessions: Map<string, Session>, ev: HookEvent): Session[] {
+    const { session_id: id, hook_event_name: name, resume } = ev.payload;
+    const switched = typeof resume === "string" && (name === "SessionStart" || name === "UserPromptSubmit");
+    return [...sessions.values()].filter((s) => s.blockId === ev.blockId && s.id !== id && (s.restored || (switched && !!s.resume && s.state !== "ended")));
 }
 
 // Sessions saved at the last quit. The restart cut off any turn in progress; ended ones are gone.

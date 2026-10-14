@@ -14,6 +14,7 @@ payload="$(cat)"
 # launch resume a throwaway session. CLAUDE_CODE_CHILD_SESSION can't tell them apart: Claude
 # sets it for everything it spawns, the interactive session's own hooks included. Nor does a fork
 # Claude Code runs in the background (CLAUDE_CODE_SESSION_KIND=bg): it inherits the pane's id too.
+resume=""
 if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" != "sdk-cli" ] && [ "${CLAUDE_CODE_SESSION_KIND:-}" != "bg" ]; then
     wsh="${WAVETERM_WSHBINDIR:+$WAVETERM_WSHBINDIR/}wsh"
     case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.reason // .source // "")' 2>/dev/null)" in
@@ -45,6 +46,7 @@ if [ "$(printf '%s' "$payload" | jq -r '.hook_event_name' 2>/dev/null)" = "PostT
     [ -n "$payload" ] || exit 0
 fi
 
-printf '%s' "$payload" | jq -c --arg t "$WAVETERM_TABID" --arg b "${WAVETERM_BLOCKID:-}" '{tabId: $t, blockId: $b, payload: .}' 2>/dev/null |
+# The resume command goes along: it tells the daemon this is the session the pane runs now.
+printf '%s' "$payload" | jq -c --arg t "$WAVETERM_TABID" --arg b "${WAVETERM_BLOCKID:-}" --arg r "$resume" '{tabId: $t, blockId: $b, payload: (. + if $r != "" then {resume: $r} else {} end)}' 2>/dev/null |
     curl -sf -m 0.2 -H "Content-Type: application/json" --data-binary @- "http://127.0.0.1:${WINTOS_PORT:-7730}/events" 2>/dev/null
 exit 0

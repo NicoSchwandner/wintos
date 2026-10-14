@@ -542,6 +542,37 @@ describe("the shelf", () => {
         expect((await shelfOf())["tab-1"]).toHaveLength(1);
     });
 
+    test("the pane switched to another session (a fork, /resume): the one it ran goes on the shelf with its status and PRs", async () => {
+        const A = "https://github.com/o/r/pull/1";
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, session_id: "fork", resume: script("fork") });
+        await post(`/blocks/blk-1/status?session=fork`, { text: "explaining the drop" });
+        await event({ hook_event_name: "PostToolUse", session_id: "fork", prs: [A] });
+        await event({ ...prompt, hook_event_name: "Stop", session_id: "fork" });
+        await event({ ...prompt, session_id: "main", resume: script("main") });
+        const st = await (await fetch(base + "/state")).json();
+        expect(st.sessions.map((x: { id: string }) => x.id)).toEqual(["main"]);
+        expect(st.shelf["tab-1"]).toEqual([expect.objectContaining({ sessionId: "fork", script: script("fork"), name: "explaining the drop", prs: [A] })]);
+    });
+
+    test("a session saved at the last quit that another one replaces in its pane goes on the shelf, resumed from its directory", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, session_id: "old", cwd: "/w/it's" });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event({ ...prompt, session_id: "new", resume: script("new") });
+        expect((await shelfOf())["tab-1"]).toEqual([expect.objectContaining({ sessionId: "old", script: "cd '/w/it'\\''s' && claude --resume 'old'" })]);
+    });
+
+    test("a background fork's events (no resume command) shelve nothing", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, session_id: "main", resume: script("main") });
+        await event({ ...prompt, session_id: "bg" });
+        expect((await (await fetch(base + "/state")).json()).sessions.map((x: { id: string }) => x.id).sort()).toEqual(["bg", "main"]);
+        expect(await shelfOf()).toEqual({});
+    });
+
     test("only the hook's resume command, and only for a project", async () => {
         await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
         expect((await post("/projects/tab-1/shelf", { script: "rm -rf ~", label: "x" })).status).toBe(400);

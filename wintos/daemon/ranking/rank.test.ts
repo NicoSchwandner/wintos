@@ -96,11 +96,6 @@ describe("unread", () => {
     test("a parked turn is no reply to read: you parked it, it waits on something else", () =>
         expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, { t: NOW - 100 }).needs).toEqual([]));
 
-    test("latestNeed is when the newest need began, so a snooze can tell a new one from an old one", () => {
-        const r = rank(["t"], [s("t", "waiting", NOW - 500), { ...s("t", "waiting", NOW - 10), id: "b", blockId: "b2" }], NOW);
-        expect([r.needs[0].waitingSince, r.needs[0].latestNeed]).toEqual([NOW - 500, NOW - 10]);
-    });
-
     test("never seen at all counts as unread; an ended session's last reply does not", () => {
         expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW).needs[0]?.unread).toBe(true);
         expect(rank(["t"], [ended("t", "ended", NOW - 50)], NOW).needs).toEqual([]);

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
 import type { WintosState } from "./view";
-import { attention, prsByTab, rowView, sidebarModel, withSnoozes } from "./attention";
+import { attention, prsByTab, rowView, sidebarModel } from "./attention";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -125,61 +125,14 @@ describe("rowView of an unread reply", () => {
     });
 });
 
-describe("withSnoozes", () => {
-    const r = (tabId: string, band: Row["band"]) => row(band, { tabId });
-    const model = { needs: [r("a", "needs")], running: [r("b", "running")], quiet: [r("c", "quiet"), r("d", "quiet")], quietMore: [], quietStale: [r("e", "quiet")] };
-
-    test("a snoozed project leaves every band and the walk, into its own group", () => {
-        const s = withSnoozes(model, { c: 1, e: 1, b: 1 });
-        expect([...s.running, ...s.quiet, ...s.quietMore, ...s.quietStale].map((x) => x.tabId)).toEqual(["d"]);
-        expect(s.snoozed.map((x) => x.tabId)).toEqual(["b", "c", "e"]);
-    });
-
-    test("a new need wakes it even when an older one was there when you snoozed", () => {
-        const s = withSnoozes({ ...model, needs: [row("needs", { tabId: "a", waitingSince: NOW - 1000, latestNeed: NOW })] }, { a: NOW - 500 });
-        expect([s.needs.map((x) => x.tabId), s.wake]).toEqual([["a"], ["a"]]);
-    });
-
-    test("one that needs you after the snooze comes back on its own, and is marked to wake", () => {
-        const s = withSnoozes({ ...model, needs: [row("needs", { tabId: "a", waitingSince: NOW })] }, { a: NOW - 1 });
-        expect(s.needs.map((x) => x.tabId)).toEqual(["a"]);
-        expect(s.wake).toEqual(["a"]);
-        expect(s.snoozed).toEqual([]);
-    });
-
-    test("a need that was already there when you snoozed stays snoozed", () => {
-        const s = withSnoozes({ ...model, needs: [row("needs", { tabId: "a", waitingSince: NOW - 10 })] }, { a: NOW });
-        expect([s.needs, s.wake, s.snoozed.map((x) => x.tabId)]).toEqual([[], [], ["a"]]);
-    });
-
-    test("a need with no start time counts as already there", () => {
-        const s = withSnoozes(model, { a: NOW });
-        expect([s.needs, s.wake, s.snoozed.map((x) => x.tabId)]).toEqual([[], [], ["a"]]);
-    });
-
-    test("a snoozed quiet project frees its slot: the next one moves up from the overflow", () => {
-        const quiet = ["q1", "q2", "q3", "q4", "q5", "q6"].map((id) => r(id, "quiet"));
-        const s = withSnoozes({ needs: [], running: [], quiet, quietMore: [r("q7", "quiet")], quietStale: [] }, { q2: 1 });
-        expect([s.quiet.map((x) => x.tabId), s.quietMore]).toEqual([["q1", "q3", "q4", "q5", "q6", "q7"], []]);
-    });
-
-    test("snoozed rows all read as quiet, whatever their project is doing", () => {
-        const s = withSnoozes({ ...model, needs: [row("needs", { tabId: "a", waitingSince: NOW - 10 })] }, { a: NOW, b: NOW });
-        expect(s.snoozed.map((x) => [x.tabId, x.band])).toEqual([["a", "quiet"], ["b", "quiet"]]);
-    });
-
-    test("nothing snoozed changes nothing", () => expect(withSnoozes(model, {})).toEqual({ ...model, snoozed: [], wake: [] }));
-});
-
 describe("attention", () => {
-    test("bands with snoozes applied and a view for every row, snoozed ones included", () => {
+    test("the bands and a view for every row", () => {
         const a = attention(["a", "b"], {
             now: NOW,
             projects: [{ id: "a", title: "Alpha", dir: "/a", mtime: 0 } as never, { id: "b", title: "Beta", dir: "/b", mtime: 0 } as never],
             sessions: [{ id: "1", tabId: "a", blockId: "x", state: "waiting", since: NOW - 1, lastAt: NOW - 1 }],
-            projectSnoozes: { b: NOW - 10 },
         }, {}, NOW);
-        expect([a.needs.map((r) => r.tabId), a.snoozed.map((r) => r.tabId), a.views.a.title, a.views.b.title]).toEqual([["a"], ["b"], "Alpha", "Beta"]);
+        expect([a.needs.map((r) => r.tabId), a.quiet.map((r) => r.tabId), a.views.a.title, a.views.b.title]).toEqual([["a"], ["b"], "Alpha", "Beta"]);
     });
 });
 

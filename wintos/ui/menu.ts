@@ -3,10 +3,10 @@ import { atom } from "jotai";
 import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, getBlockComponentModel, isDev } from "@/store/global";
-import { closeOverlay, editMine, enterProject, focusArea, focusSession, takeReopen, focusBlock, isSnoozedProject, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
+import { closeOverlay, editMine, enterProject, focusArea, focusSession, takeReopen, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
 import { closeWarning, paneCloseWarns } from "./sessions";
 import { toggleInbox } from "./inbox";
-import { FLAG_EVENT, mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, tickModeAtom, type MainView } from "./notes/state";
+import { mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, tickModeAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, LayoutTreeActionType, NavigateDirection, type LayoutTreeSwapNodeAction } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
@@ -14,7 +14,7 @@ import { isInboxTab, projectSessions, sessionHeader, urgentPr } from "./view";
 import { closeAction, escapeAction, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
 import { installFocusRing } from "./focusRing";
-import { currentState, daemonFetch, parkBlock, setProjectSnoozed } from "./useWintos";
+import { currentState, daemonFetch, parkBlock } from "./useWintos";
 import { flog } from "./focusLog";
 import { meetingToJoin } from "./meetings";
 import { installKeyGame } from "./keyGame";
@@ -73,20 +73,16 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:b", "browser"],
     ["Shift:Cmd:f", "files"],
     // ⌥ turns a letter into another character on macOS (⌥J is º, ⌥G is ©), so every ⌥⌘ letter
-    // matches the key's place; all but Z sit in the same place on QWERTY and QWERTZ.
+    // matches the key's place.
     ["Option:Cmd:c{KeyJ}", "pane-down"],
     ["Option:Cmd:c{KeyK}", "pane-up"],
     ["Shift:Cmd:c", "copy-url"],
-    // Z sits where Y is on QWERTZ: either place snoozes.
-    ["Option:Cmd:c{KeyZ}", "snooze-project"],
-    ["Option:Cmd:c{KeyY}", "snooze-project"],
     ["Option:Cmd:c{KeyP}", "park-session"],
     ["Option:Cmd:c{KeyG}", "open-pane-pr"],
     ["Shift:Cmd:j", "join-meeting"],
     ["Shift:Cmd:y", "day"],
     ["Shift:Cmd:i", "keyboard"],
     ["Shift:Cmd:u", "open-external"],
-    ["Option:Cmd:c{KeyS}", "show-snoozed"],
     ["Option:Cmd:c{KeyR}", "restart-terminal"],
     ["Option:Cmd:c{KeyX}", "tick"],
     ["Option:Cmd:c{KeyL}", "rail"],
@@ -228,7 +224,7 @@ export function runKey(action: string): boolean {
 // The Inbox holds pages and nothing else: a terminal or a Claude session started there would
 // belong to no project and never show in the sidebar, Needs you or ⌃⇥.
 const PANE_MAKERS = new Set(["session", "terminal", "browser", "files", "sysinfo", "processes", "open-page"]);
-const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "snooze-project", "park-session"]);
+const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "park-session"]);
 export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
 
@@ -273,11 +269,6 @@ export function runAction(action: string): void {
         for (const s of focused?.state === "waiting" ? [focused] : waiting) void parkBlock(s.blockId);
         return;
     }
-    // ⌥⌘Z: this project is done for now; the same key, or opening it, brings it back.
-    if (action === "snooze-project") {
-        const tabId = globalStore.get(atoms.staticTabId);
-        return void setProjectSnoozed(tabId, !isSnoozedProject(tabId));
-    }
     // ⌘H / ⌘L: the left and the right area, the same in every tab (the sidebar never takes
     // focus): the Inbox's list and its page, a project's terminals and its notes.
     if (action === "focus-left" || action === "focus-right") return stepSideways(action === "focus-right");
@@ -292,7 +283,6 @@ export function runAction(action: string): void {
     if (action === "keyboard") return toggleView("keyboard");
     if (action === "open-external") return openExternal();
     if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));
-    if (action === "show-snoozed") return toggleStoredFlag("wintos:show-snoozed");
     if (action === "restart-terminal") return restartTerminal();
     if (action.startsWith("session-")) return toSession(Number(action.slice("session-".length)));
     if (action === "rail") return toggleRail();
@@ -429,14 +419,6 @@ function openExternal(): void {
     const blockId = globalStore.get(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
     const url = blockId && focusedPageUrl(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId))));
     if (url) getApi().openExternal(url);
-}
-
-// A sidebar toggle kept in localStorage (Sidebar's useStoredFlag), flipped by a key.
-function toggleStoredFlag(key: string): void {
-    try {
-        localStorage.setItem(key, localStorage.getItem(key) === "1" ? "0" : "1");
-    } catch {}
-    window.dispatchEvent(new Event(FLAG_EVENT));
 }
 
 // ⌥⌘R: the focused terminal's shell started again, for one that hangs (Wave's Force Restart).

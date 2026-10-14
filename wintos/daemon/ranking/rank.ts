@@ -2,9 +2,8 @@ import type { Session } from "../sessions/reduce";
 
 export type Band = "needs" | "running" | "quiet";
 // unread: a turn ended after the developer last saw the project; it needs them until they do.
-// waitingSince: when the oldest need began (the band's order); latestNeed: the newest (what wakes
-// a snoozed project).
-export type Row = { tabId: string; band: Band; lastAt: number; sessions: Session[]; waitingSince?: number; latestNeed?: number; unread?: boolean };
+// waitingSince: when the oldest need began (the band's order).
+export type Row = { tabId: string; band: Band; lastAt: number; sessions: Session[]; waitingSince?: number; unread?: boolean };
 export type Ranking = { needs: Row[]; running: Row[]; quiet: Row[]; quietMore: Row[]; quietStale: Row[] };
 
 export const QUIET_CAP = 6;
@@ -36,7 +35,7 @@ function rowOf(tabId: string, sessions: Session[], touchedAt: number, seenAt: nu
     const lastAt = Math.max(touchedAt, ...sessions.map((s) => s.lastAt), 0);
     const unreadAt = sessions.filter((s) => isUnread(s, seenAt)).map((s) => s.turnEndedAt!);
     const since = [...sessions.filter((s) => s.state === "waiting").map((s) => s.since), ...unreadAt];
-    if (since.length) return { tabId, band: "needs", lastAt, sessions, waitingSince: Math.min(...since), latestNeed: Math.max(...since), ...(unreadAt.length ? { unread: true } : {}) };
+    if (since.length) return { tabId, band: "needs", lastAt, sessions, waitingSince: Math.min(...since), ...(unreadAt.length ? { unread: true } : {}) };
     // Running is Claude at work. Parked waits on something outside (a review, CI): nothing for you
     // and nothing running, so it is quiet, its row saying what it waits on.
     if (sessions.some((s) => s.state === "working")) return { tabId, band: "running", lastAt, sessions };

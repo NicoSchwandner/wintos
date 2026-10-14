@@ -1,4 +1,4 @@
-import { QUIET_CAP, rank, type Ranking, type Row } from "../daemon/ranking/rank";
+import { rank, type Ranking, type Row } from "../daemon/ranking/rank";
 import type { Project } from "../daemon/projects/store";
 import { isSnoozed, projectPrs, type ProjectPrs } from "../daemon/prs/group";
 import type { Target } from "./sessions";
@@ -32,29 +32,6 @@ export function sidebarModel(tabIds: string[], state: WintosState): Ranking {
     return rank(tabIds, state.sessions, state.now, touched, state.seen);
 }
 
-// Snoozed projects (done, but may need re-work) leave the bands and the ⌘J/⌘K walk for their own
-// group; one that needs you anew (a waiting session, a PR that needs you, a new reply, begun after the
-// snooze) comes back, and is marked to be woken for good. A need already there when you snoozed
-// is what you chose to put away.
-export type SidebarSplit = Ranking & { snoozed: Row[]; wake: string[] };
-export function withSnoozes(model: Ranking, snoozed: Record<string, number> = {}): SidebarSplit {
-    const is = (r: Row) => r.tabId in snoozed;
-    const out = (rows: Row[]) => rows.filter((r) => !is(r));
-    const woken = (r: Row) => is(r) && (r.latestNeed ?? r.waitingSince ?? 0) > snoozed[r.tabId];
-    const needs = model.needs.filter((r) => !is(r) || woken(r));
-    return {
-        needs,
-        running: out(model.running),
-        // The cap counts shown projects: a snoozed one gives its slot to the next.
-        quiet: out([...model.quiet, ...model.quietMore]).slice(0, QUIET_CAP),
-        quietMore: out([...model.quiet, ...model.quietMore]).slice(QUIET_CAP),
-        quietStale: out(model.quietStale),
-        // Put away: a snoozed project reads as quiet, whether a session there waits or works.
-        snoozed: [...model.needs.filter((r) => is(r) && !woken(r)), ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].filter(is).map((r) => ({ ...r, band: "quiet" as const })),
-        wake: needs.filter(woken).map((r) => r.tabId),
-    };
-}
-
 export function rowView(row: Row, project: Project | undefined, tabName: string | undefined, now: number, prs?: ProjectPrs): RowView {
     const title = project?.title ?? tabName ?? "Untitled";
     const since = row.band === "needs" ? row.waitingSince! : row.lastAt;
@@ -80,14 +57,14 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     return { title, age, reason: parkedOn ? `waiting on ${parkedOn}` : (prs?.blocked?.text ?? prs?.reason ?? meta ?? age) };
 }
 
-// Everything the sidebar and the palette show about the projects, computed once: the bands
-// (snoozes applied), each row's text and each project's PRs. `now` ticks the ages.
+// Everything the sidebar and the palette show about the projects, computed once: the bands,
+// each row's text and each project's PRs. `now` ticks the ages.
 // targets: where opening a project that needs you lands: the session waiting longest.
-export type Attention = SidebarSplit & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target> };
+export type Attention = Ranking & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target> };
 export function attention(tabIds: string[], state: WintosState, names: Record<string, string | undefined>, now: number): Attention {
     const prs = prsByTab(tabIds, state);
-    const split = withSnoozes(sidebarModel(tabIds, state), state.projectSnoozes);
-    const rows = [...split.needs, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale, ...split.snoozed];
+    const split = sidebarModel(tabIds, state);
+    const rows = [...split.needs, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale];
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const views = Object.fromEntries(rows.map((r) => [r.tabId, rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId])]));
     const targets: Record<string, Target> = {};

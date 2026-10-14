@@ -5,7 +5,7 @@ import type { Session } from "../daemon/sessions/reduce";
 import { nextNeedsYou, Target } from "./sessions";
 import { editingMineAtom, findInNotesAtom, isPage, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
 import { rememberReturn, returnFocus, wantPane } from "./focusOwner";
-import { currentState, daemonFetch, setProjectSnoozed } from "./useWintos";
+import { currentState, daemonFetch } from "./useWintos";
 import { flog, where } from "./focusLog";
 import { inboxKind } from "./view";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
@@ -16,10 +16,9 @@ import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 const HANDOFF = "wintos:focus";
 const HANDOFF_TTL_MS = 5000;
 
-let latest: { sessions: Session[]; tabIds: string[]; needs: string[]; snoozed: string[]; targets: Record<string, Target> } = { sessions: [], tabIds: [], needs: [], snoozed: [], targets: {} };
-export const setLatestSessions = (sessions: Session[], tabIds: string[], needs: string[], snoozed: string[] = [], targets: Record<string, Target> = {}) =>
-    (latest = { sessions, tabIds, needs, snoozed, targets });
-export const isSnoozedProject = (tabId: string) => latest.snoozed.includes(tabId);
+let latest: { sessions: Session[]; tabIds: string[]; needs: string[]; targets: Record<string, Target> } = { sessions: [], tabIds: [], needs: [], targets: {} };
+export const setLatestSessions = (sessions: Session[], tabIds: string[], needs: string[], targets: Record<string, Target> = {}) =>
+    (latest = { sessions, tabIds, needs, targets });
 // The daemon's snapshot, not the Sidebar's copy: that one lags a pane opened a moment ago.
 export const latestSessions = () => currentState()?.sessions ?? latest.sessions;
 
@@ -40,7 +39,6 @@ export function focusBlock(blockId: string): void {
 
 // Every project switch: the project opens on its terminals. Views are per renderer, so a PR
 // view left open in a project would otherwise greet you there later.
-// Opening a snoozed project (from its PR, the palette, the Snoozed group) wakes it.
 // Where the walks (⌘J/⌘K, ⌃⇥) start: what is showing. The cards above the projects are in the
 // walk as card:prs, card:oncall and card:today; a page with no card (Keyboard) is outside it.
 export function whereYouAre(): string {
@@ -55,26 +53,26 @@ export function whereYouAre(): string {
 // Opening a project: on the session behind what needs you there, when something does
 // (attention's target), else as you left it.
 export function enterProject(tabId: string, find?: string): void {
-    if (isSnoozedProject(tabId)) void setProjectSnoozed(tabId, false);
     focusSession(find ? { tabId, blockId: "", find } : (latest.targets[tabId] ?? { tabId, blockId: "" }));
 }
 
 // A closed project comes back in a new tab: the tab is created here, and its renderer, the
-// only one starting up just then, takes the project's folder over (takeReopen).
+// only one starting up just then, takes the project's folder over (takeReopen) and resumes the
+// shelved session asked for.
 const REOPEN = "wintos:reopen";
-export function reopenProject(projectId: string): void {
-    localStorage.setItem(REOPEN, JSON.stringify({ projectId, at: Date.now() }));
+export function reopenProject(projectId: string, resume?: string): void {
+    localStorage.setItem(REOPEN, JSON.stringify({ projectId, resume, at: Date.now() }));
     getApi().createTab();
 }
 export function takeReopen(): void {
     const raw = localStorage.getItem(REOPEN);
     if (!raw) return;
     localStorage.removeItem(REOPEN);
-    const r = JSON.parse(raw) as { projectId: string; at: number };
+    const r = JSON.parse(raw) as { projectId: string; resume?: string; at: number };
     if (Date.now() - r.at >= HANDOFF_TTL_MS) return;
     const tabId = globalStore.get(atoms.staticTabId);
     flog(`reopen project ${r.projectId.slice(0, 6)} in this tab`);
-    void daemonFetch(`/projects/${encodeURIComponent(r.projectId)}/reopen`, { method: "POST", body: { tabId } });
+    void daemonFetch(`/projects/${encodeURIComponent(r.projectId)}/reopen`, { method: "POST", body: { tabId } }).then(() => r.resume && landOn({ tabId, blockId: "", resume: r.resume }));
 }
 
 export function focusSession(t: Target): void {
@@ -190,7 +188,7 @@ export function jumpBack(): boolean {
 export function jumpToNextWaiting(): boolean {
     const lm = getLayoutModelForStaticTab();
     const current = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
-    const t = nextNeedsYou(latest.sessions, latest.tabIds, whereYouAre(), current, latest.needs, latest.snoozed, latest.targets);
+    const t = nextNeedsYou(latest.sessions, latest.tabIds, whereYouAre(), current, latest.needs, latest.targets);
     // Where this jump started, for ⌃⇧⇥ to go back to.
     if (t) localStorage.setItem(BEFORE_JUMP, JSON.stringify({ tabId: globalStore.get(atoms.staticTabId), blockId: current ?? "" }));
     // A project in Needs you for a PR nobody here owns has no session to land on: its terminals.

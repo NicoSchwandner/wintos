@@ -440,6 +440,45 @@ await scenario("17 · a click on WintOS itself is mouse mode: no pane frame; a c
     await until("keyboard mode again", async () => (await mode()) === "keyboard");
 });
 
+await scenario("18 · ⇧⌘W shelves the project's sessions, and ⇧⌘P reopens it on the newest", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const st = async () => await (await fetch("http://127.0.0.1:7731/state")).json();
+    const title = (await st()).projects.find((p) => p.id === tabId)?.title;
+    const script = "cd '/tmp' && claude --resume 'e2e-close'";
+    for (const hook_event_name of ["UserPromptSubmit", "Stop"])
+        await fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId: "e2e-close-pane", payload: { session_id: "e2e-close", hook_event_name, prompt: "e2e close", resume: script } }) });
+    await press(t, "w", { mods: ["meta", "shift"] });
+    await until("the close warning", () => evalIn(t, `document.body.innerText.includes("will stop")`));
+    await press(t, "w", { mods: ["meta", "shift"] });
+    await until("the tab closed", () => sql(`select count(*) from db_tab where oid='${tabId}'`) === "0");
+    await until("its session on the shelf", async () => (await st()).shelf?.[tabId]?.[0]?.sessionId === "e2e-close");
+    const v = await visible();
+    await press(v, "p", { mods: ["meta", "shift"] });
+    await until("the palette", () => evalIn(v, `!!document.querySelector("[data-wintos=palette] input")`));
+    await cdpFocus(v, "[data-wintos=palette] input");
+    await cdp(v, "Input.insertText", { text: title });
+    const palette = () => evalIn(v, `document.querySelector("[data-wintos=palette]")?.innerText ?? ""`);
+    await until("it listed as shelved", async () => /shelved · \d+ sessions? · ⏎ reopens it on the newest/.test(await palette())).catch(async (e) => { throw new Error(`${e.message} (${title}): ${(await palette()).replace(/\n/g, " | ").slice(0, 300)}`); });
+    await press(v, "Enter", { keyCode: 13 });
+    await until("a new tab resuming it", async () => {
+        const id = (await st()).projects.find((p) => p.title === title)?.id;
+        return id && id !== tabId && sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j, db_block b where t.oid='${id}' and b.oid=j.value and b.data->>'$.meta."cmd:initscript"' like '%e2e-close%'`) === "1";
+    }, 20000);
+});
+
+await scenario("19 · an empty project closes when you leave it (⇧⌘G here), and keeps its folder", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    await evalIn(t, `(async () => { const lm = window.wintosLayout(); for (const el of document.querySelectorAll("[data-blockid]")) { const n = lm.getNodeByBlockId(el.dataset.blockid); if (n) await lm.closeNode(n.id); } })()`);
+    await until("the project empty", () => evalIn(t, `document.body.innerText.includes("Nothing open in this project")`));
+    await sleep(500);
+    if (sql(`select count(*) from db_tab where oid='${tabId}'`) !== "1") throw new Error("the empty project closed before you left it");
+    await press(t, "g", { mods: ["meta", "shift"] });
+    await until(`its tab closed (active: ${sql(`select data->>'activetabid' from db_workspace limit 1`).slice(0, 8)}, it: ${tabId.slice(0, 8)})`, () => sql(`select count(*) from db_tab where oid='${tabId}'`) === "0");
+    if (!(await (await fetch("http://127.0.0.1:7731/state")).json()).projects.some((p) => p.id === tabId)) throw new Error("its project is gone");
+});
+
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
 // must not cost the run its results.
 await scenario("clean-up · the panes this run opened are closed", async () => {

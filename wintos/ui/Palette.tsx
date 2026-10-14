@@ -170,7 +170,6 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     for (const r of model.running) band[r.tabId] = "running";
     for (const r of [...model.quiet, ...model.quietMore]) band[r.tabId] = "quiet";
     for (const r of model.quietStale) band[r.tabId] = `out of the sidebar · last touched ${relTime(now - r.lastAt)} ago`;
-    for (const r of model.snoozed) band[r.tabId] = "snoozed · opening it wakes it";
     const gh = ghPrs(state);
     const prOf = prProjects(tabIds, state);
     const sessionsOf = (id: string) => state.sessions.filter((s) => s.tabId === id && s.state !== "ended");
@@ -200,7 +199,10 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     // Closed: its folder is still there, its tab is not. Opening it reopens it in a new tab.
     for (const p of state.projects) {
         if (!p.id || !p.title || p.error || tabIds.includes(p.id) || ids.includes(p.id)) continue;
-        out.push({ id: `c:${p.id}`, kind: "project", title: p.title, subtitle: ["closed · ⏎ reopens it", p.next].filter(Boolean).join(" · "), fields: fields(p.id), recency: (p.mtime ?? 0) / 2, run: () => reopenProject(p.id!) });
+        // Shelved: closed with sessions on its shelf. It reopens on the newest; the rest stay shelved.
+        const shelf = state.shelf?.[p.id] ?? [];
+        const status = shelf.length ? `shelved · ${shelf.length} session${shelf.length === 1 ? "" : "s"} · ⏎ reopens it on the newest` : "closed · ⏎ reopens it";
+        out.push({ id: `c:${p.id}`, kind: "project", title: p.title, subtitle: [status, p.next].filter(Boolean).join(" · "), fields: fields(p.id), recency: (p.mtime ?? 0) / 2, run: () => reopenProject(p.id!, shelf[0]?.script) });
     }
     for (const pr of gh?.prs ?? []) {
         const tab = prOf.get(pr.url);
@@ -213,13 +215,15 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     }
     for (const s of live.filter((s) => s.state !== "ended" && tabIds.includes(s.tabId)))
         out.push({ id: `s:${s.id}`, kind: "session", title: sessionName(s), subtitle: `${s.state} · ${title(s.tabId)}`, run: () => focusSession({ tabId: s.tabId, blockId: s.blockId }) });
-    for (const id of tabIds)
+    // A closed project's shelved sessions too: one opens its project again, on that session.
+    const closed = new Set(state.projects.filter((p) => p.id && p.title && !p.error && !ids.includes(p.id)).map((p) => p.id!));
+    for (const id of [...tabIds, ...closed])
         for (const s of state.shelf?.[id] ?? [])
             out.push({
                 id: `sh:${s.sessionId}`, kind: "session", title: shelvedName(s),
                 subtitle: [`shelved ${relTime(now - s.at)} ago`, title(id), s.name && s.gist].filter(Boolean).join(" · "),
                 fields: [{ text: [s.gist, s.label].filter(Boolean).join(" "), weight: 25 }], recency: s.at,
-                run: () => focusSession({ tabId: id, blockId: "", resume: s.script }),
+                run: () => (closed.has(id) ? reopenProject(id, s.script) : focusSession({ tabId: id, blockId: "", resume: s.script })),
             });
     const here = title(activeTab);
     // The key's own path (runKey), so an action does from here exactly what its key does.
@@ -236,9 +240,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     out.push(action("keyboard", "Keyboard: rank, streak, badges", "⇧⌘I", "keyboard"));
     out.push(action("join", "Join the meeting", "⇧⌘J", "join-meeting"));
     out.push(action("mine", `Edit mine.md of ${here}`, "⌘E", "edit-mine"));
-    out.push(action("snooze", `Snooze or wake ${here}`, "⌥⌘Z", "snooze-project"));
     out.push(action("park", "Park the waiting session: nothing for you", "⌥⌘P", "park-session"));
-    out.push(action("snoozed", "Show or hide the snoozed projects", "⌥⌘S", "show-snoozed"));
     out.push(action("copy-url", "Copy the focused page's url", "⇧⌘C", "copy-url"));
     out.push(action("external", "Open the focused page in your browser", "⇧⌘U", "open-external"));
     out.push(action("restart", "Restart the focused terminal", "⌥⌘R", "restart-terminal"));

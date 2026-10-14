@@ -18,9 +18,9 @@ import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
 import { setSwitchOrder, switchTargetAtom } from "./switcher";
 import { closeProjectTab, registerWintosMenu } from "./menu";
-import { FLAG_EVENT, isPage, mainViewAtom, renamingAtom } from "./notes/state";
+import { isPage, mainViewAtom, renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
-import { instance, setProjectSnoozed, setProjectTitle, useWintos } from "./useWintos";
+import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { attention } from "./attention";
 import { ghPrs, inboxKind, isInboxTab, type InboxList, projectTabIds, RowView } from "./view";
 import { queueModel } from "./prs";
@@ -32,7 +32,6 @@ const BAND_STYLE = {
     needs: { label: "Needs you", color: T.apricot },
     running: { label: "Running", color: T.moss },
     quiet: { label: "Quiet", color: T.muted },
-    snoozed: { label: "Snoozed", color: T.faint },
 } as const;
 
 function useTabs(tabIds: string[]): Record<string, Tab | undefined> {
@@ -59,7 +58,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const fullScreen = useAtomValue(atoms.isFullScreen);
     const mainView = useAtomValue(mainViewAtom);
     const [showAll, setShowAll] = useStoredFlag("wintos:show-all-quiet");
-    const [showSnoozed, setShowSnoozed] = useStoredFlag("wintos:show-snoozed");
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
@@ -75,15 +73,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const expanded = showAll || switchTarget != null || renaming != null;
     const activeStale = model?.quietStale.filter((r) => r.tabId === activeTabId && !expanded) ?? [];
     const quiet = model ? (expanded ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
-    // Snoozed projects join the walk while their group is shown; landing on one wakes it.
     // The cards above the projects are walked too, in the order they show: PRs, On call, Today.
     const cards = [...(state?.day ? ["card:today"] : []), ...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : [])];
-    const switchOrder = model ? [...cards, ...[...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale, ...(showSnoozed ? model.snoozed : [])].map((r) => r.tabId)] : [];
-    // Snoozed rows show on their own toggle or while renaming one; the open one always, to find it again.
-    const isSnoozedHere = !!model?.snoozed.some((r) => r.tabId === activeTabId);
-    const snoozedShown = model ? (showSnoozed || renaming != null ? model.snoozed : model.snoozed.filter((r) => r.tabId === activeTabId)) : [];
-    // A snoozed project that needs you is back for good, not only while it needs you.
-    useEffect(() => model?.wake.forEach((id) => void setProjectSnoozed(id, false)), [model?.wake.join(",")]);
+    const switchOrder = model ? [...cards, ...[...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId)] : [];
 
     useEffect(registerWintosMenu, []);
 
@@ -91,7 +83,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-tabid="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
 
     useEffect(() => {
-        if (state) setLatestSessions(state.sessions, tabIds, model?.needs.map((r) => r.tabId) ?? [], model?.snoozed.map((r) => r.tabId) ?? [], model?.targets ?? {});
+        if (state) setLatestSessions(state.sessions, tabIds, model?.needs.map((r) => r.tabId) ?? [], model?.targets ?? {});
     }, [state, tabIds.join(",")]);
 
     // The project title is the source of truth; the tab name follows it.
@@ -207,21 +199,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                                 </button>
                             )}
                         </Band>
-                        <Band kind="snoozed" count={model.snoozed.length} shown={snoozedShown.length}>
-                            {snoozedShown.map(renderRow)}
-                            {(showSnoozed || snoozedShown.length < model.snoozed.length) && (
-                                <button
-                                    data-key="⌥⌘S"
-                                    type="button"
-                                    tabIndex={-1}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => setShowSnoozed(!showSnoozed)}
-                                    style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.faint, cursor: "pointer" }}
-                                >
-                                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>{showSnoozed ? "Hide snoozed" : `Show ${model.snoozed.length} snoozed · opening one wakes it`}<Key k="⌥⌘S" label="" /></span>
-                                </button>
-                            )}
-                        </Band>
                     </>
                 )}
             </div>
@@ -230,7 +207,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 {/* ⌘J/⌘K sit on the open project's row. */}
                 <Key k="⌃⇥" label="waiting" />
                 {!isInboxTab(tabs[activeTabId]) && <Key k="⌘R" label="rename" />}
-                {!isInboxTab(tabs[activeTabId]) && <Key k="⌥⌘Z" label={isSnoozedHere ? "wake" : "snooze"} />}
                 {state?.sessions.some((x) => x.tabId === activeTabId && x.state === "waiting") && <Key k="⌥⌘P" label="park" />}
             </div>
         </div>
@@ -440,9 +416,8 @@ function useStoredFlag(key: string): [boolean, (on: boolean) => void] {
     useEffect(() => {
         const sync = () => setOn(read());
         window.addEventListener("storage", sync);
-        window.addEventListener(FLAG_EVENT, sync); // a key in this window (⌥⌘S) set it
         document.addEventListener("visibilitychange", sync);
-        return () => (window.removeEventListener("storage", sync), window.removeEventListener(FLAG_EVENT, sync), document.removeEventListener("visibilitychange", sync));
+        return () => (window.removeEventListener("storage", sync), document.removeEventListener("visibilitychange", sync));
     }, []);
     return [
         on,

@@ -79,6 +79,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
         titleShelved(item, p.title);
         return true;
     };
+    // One saved before sessions carried their resume command resumes from its directory.
+    const shelveLive = (l: Session) => {
+        const script = l.resume ?? (l.cwd && `cd '${l.cwd.replaceAll("'", "'\\''")}' && claude --resume '${l.id}'`);
+        if (script && resumedSession(script) === l.id) shelveSession(l.tabId, l.id, script, l.label);
+    };
     const sockets = new Set<WebSocket>();
     let port = opts.port;
 
@@ -189,11 +194,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     return send(res, 400, "need string tabId, blockId, payload.session_id, payload.hook_event_name");
                 const left = leavingFor(sessions, ev);
                 // Shelved before the reduce drops them, while their status and PRs are still on hand.
-                // One saved before sessions carried their resume command resumes from its directory.
-                for (const l of left) {
-                    const script = l.resume ?? (l.cwd && `cd '${l.cwd.replaceAll("'", "'\\''")}' && claude --resume '${l.id}'`);
-                    if (script && resumedSession(script) === l.id) shelveSession(l.tabId, l.id, script, l.label);
-                }
+                for (const l of left) shelveLive(l);
                 sessions = reduceSession(sessions, ev, Date.now());
                 // Running again: started or prompted. Closing its pane ends it (SessionEnd) on the way onto the shelf.
                 // Off the shelf, it takes back the PRs it had there.
@@ -255,6 +256,15 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!isSafe(b?.tabId)) return send(res, 400, "need the new tab's id");
                 const r = store.reopen(decodeURIComponent(reopen[1]), b.tabId);
                 if (r !== "ok") return send(res, r === "taken" ? 409 : 404, r);
+                broadcast();
+                return send(res, 200, "");
+            }
+            // ⇧⌘W: the project's sessions go on its shelf before its tab closes and takes their panes.
+            const shelveAll = /^\/projects\/([^/]+)\/shelve-all$/.exec(url.pathname);
+            if (req.method === "POST" && shelveAll) {
+                const tabId = decodeURIComponent(shelveAll[1]);
+                if (!store.byTab(tabId)) return send(res, 404, "no project for this tab");
+                for (const s of sessions.values()) if (s.tabId === tabId && s.state !== "ended") shelveLive(s);
                 broadcast();
                 return send(res, 200, "");
             }

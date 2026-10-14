@@ -565,6 +565,16 @@ describe("the shelf", () => {
         expect((await shelfOf())["tab-1"]).toEqual([expect.objectContaining({ sessionId: "old", script: "cd '/w/it'\\''s' && claude --resume 'old'" })]);
     });
 
+    test("closing the project (⇧⌘W) shelves every session it runs first, and a second time changes nothing", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, session_id: "a", resume: script("a") });
+        await post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { ...prompt, session_id: "b", resume: script("b") } });
+        expect((await post("/projects/tab-1/shelve-all", {})).status).toBe(200);
+        await post("/projects/tab-1/shelve-all", {});
+        expect((await shelfOf())["tab-1"].map((i: { sessionId: string }) => i.sessionId).sort()).toEqual(["a", "b"]);
+        expect((await post("/projects/tab-9/shelve-all", {})).status).toBe(404);
+    });
+
     test("a background fork's events (no resume command) shelve nothing", async () => {
         await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
         await event({ ...prompt, session_id: "main", resume: script("main") });

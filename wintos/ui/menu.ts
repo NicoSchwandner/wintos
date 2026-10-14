@@ -418,7 +418,9 @@ function closeProject(): void {
 export function closeProjectTab(tabId: string, confirm: boolean): void {
     const top = tabId === globalStore.get(atoms.staticTabId) ? topProject(tabId) : undefined;
     if (top) enterProject(top);
-    void getApi().closeTab(globalStore.get(atoms.workspace).oid, tabId, confirm);
+    // Its sessions go on the shelf first: the resume commands live on the panes the close takes.
+    const close = () => void getApi().closeTab(globalStore.get(atoms.workspace).oid, tabId, confirm);
+    daemonFetch(`/projects/${encodeURIComponent(tabId)}/shelve-all`, { method: "POST", body: {} }).then(close, close);
 }
 
 // ⇧⌘L opens the notes full width, and the same key again goes back to the terminals.

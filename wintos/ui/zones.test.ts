@@ -88,13 +88,18 @@ describe("escapeAction", () => {
 });
 
 describe("closeAction", () => {
-    const base = { overlay: false, notesShown: false, zone: "pane" as const, paneFocused: true, paneHidden: false };
+    const base = { overlay: false, notesShown: false, zone: "pane" as const, paneFocused: true, paneHidden: false, emptyProject: false };
     test("an overlay closes first", () => expect(closeAction({ ...base, overlay: true })).toBe("overlay"));
     test("the full notes view goes back to the terminals", () => expect(closeAction({ ...base, notesShown: true })).toBe("view"));
     test("the focused, visible pane closes", () => expect(closeAction(base)).toBe("pane"));
     test("with a list focused nothing closes", () => expect(closeAction({ ...base, zone: "list" })).toBe("nothing"));
-    test("never a hidden pane, and never the project when no pane is left", () => {
+    test("never a hidden pane, nor anything with no pane focused", () => {
         expect(closeAction({ ...base, paneHidden: true })).toBe("nothing");
         expect(closeAction({ ...base, paneFocused: false })).toBe("nothing");
+    });
+    test("a project with no pane left closes, from wherever focus is, overlays and the notes view first", () => {
+        const empty = { ...base, paneFocused: false, zone: "list" as const, emptyProject: true };
+        expect(closeAction(empty)).toBe("project");
+        expect([closeAction({ ...empty, overlay: true }), closeAction({ ...empty, notesShown: true })]).toEqual(["overlay", "view"]);
     });
 });

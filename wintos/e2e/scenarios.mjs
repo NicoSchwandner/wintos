@@ -512,6 +512,15 @@ await scenario("20 · ⌘Z brings back the pane ⌘W closed, and the project ⇧
     }, 20000).catch((e) => { throw new Error(`${e.message}: ${seen}`); });
 });
 
+await scenario("21 · ⌘W in a project with no pane left closes the project", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    await evalIn(t, `(async () => { const lm = window.wintosLayout(); for (const el of document.querySelectorAll("[data-blockid]")) { const n = lm.getNodeByBlockId(el.dataset.blockid); if (n) await lm.closeNode(n.id); } })()`);
+    await until("the project empty", () => evalIn(t, `document.body.innerText.includes("Nothing open in this project")`));
+    await press(t, "w", { mods: ["meta"] });
+    await until("its tab closed", () => sql(`select count(*) from db_tab where oid='${tabId}'`) === "0");
+});
+
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
 // must not cost the run its results.
 await scenario("clean-up · the panes this run opened are closed", async () => {

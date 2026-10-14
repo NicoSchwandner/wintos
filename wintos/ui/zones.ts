@@ -44,9 +44,11 @@ export function escapeAction(c: { overlay: boolean; zone: Zone; inInbox: boolean
 }
 
 // ⌘W closes the innermost thing you can see, never a project and never something hidden.
-export function closeAction(c: { overlay: boolean; notesShown: boolean; zone: Zone; paneFocused: boolean; paneHidden: boolean }): "overlay" | "view" | "pane" | "nothing" {
+// emptyProject: a project tab with no pane left (never the Inbox): ⌘W closes the project.
+export function closeAction(c: { overlay: boolean; notesShown: boolean; zone: Zone; paneFocused: boolean; paneHidden: boolean; emptyProject: boolean }): "overlay" | "view" | "pane" | "project" | "nothing" {
     if (c.overlay) return "overlay";
     if (c.notesShown) return "view";
+    if (c.emptyProject) return "project";
     if (c.zone !== "pane" || !c.paneFocused || c.paneHidden) return "nothing";
     return "pane";
 }

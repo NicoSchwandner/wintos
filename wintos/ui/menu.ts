@@ -306,7 +306,9 @@ export function wintosClose(): boolean {
         zone: zoneOf(document.activeElement),
         paneFocused: !!focused,
         paneHidden: !!magnified && magnified !== focused?.id,
+        emptyProject: !inInbox() && !globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))))?.blockids?.length,
     });
+    if (action === "project") closeProjectTab(globalStore.get(atoms.staticTabId), false);
     if (action === "overlay") closeOverlay();
     if (action === "view") closeNotesView();
     if (action === "pane") {

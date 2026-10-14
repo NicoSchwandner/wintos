@@ -52,8 +52,10 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     // gap (window:tilegapsize) down, so the strip adds only the rest.
     const tileGap = Number(tileGapSetting ?? 3);
     return (
-        // The strip's empty space drags the window; the chips don't.
-        <div style={{ display: "flex", alignItems: "center", gap: 4, padding: `${STRIP_GAP}px 8px ${Math.max(0, STRIP_GAP - tileGap / 2)}px`, fontFamily: T.mono, fontSize: 11, flexShrink: 0, overflowX: "auto", WebkitAppRegion: "drag" } as React.CSSProperties}>
+        // The strip's empty space drags the window. The chips' row doesn't, gaps included: a drag
+        // region takes the wheel too, and the row scrolls sideways when it overflows.
+        <div style={{ display: "flex", padding: `${STRIP_GAP}px 8px ${Math.max(0, STRIP_GAP - tileGap / 2)}px`, flexShrink: 0, WebkitAppRegion: "drag" } as React.CSSProperties}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, fontFamily: T.mono, fontSize: 11, overflowX: "auto", WebkitAppRegion: "no-drag" } as React.CSSProperties}>
             {/* ⌘H / ⌘L step pane by pane (in an Inbox tab from the list through its pages). */}
             {(chips.length > 1 || !inProject) && (
                 <span style={{ marginRight: 6 }}>
@@ -122,6 +124,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                     <Key k="⌘M" label="all panes" />
                 </button>
             )}
+        </div>
         </div>
     );
 });

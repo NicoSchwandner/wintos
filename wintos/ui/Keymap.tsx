@@ -26,23 +26,26 @@ export const Keymap = memo(() => {
                 ref={focusRef}
                 data-zone="overlay"
                 onClick={(e) => e.stopPropagation()}
-                style={{ width: 640, padding: "22px 26px", background: "#1d2021", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px 32px" }}
+                // A short window gets more columns, then a scroll (↑↓, the card is focused), never a cut-off.
+                style={{ width: "min(1040px, calc(100% - 32px))", maxHeight: "calc(100% - 32px)", overflowY: "auto", boxSizing: "border-box", padding: "22px 26px", background: "#1d2021", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none" }}
             >
-                <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "baseline", gap: 12 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "4px 12px", marginBottom: 18 }}>
                     <span style={{ fontFamily: T.display, fontSize: 26, color: T.emphasis }}>Keys</span>
                     <span style={{ fontSize: 11.5, color: T.muted }}>⌘ keys work outside text fields · single letters act in the focused list</span>
                 </div>
+                <div style={{ columnWidth: 250, columnGap: 28 }}>
                 {SECTIONS.map(([name, keys]) => (
-                    <div key={name} style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                    <div key={name} style={{ display: "flex", flexDirection: "column", gap: 7, breakInside: "avoid", marginBottom: 18 }}>
                         <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>{name}</span>
                         {keys.map(([k, what]) => (
                             <span key={k} style={{ display: "flex", gap: 10, fontSize: 12.5, color: T.secondary }}>
-                                <span style={{ width: 96, flexShrink: 0, fontFamily: KEYCAP_FONT, fontSize: 12, color: T.keycapText }}>{k}</span>
+                                <span style={{ width: 84, flexShrink: 0, fontFamily: KEYCAP_FONT, fontSize: 12, color: T.keycapText }}>{k}</span>
                                 {what}
                             </span>
                         ))}
                     </div>
                 ))}
+                </div>
             </div>
         </div>
     );

@@ -67,6 +67,11 @@ describe("nextNeedsYou", () => {
         expect(nextNeedsYou([s("z", "t0", "waiting")], tabs, "t3", undefined, ["t3"])).toEqual({ tabId: "t0", blockId: "b-z" });
     });
 
+    test("two sessions waiting in one pane (a stale one under the live one) are one stop: ⌃⇥ moves on", () => {
+        const pane = (id: string, since: number): Session => ({ ...s(id, "t1", "waiting", since), blockId: "b-p" });
+        expect(nextNeedsYou([pane("old", 1), pane("new", 2), s("c", "t2", "waiting", 3)], tabs, "t1", "b-p", ["t1", "t2"])).toEqual({ tabId: "t2", blockId: "b-c" });
+    });
+
     test("the only stop is where you are: stay", () => {
         expect(nextNeedsYou([s("a", "t1", "waiting")], tabs, "t1", "b-a", ["t1"])).toEqual({ tabId: "t1", blockId: "b-a" });
         expect(nextNeedsYou([], ["t1"], "t1", undefined, ["t1"])).toEqual({ tabId: "t1" });

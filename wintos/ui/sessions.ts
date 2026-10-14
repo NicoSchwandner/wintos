@@ -30,7 +30,9 @@ export function nextNeedsYou(sessions: Session[], tabIds: string[], activeTabId:
     const waiting = sessions.filter((s) => s.state === "waiting" && tabIds.includes(s.tabId) && !snoozedTabIds.includes(s.tabId)).sort((a, b) => a.since - b.since);
     const order = [...needsTabIds, ...waiting.map((s) => s.tabId)].filter((t, i, all) => tabIds.includes(t) && all.indexOf(t) === i);
     const stops: (Target | { tabId: string })[] = order.flatMap((tabId) => {
-        const here = waiting.filter((s) => s.tabId === tabId).map((s) => ({ tabId, blockId: s.blockId }));
+        // One stop per pane: a pane can hold two waiting sessions (a stale one under the live one),
+        // and two identical stops in a row make ⌃⇥ land where you already are.
+        const here = [...new Set(waiting.filter((s) => s.tabId === tabId).map((s) => s.blockId))].map((blockId) => ({ tabId, blockId }));
         return here.length ? here : [targets[tabId] ?? { tabId }];
     });
     if (!stops.length) return null;

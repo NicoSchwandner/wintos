@@ -63,8 +63,12 @@ export class PluginRunner {
                 (err, stdout, stderr) => {
                     const last = this.results[name]?.data;
                     let result: PluginResult;
-                    if (err) result = { ok: false, at: Date.now(), data: last, error: (stderr || err.message).trim().slice(0, 500) };
-                    else {
+                    if (err) {
+                        // The panel shows the first line (gh: HTTP 502); the stack under it is for the log.
+                        const why = (stderr || err.message).trim();
+                        console.error(`[wintosd] plugin ${name} failed: ${why}`);
+                        result = { ok: false, at: Date.now(), data: last, error: why.split("\n")[0].slice(0, 200) };
+                    } else {
                         try {
                             result = { ok: true, at: Date.now(), data: JSON.parse(stdout) };
                         } catch {

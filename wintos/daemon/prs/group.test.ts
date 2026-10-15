@@ -57,6 +57,8 @@ describe("groupOf (spec §4, first match wins)", () => {
 describe("qualifier", () => {
     test("names who asked for changes", () =>
         expect(qualifier(pr({ reviewDecision: "CHANGES_REQUESTED", changesRequestedBy: "ana.b" }), "fix")).toEqual({ text: "changes requested by ana.b" }));
+    test("changes asked for again: the red CI is what is yours", () =>
+        expect(qualifier(pr({ reviewDecision: "CHANGES_REQUESTED", changesRerequested: true, changesRequestedBy: "ana.b", checks: "FAILURE" }), "fix")).toEqual({ text: "CI red", brick: true }));
     test("red CI is brick", () => expect(qualifier(pr({ checks: "FAILURE" }), "fix")).toEqual({ text: "CI red", brick: true }));
     test("a chased PR with nobody on it says so", () => expect(qualifier(pr(), "chase")).toEqual({ text: "no reviewer assigned" }));
     test("otherwise it names who it waits on", () => expect(qualifier(pr({ reviewers: ["ana.b"] }), "team")).toEqual({ text: "waiting on ana.b" }));

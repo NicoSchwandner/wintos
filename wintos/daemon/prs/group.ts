@@ -105,7 +105,7 @@ export function qualifier(pr: PR, group: Group, opts: { reviewers?: boolean } = 
     if (group === "merge") return pr.openThreads ? { text: `resolve ${pr.openThreads} thread${pr.openThreads === 1 ? "" : "s"} first` } : undefined;
     if (pr.mergedAt) return { text: "merged, not on main" };
     if (group === "fix") {
-        if (pr.reviewDecision === "CHANGES_REQUESTED") return { text: pr.changesRequestedBy ? `changes requested by ${pr.changesRequestedBy}` : "changes requested" };
+        if (pr.reviewDecision === "CHANGES_REQUESTED" && !pr.changesRerequested) return { text: pr.changesRequestedBy ? `changes requested by ${pr.changesRequestedBy}` : "changes requested" };
         if (redChecks(pr)) return { text: "CI red", brick: true };
         if (pr.conflict) return { text: "merge conflict", brick: true };
     }

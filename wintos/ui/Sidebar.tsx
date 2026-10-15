@@ -1,7 +1,8 @@
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
+import { getWaveObjectAtom, makeORef, reloadWaveObject } from "@/app/store/wos";
+import type { Session } from "../daemon/sessions/reduce";
 import { atoms, getApi } from "@/store/global";
 import { fireAndForget } from "@/util/util";
 import { atom, useAtom, useAtomValue } from "jotai";
@@ -42,6 +43,21 @@ function useTabs(tabIds: string[]): Record<string, Tab | undefined> {
     return useAtomValue(tabsAtom);
 }
 
+// This renderer hears about another tab's panes only when it loads that tab, so a session in a pane
+// opened there since would be dropped as gone (liveSessions) and its project shown quiet. Such a
+// tab is reloaded, once per pane, before its list is trusted.
+function useFreshPaneLists(sessions: Session[] | undefined, tabs: Record<string, Tab | undefined>): void {
+    const asked = useRef(new Set<string>());
+    useEffect(() => {
+        for (const s of sessions ?? []) {
+            const known = tabs[s.tabId]?.blockids;
+            if (!known || known.includes(s.blockId) || s.state === "ended" || asked.current.has(s.blockId)) continue;
+            asked.current.add(s.blockId);
+            void reloadWaveObject(makeORef("tab", s.tabId));
+        }
+    }, [sessions, tabs]);
+}
+
 export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const allTabIds = workspace?.tabids ?? [];
     const activeTabId = useAtomValue(atoms.staticTabId);
@@ -53,6 +69,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const shows = (list: InboxList) => !isPage(mainView) && inboxKind(tabs[activeTabId]) === list;
     const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
     const { state: raw, offline } = useWintos();
+    useFreshPaneLists(raw?.sessions, tabs);
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
     const now = useNow();
     const fullScreen = useAtomValue(atoms.isFullScreen);

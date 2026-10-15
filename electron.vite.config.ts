@@ -152,6 +152,10 @@ export default defineConfig({
         },
         server: {
             open: false,
+            // WintOS: each instance owns its port. Taking the next free one let the dev instance
+            // push the everyday one off 5173, and its daemon then refused the window's origin.
+            port: Number(process.env.WINTOS_UI_PORT ?? 5173),
+            strictPort: true,
             watch: {
                 ignored: [
                     "dist/**",

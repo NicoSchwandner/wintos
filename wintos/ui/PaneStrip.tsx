@@ -45,7 +45,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     const chips = stripPanes(blocks, sessions);
     // The strip is where every pane's controls live, so it shows whenever there is a pane.
     if (!chips.length) return null;
-    const unread = new Set(unreadSessions(sessions, tabId, state?.seen?.[tabId]).map((s) => s.id));
+    const unread = new Set(unreadSessions(sessions, tabId, state?.seen).map((s) => s.id));
     const on = magnified ?? focused?.id;
     const inProject = !isInboxTab(tab);
     // As much room under the chips as above them: the panes below already sit half the tile

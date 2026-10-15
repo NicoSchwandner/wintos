@@ -1,4 +1,5 @@
-import { rank, type Ranking, type Row } from "../daemon/ranking/rank";
+import { isUnread, rank, type Ranking, type Row } from "../daemon/ranking/rank";
+import type { Session } from "../daemon/sessions/reduce";
 import type { Project } from "../daemon/projects/store";
 import { isSnoozed, projectPrs, type ProjectPrs } from "../daemon/prs/group";
 import type { Target } from "./sessions";
@@ -44,7 +45,8 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     if (project?.error) return { title, next: `note unreadable: ${project.dir}/project.md`, tone: "brick", age, meta };
     if (row.band === "needs") {
         const sessionWaiting = row.sessions.some((s) => s.state === "waiting");
-        if (!sessionWaiting && row.unread) return { title, next: project?.next ? `New reply · ${project.next}` : "New reply", tone: "apricot", age, meta };
+        const said = lastSaid(row.sessions) ?? project?.next;
+        if (!sessionWaiting && row.unread) return { title, next: said ? `New reply · ${said}` : "New reply", tone: "apricot", age, meta };
         return { title, next: project?.next ?? "Your turn", tone: "apricot", age, meta };
     }
     if (row.band === "running") {
@@ -54,8 +56,10 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     }
     const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
     // A PR that needs you no longer lifts the project: its line says so, quietly.
-    return { title, age, reason: parkedOn ? `waiting on ${parkedOn}` : (prs?.blocked?.text ?? prs?.reason ?? meta ?? age) };
+    return { title, age, reason: parkedOn ? `waiting on ${parkedOn}` : (lastSaid(row.sessions) ?? prs?.blocked?.text ?? prs?.reason ?? meta ?? age) };
 }
+
+const lastSaid = (sessions: Session[]) => sessions.filter((s) => s.outcome).sort((a, b) => b.outcome!.at - a.outcome!.at)[0]?.outcome!.text;
 
 // Everything the sidebar and the palette show about the projects, computed once: the bands,
 // each row's text and each project's PRs. `now` ticks the ages.
@@ -70,7 +74,9 @@ export function attention(tabIds: string[], state: WintosState, names: Record<st
     const targets: Record<string, Target> = {};
     for (const r of rows.filter((r) => r.band === "needs")) {
         const waiting = r.sessions.filter((s) => s.state === "waiting").sort((a, b) => a.since - b.since)[0];
-        if (waiting) targets[r.tabId] = { tabId: r.tabId, blockId: waiting.blockId };
+        const reply = r.sessions.filter((s) => isUnread(s, state.seen ?? {})).sort((a, b) => b.turnEndedAt! - a.turnEndedAt!)[0];
+        const to = waiting ?? reply;
+        if (to) targets[r.tabId] = { tabId: r.tabId, blockId: to.blockId };
     }
     return { ...split, views, prs, targets };
 }

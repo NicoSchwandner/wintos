@@ -19,6 +19,12 @@ describe("reduceSession", () => {
         expect(only(m)).toMatchObject({ state: "waiting", since: 1020, lastAt: 1020 });
     });
 
+    test("a Stop keeps the reply's first line of prose as the outcome; a turn with no text keeps the last", () => {
+        const said = (text: string) => ev({ ...stop, last_assistant_message: text });
+        expect(only(run([ev(prompt), said("## Done\n\n**Fixed** the `walk` from a page.\nMore below.")])).outcome).toEqual({ text: "Fixed the walk from a page.", at: 1010 });
+        expect(only(run([ev(prompt), said("Shipped."), ev(prompt), said("  ")])).outcome?.text).toBe("Shipped.");
+    });
+
     test("a prompt after Stop clears waiting", () => {
         expect(only(run([ev(stop), ev(prompt)])).state).toBe("working");
     });

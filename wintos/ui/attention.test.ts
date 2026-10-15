@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
+import type { Session } from "../daemon/sessions/reduce";
 import type { WintosState } from "./view";
 import { attention, prsByTab, rowView, sidebarModel } from "./attention";
 
@@ -122,6 +123,22 @@ describe("rowView of an unread reply", () => {
     test("a done session's reply you haven't read says so", () => {
         const r: Row = { tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, unread: true, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "done", since: 5, lastAt: 5, turnEndedAt: 5 }] };
         expect(rowView(r, { dir: "/p", mtime: 0, title: "X", next: "Ship it", pr: [] }, "T", 10)).toMatchObject({ next: "New reply · Ship it", tone: "apricot" });
+    });
+});
+
+describe("a row says how the last turn ended", () => {
+    const sess = (state: Session["state"], extra: Partial<Session> = {}): Session => ({ id: "s", tabId: "t", blockId: "b", state, since: 5, lastAt: 5, turnEndedAt: 5, outcome: { text: "Fixed the walk", at: 5 }, ...extra });
+    test("unread: New reply, then what it said", () => {
+        const r: Row = { tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, unread: true, sessions: [sess("parked", { parkedOn: "CI" })] };
+        expect(rowView(r, { dir: "/p", mtime: 0, title: "X", next: "Ship it", pr: [] }, "T", 10)).toMatchObject({ next: "New reply · Fixed the walk", tone: "apricot" });
+    });
+    test("quiet: what it waits on, else what it said", () => {
+        expect(rowView(row("quiet", { sessions: [sess("parked", { parkedOn: "CI" })] }), undefined, "T", NOW).reason).toBe("waiting on CI");
+        expect(rowView(row("quiet", { sessions: [sess("done")] }), undefined, "T", NOW).reason).toBe("Fixed the walk");
+    });
+    test("opening an unread project lands on the session with the reply", () => {
+        const a = attention(["t"], { now: 10, sessions: [sess("done")], projects: [], seen: {} } as unknown as WintosState, {}, 10);
+        expect(a.targets.t).toEqual({ tabId: "t", blockId: "b" });
     });
 });
 

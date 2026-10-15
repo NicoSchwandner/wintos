@@ -45,7 +45,7 @@ export function nextNeedsYou(sessions: Session[], tabIds: string[], activeTabId:
     return stops.find((t) => t.tabId === activeTabId) ?? stops[0];
 }
 
-// A reply you haven't seen: the session's last turn ended after you last looked at its project.
-export function unreadSessions(sessions: Session[], tabId: string, seenAt: number | undefined): Session[] {
-    return sessions.filter((s) => s.tabId === tabId && isUnread(s, seenAt ?? 0));
+// A reply you haven't seen: the session's last turn ended after you last looked at it.
+export function unreadSessions(sessions: Session[], tabId: string, seen: Record<string, number> | undefined): Session[] {
+    return sessions.filter((s) => s.tabId === tabId && isUnread(s, seen ?? {}));
 }

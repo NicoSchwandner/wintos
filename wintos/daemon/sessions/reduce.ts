@@ -1,4 +1,4 @@
-export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string; reason?: string };
+export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string; reason?: string; last_assistant_message?: string };
 export type HookEvent = { tabId: string; blockId: string; payload: HookPayload };
 // parked: the turn ended waiting on something outside (CI, a review), not on the developer.
 // done: the turn ended with the goal met and nothing asked of the developer.
@@ -20,6 +20,7 @@ export type Session = {
     status?: { text: string; at: number }; // its own line on what it is doing (`wintos status`)
     lane?: Lane; // the process it follows and where it is in it (`wintos lane`, `wintos step`)
     turnEndedAt?: number; // the last Stop: a reply the developer may not have read yet
+    outcome?: { text: string; at: number }; // how the last turn with text ended: its first line of prose
     promptAt?: number; // the last prompt: in a pane running two sessions, the one you talk to
     resume?: string; // the pane's resume command for it: only the session the pane runs sends one
 };
@@ -66,6 +67,17 @@ function withPrStep(lane: Lane | undefined, verb: unknown): Lane | undefined {
     const { note: _note, todos: _todos, ...rest } = lane;
     return { ...rest, at: i };
 }
+const OUTCOME_MAX = 200;
+// The first line of a reply that says something: headings are skipped, markdown marks dropped.
+function outcomeOf(reply: unknown): string | undefined {
+    if (typeof reply !== "string") return undefined;
+    const line = reply
+        .split("\n")
+        .map((l) => l.trim())
+        .find((l) => l && !l.startsWith("#") && !/^[-*_`]{3,}$/.test(l));
+    const text = line?.replace(/^[>*+-]\s+|^\d+\.\s+/, "").replace(/[*_`]+/g, "").trim();
+    return text ? text.slice(0, OUTCOME_MAX) : undefined;
+}
 const labelOf = (prompt?: string) =>
     prompt && (prompt.length > LABEL_MAX ? `${prompt.slice(0, LABEL_MAX - 1).trimEnd()}…` : prompt);
 
@@ -110,6 +122,9 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     if (resume) session.resume = resume;
     if (prev?.prs) session.prs = prev.prs;
     if (prev?.status) session.status = prev.status;
+    const said = name === "Stop" ? outcomeOf(ev.payload.last_assistant_message) : undefined;
+    const outcome = said ? { text: said, at: now } : prev?.outcome;
+    if (outcome) session.outcome = outcome;
     const lane = name === "PostToolUse" ? withPrStep(prev?.lane, pr_verb) : prev?.lane;
     if (lane) session.lane = lane;
     const out = new Map(sessions);

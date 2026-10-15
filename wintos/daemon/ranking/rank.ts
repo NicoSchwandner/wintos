@@ -8,15 +8,16 @@ export type Ranking = { needs: Row[]; running: Row[]; quiet: Row[]; quietMore: R
 
 export const QUIET_CAP = 6;
 
-// A parked turn is no reply to read: you parked it, and it waits on something outside.
-export const isUnread = (s: Session, seenAt: number) => s.state !== "ended" && s.state !== "parked" && (s.turnEndedAt ?? 0) > seenAt;
+// seen holds when the developer last looked at each session (or, from before that, its project).
+// A parked turn is a reply too: it goes quiet once you have read how it ended.
+export const isUnread = (s: Session, seen: Record<string, number>) => s.state !== "ended" && (s.turnEndedAt ?? 0) > (seen[s.id] ?? seen[s.tabId] ?? 0);
 export const STALE_MS = 14 * 86_400_000;
 
-// seen: when the developer last looked at each project; a reply after that is unread.
+// seen: when the developer last looked at each session; a reply after that is unread.
 // Only sessions put a project in Needs you: a turn waiting on you, a reply you haven't read. A PR
 // that needs you is the PRs tab's to show.
 export function rank(tabIds: string[], sessions: Session[], now: number, touched: Record<string, number> = {}, seen: Record<string, number> = {}): Ranking {
-    const rows = tabIds.map((tabId) => rowOf(tabId, sessions.filter((s) => s.tabId === tabId), touched[tabId] ?? 0, seen[tabId] ?? 0));
+    const rows = tabIds.map((tabId) => rowOf(tabId, sessions.filter((s) => s.tabId === tabId), touched[tabId] ?? 0, seen));
     const byRecent = (a: Row, b: Row) => b.lastAt - a.lastAt;
     const quietAll = rows.filter((r) => r.band === "quiet").sort(byRecent);
     // lastAt 0 means nothing is known yet (a fresh tab), which is not the same as untouched.
@@ -31,9 +32,9 @@ export function rank(tabIds: string[], sessions: Session[], now: number, touched
     };
 }
 
-function rowOf(tabId: string, sessions: Session[], touchedAt: number, seenAt: number): Row {
+function rowOf(tabId: string, sessions: Session[], touchedAt: number, seen: Record<string, number>): Row {
     const lastAt = Math.max(touchedAt, ...sessions.map((s) => s.lastAt), 0);
-    const unreadAt = sessions.filter((s) => isUnread(s, seenAt)).map((s) => s.turnEndedAt!);
+    const unreadAt = sessions.filter((s) => isUnread(s, seen)).map((s) => s.turnEndedAt!);
     const since = [...sessions.filter((s) => s.state === "waiting").map((s) => s.since), ...unreadAt];
     if (since.length) return { tabId, band: "needs", lastAt, sessions, waitingSince: Math.min(...since), ...(unreadAt.length ? { unread: true } : {}) };
     // Running is Claude at work. Parked waits on something outside (a review, CI): nothing for you

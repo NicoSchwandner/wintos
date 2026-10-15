@@ -47,7 +47,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // When the developer last looked at each project: a reply after that is unread.
     const seenFile = join(opts.root, ".seen.json");
     const seen = readJson<Record<string, number>>(seenFile, {});
-    const markSeen = (tabId: string) => ((seen[tabId] = Date.now()), writeFileSync(seenFile, JSON.stringify(seen)));
+    const markSeen = (id: string) => ((seen[id] = Date.now()), writeFileSync(seenFile, JSON.stringify(seen)));
     // The keyboard game's score, per instance like the rest of this folder.
     const keyboardFile = join(opts.root, ".keyboard.json");
     let keyboard = readJson<KeyStats>(keyboardFile, emptyStats());
@@ -206,7 +206,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 saveSessions();
                 const tp = (p as { transcript_path?: unknown }).transcript_path;
                 recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now());
-                if (p.hook_event_name === "UserPromptSubmit") markSeen(ev.tabId); // you read it to answer it
+                if (p.hook_event_name === "UserPromptSubmit") markSeen(p.session_id); // you read it to answer it
                 const text =
                     p.hook_event_name === "UserPromptSubmit" ? injection(store.byTab(ev.tabId), store.mineDiff(ev.tabId, p.session_id)) : "";
                 broadcast();
@@ -305,11 +305,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, "");
             }
-            const seenTab = /^\/projects\/([^/]+)\/seen$/.exec(url.pathname);
-            if (req.method === "POST" && seenTab) {
-                const tabId = decodeURIComponent(seenTab[1]);
-                if (!isSafe(tabId)) return send(res, 400, "bad tab id");
-                markSeen(tabId);
+            const seenSession = /^\/sessions\/([^/]+)\/seen$/.exec(url.pathname);
+            if (req.method === "POST" && seenSession) {
+                const id = decodeURIComponent(seenSession[1]);
+                if (!isSafe(id)) return send(res, 400, "bad session id");
+                markSeen(id);
                 broadcast();
                 return send(res, 200, "");
             }

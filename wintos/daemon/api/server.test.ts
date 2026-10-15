@@ -407,10 +407,10 @@ describe("sessions across a restart", () => {
 });
 
 describe("seen", () => {
-    const seenOf = async () => (await (await fetch(base + "/state")).json()).seen["tab-1"];
+    const seenOf = async (id = "sess-1") => (await (await fetch(base + "/state")).json()).seen[id];
 
-    test("the UI marks a project seen; it survives a restart", async () => {
-        expect((await post("/projects/tab-1/seen", {})).status).toBe(200);
+    test("the UI marks a session seen; it survives a restart", async () => {
+        expect((await post("/sessions/sess-1/seen", {})).status).toBe(200);
         const at = await seenOf();
         expect(at).toBeGreaterThan(0);
         srv.close();
@@ -421,7 +421,7 @@ describe("seen", () => {
 
     test("prompting a session means you read what came before", async () => {
         await event(prompt);
-        expect(await seenOf()).toBeGreaterThan(0);
+        expect(await seenOf(prompt.session_id)).toBeGreaterThan(0);
     });
 });
 

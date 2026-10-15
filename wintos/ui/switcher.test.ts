@@ -115,3 +115,22 @@ describe("undoWalkKey", () => {
         vi.useRealTimers();
     });
 });
+
+describe("a walk from a page ends on the main process's word", () => {
+    test("⌘ up in the page, or a key there without ⌘, switches once", () => {
+        let metaUp = () => {};
+        const win = Object.assign(new EventTarget(), { api: { onWintosWalkMetaUp: (cb: () => void) => (metaUp = cb) } });
+        vi.stubGlobal("window", win);
+        vi.stubGlobal("document", new EventTarget());
+        vi.mocked(enterProject).mockClear();
+        here.tab = "a";
+        setSwitchOrder(["a", "b", "c"]);
+        switchProject(1, true);
+        expect(walking()).toBe(true);
+        metaUp();
+        expect(walking()).toBe(false);
+        expect(enterProject).toHaveBeenCalledExactlyOnceWith("b");
+        metaUp();
+        expect(enterProject).toHaveBeenCalledOnce();
+    });
+});

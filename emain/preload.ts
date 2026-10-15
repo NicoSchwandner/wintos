@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld("api", {
     setWintosWalking: (on) => ipcRenderer.send("wintos-walking", on),
     nativeUndo: () => ipcRenderer.send("wintos-native-undo"),
     onWintosWalkEsc: (callback) => ipcRenderer.on("wintos-walk-esc", () => callback()),
+    onWintosWalkMetaUp: (callback) => ipcRenderer.on("wintos-walk-meta-up", () => callback()),
     updateWindowControlsOverlay: (rect) => ipcRenderer.send("update-window-controls-overlay", rect),
     onReinjectKey: (callback) => ipcRenderer.on("reinject-key", (_event, waveEvent) => callback(waveEvent)),
     setWebviewFocus: (focused: number) => ipcRenderer.send("webview-focus", focused),

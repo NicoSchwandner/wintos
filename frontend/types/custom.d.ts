@@ -115,6 +115,7 @@ declare global {
         setWintosWalking: (on: boolean) => void; // wintos-walking
         nativeUndo: () => void; // wintos-native-undo
         onWintosWalkEsc: (callback: () => void) => void; // wintos-walk-esc
+        onWintosWalkMetaUp: (callback: () => void) => void; // wintos-walk-meta-up
         getWintosFullScreen: () => boolean; // wintos-is-fullscreen
         updateWindowControlsOverlay: (rect: Dimensions) => void; // update-window-controls-overlay
         onReinjectKey: (callback: (waveEvent: WaveKeyboardEvent) => void) => void; // reinject-key

@@ -46,16 +46,6 @@ document.addEventListener(
     true
 );
 
-// WintOS: a page never passes the ⌘ release to the host, which ends a ⌘J/⌘K walk
-// (wintos/ui/switcher.ts).
-window.addEventListener(
-    "keyup",
-    (event) => {
-        if (event.isTrusted && event.key === "Meta") ipcRenderer.sendToHost("wintos-meta-up");
-    },
-    true
-);
-
 // WintOS: whether what has focus here takes text, so the host leaves the page its editing keys
 // (Esc, ⌘⏎, ⌘K, ⌘E, ⌘I, ⌘B, ⇧⌘P) while you type in it (emain-ipc.ts).
 const takesText = (el: Element | null) =>

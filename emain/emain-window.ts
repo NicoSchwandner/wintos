@@ -23,7 +23,7 @@ import { delay, ensureBoundsAreVisible, waveKeyToElectronKey } from "./emain-uti
 import { ElectronWshClient } from "./emain-wsh";
 import { updater } from "./updater";
 
-const DevInitTimeoutMs = 5000;
+const DevInitTimeoutMs = 30_000;
 
 export type WindowOpts = {
     unamePlatform: NodeJS.Platform;
@@ -455,27 +455,23 @@ export class WaveBrowserWindow extends BaseWindow {
         console.log("wave-ready init time", Date.now() - startTime + "ms");
     }
 
+    // WintOS: a slow start is only reported, never abandoned. A cold Vite (after dev-reset) takes
+    // longer than the timeout to load the renderer, and rejecting left the window blank for good.
     private async awaitWithDevTimeout<T>(promise: Promise<T>, name: string, tabId: string): Promise<T> {
         if (!isDev) {
             return promise;
         }
-        let timeoutHandle: ReturnType<typeof setTimeout> = null;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutHandle = setTimeout(() => {
-                console.log(
-                    `[dev] ${name} timed out after ${DevInitTimeoutMs}ms for tab ${tabId}, showing window for devtools`
-                );
-                if (!this.isDestroyed() && !this.isVisible()) {
-                    this.show();
-                }
-                if (this.activeTabView?.webContents && !this.activeTabView.webContents.isDevToolsOpened()) {
-                    this.activeTabView.webContents.openDevTools();
-                }
-                reject(new Error(`[dev] ${name} timed out after ${DevInitTimeoutMs}ms`));
-            }, DevInitTimeoutMs);
-        });
+        const timeoutHandle = setTimeout(() => {
+            console.log(`[dev] ${name} still waiting after ${DevInitTimeoutMs}ms for tab ${tabId}, showing window for devtools`);
+            if (!this.isDestroyed() && !this.isVisible()) {
+                this.show();
+            }
+            if (this.activeTabView?.webContents && !this.activeTabView.webContents.isDevToolsOpened()) {
+                this.activeTabView.webContents.openDevTools();
+            }
+        }, DevInitTimeoutMs);
         try {
-            return await Promise.race([promise, timeoutPromise]);
+            return await promise;
         } finally {
             clearTimeout(timeoutHandle);
         }

@@ -98,7 +98,10 @@ async function until(what, fn, ms = 15000) {
 const inboxIn = (t) => evalIn(t, `!!document.querySelector("[data-wintos=inbox]")`);
 const sql = (q) => execFileSync("sqlite3", ["-readonly", DB, q], { encoding: "utf8" }).trim();
 const results = [];
+// ONLY=<regex> runs the matching scenarios, e.g. ONLY="^2[01] " to iterate on two of them.
+const only = process.env.ONLY && new RegExp(process.env.ONLY);
 async function scenario(name, fn) {
+    if (only && !only.test(name)) return;
     try {
         await fn();
         results.push(["PASS", name]);
@@ -167,6 +170,8 @@ await scenario("1 · ⇧⌘G from a project shows the Inbox with its list focuse
 let prUrl;
 await scenario("2 · a PR opened in the Inbox, and its selected row, are still there after a project and back", async () => {
     const inbox = await visible();
+    // Right after a reset GitHub is still loading: Enter on an empty list opens nothing.
+    await until("the PR list loaded", () => evalIn(inbox, `!!document.querySelector("[data-selected]")`), 90_000);
     await evalIn(inbox, `document.querySelector("[data-wintos=inbox-list]").focus()`);
     await press(inbox, "Enter", { code: "Enter", keyCode: 13 });
     prUrl = await until("a PR pane", () => evalIn(inbox, `[...document.querySelectorAll("webview")].map(w => w.getAttribute("src")).find(u => u?.includes("/pull/"))`));
@@ -278,7 +283,7 @@ await scenario("7 · Esc closes the palette and focus goes back to the list; fro
     await until("the palette closed", () => evalIn(inbox, `!document.querySelector("[data-wintos=palette]")`));
     await until("the list focused again", () => evalIn(inbox, `document.activeElement?.dataset?.wintos === "inbox-list"`));
     // A click, as a person would: it gives the guest page real focus.
-    const at = await evalIn(inbox, `(() => { const w = [...document.querySelectorAll("webview")].find((w) => w.getURL().includes("github.com") && w.getBoundingClientRect().width > 0); const r = w?.getBoundingClientRect(); return r && { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    const at = await evalIn(inbox, `(() => { const area = (w) => { const r = w.getBoundingClientRect(); return r.y >= 0 && r.width > 100 && r.height > 100 ? r.width * r.height : 0; }; const w = [...document.querySelectorAll("webview")].filter((w) => w.getURL().includes("github.com") && area(w)).sort((a, b) => area(b) - area(a))[0]; const r = w?.getBoundingClientRect(); return r && { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
     if (!at) throw new Error("no visible page in the Inbox");
     for (const type of ["mousePressed", "mouseReleased"]) await cdp(inbox, "Input.dispatchMouseEvent", { type, ...at, button: "left", clickCount: 1 });
     await until("the page focused", () => evalIn(inbox, `document.activeElement?.tagName === "WEBVIEW"`));
@@ -375,8 +380,36 @@ await scenario("14 · ⌥⌘P parks the session waiting in a pane just opened", 
     await post("Stop");
     const state = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((s) => s.id === "e2e-park")?.state;
     await until("the session waiting", async () => (await state()) === "waiting");
+    // ⌥⌘P parks what the window knows is waiting, which can trail the daemon by a broadcast.
+    await until("the window seeing it waiting", () => evalIn(t, `window.wintosState()?.sessions.some((s) => s.id === "e2e-park" && s.state === "waiting")`));
     await press(t, "π", { code: "KeyP", keyCode: 80, mods: ["alt", "meta"] }); // what macOS sends for ⌥P
     await until("the session parked", async () => (await state()) === "parked");
+    await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
+});
+
+await scenario("14b · a session that parks itself stays in Needs you with its last line until you focus its pane, then goes quiet saying it", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    await press(t, "d", { mods: ["meta"] });
+    const blockId = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
+    const focus = (b) => evalIn(t, `window.wintosLayout().focusNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(b)}).id)`);
+    await focus(first);
+    const post = (hook_event_name, extra = {}) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-ack", hook_event_name, prompt: "e2e ack", ...extra } }) });
+    await post("UserPromptSubmit");
+    await fetch(`http://127.0.0.1:7731/blocks/${blockId}/wait?session=e2e-ack`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason: "CI on #1" }) });
+    await post("Stop", { last_assistant_message: "## Done\n\nPushed the **fix**; CI is running." });
+    const row = (band) => `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-band-group=${band}] [data-tabid='${tabId}']")].map((e) => e.innerText).join(" ")`;
+    // The active row shows the walk keys instead of its line, so read it in another tab's sidebar.
+    const others = [];
+    for (const r of await renderers()) if ((await evalIn(r, "window.wintosTabId?.()")) !== tabId) others.push(r);
+    const elsewhere = (band, line) => until(`"${line}" in ${band} in another sidebar`, async () => { for (const r of others) if ((await evalIn(r, row(band))).includes(line)) return true; return false; });
+    await elsewhere("needs", "New reply · Pushed the fix; CI is running.");
+    await sleep(3000);
+    if (!(await evalIn(t, row("needs")))) throw new Error("acked without its pane ever focused");
+    await focus(blockId);
+    await until("the project quiet", () => evalIn(t, row("quiet")), 8000);
+    await elsewhere("quiet", "waiting on CI on #1");
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
 });
 

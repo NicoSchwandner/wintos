@@ -25,6 +25,11 @@ describe("queueModel", () => {
 
     test("header counts: yours are the four you act on, team is the rest", () => expect([m.yours, m.waiting, m.team]).toEqual([4, 0, 1]));
 
+    test("someone else's draft asked of your team is not shown: it asks nothing yet", () => {
+        const d = queueModel([pr({ number: 7, author: "bo.k", requestedTeam: true, isDraft: true })], "me", MON);
+        expect([d.groups, d.team]).toEqual([[], 0]);
+    });
+
     test("your PRs waiting on others count as waiting, not yours", () => {
         const w = queueModel([pr({ number: 6, reviewers: ["ana"] })], "me", MON);
         expect([w.groups.map((g) => g.group), w.yours, w.waiting]).toEqual([["waiting"], 0, 1]);

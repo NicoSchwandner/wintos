@@ -2,7 +2,8 @@ import type { Day } from "../daemon/journal/journal";
 import type { KeyStats } from "../daemon/keyboard/keyboard";
 import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
-import { byUrgency, GROUPS, groupOf, isSnoozed, isStacked, projectPrs, qualifier, type Group, type PR, type Snoozes } from "../daemon/prs/group";
+import { ageLabel, byUrgency, GROUPS, groupOf, isSnoozed, isStacked, projectPrs, qualifier, type Group, type PR, type Snoozes } from "../daemon/prs/group";
+import { fixNote } from "./prs";
 import { liveSessionIn, liveSessionsIn, type Session } from "../daemon/sessions/reduce";
 import { shelvedName, type Shelved } from "../daemon/shelf/shelf";
 import type { FixerState } from "../daemon/fixer/runner";
@@ -85,6 +86,7 @@ export type SessionHeader = {
     task?: string;
     branch?: string;
     prs: PrChip[];
+    merged: number;
     tone?: "apricot" | "brick"; // a PR here needs a fix (apricot) or is past the SLA (brick)
 };
 
@@ -95,46 +97,71 @@ export function sessionHeader(state: WintosState, blockId: string): SessionHeade
     if (!session) return undefined;
     const gh = ghPrs(state);
     const byUrl = new Map((gh?.prs ?? []).map((p) => [p.url, p]));
-    const prs = prChips(state, session.prs ?? []);
+    const { open: prs, merged } = prChips(state, session.prs ?? []);
     const open = (session.prs ?? []).map((u) => byUrl.get(u)).filter((p): p is PR => !!p);
     const where = session.cwd?.split("/").pop();
     const branch = open[0]?.branch ?? where;
     const task = [...open.flatMap((p) => [p.branch, p.title]), where ?? ""].map((t) => TASK_ID.exec(t)?.[0]).find(Boolean)?.toUpperCase();
     const groups = prs.map((p) => p.group);
     const tone = groups.some((g) => g === "chase" || g === "release") ? "brick" : groups.includes("fix") ? "apricot" : undefined;
-    return { session, ...(task && { task }), ...(branch && { branch }), prs, ...(tone && { tone }) };
+    return { session, ...(task && { task }), ...(branch && { branch }), prs, merged, ...(tone && { tone }) };
 }
 
-// A session's PRs as chips: the number, the queue group and what it waits on. A PR the PR
-// list doesn't show (closed, or not fetched yet) is the bare number.
-export type PrChip = { url: string; number: number; group?: Group; why?: string };
-export function prChips(state: WintosState, urls: string[]): PrChip[] {
+// A session's open PRs as chips, most urgent first, each saying what is next in plain words;
+// the done ones drop out, the merged ones waiting for a release only count. repo: on a PR outside
+// the session's own repo. Before the first PR fetch every PR shows as a bare number.
+export type PrChip = { url: string; number: number; group?: Group; text?: string; repo?: string };
+export type SessionPrs = { open: PrChip[]; merged: number };
+export function prChips(state: WintosState, urls: string[]): SessionPrs {
     const gh = ghPrs(state);
-    const byUrl = new Map((gh?.prs ?? []).map((p) => [p.url, p]));
-    return urls.map((url) => {
-        const pr = byUrl.get(url);
-        const number = Number(url.split("/").pop());
-        if (!pr || !gh) return { url, number };
+    if (!gh) return { open: urls.map((url) => ({ url, number: Number(url.split("/").pop()) })), merged: 0 };
+    const byUrl = new Map(gh.prs.map((p) => [p.url, p]));
+    const known = urls.map((u) => byUrl.get(u)).filter((p): p is PR => !!p);
+    const open = known.filter((p) => !p.mergedAt);
+    const counts = new Map<string, number>();
+    for (const p of open) counts.set(p.repo, (counts.get(p.repo) ?? 0) + 1);
+    const home = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const chips = open.map((pr): PrChip => {
         const group = groupOf(pr, gh.me, state.now);
-        const why = qualifier(pr, group)?.text;
-        return why ? { url, number, group, why } : { url, number, group };
+        const repo = pr.repo === home ? undefined : shortRepo(pr.repo);
+        return { url: pr.url, number: pr.number, group, text: chipText(pr, group, state), ...(repo ? { repo } : {}) };
     });
+    return { open: chips.sort((a, b) => GROUPS.indexOf(a.group!) - GROUPS.indexOf(b.group!)), merged: known.length - open.length };
 }
 
-// The PR ⌥⌘G opens from the focused pane: the one the queue would put first.
-export const urgentPr = (h: SessionHeader | undefined) =>
-    h?.prs.filter((p) => p.group).sort((a, b) => GROUPS.indexOf(a.group!) - GROUPS.indexOf(b.group!))[0] ?? h?.prs[0];
+const shortRepo = (repo: string) => repo.split("/").pop()!.replace(/^Wint\./, "").replace(/\.Service$/, "");
+
+function chipText(pr: PR, group: Group, state: WintosState): string {
+    const fixer = state.fixer;
+    const fix = fixNote(fixer?.runs.find((r) => r.url === pr.url), pr, fixer?.queued ?? []);
+    if (fix) return fix.text;
+    const why = qualifier(pr, group)?.text;
+    if (group === "merge") return why ?? "merge it";
+    if (group === "fix") return why ?? "fix";
+    if (group === "review") return "review asked";
+    if (group === "team") return "team review";
+    if (group === "chase") return ["chase", why, ageLabel(pr, state.now).text].filter(Boolean).join(" · ");
+    return pr.isDraft && !why ? "draft" : (why ?? "waiting");
+}
+
+const chipsOf = (state: WintosState, urls: string[] = []) => {
+    const { open, merged } = prChips(state, urls);
+    return { prs: open, merged };
+};
+
+// The PR ⌥⌘G opens from the focused pane: the one the queue would put first (chips come sorted).
+export const urgentPr = (h: SessionHeader | undefined) => h?.prs[0];
 
 // What a live session is called: the status line it keeps (`wintos status`), else its first prompt.
 export const sessionName = (s: Session) => s.status?.text ?? s.label ?? "session";
 
 // A project's sessions, as its notes list them and ⌥⌘1–9 counts them: the live ones in pane
 // order (blockIds, the tab's), then the shelved ones newest first; each with its PRs as chips.
-export type ProjectSession = { kind: "live"; session: Session; name: string; prs: PrChip[] } | { kind: "shelved"; item: Shelved; name: string; prs: PrChip[] };
+export type ProjectSession = ({ kind: "live"; session: Session } | { kind: "shelved"; item: Shelved }) & { name: string; prs: PrChip[]; merged: number };
 export function projectSessions(state: WintosState, tabId: string, blockIds: string[]): ProjectSession[] {
     const live = blockIds.flatMap((b) => liveSessionsIn(state.sessions.filter((s) => s.tabId === tabId), b));
     return [
-        ...live.map((session): ProjectSession => ({ kind: "live", session, name: sessionName(session), prs: prChips(state, session.prs ?? []) })),
-        ...(state.shelf?.[tabId] ?? []).map((item): ProjectSession => ({ kind: "shelved", item, name: shelvedName(item), prs: prChips(state, item.prs ?? []) })),
+        ...live.map((session): ProjectSession => ({ kind: "live", session, name: sessionName(session), ...chipsOf(state, session.prs) })),
+        ...(state.shelf?.[tabId] ?? []).map((item): ProjectSession => ({ kind: "shelved", item, name: shelvedName(item), ...chipsOf(state, item.prs) })),
     ];
 }

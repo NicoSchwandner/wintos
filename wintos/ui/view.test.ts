@@ -108,7 +108,7 @@ describe("sessionHeader (the header on a Claude pane)", () => {
 
     test("its PRs with their queue group and why; the task and branch from the first PR", () => {
         const h = sessionHeader(st([sess({ prs: [p(1).url, p(2).url] })], [p(1, { checks: "FAILURE" }), p(2, { reviewers: ["ana"] })]), "b")!;
-        expect(h.prs.map((x) => [x.number, x.group, x.why])).toEqual([[1, "fix", "CI red"], [2, "chase", "waiting on ana"]]);
+        expect(h.prs.map((x) => [x.number, x.group, x.text])).toEqual([[1, "fix", "CI red"], [2, "chase", "chase · waiting on ana · 5 wd"]]);
         expect([h.task, h.branch]).toEqual(["DEV-77", "DEV-77-thing"]);
     });
 
@@ -118,8 +118,25 @@ describe("sessionHeader (the header on a Claude pane)", () => {
         expect(sessionHeader(st([sess({ prs: [p(1).url] })], [p(1, { createdAt: "2026-09-28T08:00:00Z" })]), "b")!.tone).toBeUndefined();
     });
 
-    test("a PR no longer open is listed without a group", () =>
-        expect(sessionHeader(st([sess({ prs: ["https://github.com/acme/api/pull/9"] })]), "b")!.prs).toEqual([{ url: "https://github.com/acme/api/pull/9", number: 9 }]));
+    test("done PRs drop out: one gone from the PR list has no chip, a merged one only counts", () => {
+        const h = sessionHeader(st([sess({ prs: ["https://github.com/acme/api/pull/9", p(3).url, p(1).url] })], [p(3, { mergedAt: "2026-09-27T08:00:00Z" }), p(1)]), "b")!;
+        expect([h.prs.map((x) => x.number), h.merged]).toEqual([[1], 1]);
+    });
+
+    test("most urgent first; the repo only on a PR outside the session's own; a draft says so", () => {
+        const other = { ...p(7, { reviewers: ["ana"] }), repo: "acme/Wint.Embedding.Service", url: "https://github.com/acme/Wint.Embedding.Service/pull/7" };
+        const h = sessionHeader(st([sess({ prs: [p(2).url, other.url, p(1).url] })], [p(2, { isDraft: true, createdAt: "2026-09-28T08:00:00Z" }), other, p(1, { conflict: true })]), "b")!;
+        expect(h.prs.map((x) => [x.number, x.repo, x.text])).toEqual([[1, undefined, "merge conflict"], [7, "Embedding", "chase · waiting on ana · 5 wd"], [2, undefined, "draft"]]);
+    });
+
+    test("the fixer at work on the PR's commit says so on its chip", () => {
+        const fixer = { conflicts: true, queued: [], runs: [{ id: "r", kind: "conflict", url: p(1).url, head: "h1", route: "fresh", at: 1, startedAt: 2 }] };
+        const state = { ...st([sess({ prs: [p(1).url] })], [p(1, { conflict: true, head: "h1" })]), fixer } as unknown as WintosState;
+        expect(sessionHeader(state, "b")!.prs[0].text).toBe("fixing the conflict…");
+    });
+
+    test("without PR data yet, every PR shows as a bare number", () =>
+        expect(sessionHeader({ ...st([sess({ prs: [p(9).url] })]), plugins: {} } as unknown as WintosState, "b")!.prs).toEqual([{ url: p(9).url, number: 9 }]));
 
     test("⌥⌘G opens the PR the queue would put first", () => {
         const h = sessionHeader(st([sess({ prs: [p(1).url, p(2).url] })], [p(1, { reviewers: ["ana"], createdAt: "2026-09-28T08:00:00Z" }), p(2, { checks: "FAILURE" })]), "b");

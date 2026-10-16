@@ -43,9 +43,11 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}> · {relTime(now - s.status.at)}</span>
                 </div>
             )}
+            {/* One line: the most urgent few; the rest, and the merged ones, are in the notes' Sessions. */}
             {h.prs.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                    {h.prs.map((p) => <PrChipButton key={p.url} chip={p} keyHint={focused && p === urgent ? "⌥⌘G" : undefined} />)}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
+                    {h.prs.slice(0, HEADER_CHIPS).map((p) => <PrChipButton key={p.url} chip={p} keyHint={focused && p === urgent ? "⌥⌘G" : undefined} />)}
+                    {h.prs.length > HEADER_CHIPS && <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: T.muted }}>+{h.prs.length - HEADER_CHIPS}</span>}
                 </div>
             )}
         </div>
@@ -53,9 +55,12 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
 });
 SessionHeader.displayName = "SessionHeader";
 
-// One PR as a chip: its number, its queue group and what it waits on; a click opens the PR.
+const HEADER_CHIPS = 4;
+
+// One PR as a chip: its number and what is next, in its queue group's colour; a click opens the PR.
 export function PrChipButton({ chip: p, keyHint, small }: { chip: PrChip; keyHint?: string; small?: boolean }) {
     const head = p.group ? HEADERS[p.group] : undefined;
+    const loud = !!head && p.group !== "waiting" && p.group !== "team";
     return (
         <button
             type="button"
@@ -63,11 +68,10 @@ export function PrChipButton({ chip: p, keyHint, small }: { chip: PrChip; keyHin
             title={p.url}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => runAction(`open-page:${p.url}`)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: small ? "1px 6px" : "2px 7px", borderRadius: 6, border: `1px solid ${head && p.group !== "waiting" && p.group !== "team" ? head.color : T.border}`, background: "transparent", cursor: "pointer", fontFamily: T.ui, fontSize: small ? 10.5 : 11.5, whiteSpace: "nowrap" }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: small ? "1px 6px" : "2px 7px", borderRadius: 6, border: `1px solid ${loud ? head.color : T.border}`, background: "transparent", cursor: "pointer", fontFamily: T.ui, fontSize: small ? 10.5 : 11.5, whiteSpace: "nowrap", flexShrink: 0 }}
         >
-            <span style={{ fontFamily: T.mono, color: T.title }}>#{p.number}</span>
-            {head && <span style={{ color: head.color, fontWeight: 600 }}>{head.label}</span>}
-            {p.why && <span style={{ color: T.muted }}>{p.why}</span>}
+            <span style={{ fontFamily: T.mono, color: T.title }}>{p.repo ? `${p.repo} ` : ""}#{p.number}</span>
+            {p.text && <span style={{ color: loud ? head.color : T.muted }}>{p.text}</span>}
             {keyHint && <Key k={keyHint} label="" />}
         </button>
     );

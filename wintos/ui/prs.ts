@@ -91,7 +91,7 @@ export function fixNote(run: FixRun | undefined, pr: PR, queued: string[]): { te
     const what = run.kind === "conflict" ? "the conflict" : "red CI";
     if (run.route === "pane") return { text: `${what} sent to its session` };
     if (queued.includes(run.id)) return { text: `fixing ${what} next` };
-    if (!run.endedAt) return { text: `fixing ${what}…` };
+    if (!run.endedAt) return { text: run.startedAt ? `fixing ${what}…` : `fixing ${what} next` };
     if (run.exit === 0) return { text: `tried to fix ${what}${run.result ? `: ${run.result}` : ""}` };
     return { text: `fixing ${what} failed${run.result ? `: ${run.result}` : ""}`, brick: true };
 }

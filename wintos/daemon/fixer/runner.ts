@@ -7,7 +7,8 @@ import { conflictJobs, fixKey, fixPrompt, type FixJob } from "./plan";
 
 // One line per run in runs.jsonl, its full output (stream-json) in logs/<id>.log: what to read
 // when a fix went wrong. typed: written into the owning session's pane, which runs it.
-export type FixRun = { id: string; kind: FixJob["kind"]; url: string; head?: string; route: FixJob["route"]["kind"]; sessionId?: string; at: number; endedAt?: number; exit?: number | null; result?: string; log?: string };
+// at: queued; startedAt: its run began (runs go one at a time, so a queued one waits).
+export type FixRun = { id: string; kind: FixJob["kind"]; url: string; head?: string; route: FixJob["route"]["kind"]; sessionId?: string; at: number; startedAt?: number; endedAt?: number; exit?: number | null; result?: string; log?: string };
 export type FixerState = { conflicts: boolean; runs: FixRun[]; queued: string[] };
 
 const DEFAULT_CMD = "claude -p --permission-mode auto --output-format stream-json --verbose";
@@ -87,8 +88,11 @@ export class Fixer {
         }
     }
 
-    private exec(job: FixJob, run: FixRun): Promise<void> {
-        const log = join(this.dir, "logs", `${run.id}.log`);
+    private exec(job: FixJob, queued: FixRun): Promise<void> {
+        const log = join(this.dir, "logs", `${queued.id}.log`);
+        const run: FixRun = { ...queued, startedAt: Date.now(), log };
+        this.record(run);
+        this.onChange();
         const line = commandLine(job, this.cmd, this.cwd);
         const out = createWriteStream(log);
         out.write(`# ${line}\n`);

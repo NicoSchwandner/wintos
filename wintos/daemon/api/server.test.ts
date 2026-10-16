@@ -283,6 +283,7 @@ describe("the PR fixer", () => {
     const CONFLICTED = "https://github.com/o/r/pull/5", RED = "https://github.com/o/r/pull/6";
     const prs = [
         { repo: "o/r", number: 5, url: CONFLICTED, title: "t", author: "me", isDraft: false, createdAt: "", conflict: true, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b5", base: "main", head: "h5" },
+        { repo: "o/r", number: 9, url: "https://github.com/o/r/pull/9", title: "t", author: "me", isDraft: false, createdAt: "", conflict: true, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b9", base: "main", head: "h9" },
         { repo: "o/r", number: 6, url: RED, title: "t", author: "me", isDraft: false, createdAt: "", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b6", head: "h6", checks: "FAILURE" },
     ];
     const until = async <T>(f: () => Promise<T>) => {
@@ -309,16 +310,22 @@ describe("the PR fixer", () => {
         return dir;
     };
 
-    test("a conflict on my PR is resolved by itself, once per head commit, logged", async () => {
+    test("a conflict on my PR is resolved by itself, once per head commit, one run at a time, logged", async () => {
         const dir = await start();
-        const run = await until(async () => (await fixerOf()).runs.find((r: { exit?: number }) => r.exit === 0));
+        const runs = await until(async () => {
+            const rs = (await fixerOf()).runs;
+            return rs.length === 2 && rs.every((r: { exit?: number }) => r.exit === 0) && rs;
+        });
+        const [second, first] = runs;
+        expect(second.startedAt).toBeGreaterThanOrEqual(first.endedAt);
+        const run = runs.find((r: { url: string }) => r.url === CONFLICTED);
         expect(run).toMatchObject({ kind: "conflict", url: CONFLICTED, head: "h5", route: "fresh", result: "Resolved and pushed." });
         expect(readFileSync(join(dir, "args"), "utf8")).toContain(`${CONFLICTED} has merge conflicts`);
         expect(readFileSync(run.log, "utf8")).toContain("Resolved and pushed.");
-        expect(readFileSync(join(root, ".fixer", "runs.jsonl"), "utf8").trim().split("\n").length).toBe(2); // started, ended
+        expect(readFileSync(join(root, ".fixer", "runs.jsonl"), "utf8").trim().split("\n").length).toBe(6); // queued, started, ended, twice
         await post("/plugins/gh-prs/run", {});
         await new Promise((r) => setTimeout(r, 200));
-        expect((await fixerOf()).runs).toHaveLength(1);
+        expect((await fixerOf()).runs).toHaveLength(2);
     });
 
     test("turned off, a conflict waits for you", async () => {
@@ -329,7 +336,7 @@ describe("the PR fixer", () => {
         expect((await post("/fixer/settings", { conflicts: "yes" })).status).toBe(400);
         await post("/fixer/settings", { conflicts: true });
         await post("/plugins/gh-prs/run", {});
-        await until(async () => (await fixerOf()).runs.length === 1);
+        await until(async () => (await fixerOf()).runs.length === 2);
     });
 
     test("red CI, dispatched: typed into the live owning session's pane; not red is refused", async () => {

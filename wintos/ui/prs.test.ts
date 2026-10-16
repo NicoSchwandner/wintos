@@ -181,7 +181,8 @@ describe("fixNote", () => {
         expect(fixNote(run({ head: "h0" }), pr, [])).toBeUndefined();
         expect(fixNote(undefined, pr, [])).toBeUndefined();
         expect(fixNote(run(), pr, ["r"])).toEqual({ text: "fixing the conflict next" });
-        expect(fixNote(run(), pr, [])).toEqual({ text: "fixing the conflict…" });
+        expect(fixNote(run({ startedAt: 2 }), pr, [])).toEqual({ text: "fixing the conflict…" });
+        expect(fixNote(run(), pr, [])).toEqual({ text: "fixing the conflict next" });
         expect(fixNote(run({ kind: "ci", route: "pane" }), pr, [])).toEqual({ text: "red CI sent to its session" });
         expect(fixNote(run({ endedAt: 2, exit: 0, result: "Pushed." }), pr, [])).toEqual({ text: "tried to fix the conflict: Pushed." });
         expect(fixNote(run({ endedAt: 2, exit: 1 }), pr, [])).toEqual({ text: "fixing the conflict failed", brick: true });

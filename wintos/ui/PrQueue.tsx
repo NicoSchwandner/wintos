@@ -241,8 +241,10 @@ function PrRow({ r, depth, project, cursor, cols, onOpen }: { r: QueueRow; depth
             </span>
             <Reviewers r={r} names={cols.names} />
             <span title={project ? `Project: ${project} (o)` : "No project"} style={{ width: 12, flexShrink: 0, textAlign: "center", fontSize: 11, color: project ? T.moss : "transparent" }}>◆</span>
-            <span style={{ width: compact ? 120 : 150, flexShrink: 0, textAlign: "right", fontFamily: T.mono, fontSize: 10.5, color: T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {r.repoShort} #{pr.number}
+            {/* The repo gives way; the number never does. */}
+            <span style={{ width: compact ? 120 : 150, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: "0.6em", fontFamily: T.mono, fontSize: 10.5, color: T.faint, whiteSpace: "nowrap" }}>
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{r.repoShort}</span>
+                <span style={{ flexShrink: 0 }}>#{pr.number}</span>
             </span>
         </div>
     );

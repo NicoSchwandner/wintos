@@ -103,6 +103,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                                     ) : (
                                         <HitRow hit={row.hit} on={on} />
                                     )}
+                                    {row.type === "hit" && row.hit.item.touchedAt != null && <span data-wintos="palette-touched" style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>{relTime(now - row.hit.item.touchedAt)} ago</span>}
                                     {row.type === "hit" && row.hit.item.hint && <Key k={row.hit.item.hint} label="" />}
                                 </div>
                             </div>
@@ -194,7 +195,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     const out: PaletteItem[] = tabIds.map((id) => ({
         id: `p:${id}`, kind: "project", title: title(id),
         subtitle: [band[id], project(id)?.next].filter(Boolean).join(" · "),
-        fields: fields(id), recency: project(id)?.mtime, run: opens(id),
+        fields: fields(id), recency: project(id)?.mtime, touchedAt: state.seen?.[id], run: opens(id),
     }));
     // Closed: its folder is still there, its tab is not. Opening it reopens it in a new tab.
     for (const p of state.projects) {
@@ -202,7 +203,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
         // Shelved: closed with sessions on its shelf. It reopens on the newest; the rest stay shelved.
         const shelf = state.shelf?.[p.id] ?? [];
         const status = shelf.length ? `shelved · ${shelf.length} session${shelf.length === 1 ? "" : "s"} · ⏎ reopens it on the newest` : "closed · ⏎ reopens it";
-        out.push({ id: `c:${p.id}`, kind: "project", title: p.title, subtitle: [status, p.next].filter(Boolean).join(" · "), fields: fields(p.id), recency: (p.mtime ?? 0) / 2, run: () => reopenProject(p.id!, shelf[0] ? [resumePane(shelf[0].script)] : []) });
+        out.push({ id: `c:${p.id}`, kind: "project", title: p.title, subtitle: [status, p.next].filter(Boolean).join(" · "), fields: fields(p.id), recency: (p.mtime ?? 0) / 2, touchedAt: state.seen?.[p.id], run: () => reopenProject(p.id!, shelf[0] ? [resumePane(shelf[0].script)] : []) });
     }
     for (const pr of gh?.prs ?? []) {
         const tab = prOf.get(pr.url);
@@ -214,15 +215,15 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
         });
     }
     for (const s of live.filter((s) => s.state !== "ended" && tabIds.includes(s.tabId)))
-        out.push({ id: `s:${s.id}`, kind: "session", title: sessionName(s), subtitle: `${s.state} · ${title(s.tabId)}`, run: () => focusSession({ tabId: s.tabId, blockId: s.blockId }) });
+        out.push({ id: `s:${s.id}`, kind: "session", title: sessionName(s), subtitle: `${s.state} · ${title(s.tabId)}`, touchedAt: s.promptAt ?? s.lastAt, run: () => focusSession({ tabId: s.tabId, blockId: s.blockId }) });
     // A closed project's shelved sessions too: one opens its project again, on that session.
     const closed = new Set(state.projects.filter((p) => p.id && p.title && !p.error && !ids.includes(p.id)).map((p) => p.id!));
     for (const id of [...tabIds, ...closed])
         for (const s of state.shelf?.[id] ?? [])
             out.push({
                 id: `sh:${s.sessionId}`, kind: "session", title: shelvedName(s),
-                subtitle: [`shelved ${relTime(now - s.at)} ago`, title(id), s.name && s.gist].filter(Boolean).join(" · "),
-                fields: [{ text: [s.gist, s.label].filter(Boolean).join(" "), weight: 25 }], recency: s.at,
+                subtitle: ["shelved", title(id), s.name && s.gist].filter(Boolean).join(" · "),
+                fields: [{ text: [s.gist, s.label].filter(Boolean).join(" "), weight: 25 }], recency: s.at, touchedAt: s.at,
                 run: () => (closed.has(id) ? reopenProject(id, [resumePane(s.script)]) : focusSession({ tabId: id, blockId: "", resume: s.script })),
             });
     const here = title(activeTab);

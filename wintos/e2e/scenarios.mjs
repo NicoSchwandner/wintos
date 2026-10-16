@@ -496,6 +496,7 @@ await scenario("18 · ⇧⌘W shelves the project's sessions, and ⇧⌘P reopen
     await cdp(v, "Input.insertText", { text: title });
     const palette = () => evalIn(v, `document.querySelector("[data-wintos=palette]")?.innerText ?? ""`);
     await until("it listed as shelved", async () => /shelved · \d+ sessions? · ⏎ reopens it on the newest/.test(await palette())).catch(async (e) => { throw new Error(`${e.message} (${title}): ${(await palette()).replace(/\n/g, " | ").slice(0, 300)}`); });
+    await until("when each was last touched", () => evalIn(v, `[...document.querySelectorAll("[data-wintos=palette-touched]")].some((e) => /ago$/.test(e.innerText))`));
     await press(v, "Enter", { keyCode: 13 });
     await until("a new tab resuming it", async () => {
         const id = (await st()).projects.find((p) => p.title === title)?.id;

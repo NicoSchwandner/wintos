@@ -3,7 +3,8 @@
 // and task ids, where an exact hit beats everything; label names a long text in a hit's snippet.
 export type Field = { text: string; weight: number; fuzzy?: boolean; ids?: boolean; label?: string };
 export type Kind = "project" | "pr" | "session" | "action";
-export type PaletteItem = { id: string; kind: Kind; title: string; subtitle?: string; hint?: string; fields?: Field[]; recency?: number; run?: (hit: Hit) => void };
+// touchedAt: when you last interacted with it (looked at the project, prompted the session, shelved it).
+export type PaletteItem = { id: string; kind: Kind; title: string; subtitle?: string; hint?: string; fields?: Field[]; recency?: number; touchedAt?: number; run?: (hit: Hit) => void };
 export type Snippet = { label: string; before: string; match: string; after: string };
 export type Hit = { item: PaletteItem; score: number; snippet?: Snippet; titleMarks?: [number, number][] };
 

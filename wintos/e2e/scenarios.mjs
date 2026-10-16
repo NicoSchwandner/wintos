@@ -97,6 +97,8 @@ async function until(what, fn, ms = 15000) {
 
 const inboxIn = (t) => evalIn(t, `!!document.querySelector("[data-wintos=inbox]")`);
 const sql = (q) => execFileSync("sqlite3", ["-readonly", DB, q], { encoding: "utf8" }).trim();
+// Layout leaves whose block is gone: the empty half a racing close leaves behind.
+const ghostLeaves = (tabId) => Number(sql(`select count(*) from db_tab t, db_layout l, json_each(l.data->'leaforder') j where t.oid='${tabId}' and l.oid=t.data->>'layoutstate' and j.value->>'blockid' not in (select b.value from json_each(t.data->'blockids') b)`));
 const results = [];
 // ONLY=<regex> runs the matching scenarios, e.g. ONLY="^2[01] " to iterate on two of them.
 const only = process.env.ONLY && new RegExp(process.env.ONLY);
@@ -498,6 +500,10 @@ await scenario("18 · ⇧⌘W shelves the project's sessions, and ⇧⌘P reopen
         const id = (await st()).projects.find((p) => p.title === title)?.id;
         return id && id !== tabId && sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j, db_block b where t.oid='${id}' and b.oid=j.value and b.data->>'$.meta."cmd:initscript"' like '%e2e-close%'`) === "1";
     }, 20000);
+    const back = (await st()).projects.find((p) => p.title === title).id;
+    await sleep(1000);
+    const panes = (id) => Number(sql(`select coalesce(json_array_length(data->'blockids'), 0) from db_tab where oid='${id}'`));
+    if (panes(back) !== 1 || ghostLeaves(back)) throw new Error(`the reopened project has ${panes(back)} panes and ${ghostLeaves(back)} empty leaves, want 1 and 0`);
 });
 
 await scenario("19 · an empty project closes when you leave it (⇧⌘G here), and keeps its folder", async () => {
@@ -543,6 +549,9 @@ await scenario("20 · ⌘Z brings back the pane ⌘W closed, and the project ⇧
         seen = `${id?.slice(0, 8)} with ${id ? panes(id) : "-"} panes, want ${before}`;
         return id && id !== tabId && panes(id) === before;
     }, 20000).catch((e) => { throw new Error(`${e.message}: ${seen}`); });
+    const back = (await st()).projects.find((p) => p.title === title).id;
+    await sleep(1000);
+    if (ghostLeaves(back)) throw new Error(`the reopened project has ${ghostLeaves(back)} empty leaves`);
 });
 
 await scenario("21 · ⌘W in a project with no pane left closes the project", async () => {

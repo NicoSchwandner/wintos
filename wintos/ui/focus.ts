@@ -1,5 +1,5 @@
 import { globalStore } from "@/app/store/jotaiStore";
-import { atoms, createBlock, getApi } from "@/store/global";
+import { atoms, createBlock, getApi, replaceBlock } from "@/store/global";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import type { Session } from "../daemon/sessions/reduce";
 import { nextNeedsYou, Target } from "./sessions";
@@ -74,16 +74,24 @@ export function takeReopen(): void {
     const tabId = globalStore.get(atoms.staticTabId);
     flog(`reopen project ${r.projectId.slice(0, 6)} in this tab`);
     void daemonFetch(`/projects/${encodeURIComponent(r.projectId)}/reopen`, { method: "POST", body: { tabId } }).then(async () => {
-        if (!r.panes.length) return;
-        // The new tab's own starter terminal goes once the panes asked for are there.
-        const starter = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.blockids ?? [];
-        for (const meta of r.panes) await createBlock({ meta });
-        const lm = getLayoutModelForStaticTab();
-        for (const id of starter) {
-            const node = lm?.getNodeByBlockId(id);
-            if (node) await lm.closeNode(node.id);
-        }
+        const [first, ...rest] = r.panes;
+        if (!first) return;
+        // The first pane takes the new tab's starter terminal's place. Closing the starter after
+        // adding the panes races the layout's pending inserts and leaves an empty leaf behind.
+        const starter = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.blockids?.[0];
+        if (starter && (await laidOut(starter))) await replaceBlock(starter, { meta: first }, true);
+        else await createBlock({ meta: first });
+        for (const meta of rest) await createBlock({ meta });
     });
+}
+
+// The layout node arrives a moment after the block; up to ~2 s.
+async function laidOut(blockId: string): Promise<boolean> {
+    for (let i = 0; i < 120; i++) {
+        if (getLayoutModelForStaticTab()?.getNodeByBlockId(blockId)) return true;
+        await new Promise((r) => requestAnimationFrame(r));
+    }
+    return false;
 }
 
 export function focusSession(t: Target): void {

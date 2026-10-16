@@ -956,9 +956,11 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
     useLayoutEffect(() => {
         return () => {
             const webview = model.webviewRef.current;
-            if (webview?.isDevToolsOpened()) {
-                webview.closeDevTools();
-            }
+            // WintOS: a page that closed itself (a sign-in popup) is gone before its pane unmounts,
+            // and asking a destroyed guest throws "Invalid guestInstanceId", which unmounts everything.
+            try {
+                if (webview?.isDevToolsOpened()) webview.closeDevTools();
+            } catch {}
         };
     }, []);
 

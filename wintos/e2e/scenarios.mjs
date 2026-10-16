@@ -3,6 +3,7 @@
 // everyday instance; its keystrokes would land in the developer's window.
 // usage: node wintos/e2e/scenarios.mjs
 import { execFileSync } from "node:child_process";
+import { createServer } from "node:http";
 import { homedir } from "node:os";
 
 const PORT = process.env.WINTOS_DEBUG_PORT ?? 9224;
@@ -591,6 +592,25 @@ await scenario("22 · a in the PRs tab turns the conflicts fixer off and on; a c
     if (!before || !conflicted) return console.log("      (run check skipped: the fixer is off or none of your PRs is in conflict)");
     await until("its run ended", async () => (await fixer()).runs.some((r) => r.url === conflicted.url && r.result === "dev instance: nothing done"), 30000);
     await until("its row says so", () => evalIn(inbox, `[...document.querySelectorAll("[data-pr='${conflicted.repo}#${conflicted.number}'] [data-wintos=pr-fix]")].some((e) => e.innerText.includes("conflict"))`));
+});
+
+await scenario("23 · a page that closes itself (a sign-in popup) closes its pane, and the window keeps working", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const panes = () => Number(sql(`select coalesce(json_array_length(data->'blockids'), 0) from db_tab where oid='${tabId}'`));
+    const before = panes();
+    // A data: URL is taken for a search, so the page is served for real.
+    const server = createServer((_q, res) => res.end("<p>signing in</p><script>setTimeout(() => window.close(), 800)</script>"));
+    await new Promise((r) => server.listen(0, "127.0.0.1", r));
+    try {
+        await evalIn(t, `window.wintosAction("open-url:http://127.0.0.1:${server.address().port}/")`);
+        await until("the page's pane", () => panes() === before + 1);
+        await until("its pane closed", () => panes() === before);
+    } finally {
+        server.close();
+    }
+    await sleep(500);
+    if (!(await evalIn(t, `!!document.querySelector("[data-wintos=sidebar-list]")`))) throw new Error("the window stopped rendering after the page closed itself");
 });
 
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up

@@ -68,12 +68,14 @@ export function projectPrList(state: WintosState, tabId: string): ProjectPrRow[]
 }
 
 // Which project each PR belongs to, for "go to project" in the queue. Snoozed PRs included:
-// snoozing a PR doesn't detach it from its project.
+// snoozing a PR doesn't detach it from its project. A closed project keeps its PRs too (its
+// shelf holds their sessions); an open one claiming the same PR wins.
 export function prProjects(tabIds: string[], state: WintosState): Map<string, string> {
     const gh = ghPrs(state);
     const out = new Map<string, string>();
     if (!gh) return out;
-    for (const id of tabIds) {
+    const closed = state.projects.filter((p) => p.id && !tabIds.includes(p.id)).map((p) => p.id!);
+    for (const id of [...tabIds, ...closed]) {
         const p = state.projects.find((x) => x.id === id);
         if (p) for (const { pr } of projectPrs({ ...p, pr: [...(p.pr ?? []), ...prOwners(state, id).keys()] }, gh.prs, gh.me, state.now).items) if (!out.has(pr.url)) out.set(pr.url, id);
     }

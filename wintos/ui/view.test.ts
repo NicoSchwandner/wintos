@@ -94,6 +94,19 @@ describe("prProjects", () => {
         const state = { now: 0, sessions: [], projects: [{ id: "t1", title: "X", titleLocked: false, pr: ["acme/api#5"], dir: "/d", mtime: 0 }], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs: [pr, other] } } }, snoozes: { [pr.url]: { until: 1e15, movedAt: pr.createdAt } } } as unknown as WintosState;
         expect([...prProjects(["t1"], state)]).toEqual([[pr.url, "t1"]]);
     });
+
+    test("a closed project keeps its PRs, through its shelf; an open one claiming the same PR wins", () => {
+        const pr = { repo: "acme/api", number: 5, url: "https://github.com/acme/api/pull/5", title: "t", author: "me", isDraft: false, createdAt: "2026-09-28T08:00:00Z", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b" };
+        const other = { ...pr, number: 6, url: "https://github.com/acme/api/pull/6" };
+        const shelved = (url: string) => [{ sessionId: "s", script: "x", label: "l", at: 0, prs: [url] }];
+        const state = {
+            now: 0, sessions: [],
+            projects: [{ id: "open", title: "O", titleLocked: false, pr: ["acme/api#6"], dir: "/o", mtime: 0 }, { id: "closed", title: "C", titleLocked: false, dir: "/c", mtime: 0 }],
+            shelf: { closed: [...shelved(pr.url), ...shelved(other.url)] },
+            plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs: [pr, other] } } },
+        } as unknown as WintosState;
+        expect(Object.fromEntries(prProjects(["open"], state))).toEqual({ [pr.url]: "closed", [other.url]: "open" });
+    });
 });
 
 describe("sessionHeader (the header on a Claude pane)", () => {

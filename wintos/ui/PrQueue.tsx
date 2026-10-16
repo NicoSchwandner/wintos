@@ -3,7 +3,7 @@ import { useFocusOnMount } from "./useFocusOnMount";
 import { useZoneKeys } from "./zones";
 import { wantPane } from "./focusOwner";
 import { motionKeys } from "./listMotion";
-import { enterProject, focusSession } from "./focus";
+import { enterProject, focusSession, reopenProject, resumePane } from "./focus";
 import { atoms, createTab } from "@/store/global";
 import { offerPrompt, prLinkPaste } from "./newproject";
 import { useAtomValue } from "jotai";
@@ -79,12 +79,18 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const tabIds = useAtomValue(atoms.workspace)?.tabids ?? [];
     const projectOf = state ? prProjects(tabIds, state) : new Map<string, string>();
     const titleOf = (tabId: string) => state?.projects.find((p) => p.id === tabId)?.title ?? "its project";
+    const projectLabel = (url: string) => {
+        const id = projectOf.get(url);
+        return id && `${titleOf(id)}${tabIds.includes(id) ? "" : " · closed, o opens it again"}`;
+    };
     // o: the session that owns the PR (resumed from the shelf if need be), else its project, else
     // a new project for it whose Claude prompt starts with the PR's link.
     const goToProject = (r: QueueRow) => {
         const tabId = projectOf.get(r.pr.url);
         if (!tabId) return void (offerPrompt(prLinkPaste(r.pr.url)), createTab());
         const owner = state && prOwners(state, tabId).get(r.pr.url);
+        // A closed project opens again, on the session that owns the PR.
+        if (!tabIds.includes(tabId)) return reopenProject(tabId, owner && "resume" in owner ? [resumePane(owner.resume)] : []);
         if (!owner) return enterProject(tabId);
         focusSession("resume" in owner ? { tabId, blockId: "", resume: owner.resume } : { tabId, blockId: owner.blockId });
     };
@@ -159,7 +165,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                     <div key={group} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         <GroupHeader {...HEADERS[group]} count={rows.length} />
                         {rows.flatMap((row) => withStack(row)).map(({ r, depth }) => (
-                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectLabel(r.pr.url)} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 ))}
@@ -167,7 +173,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                     <div style={{ display: "flex", flexDirection: "column", gap: 2, opacity: 0.6 }}>
                         <GroupHeader label="Snoozed" note="back next working day, or when it moves · z wakes" color={T.muted} count={model.snoozed.length} />
                         {model.snoozed.map((r) => (
-                            <PrRow key={r.pr.url} r={r} depth={0} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={0} project={projectLabel(r.pr.url)} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 )}

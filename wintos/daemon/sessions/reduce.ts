@@ -1,4 +1,4 @@
-export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string; reason?: string; last_assistant_message?: string };
+export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string; reason?: string; last_assistant_message?: string; tool_name?: string };
 export type HookEvent = { tabId: string; blockId: string; payload: HookPayload };
 // parked: the turn ended waiting on something outside (CI, a review), not on the developer.
 // done: the turn ended with the goal met and nothing asked of the developer.
@@ -91,6 +91,8 @@ const TRANSITIONS: Record<string, SessionState> = {
     SessionEnd: "ended",
 };
 
+const ASKING_TOOLS = new Set(["AskUserQuestion", "ExitPlanMode"]);
+
 export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now: number): Map<string, Session> {
     const { session_id: id, hook_event_name: name, cwd, prompt, prs, pr_verb } = ev.payload;
     const prev = sessions.get(id);
@@ -98,7 +100,9 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     // WintOS ends every Claude with reason "other": that ends nothing, so the restart finds the
     // session with its PRs, lane and status. A pane WintOS closes ends its session itself (endSessions).
     const quits = name === "SessionEnd" && ev.payload.reason === "other";
-    const next = (prev?.restored && name === "SessionStart") || quits ? undefined : TRANSITIONS[name];
+    // A question mid-turn ends no turn, so no Stop says so: its tool's start and end do.
+    const asks = ASKING_TOOLS.has(ev.payload.tool_name ?? "") ? (name === "PreToolUse" ? "waiting" : name === "PostToolUse" ? "working" : undefined) : undefined;
+    const next = (prev?.restored && name === "SessionStart") || quits ? undefined : (asks ?? TRANSITIONS[name]);
     const parks = name === "Stop" && prev?.parkPending;
     const finishes = name === "Stop" && prev?.donePending;
     const state = parks ? "parked" : finishes ? "done" : (next ?? prev?.state ?? "idle");

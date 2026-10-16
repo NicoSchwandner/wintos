@@ -31,9 +31,16 @@ if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" != "sdk-cli" ] 
     esac
 fi
 
+# A question to the developer mid-turn (AskUserQuestion, ExitPlanMode) waits on them until it is
+# answered: its start and end go to the daemon, the question itself never does.
+case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.tool_name // "")' 2>/dev/null)" in
+PreToolUse:AskUserQuestion | PreToolUse:ExitPlanMode | PostToolUse:AskUserQuestion | PostToolUse:ExitPlanMode)
+    payload="$(printf '%s' "$payload" | jq -c '{hook_event_name, session_id, cwd, tool_name}' 2>/dev/null)" ;;
+esac
+
 # A Bash call (PostToolUse) only matters when it was a gh pr command: then the PRs it named, by
 # link or by number and repo, become the session's, and a create or ready moves its lane. The rest of the call never leaves here.
-if [ "$(printf '%s' "$payload" | jq -r '.hook_event_name' 2>/dev/null)" = "PostToolUse" ]; then
+if [ "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.tool_name // "")' 2>/dev/null)" = "PostToolUse:Bash" ]; then
     payload="$(printf '%s' "$payload" | jq -c '
         (.tool_input.command // "") as $c
         | select($c | test("(^|[;&|(\\s])gh pr (create|edit|ready|merge|comment|view|checks|review|close|reopen)\\b"))

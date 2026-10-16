@@ -65,6 +65,14 @@ describe("wintos-hook.sh", () => {
     });
 });
 
+describe("wintos-hook.sh and a question mid-turn", () => {
+    test.each(["PreToolUse", "PostToolUse"])("%s of AskUserQuestion goes to the daemon without the question itself", async (name) => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, JSON.stringify({ hook_event_name: name, session_id: "s", cwd: "/x", tool_name: "AskUserQuestion", tool_input: { questions: [{ question: "secret?" }] } }));
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: name, session_id: "s", cwd: "/x", tool_name: "AskUserQuestion" });
+    });
+});
+
 describe("wintos-hook.sh tells the daemon which session the pane runs", () => {
     const env = (port: number, extra: Record<string, string> = {}) => ({ CLAUDE_CODE_ENTRYPOINT: "cli", WAVETERM_TABID: "t", WAVETERM_BLOCKID: "blk", WAVETERM_WSHBINDIR: tmp(), WINTOS_PORT: String(port), ...extra });
 
@@ -207,9 +215,10 @@ describe("wintos hooks", () => {
         expect(s.model).toBe("x");
         expect(s.hooks.Stop).toHaveLength(2);
         expect(s.hooks.Stop[0].hooks[0].command).toBe("mine.sh");
-        for (const e of ["SessionStart", "UserPromptSubmit", "Stop", "SubagentStop", "Notification", "SessionEnd", "PostToolUse"])
+        for (const e of ["SessionStart", "UserPromptSubmit", "Stop", "SubagentStop", "Notification", "SessionEnd", "PreToolUse", "PostToolUse"])
             expect(s.hooks[e].filter((h: any) => h.hooks[0].command.endsWith("wintos-hook.sh"))).toHaveLength(1);
-        expect(s.hooks.PostToolUse[0].matcher).toBe("Bash");
+        // A question to the developer mid-turn: before it, the turn waits on them; after it, it runs on.
+        expect([s.hooks.PreToolUse[0].matcher, s.hooks.PostToolUse[0].matcher]).toEqual(["AskUserQuestion|ExitPlanMode", "Bash|AskUserQuestion|ExitPlanMode"]);
     });
 
     test("a Claude config dir given names where they go; another account's settings stay as they were", () => {

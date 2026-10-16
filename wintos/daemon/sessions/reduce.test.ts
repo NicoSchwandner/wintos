@@ -135,6 +135,19 @@ describe("a pane switched to another session", () => {
     });
 });
 
+describe("a question mid-turn (AskUserQuestion, ExitPlanMode)", () => {
+    const tool = (name: string, tool_name: string) => ev({ hook_event_name: name, session_id: prompt.session_id, tool_name });
+    test.each(["AskUserQuestion", "ExitPlanMode"])("%s waits on you until you answer, then the turn runs on", (t) => {
+        const m = run([ev(prompt), tool("PreToolUse", t)]);
+        expect(only(m)).toMatchObject({ state: "waiting", since: 1010 });
+        expect(only(run([ev(prompt), tool("PreToolUse", t), tool("PostToolUse", t)])).state).toBe("working");
+    });
+
+    test("any other tool changes nothing", () => {
+        expect(only(run([ev(prompt), tool("PreToolUse", "Bash"), tool("PostToolUse", "Bash")])).state).toBe("working");
+    });
+});
+
 describe("SessionEnd", () => {
     test("quitting WintOS (reason other) ends nothing: the session keeps its state and PRs for the restart", () => {
         const m = run([ev(prompt), ev({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: ["https://github.com/o/r/pull/1"] }), ev(stop), ev({ ...stop, hook_event_name: "SessionEnd", reason: "other" })]);

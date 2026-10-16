@@ -127,8 +127,9 @@ hooks)
         # shellcheck disable=SC2016
         rewrite_settings --arg hook "$HOOK" --arg events "$EVENTS" "$strip"' | reduce ($events | split(" "))[] as $e (.;
             .hooks[$e] = ((.hooks[$e] // []) + [{hooks: [{type: "command", command: $hook}]}]))
-            | .hooks.PostToolUse = ((.hooks.PostToolUse // []) + [{matcher: "Bash", hooks: [{type: "command", command: $hook}]}])'
-        echo "wintos: hooks installed in $SETTINGS ($EVENTS PostToolUse:Bash)"
+            | .hooks.PreToolUse = ((.hooks.PreToolUse // []) + [{matcher: "AskUserQuestion|ExitPlanMode", hooks: [{type: "command", command: $hook}]}])
+            | .hooks.PostToolUse = ((.hooks.PostToolUse // []) + [{matcher: "Bash|AskUserQuestion|ExitPlanMode", hooks: [{type: "command", command: $hook}]}])'
+        echo "wintos: hooks installed in $SETTINGS ($EVENTS PreToolUse:AskUserQuestion|ExitPlanMode PostToolUse:Bash|AskUserQuestion|ExitPlanMode)"
         ;;
     uninstall)
         rewrite_settings "$strip"' | .hooks |= with_entries(select(.value | length > 0)) | if .hooks == {} then del(.hooks) else . end'

@@ -37,7 +37,7 @@ export class ProjectStore {
 
     reload(): void {
         this.projects = readdirSync(this.root, { withFileTypes: true })
-            .filter((d) => d.isDirectory())
+            .filter((d) => d.isDirectory() && !d.name.startsWith(".")) // a hidden folder is the daemon's own, never a project
             .map((d) => this.read(join(this.root, d.name)));
     }
 

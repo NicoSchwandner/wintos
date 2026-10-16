@@ -12,7 +12,11 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Group } from "../daemon/prs/group";
 import { runAction } from "./menu";
 import { Key, KeyOr } from "./Key";
-import { initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns, type QueueRow, type RowColumns } from "./prs";
+import { fixNote, initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns, type QueueRow, type RowColumns } from "./prs";
+import { RpcApi } from "@/app/store/wshclientapi";
+import { TabRpcClient } from "@/app/store/wshrpcutil";
+import { stringToBase64 } from "@/util/util";
+import type { FixRun } from "../daemon/fixer/runner";
 import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
@@ -91,7 +95,13 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     };
 
     const r = flat[Math.min(cursor, flat.length - 1)];
+    const fixer = state?.fixer;
+    const fixOf = (url: string) => fixer?.runs.find((x) => x.url === url);
+    const canFixCi = !!r && r.mine && (r.pr.checks === "FAILURE" || r.pr.checks === "ERROR");
     useZoneKeys(focusRef, {
+        // a: the conflicts babysitter on or off. c: this PR's red CI to the session that wrote it.
+        a: (e) => void (e.repeat || daemonFetch("/fixer/settings", { method: "POST", body: { conflicts: !fixer?.conflicts } }).catch(() => {})),
+        c: (e) => void (!e.repeat && canFixCi && dispatchCiFix(r.pr.url)),
         ...motionKeys(step, (end) => setSelected(urls[end === "first" ? 0 : urls.length - 1])),
         j: () => step(1),
         k: () => step(-1),
@@ -122,6 +132,9 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                     {model && <span style={{ fontSize: 12, color: T.muted }}>{model.yours} yours · {model.waiting} waiting · {model.team} team</span>}
                 </div>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11, color: result && !result.ok ? T.brick : T.faint }}>
+                    <span style={{ color: fixer?.conflicts ? T.moss : T.faint }}>{fixer?.conflicts ? "conflicts fix themselves" : "conflicts wait for you"}</span>
+                    <Key k="a" label="" />
+                    <span style={{ width: 8 }} />
                     {refreshing ? "refreshing…" : result ? (result.ok ? `GitHub · ${relTime(now - result.at)} ago` : `GitHub failed ${relTime(now - result.at)} ago: ${result.error}`) : "fetching from GitHub…"}
                     <Key k="r" label="" />
                 </span>
@@ -146,7 +159,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                     <div key={group} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         <GroupHeader {...HEADERS[group]} count={rows.length} />
                         {rows.flatMap((row) => withStack(row)).map(({ r, depth }) => (
-                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} cols={cols} onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 ))}
@@ -154,7 +167,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                     <div style={{ display: "flex", flexDirection: "column", gap: 2, opacity: 0.6 }}>
                         <GroupHeader label="Snoozed" note="back next working day, or when it moves · z wakes" color={T.muted} count={model.snoozed.length} />
                         {model.snoozed.map((r) => (
-                            <PrRow key={r.pr.url} r={r} depth={0} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} cols={cols} onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={0} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 )}
@@ -165,12 +178,27 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                 <Key k="⏎" label="open" />
                 <Key k="o" label={flat[cursor] && !projectOf.has(flat[cursor].pr.url) ? "open as new project" : "go to project"} off={!flat[cursor]} />
                 <Key k="z" label="snooze" />
+                <Key k="c" label="fix red CI" off={!canFixCi} />
+                <Key k="a" label={fixer?.conflicts ? "conflicts: stop fixing them" : "conflicts: fix them"} />
                 {pageOpen && <KeyOr keys={["esc", "⌘L"]} label="to the page" />}
             </div>
         </div>
     );
 });
 PrQueue.displayName = "PrQueue";
+
+// The same route an automatic run takes: a live owning session gets the prompt typed into its
+// pane (text, then Enter, so Claude doesn't take both for one paste); the daemon runs the rest.
+async function dispatchCiFix(url: string): Promise<void> {
+    const res = await daemonFetch("/fixer/ci", { method: "POST", body: { url } }).catch(() => undefined);
+    if (!res?.ok) return;
+    const r = (await res.json()) as { run: FixRun; blockId?: string; prompt?: string };
+    if (!r.blockId || !r.prompt) return;
+    const type = (text: string) => RpcApi.ControllerInputCommand(TabRpcClient, { blockid: r.blockId!, inputdata64: stringToBase64(text) });
+    await type(r.prompt);
+    await new Promise((done) => setTimeout(done, 300));
+    await type("\r");
+}
 
 const CHIP: React.CSSProperties = { flexShrink: 0, maxWidth: 96, padding: "2px 7px", borderRadius: 10, border: `1px solid ${T.keycapBorder}`, fontSize: 10.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
@@ -208,7 +236,7 @@ function GroupHeader({ label, note, color, count }: { label: string; note: strin
 }
 
 // project: the title of the project this PR belongs to, for its marker (o goes there).
-function PrRow({ r, depth, project, cursor, cols, onOpen }: { r: QueueRow; depth: number; project?: string; cursor: boolean; cols: RowColumns; onOpen: () => void }) {
+function PrRow({ r, depth, project, cursor, cols, fix, onOpen }: { r: QueueRow; depth: number; project?: string; cursor: boolean; cols: RowColumns; fix?: { text: string; brick?: boolean }; onOpen: () => void }) {
     const { pr } = r;
     const compact = !cols.names;
     return (
@@ -238,6 +266,7 @@ function PrRow({ r, depth, project, cursor, cols, onOpen }: { r: QueueRow; depth
                 {pr.isDraft && <span style={{ fontSize: 10, border: `1px solid ${T.keycapBorder}`, borderRadius: 5, padding: "1px 5px", marginRight: 8, color: T.muted }}>draft</span>}
                 {pr.title}
                 {r.qualifier && <span style={{ fontSize: 11, color: r.qualifier.brick ? T.brick : T.muted }}> — {r.qualifier.text}</span>}
+                {fix && <span data-wintos="pr-fix" style={{ fontSize: 11, color: fix.brick ? T.brick : T.apricot }}> · {fix.text}</span>}
             </span>
             <Reviewers r={r} names={cols.names} />
             <span title={project ? `Project: ${project} (o)` : "No project"} style={{ width: 12, flexShrink: 0, textAlign: "center", fontSize: 11, color: project ? T.moss : "transparent" }}>◆</span>

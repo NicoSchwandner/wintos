@@ -13,6 +13,9 @@ import { dayRecapper } from "../recap/day";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { releasePrs, resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { titlePrompt, writeTitle } from "../shelf/title";
+import { fixJob, fixPrompt } from "../fixer/plan";
+import type { PR } from "../prs/group";
+import { Fixer } from "../fixer/runner";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, endSessions, leavingFor, unparkSession } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
@@ -32,7 +35,7 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     const recapper = dayRecapper(opts.root, opts.recapCmd, opts.recapExtra);
     // Ready before you open the Today page: the summarizer takes a minute. Cached, so this is
@@ -96,6 +99,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         pluginsRunning: runner.running,
         snoozes,
         seen,
+        fixer: fixer.state(),
         ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
         keyboard,
         // By the tab the project's folder belongs to now.
@@ -113,7 +117,14 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // Kept next to the projects: a file there is not a project (those are folders).
     const snoozeFile = join(opts.root, ".snoozes.json");
     let snoozes = readJson<Snoozes>(snoozeFile, {});
-    const runner = new PluginRunner(opts.plugins ?? [], () => broadcast());
+    const fixer = new Fixer(opts.root, () => broadcast(), opts.fixCmd, opts.fixCwd);
+    const ghData = () => runner.results["gh-prs"]?.data as { me: string; prs: PR[] } | undefined;
+    // Every PR refresh is a chance for the conflicts babysitter.
+    const runner = new PluginRunner(opts.plugins ?? [], () => {
+        const gh = ghData();
+        if (gh) fixer.consider(gh.prs, gh.me);
+        broadcast();
+    });
 
     let watcher: FSWatcher | undefined;
     let pending: NodeJS.Timeout | undefined;
@@ -321,6 +332,22 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");
+            }
+            if (req.method === "POST" && url.pathname === "/fixer/settings") {
+                const b = (await body(req)) as { conflicts?: unknown };
+                if (typeof b?.conflicts !== "boolean") return send(res, 400, "need conflicts: true or false");
+                fixer.setConflicts(b.conflicts);
+                return send(res, 200, "");
+            }
+            // Red CI, dispatched from the PRs tab: the same route an automatic run would take.
+            if (req.method === "POST" && url.pathname === "/fixer/ci") {
+                const b = (await body(req)) as { url?: unknown };
+                const pr = ghData()?.prs.find((p) => p.url === b?.url);
+                if (!pr) return send(res, 404, "no such PR in the PR list");
+                if (pr.checks !== "FAILURE" && pr.checks !== "ERROR") return send(res, 409, "its CI is not red");
+                const job = fixJob(pr, [...sessions.values()], shelf);
+                const run = fixer.start(job);
+                return json(res, { run, ...(job.route.kind === "pane" ? { blockId: job.route.blockId, tabId: job.route.tabId, prompt: fixPrompt(job) } : {}) });
             }
             const unpark = /^\/sessions\/([^/]+)\/unpark$/.exec(url.pathname);
             if (req.method === "POST" && unpark) {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { PR } from "../daemon/prs/group";
-import { initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns } from "./prs";
+import type { FixRun } from "../daemon/fixer/runner";
+import { fixNote, initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns } from "./prs";
 
 const MON = Date.parse("2026-09-28T09:00:00Z");
 const pr = (p: Partial<PR>): PR => ({
@@ -172,3 +173,17 @@ test("an unreleased merge past the SLA is in Release, counted past SLA", () => {
 });
 
 test("a merged PR asks no reviewer", () => expect(reviewerChips(pr({ mergedAt: "2026-09-23T09:00:00Z" }), 2).none).toBe(false));
+
+describe("fixNote", () => {
+    const pr = { url: "u", head: "h1" } as PR;
+    const run = (o: Partial<FixRun> = {}): FixRun => ({ id: "r", kind: "conflict", url: "u", head: "h1", route: "fresh", at: 1, ...o });
+    test("says what the fixer does about the PR's current commit only", () => {
+        expect(fixNote(run({ head: "h0" }), pr, [])).toBeUndefined();
+        expect(fixNote(undefined, pr, [])).toBeUndefined();
+        expect(fixNote(run(), pr, ["r"])).toEqual({ text: "fixing the conflict next" });
+        expect(fixNote(run(), pr, [])).toEqual({ text: "fixing the conflict…" });
+        expect(fixNote(run({ kind: "ci", route: "pane" }), pr, [])).toEqual({ text: "red CI sent to its session" });
+        expect(fixNote(run({ endedAt: 2, exit: 0, result: "Pushed." }), pr, [])).toEqual({ text: "tried to fix the conflict: Pushed." });
+        expect(fixNote(run({ endedAt: 2, exit: 1 }), pr, [])).toEqual({ text: "fixing the conflict failed", brick: true });
+    });
+});

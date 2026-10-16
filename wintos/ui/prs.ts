@@ -1,3 +1,4 @@
+import type { FixRun } from "../daemon/fixer/runner";
 import { ageLabel, byUrgency, Group, GROUPS, groupOf, isSnoozed, isStacked, lastMovement, PR, qualifier, type Snoozes } from "../daemon/prs/group";
 
 // children: PRs stacked on this one that only wait for it (spec: stacked PRs sit under their base).
@@ -82,4 +83,15 @@ export const rowColumns = (width: number): RowColumns => ({ size: width >= 1000,
 export function matchesPr(pr: Pick<PR, "repo" | "number" | "title" | "author" | "branch">, query: string): boolean {
     const hay = `${pr.repo} #${pr.number} ${pr.title} ${pr.author} ${pr.branch}`.toLowerCase();
     return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+}
+
+// What the fixer is doing about a PR, on its row: only about the commit the PR is at now.
+export function fixNote(run: FixRun | undefined, pr: PR, queued: string[]): { text: string; brick?: boolean } | undefined {
+    if (!run || run.head !== pr.head) return undefined;
+    const what = run.kind === "conflict" ? "the conflict" : "red CI";
+    if (run.route === "pane") return { text: `${what} sent to its session` };
+    if (queued.includes(run.id)) return { text: `fixing ${what} next` };
+    if (!run.endedAt) return { text: `fixing ${what}…` };
+    if (run.exit === 0) return { text: `tried to fix ${what}${run.result ? `: ${run.result}` : ""}` };
+    return { text: `fixing ${what} failed${run.result ? `: ${run.result}` : ""}`, brick: true };
 }

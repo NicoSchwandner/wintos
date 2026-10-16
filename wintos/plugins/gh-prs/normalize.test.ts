@@ -6,7 +6,7 @@ const node = (n: Partial<Node> = {}): Node => ({
     createdAt: "2026-09-25T09:00:00Z", author: { login: "ana" }, repository: { nameWithOwner: "o/r" },
     headRefName: "DEV-1-flag", reviewDecision: "REVIEW_REQUIRED", mergeable: "MERGEABLE",
     additions: 10, deletions: 2,
-    commits: { nodes: [{ commit: { statusCheckRollup: { state: "SUCCESS" } } }] },
+    commits: { nodes: [{ commit: { oid: "abc123", statusCheckRollup: { state: "SUCCESS" } } }] },
     reviewRequests: { nodes: [{ requestedReviewer: { __typename: "User", login: "me" } }, { requestedReviewer: { __typename: "Bot", login: "copilot" } }] },
     latestReviews: { nodes: [] },
     ...n,
@@ -16,7 +16,7 @@ describe("normalize", () => {
     test("maps a search node to the PR shape", () =>
         expect(normalize(node(), "me", { requestedMe: true, requestedTeam: false })).toEqual({
             repo: "o/r", number: 7, url: "https://github.com/o/r/pull/7", title: "Add flag", author: "ana",
-            isDraft: false, createdAt: "2026-09-25T09:00:00Z", reviewDecision: "REVIEW_REQUIRED", checks: "SUCCESS",
+            isDraft: false, createdAt: "2026-09-25T09:00:00Z", reviewDecision: "REVIEW_REQUIRED", checks: "SUCCESS", head: "abc123",
             conflict: false, requestedMe: true, requestedTeam: false, reviewedByMe: false, reviewers: ["me"],
             additions: 10, deletions: 2, branch: "DEV-1-flag",
         }));

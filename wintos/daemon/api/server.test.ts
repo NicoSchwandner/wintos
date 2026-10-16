@@ -279,6 +279,79 @@ describe("notes", () => {
     });
 });
 
+describe("the PR fixer", () => {
+    const CONFLICTED = "https://github.com/o/r/pull/5", RED = "https://github.com/o/r/pull/6";
+    const prs = [
+        { repo: "o/r", number: 5, url: CONFLICTED, title: "t", author: "me", isDraft: false, createdAt: "", conflict: true, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b5", base: "main", head: "h5" },
+        { repo: "o/r", number: 6, url: RED, title: "t", author: "me", isDraft: false, createdAt: "", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b6", head: "h6", checks: "FAILURE" },
+    ];
+    const until = async <T>(f: () => Promise<T>) => {
+        for (let i = 0; i < 100; i++) {
+            const v = await f();
+            if (v) return v;
+            await new Promise((r) => setTimeout(r, 50));
+        }
+        throw new Error("timed out");
+    };
+    const fixerOf = async () => (await (await fetch(base + "/state")).json()).fixer;
+    // A fake gh-prs plugin and a fake claude that records its arguments and says it is done.
+    const start = async (conflictsOff = false) => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-fix-"));
+        writeFileSync(join(dir, "gh"), `#!/bin/sh\necho '${JSON.stringify({ me: "me", prs })}'\n`, { mode: 0o755 });
+        writeFileSync(join(dir, "claude"), `#!/bin/sh\nprintf '%s\\n' "$@" >> "${dir}/args"\necho '{"type":"result","result":"Resolved and pushed."}'\n`, { mode: 0o755 });
+        if (conflictsOff) {
+            mkdirSync(join(root, ".fixer"), { recursive: true });
+            writeFileSync(join(root, ".fixer", "settings.json"), JSON.stringify({ conflicts: false }));
+        }
+        srv = await startServer({ root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fixCmd: join(dir, "claude"), fixCwd: dir });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        return dir;
+    };
+
+    test("a conflict on my PR is resolved by itself, once per head commit, logged", async () => {
+        const dir = await start();
+        const run = await until(async () => (await fixerOf()).runs.find((r: { exit?: number }) => r.exit === 0));
+        expect(run).toMatchObject({ kind: "conflict", url: CONFLICTED, head: "h5", route: "fresh", result: "Resolved and pushed." });
+        expect(readFileSync(join(dir, "args"), "utf8")).toContain(`${CONFLICTED} has merge conflicts`);
+        expect(readFileSync(run.log, "utf8")).toContain("Resolved and pushed.");
+        expect(readFileSync(join(root, ".fixer", "runs.jsonl"), "utf8").trim().split("\n").length).toBe(2); // started, ended
+        await post("/plugins/gh-prs/run", {});
+        await new Promise((r) => setTimeout(r, 200));
+        expect((await fixerOf()).runs).toHaveLength(1);
+    });
+
+    test("turned off, a conflict waits for you", async () => {
+        await start(true);
+        await post("/plugins/gh-prs/run", {});
+        await new Promise((r) => setTimeout(r, 200));
+        expect((await fixerOf())).toMatchObject({ conflicts: false, runs: [] });
+        expect((await post("/fixer/settings", { conflicts: "yes" })).status).toBe(400);
+        await post("/fixer/settings", { conflicts: true });
+        await post("/plugins/gh-prs/run", {});
+        await until(async () => (await fixerOf()).runs.length === 1);
+    });
+
+    test("red CI, dispatched: typed into the live owning session's pane; not red is refused", async () => {
+        await start(true);
+        await until(async () => (await (await fetch(base + "/state")).json()).plugins["gh-prs"]);
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [RED] });
+        const r = await (await post("/fixer/ci", { url: RED })).json();
+        expect(r).toMatchObject({ blockId: "blk-1", tabId: "tab-1", run: { kind: "ci", route: "pane", sessionId: prompt.session_id } });
+        expect(r.prompt).toContain(`CI is red on ${RED}`);
+        expect((await post("/fixer/ci", { url: CONFLICTED })).status).toBe(409);
+    });
+
+    test("red CI with no owner: a fresh headless run", async () => {
+        const dir = await start(true);
+        await until(async () => (await (await fetch(base + "/state")).json()).plugins["gh-prs"]);
+        expect((await (await post("/fixer/ci", { url: RED })).json()).run.route).toBe("fresh");
+        await until(async () => (await fixerOf()).runs.some((r: { exit?: number }) => r.exit === 0));
+        expect(readFileSync(join(dir, "args"), "utf8")).toContain("gh run rerun");
+    });
+});
+
 describe("plugins", () => {
     test("results appear in state and r re-runs a plugin", async () => {
         srv.close();

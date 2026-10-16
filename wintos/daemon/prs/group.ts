@@ -10,6 +10,7 @@ export type PR = {
     lastReviewAt?: string;
     reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED";
     checks?: string; // statusCheckRollup state: SUCCESS, FAILURE, ERROR, PENDING, EXPECTED
+    head?: string; // the head commit's oid
     conflict: boolean;
     mergeState?: string; // mergeStateStatus: CLEAN, BLOCKED, BEHIND, UNSTABLE, DIRTY, …
     openThreads?: number; // unresolved review threads

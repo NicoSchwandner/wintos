@@ -563,6 +563,36 @@ await scenario("21 · ⌘W in a project with no pane left closes the project", a
     await until("its tab closed", () => sql(`select count(*) from db_tab where oid='${tabId}'`) === "0");
 });
 
+// The dev instance's fixer runs e2e/fake-claude.sh: it sees your real PRs and must leave them alone.
+await scenario("22 · a in the PRs tab turns the conflicts fixer off and on; a conflicted PR of yours gets a run, on its row", async () => {
+    // The Inbox can be On call (closing a project lands there); a is a PRs tab key.
+    let inbox = await toInbox();
+    const onPrs = (t) => evalIn(t, `!!document.querySelector("[data-wintos=inbox-list]")?.innerText.startsWith("PRs need attention")`);
+    if (!(await onPrs(inbox))) {
+        await press(inbox, "g", { mods: ["meta", "shift"] });
+        inbox = await until("the PRs tab", async () => { const t = await visible(); return (await onPrs(t)) && t; });
+        await cdpFocus(inbox, "[data-wintos=inbox-list]");
+    }
+    const fixer = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).fixer;
+    const before = (await fixer()).conflicts;
+    // Right after a tab switch the list may not have its keys yet: press until it answers.
+    const toggleTo = async (want) => {
+        for (let i = 0; i < 4 && (await fixer()).conflicts !== want; i++) {
+            await cdpFocus(inbox, "[data-wintos=inbox-list]");
+            await press(inbox, "a", { keyCode: 65 });
+            await until(`the fixer ${want ? "on" : "off"}`, async () => (await fixer()).conflicts === want, 2000).catch(() => {});
+        }
+        if ((await fixer()).conflicts !== want) throw new Error(`a left the fixer ${want ? "off" : "on"}`);
+    };
+    await toggleTo(!before);
+    await toggleTo(before);
+    const gh = (await (await fetch("http://127.0.0.1:7731/state")).json()).plugins?.["gh-prs"]?.data;
+    const conflicted = gh?.prs.find((p) => p.author === gh.me && p.conflict && !p.mergedAt && p.head);
+    if (!before || !conflicted) return console.log("      (run check skipped: the fixer is off or none of your PRs is in conflict)");
+    await until("its run ended", async () => (await fixer()).runs.some((r) => r.url === conflicted.url && r.result === "dev instance: nothing done"), 30000);
+    await until("its row says so", () => evalIn(inbox, `[...document.querySelectorAll("[data-pr='${conflicted.repo}#${conflicted.number}'] [data-wintos=pr-fix]")].some((e) => e.innerText.includes("conflict"))`));
+});
+
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
 // must not cost the run its results.
 await scenario("clean-up · the panes this run opened are closed", async () => {

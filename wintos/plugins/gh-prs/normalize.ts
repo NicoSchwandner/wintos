@@ -16,7 +16,7 @@ export type Node = {
     mergeStateStatus?: string;
     additions: number;
     deletions: number;
-    commits: { nodes: { commit: { statusCheckRollup: { state: string } | null } }[] };
+    commits: { nodes: { commit: { oid?: string; statusCheckRollup: { state: string } | null } }[] };
     reviewRequests: { nodes: { requestedReviewer: Reviewer | null }[] };
     latestReviews: { nodes: { author: { login: string } | null; state: string; submittedAt: string }[] };
     mergedAt?: string | null;
@@ -57,6 +57,8 @@ export function normalize(n: Node, me: string, asked: { requestedMe: boolean; re
     if (n.repository.defaultBranchRef?.name) pr.defaultBranch = n.repository.defaultBranchRef.name;
     if (n.reviewDecision) pr.reviewDecision = n.reviewDecision;
     if (checks) pr.checks = checks;
+    const head = n.commits.nodes[0]?.commit.oid;
+    if (head) pr.head = head;
     if (n.mergeStateStatus) pr.mergeState = n.mergeStateStatus;
     if (latest) pr.lastReviewAt = latest;
     const changes = reviews.filter((r) => r.state === "CHANGES_REQUESTED").pop();

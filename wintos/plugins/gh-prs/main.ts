@@ -6,7 +6,7 @@ import { linkStacks, normalize, orgQualifier, unreleased, type Node } from "./no
 
 const FIELDS = `number title url isDraft createdAt author{login} repository{nameWithOwner defaultBranchRef{name}} headRefName baseRefName
   reviewDecision mergeable mergeStateStatus additions deletions
-  commits(last:1){nodes{commit{statusCheckRollup{state}}}}
+  commits(last:1){nodes{commit{oid statusCheckRollup{state}}}}
   reviewRequests(first:10){nodes{requestedReviewer{__typename ... on User{login} ... on Team{name} ... on Bot{login}}}}
   latestReviews(first:20){nodes{author{login} state submittedAt}}`;
 const query = (fields: string) => `query($q:String!){search(query:$q,type:ISSUE,first:100){nodes{... on PullRequest{${fields}}}}}`;

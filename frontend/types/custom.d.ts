@@ -111,6 +111,12 @@ declare global {
         getWintosInstance: () => { port: number; label: string }; // wintos-instance
         writeClipboard: (text: string) => void; // wintos-clipboard
         onWintosOpenPane: (callback: (url: string) => void) => void; // wintos-open-pane
+        onWintosWindowFocus: (callback: (focused: boolean) => void) => void; // wintos-window-focus
+        setWintosWalking: (on: boolean) => void; // wintos-walking
+        nativeUndo: () => void; // wintos-native-undo
+        onWintosWalkEsc: (callback: () => void) => void; // wintos-walk-esc
+        onWintosWalkMetaUp: (callback: () => void) => void; // wintos-walk-meta-up
+        getWintosFullScreen: () => boolean; // wintos-is-fullscreen
         updateWindowControlsOverlay: (rect: Dimensions) => void; // update-window-controls-overlay
         onReinjectKey: (callback: (waveEvent: WaveKeyboardEvent) => void) => void; // reinject-key
         setWebviewFocus: (focusedId: number) => void; // webview-focus, focusedId is the getWebContentsId of the webview

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import type { AddressInfo } from "net";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -25,6 +25,42 @@ const post = (path: string, body: unknown, headers: Record<string, string> = JSO
 const event = (payload: object, tabId = "tab-1") => post("/events", { tabId, blockId: "blk-1", payload });
 
 describe("wintosd API", () => {
+    test("⌘Z after a park: /sessions/:id/unpark makes the turn yours again", async () => {
+        await event({ ...prompt, hook_event_name: "Stop" });
+        await post("/blocks/blk-1/wait", { reason: "CI" });
+        expect((await post(`/sessions/${prompt.session_id}/unpark`, {})).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).sessions[0]).toMatchObject({ state: "waiting" });
+    });
+
+    test("`wintos lane` then `wintos step` show in /state; an unknown step is a 400", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/lane", { name: "fast", steps: ["Test", "Fix", "?Your OK"] })).status).toBe(200);
+        expect((await post("/blocks/blk-1/step", { step: "fix" })).status).toBe(200);
+        expect((await post("/blocks/blk-1/step", { step: "Deploy" })).status).toBe(400);
+        expect((await post("/blocks/blk-1/lane", { name: "x", steps: [] })).status).toBe(400);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].lane).toEqual({ name: "fast", steps: ["Test", "Fix", "?Your OK"], at: 1 });
+    });
+
+    test("`wintos todo` lists the step's to-dos and ticks them; without a lane it is a 400", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/todo", { items: ["Narrow list"] })).status).toBe(400);
+        await post("/blocks/blk-1/lane", { name: "fast", steps: ["Test", "Fix"] });
+        expect((await post("/blocks/blk-1/todo", { items: ["Narrow list", "Name search"] })).status).toBe(200);
+        expect((await post("/blocks/blk-1/todo", { done: "name" })).status).toBe(200);
+        expect((await post("/blocks/blk-1/todo", { done: "Deploy" })).status).toBe(400);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].lane.todos).toEqual([{ text: "Narrow list", done: false }, { text: "Name search", done: true }]);
+    });
+
+    test("`wintos status` sets the session's line, shown in /state", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/status", { text: "Walking the test plan" })).status).toBe(200);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].status).toEqual({ text: "Walking the test plan", at: expect.any(Number) });
+        expect((await post("/blocks/blk-1/status", { text: "a\nb" })).status).toBe(400);
+    });
+
     test("`wintos wait` then Stop parks the session on what it waits for", async () => {
         await event(prompt);
         expect((await post("/blocks/blk-1/wait", { reason: "CI on #1479" })).status).toBe(200);
@@ -105,6 +141,94 @@ describe("wintosd API", () => {
     });
 });
 
+describe("search and reopen", () => {
+    test("GET texts gives every project's notes and mine.md, for the palette's search", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        await post("/projects/tab-2/title", { title: "Y", manual: false });
+        writeFileSync(join(root, "x", "mine.md"), "rules\n");
+        const t = await (await fetch(base + "/projects/texts")).json();
+        expect(t).toEqual({ "tab-1": { body: "", mine: "rules\n" }, "tab-2": { body: "", mine: "" } });
+    });
+
+    test("reopening a closed project binds its folder to the new tab", async () => {
+        await post("/projects/tab-old/title", { title: "X", manual: false });
+        expect((await post("/projects/tab-old/reopen", { tabId: "tab-new" })).status).toBe(200);
+        const n = await (await fetch(base + "/projects/tab-new/notes")).json();
+        expect(n.dir).toBe(join(root, "x"));
+        expect(require("fs").readFileSync(join(root, "x", "project.md"), "utf8")).toContain("id: tab-new");
+        expect((await fetch(base + "/projects/tab-old/notes")).status).toBe(404);
+    });
+
+    test("reopen refuses an unknown project, and a tab that already has one", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        await post("/projects/tab-2/title", { title: "Y", manual: false });
+        expect((await post("/projects/nope/reopen", { tabId: "tab-3" })).status).toBe(404);
+        expect((await post("/projects/tab-1/reopen", { tabId: "tab-2" })).status).toBe(409);
+    });
+});
+
+describe("the keyboard game", () => {
+    test("keys and clicks are scored, kept across a restart, and in the state", async () => {
+        for (const kind of ["key", "key", "click"]) expect((await post("/keyboard", { kind, key: "⌘J" })).status).toBe(200);
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        const k = (await (await fetch(base + "/state")).json()).keyboard;
+        expect([k.points, k.streak, k.keys["⌘J"], k.clicks["⌘J"]]).toEqual([1, 0, 2, 1]);
+    });
+
+    test("anything else is refused", async () => expect((await post("/keyboard", { kind: "scroll", key: "x" })).status).toBe(400));
+});
+
+describe("the day", () => {
+    const withJournal = async () => {
+        srv.close();
+        const dir = join(root, "journal");
+        mkdirSync(dir);
+        writeFileSync(join(root, "tpl.md"), "# $date\n\n## Today's focus (1-3 items)\n\n- [ ] ...\n");
+        const { Journal } = await import("../journal/journal");
+        srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")), lunch: "11:30-13:00" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+    };
+
+    test("the state carries today's plan and the lunch break; saving and planning update it", async () => {
+        await withJournal();
+        const day = async () => (await (await fetch(base + "/state")).json()) as { day: { focus: string; planned: boolean }; lunch: string };
+        expect([(await day()).day.focus, (await day()).day.planned, (await day()).lunch]).toEqual(["", false, "11:30-13:00"]);
+        expect((await post("/day/focus", { text: "- [ ] Pair on the flaky test" })).status).toBe(200);
+        expect((await post("/day/planned", {})).status).toBe(200);
+        expect([(await day()).day.focus, (await day()).day.planned]).toEqual(["- [ ] Pair on the flaky test", true]);
+    });
+
+    test("today's focus is saved tidied, its nesting kept", async () => {
+        await withJournal();
+        await post("/day/focus", { text: "-  [ ] Ship it\n\t- [ ] the fallback" });
+        const d = (await (await fetch(base + "/state")).json()) as { day: { focus: string } };
+        expect(d.day.focus).toBe("- [ ] Ship it\n  - [ ] the fallback");
+    });
+
+    test("an edit to the journal outside WintOS is pushed to the windows", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-journal-"));
+        const { Journal } = await import("../journal/journal");
+        srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")) });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        const ws = new WebSocket(base.replace("http", "ws") + "/ws?token=t0ken", { origin: "http://localhost:5173" });
+        let first: () => void;
+        const connected = new Promise<void>((r) => (first = r));
+        const pushed = new Promise<string>((resolve) => ws.on("message", (m) => (first(), String(m).includes("Edited elsewhere") && resolve(String(m)))));
+        await connected;
+        const d = new Date();
+        const ymd = [String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")];
+        mkdirSync(join(dir, ymd[0], ymd[1]), { recursive: true });
+        writeFileSync(join(dir, ymd[0], ymd[1], `${ymd.join("-")}.md`), "# Today\n\n## Today's focus (1-3 items)\n\n- [ ] Edited elsewhere\n");
+        expect(JSON.parse(await pushed).day.focus).toBe("- [ ] Edited elsewhere");
+        ws.close();
+    });
+
+    test("without a journal the day endpoints say how to get one", async () => expect((await post("/day/focus", { text: "x" })).status).toBe(404));
+});
+
 describe("notes", () => {
     test("GET notes returns project.md's body and mine.md", async () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });
@@ -116,7 +240,7 @@ describe("notes", () => {
     test("saving mine.md writes the file in the project folder", async () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });
         expect((await post("/projects/tab-1/mine", { text: "## Promised\nmetric\n" })).status).toBe(200);
-        expect(require("fs").readFileSync(join(root, "x", "mine.md"), "utf8")).toBe("## Promised\nmetric\n");
+        expect(require("fs").readFileSync(join(root, "x", "mine.md"), "utf8")).toBe("## Promised\n\nmetric\n");
     });
 
     test("a save based on an older mine.md is refused, never overwriting an outside edit", async () => {
@@ -152,6 +276,151 @@ describe("notes", () => {
     test("mine.md must be a string", async () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });
         expect((await post("/projects/tab-1/mine", { text: 5 })).status).toBe(400);
+    });
+});
+
+describe("rebuilding PR ownership", () => {
+    test("/prs/owners moves each PR to its owner, live or shelved, or to nobody; anything else is refused", async () => {
+        const A = "https://github.com/o/r/pull/1", B = "https://github.com/o/r/pull/2";
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A, B] });
+        await post("/projects/tab-1/shelf", { script: `cd '/w' && claude --resume 'z'`, label: "x" });
+        expect((await post("/prs/owners", { owners: { [A]: "z", [B]: null } })).status).toBe(200);
+        const st = await (await fetch(base + "/state")).json();
+        expect([st.sessions[0].prs, st.shelf["tab-1"][0].prs]).toEqual([[], [A]]);
+        expect((await post("/prs/owners", { owners: { "rm -rf": "z" } })).status).toBe(400);
+    });
+});
+
+describe("a session's name", () => {
+    const state = async () => (await (await fetch(base + "/state")).json());
+    const id = prompt.session_id;
+
+    test("the session names itself, you rename it, and its next one waits as a suggestion you can take", async () => {
+        await event(prompt);
+        expect((await post(`/blocks/blk-1/name?session=${id}`, { text: "Retention backfill" })).status).toBe(200);
+        expect((await state()).sessions[0].name).toMatchObject({ text: "Retention backfill", by: "session" });
+        await post(`/sessions/${id}/name`, { text: "My own" });
+        await post(`/blocks/blk-1/name?session=${id}`, { text: "Its next" });
+        expect((await state()).sessions[0].name).toMatchObject({ text: "My own", by: "you", suggested: "Its next" });
+        await post(`/sessions/${id}/name/accept`, {});
+        expect((await state()).sessions[0].name).toMatchObject({ text: "Its next", by: "you" });
+        expect((await post(`/sessions/${id}/name`, { text: "" })).status).toBe(400);
+    });
+
+    test("a session nobody named gets one from what you asked it; one that named itself keeps its own", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-name-"));
+        writeFileSync(join(dir, "model"), `#!/bin/sh\ncat > "${dir}/prompt"\necho '"Retention backfill review fixes"'\n`, { mode: 0o755 });
+        const transcript = join(dir, "t.jsonl");
+        writeFileSync(transcript, JSON.stringify({ type: "user", message: { content: "Fix the review comments on the retention backfill" } }) + "\n");
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: join(dir, "model") });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event(prompt);
+        await event({ ...prompt, hook_event_name: "Stop", transcript_path: transcript });
+        for (let i = 0; i < 50 && !(await state()).sessions[0].name; i++) await new Promise((r) => setTimeout(r, 50));
+        expect((await state()).sessions[0].name).toMatchObject({ text: "Retention backfill review fixes", by: "model" });
+        expect(readFileSync(join(dir, "prompt"), "utf8")).toContain("- Fix the review comments on the retention backfill");
+        await event({ ...prompt, session_id: "own" });
+        await post(`/blocks/blk-1/name?session=own`, { text: "Its own" });
+        await event({ ...prompt, session_id: "own", hook_event_name: "Stop", transcript_path: transcript });
+        await new Promise((r) => setTimeout(r, 300));
+        expect((await state()).sessions.find((x: { id: string }) => x.id === "own").name).toMatchObject({ text: "Its own", by: "session" });
+    });
+
+    test("shelved, it keeps its name, and resumed it has it again", async () => {
+        const script = `cd '/w' && claude --resume '${id}'`;
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await post(`/sessions/${id}/name`, { text: "My own" });
+        await post("/projects/tab-1/shelf", { script, label: "x" });
+        expect((await state()).shelf["tab-1"][0].named).toMatchObject({ text: "My own", by: "you" });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event({ ...prompt, hook_event_name: "SessionStart", source: "resume" });
+        expect((await state()).sessions[0].name).toMatchObject({ text: "My own", by: "you" });
+    });
+});
+
+describe("the PR fixer", () => {
+    const CONFLICTED = "https://github.com/o/r/pull/5", RED = "https://github.com/o/r/pull/6";
+    const prs = [
+        { repo: "o/r", number: 5, url: CONFLICTED, title: "t", author: "me", isDraft: false, createdAt: "", conflict: true, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b5", base: "main", head: "h5" },
+        { repo: "o/r", number: 9, url: "https://github.com/o/r/pull/9", title: "t", author: "me", isDraft: false, createdAt: "", conflict: true, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b9", base: "main", head: "h9" },
+        { repo: "o/r", number: 6, url: RED, title: "t", author: "me", isDraft: false, createdAt: "", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b6", head: "h6", checks: "FAILURE" },
+    ];
+    const until = async <T>(f: () => Promise<T>) => {
+        for (let i = 0; i < 100; i++) {
+            const v = await f();
+            if (v) return v;
+            await new Promise((r) => setTimeout(r, 50));
+        }
+        throw new Error("timed out");
+    };
+    const fixerOf = async () => (await (await fetch(base + "/state")).json()).fixer;
+    // A fake gh-prs plugin and a fake claude that records its arguments and says it is done.
+    const start = async (conflictsOff = false) => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-fix-"));
+        writeFileSync(join(dir, "gh"), `#!/bin/sh\necho '${JSON.stringify({ me: "me", prs })}'\n`, { mode: 0o755 });
+        writeFileSync(join(dir, "claude"), `#!/bin/sh\nprintf '%s\\n' "$@" >> "${dir}/args"\necho '{"type":"result","result":"Resolved and pushed."}'\n`, { mode: 0o755 });
+        if (conflictsOff) {
+            mkdirSync(join(root, ".fixer"), { recursive: true });
+            writeFileSync(join(root, ".fixer", "settings.json"), JSON.stringify({ conflicts: false }));
+        }
+        srv = await startServer({ root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fixCmd: join(dir, "claude"), fixCwd: dir });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        return dir;
+    };
+
+    test("a conflict on my PR is resolved by itself, once per head commit, one run at a time, logged", async () => {
+        const dir = await start();
+        const runs = await until(async () => {
+            const rs = (await fixerOf()).runs;
+            return rs.length === 2 && rs.every((r: { exit?: number }) => r.exit === 0) && rs;
+        });
+        const [second, first] = runs;
+        expect(second.startedAt).toBeGreaterThanOrEqual(first.endedAt);
+        const run = runs.find((r: { url: string }) => r.url === CONFLICTED);
+        expect(run).toMatchObject({ kind: "conflict", url: CONFLICTED, head: "h5", route: "fresh", result: "Resolved and pushed." });
+        expect(readFileSync(join(dir, "args"), "utf8")).toContain(`${CONFLICTED} has merge conflicts`);
+        expect(readFileSync(run.log, "utf8")).toContain("Resolved and pushed.");
+        expect(readFileSync(join(root, ".fixer", "runs.jsonl"), "utf8").trim().split("\n").length).toBe(6); // queued, started, ended, twice
+        await post("/plugins/gh-prs/run", {});
+        await new Promise((r) => setTimeout(r, 200));
+        expect((await fixerOf()).runs).toHaveLength(2);
+    });
+
+    test("turned off, a conflict waits for you", async () => {
+        await start(true);
+        await post("/plugins/gh-prs/run", {});
+        await new Promise((r) => setTimeout(r, 200));
+        expect((await fixerOf())).toMatchObject({ conflicts: false, runs: [] });
+        expect((await post("/fixer/settings", { conflicts: "yes" })).status).toBe(400);
+        await post("/fixer/settings", { conflicts: true });
+        await post("/plugins/gh-prs/run", {});
+        await until(async () => (await fixerOf()).runs.length === 2);
+    });
+
+    test("red CI, dispatched: typed into the live owning session's pane; not red is refused", async () => {
+        await start(true);
+        await until(async () => (await (await fetch(base + "/state")).json()).plugins["gh-prs"]);
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [RED] });
+        const r = await (await post("/fixer/ci", { url: RED })).json();
+        expect(r).toMatchObject({ blockId: "blk-1", tabId: "tab-1", run: { kind: "ci", route: "pane", sessionId: prompt.session_id } });
+        expect(r.prompt).toContain(`CI is red on ${RED}`);
+        expect((await post("/fixer/ci", { url: CONFLICTED })).status).toBe(409);
+    });
+
+    test("red CI with no owner: a fresh headless run", async () => {
+        const dir = await start(true);
+        await until(async () => (await (await fetch(base + "/state")).json()).plugins["gh-prs"]);
+        expect((await (await post("/fixer/ci", { url: RED })).json()).run.route).toBe("fresh");
+        await until(async () => (await fixerOf()).runs.some((r: { exit?: number }) => r.exit === 0));
+        expect(readFileSync(join(dir, "args"), "utf8")).toContain("gh run rerun");
     });
 });
 
@@ -283,10 +552,10 @@ describe("sessions across a restart", () => {
 });
 
 describe("seen", () => {
-    const seenOf = async () => (await (await fetch(base + "/state")).json()).seen["tab-1"];
+    const seenOf = async (id = "sess-1") => (await (await fetch(base + "/state")).json()).seen[id];
 
-    test("the UI marks a project seen; it survives a restart", async () => {
-        expect((await post("/projects/tab-1/seen", {})).status).toBe(200);
+    test("the UI marks a session seen; it survives a restart", async () => {
+        expect((await post("/sessions/sess-1/seen", {})).status).toBe(200);
         const at = await seenOf();
         expect(at).toBeGreaterThan(0);
         srv.close();
@@ -297,6 +566,176 @@ describe("seen", () => {
 
     test("prompting a session means you read what came before", async () => {
         await event(prompt);
-        expect(await seenOf()).toBeGreaterThan(0);
+        expect(await seenOf(prompt.session_id)).toBeGreaterThan(0);
+    });
+});
+
+describe("the daily recap", () => {
+    const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    test("a session's events note its project and transcript for the day", async () => {
+        await event({ ...prompt, transcript_path: "/t/s.jsonl" });
+        const activity = JSON.parse(readFileSync(join(root, ".activity.json"), "utf8"));
+        expect(activity[iso(new Date())]["tab-1"]).toMatchObject({ prompts: 1, sessions: { [prompt.session_id]: "/t/s.jsonl" } });
+    });
+
+    test("the last worked day before today, one bullet per project from its recap", async () => {
+        const day = "2026-10-06";
+        const transcript = join(root, "t.jsonl");
+        writeFileSync(transcript, JSON.stringify({ timestamp: `${day}T15:00:00Z`, type: "system", subtype: "away_summary", content: "We merged the two lanes. Next, rerun it." }));
+        writeFileSync(join(root, ".activity.json"), JSON.stringify({ [day]: { "tab-1": { title: "Idea skill", prompts: 3, sessions: { s: transcript } } } }));
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect(await (await fetch(base + "/day/recap")).json()).toEqual({ date: day, bullets: ["Idea skill: We merged the two lanes."] });
+    });
+});
+
+describe("the shelf", () => {
+    const script = (id: string) => `cd '/w' && claude --resume '${id}'`;
+    const shelfOf = async () => (await (await fetch(base + "/state")).json()).shelf;
+
+    test("a shelved session keeps its PRs until another session touches one, and takes them back when it runs", async () => {
+        const A = "https://github.com/o/r/pull/1", B = "https://github.com/o/r/pull/2";
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A, B] });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
+        expect((await shelfOf())["tab-1"][0].prs).toEqual([A, B]);
+        await post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { hook_event_name: "PostToolUse", session_id: "other", prs: [A] } });
+        expect((await shelfOf())["tab-1"][0].prs).toEqual([B]);
+        await event({ ...prompt, hook_event_name: "SessionStart" });
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions.find((x: { id: string }) => x.id === prompt.session_id).prs).toEqual([B]);
+    });
+
+    test("`wintos pr` claims a PR named by link or owner/repo#n for the pane's session", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/pr", { ref: "o/r#7" })).status).toBe(200);
+        expect((await post("/blocks/blk-1/pr", { ref: "#7" })).status).toBe(400);
+        expect((await post("/blocks/nope/pr", { ref: "o/r#7" })).status).toBe(400);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].prs).toEqual(["https://github.com/o/r/pull/7"]);
+    });
+
+    test("a closed session is kept with its project, its label and what it was last about", async () => {
+        const transcript = join(root, "t.jsonl");
+        writeFileSync(transcript, JSON.stringify({ timestamp: "2026-10-06T15:00:00Z", type: "system", subtype: "away_summary", content: "We merged the two lanes. Next, rerun it." }));
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, transcript_path: transcript });
+        expect((await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "merge the lanes" })).status).toBe(200);
+        expect(await shelfOf()).toEqual({ "tab-1": [expect.objectContaining({ sessionId: prompt.session_id, label: "merge the lanes", gist: "We merged the two lanes." })] });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id) });
+        expect((await shelfOf())["tab-1"][0].label).toBe("We merged the two lanes.");
+    });
+
+    test("it follows the project's folder into a reopened tab, and survives a restart", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await post("/projects/tab-1/shelf", { script: script("s1"), label: "x" });
+        await post("/projects/tab-1/reopen", { tabId: "tab-2" });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect(Object.keys(await shelfOf())).toEqual(["tab-2"]);
+    });
+
+    test("its name is the status line the session last set, when it set one", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await post("/blocks/blk-1/status", { text: "deploying the stack to test" });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "I'm back now, go ahead!" });
+        expect((await shelfOf())["tab-1"][0]).toMatchObject({ name: "deploying the stack to test", label: "I'm back now, go ahead!" });
+    });
+
+    test("a 3-6 word title is written for it in the background, and shown first", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: `cat > ${join(root, "title-prompt.txt")}; echo '"Merge the two lanes."'` });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "I'm back now, go ahead!" });
+        for (let i = 0; i < 50 && !(await shelfOf())["tab-1"]?.[0]?.title; i++) await new Promise((r) => setTimeout(r, 50));
+        expect((await shelfOf())["tab-1"][0].title).toBe("Merge the two lanes");
+        expect(readFileSync(join(root, "title-prompt.txt"), "utf8")).toContain("Its first prompt: I'm back now, go ahead!");
+    });
+
+    test("a session that runs again leaves the shelf", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
+        await event({ ...prompt, hook_event_name: "SessionStart" });
+        expect(await shelfOf()).toEqual({});
+    });
+
+    test("closing its pane ends the session, and that keeps it on the shelf", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
+        await event({ ...prompt, hook_event_name: "SessionEnd", reason: "other" });
+        expect((await shelfOf())["tab-1"]).toHaveLength(1);
+    });
+
+    test("the pane switched to another session (a fork, /resume): the one it ran goes on the shelf with its status and PRs", async () => {
+        const A = "https://github.com/o/r/pull/1";
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, session_id: "fork", resume: script("fork") });
+        await post(`/blocks/blk-1/status?session=fork`, { text: "explaining the drop" });
+        await event({ hook_event_name: "PostToolUse", session_id: "fork", prs: [A] });
+        await event({ ...prompt, hook_event_name: "Stop", session_id: "fork" });
+        await event({ ...prompt, session_id: "main", resume: script("main") });
+        const st = await (await fetch(base + "/state")).json();
+        expect(st.sessions.map((x: { id: string }) => x.id)).toEqual(["main"]);
+        expect(st.shelf["tab-1"]).toEqual([expect.objectContaining({ sessionId: "fork", script: script("fork"), name: "explaining the drop", prs: [A] })]);
+    });
+
+    test("a session saved at the last quit that another one replaces in its pane goes on the shelf, resumed from its directory", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, session_id: "old", cwd: "/w/it's" });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event({ ...prompt, session_id: "new", resume: script("new") });
+        expect((await shelfOf())["tab-1"]).toEqual([expect.objectContaining({ sessionId: "old", script: "cd '/w/it'\\''s' && claude --resume 'old'" })]);
+    });
+
+    test("closing the project (⇧⌘W) shelves every session it runs first, and a second time changes nothing", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, session_id: "a", resume: script("a") });
+        await post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { ...prompt, session_id: "b", resume: script("b") } });
+        expect((await post("/projects/tab-1/shelve-all", {})).status).toBe(200);
+        await post("/projects/tab-1/shelve-all", {});
+        expect((await shelfOf())["tab-1"].map((i: { sessionId: string }) => i.sessionId).sort()).toEqual(["a", "b"]);
+        expect((await post("/projects/tab-9/shelve-all", {})).status).toBe(404);
+    });
+
+    test("a restart keeps a session's PRs: quitting ends nothing, the resumed session finds them again", async () => {
+        const A = "https://github.com/o/r/pull/1";
+        await event({ ...prompt, resume: script(prompt.session_id) });
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A] });
+        await event({ ...prompt, hook_event_name: "SessionEnd", reason: "other" });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event({ ...prompt, hook_event_name: "SessionStart", source: "resume", resume: script(prompt.session_id) });
+        expect((await (await fetch(base + "/state")).json()).sessions).toEqual([expect.objectContaining({ id: prompt.session_id, prs: [A] })]);
+    });
+
+    test("⌘W's shelving ends the session: its pane is going", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
+        expect((await (await fetch(base + "/state")).json()).sessions[0].state).toBe("ended");
+    });
+
+    test("a background fork's events (no resume command) shelve nothing", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, session_id: "main", resume: script("main") });
+        await event({ ...prompt, session_id: "bg" });
+        expect((await (await fetch(base + "/state")).json()).sessions.map((x: { id: string }) => x.id).sort()).toEqual(["bg", "main"]);
+        expect(await shelfOf()).toEqual({});
+    });
+
+    test("only the hook's resume command, and only for a project", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        expect((await post("/projects/tab-1/shelf", { script: "rm -rf ~", label: "x" })).status).toBe(400);
+        expect((await post("/projects/tab-9/shelf", { script: script("s1"), label: "x" })).status).toBe(404);
     });
 });

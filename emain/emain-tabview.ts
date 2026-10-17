@@ -140,6 +140,9 @@ export class WaveTabView extends WebContentsView {
             webPreferences: {
                 preload: path.join(getElectronAppBasePath(), "preload", "index.cjs"),
                 webviewTag: true,
+                // WintOS: the dev instance is driven by the e2e scenarios while it sits behind the
+                // developer's own windows; throttled, its focus handoffs (requestAnimationFrame) stall.
+                backgroundThrottling: process.env.WINTOS_INSTANCE !== "dev",
             },
         });
         this.createdTs = Date.now();
@@ -332,6 +335,8 @@ export async function getOrCreateWebViewForTab(waveWindowId: string, tabId: stri
         // console.log("WIN bie", tabView.waveTabId.substring(0, 8), waveEvent.type, waveEvent.code);
         handleCtrlShiftState(tabView.webContents, waveEvent);
         setWasActive(true);
+        // WintOS: whether an Esc reaches the window at all; a walk's ⌘Esc has gone missing.
+        if (input.key === "Escape") console.log(`wintos-key ${input.type} ${input.meta ? "⌘" : ""}Esc tab ${tabView.waveTabId.slice(0, 8)}`);
         if (input.type == "keyDown" && tabView.keyboardChordMode) {
             e.preventDefault();
             tabView.setKeyboardChordMode(false);

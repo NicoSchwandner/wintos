@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { inboxTabId, isInboxTab, prProjects, projectTabIds, projectPrList, prsByTab, relTime, rowView, sidebarModel, type WintosState } from "./view";
+import { inboxKind, inboxTabId, isInboxTab, prProjects, projectSessions, projectTabIds, projectPrList, projectTouched, relTime, sessionHeader, sessionTouched, urgentPr, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -13,82 +13,6 @@ describe("relTime", () => {
         [4 * 86_400_000, "4d"],
         [-5, "0s"],
     ])("%i ms → %s", (ms, out) => expect(relTime(ms)).toBe(out));
-});
-
-describe("rowView", () => {
-    test("needs: apricot next action, age since the wait began", () => {
-        const v = rowView(row("needs", { waitingSince: NOW - 3 * 60_000 }), { dir: "/p", mtime: 0, title: "Invoice OCR", next: "Approve the plan", pr: ["Core#1"] }, "T1", NOW);
-        expect(v).toMatchObject({ title: "Invoice OCR", next: "Approve the plan", tone: "apricot", meta: "Core#1", age: "3m" });
-    });
-
-    test("needs without a next action still says whose turn it is", () => {
-        expect(rowView(row("needs", { waitingSince: NOW }), undefined, "T1", NOW)).toMatchObject({ title: "T1", next: "Your turn", tone: "apricot" });
-    });
-
-    test("running on a parked session says what it waits on", () => {
-        const parked = { id: "s", tabId: "t", blockId: "b", state: "parked", since: NOW, lastAt: NOW, parkedOn: "CI on #1479" } as const;
-        expect(rowView(row("running", { sessions: [parked] }), { dir: "/p", mtime: 0, title: "X", next: "Mark #1479 ready", pr: [] }, "T", NOW)).toMatchObject({ next: "Waiting on CI on #1479", tone: "secondary" });
-    });
-
-    test("running: neutral line, Claude named as the one working", () => {
-        expect(rowView(row("running"), undefined, "T2", NOW)).toMatchObject({ next: "Claude is working", tone: "secondary", age: "1m" });
-    });
-
-    test("quiet: no next line, the reason column carries a PR or a bare age", () => {
-        const v = rowView(row("quiet"), { dir: "/p", mtime: 0, pr: ["Core#9"] }, "T", NOW);
-        expect(v.next).toBeUndefined();
-        expect(v.reason).toBe("Core#9");
-        expect(rowView(row("quiet"), undefined, "T", NOW)).toMatchObject({ reason: "1m" });
-    });
-
-    test("an unreadable note is shown in brick with its path, never hidden", () => {
-        expect(rowView(row("quiet"), { dir: "/p/x", mtime: 0, error: "no front matter" }, "T", NOW)).toMatchObject({ next: "note unreadable: /p/x/project.md", tone: "brick" });
-    });
-
-    test("nothing known about a tab shows no age, not one counted from 1970", () => {
-        const v = rowView(row("quiet", { lastAt: 0 }), undefined, "T", NOW);
-        expect([v.age, v.reason]).toEqual(["", ""]);
-    });
-
-    test("with no project and no tab name it is Untitled", () => {
-        expect(rowView(row("quiet"), undefined, undefined, NOW).title).toBe("Untitled");
-    });
-});
-
-describe("rowView with PRs", () => {
-    const blocked = { items: [{ pr: { number: 4803, branch: "fix/bank-retry" } as never, group: "chase" as const }], blocked: { since: NOW, text: "Nobody has looked at #4803 in 4 working days", tone: "brick" as const } };
-    test("a rotting PR speaks in brick when no session is waiting", () =>
-        expect(rowView(row("needs", { waitingSince: NOW }), { dir: "/p", mtime: 0 }, "T", NOW, blocked)).toMatchObject({ next: "Nobody has looked at #4803 in 4 working days", tone: "brick", meta: "#4803 · fix/bank-retry" }));
-    test("a waiting session still wins the next-action line", () =>
-        expect(rowView(row("needs", { waitingSince: NOW, sessions: [{ state: "waiting" } as never] }), undefined, "T", NOW, blocked)).toMatchObject({ next: "Your turn", tone: "apricot" }));
-    test("quiet rows take the PR's reason", () =>
-        expect(rowView(row("quiet"), undefined, "T", NOW, { items: [], reason: "#4812 with ana.b" }).reason).toBe("#4812 with ana.b"));
-});
-
-describe("sidebarModel", () => {
-    test("only tabs of this workspace appear, ranked by the daemon's rules", () => {
-        const m = sidebarModel(["a", "b"], {
-            now: NOW,
-            projects: [],
-            sessions: [
-                { id: "1", tabId: "b", blockId: "x", state: "waiting", since: NOW - 1, lastAt: NOW - 1 },
-                { id: "2", tabId: "gone", blockId: "y", state: "waiting", since: NOW, lastAt: NOW },
-            ],
-        });
-        expect(m.needs.map((r) => r.tabId)).toEqual(["b"]);
-        expect(m.quiet.map((r) => r.tabId)).toEqual(["a"]);
-    });
-
-    test("a project whose PR needs you is ranked into needs", () => {
-        const prs = { ok: true, at: NOW, data: { me: "me", prs: [{ repo: "o/r", number: 9, url: "u", title: "DEV-1", author: "me", isDraft: false, createdAt: "1970-01-01T00:00:00Z", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b" }] } };
-        const m = sidebarModel(["a"], { now: NOW, sessions: [], projects: [{ id: "a", dir: "/p", mtime: 0, title: "DEV-1 thing", pr: [] }], plugins: { "gh-prs": prs } });
-        expect(m.needs.map((r) => r.tabId)).toEqual(["a"]);
-    });
-
-    test("the project file's mtime counts as activity", () => {
-        const m = sidebarModel(["a"], { now: NOW, sessions: [], projects: [{ id: "a", dir: "/p", mtime: NOW - 5 }] });
-        expect(m.quiet[0].lastAt).toBe(NOW - 5);
-    });
 });
 
 describe("the Inbox tab", () => {
@@ -107,26 +31,18 @@ describe("the Inbox tab", () => {
         expect(projectTabIds(["p1", "old", "used"], { ...tabs, old: { meta: { "wintos:blank": true } } as unknown as Tab, used: { meta: { "wintos:blank": true }, blockids: ["b1"] } as unknown as Tab })).toEqual(["p1", "used"]));
 
     test("is found among the tabs, or not at all", () => {
-        expect(inboxTabId(["p1", "ib"], tabs)).toBe("ib");
-        expect(inboxTabId(["p1"], tabs)).toBeUndefined();
+        expect(inboxTabId(["p1", "ib"], tabs, "prs")).toBe("ib");
+        expect(inboxTabId(["p1"], tabs, "prs")).toBeUndefined();
     });
-});
 
-describe("prsByTab with snoozes", () => {
-    test("a snoozed PR no longer puts its project in Needs you", () => {
-        const prs = [{ repo: "acme/api", number: 5, url: "https://github.com/acme/api/pull/5", title: "t", author: "me", isDraft: false, createdAt: "2026-09-28T08:00:00Z", conflict: false, checks: "FAILURE", requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b" }];
-        const state = { now: Date.parse("2026-09-28T09:00:00Z"), sessions: [], projects: [{ id: "t1", title: "x", titleLocked: false, pr: ["acme/api#5"], dir: "/d", mtime: 0 }], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs } } } } as unknown as WintosState;
-        expect(prsByTab(["t1"], state).t1.blocked).toBeDefined();
-        const snoozed = { ...state, snoozes: { [prs[0].url]: { until: state.now + 1, movedAt: prs[0].createdAt } } };
-        expect(prsByTab(["t1"], snoozed).t1.blocked).toBeUndefined();
-    });
-});
-
-describe("rowView after a restart", () => {
-    test("a project whose sessions haven't started again says so", () => {
-        const r: Row = { tabId: "t", band: "needs", lastAt: 1, waitingSince: 1, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "waiting", since: 1, lastAt: 1, restored: true }] };
-        expect(rowView(r, { dir: "/p", mtime: 0, title: "X", pr: ["Core#1"] }, "T", 10).meta).toBe("Core#1 · not started, opens with the project");
-        expect(rowView({ ...r, sessions: [{ ...r.sessions[0], restored: undefined }] }, { dir: "/p", mtime: 0, title: "X", pr: ["Core#1"] }, "T", 10).meta).toBe("Core#1");
+    test("PRs and On call are two tabs, each found by its list; an Inbox from before the split is the PRs one", () => {
+        const two = { ...tabs, oc: tab({ "wintos:inbox": "oncall" }), pr: tab({ "wintos:inbox": "prs" }) };
+        expect(inboxKind(two.oc)).toBe("oncall");
+        expect(inboxKind(two.pr)).toBe("prs");
+        expect(inboxKind(two.ib)).toBe("prs");
+        expect(inboxKind(two.p1)).toBeUndefined();
+        expect(inboxTabId(["p1", "oc", "pr"], two, "oncall")).toBe("oc");
+        expect(projectTabIds(["p1", "oc", "pr"], two)).toEqual(["p1"]);
     });
 });
 
@@ -135,6 +51,11 @@ describe("projectPrList (the notes' Pull requests section)", () => {
     const p = (n: number, extra: object = {}) => ({ ...base, number: n, url: `https://github.com/acme/api/pull/${n}`, branch: `b${n}`, createdAt: "2026-09-25T08:00:00Z", ...extra });
     const st = (prs: object[], snoozes = {}) =>
         ({ now: Date.parse("2026-09-28T09:00:00Z"), sessions: [], projects: [{ id: "t1", title: "x", titleLocked: false, pr: ["acme/api#1", "acme/api#2", "acme/api#3"], dir: "/d", mtime: 0 }], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs } } }, snoozes }) as unknown as WintosState;
+
+    test("a PR a shelved session owns is on its shelf row, not here", () => {
+        const state = { ...st([p(1), p(2)]), shelf: { t1: [{ sessionId: "z", script: "s", label: "l", at: 0, prs: ["https://github.com/acme/api/pull/2"] }] } } as WintosState;
+        expect(projectPrList(state, "t1").map((r) => r.pr.number)).toEqual([1]);
+    });
 
     test("the project's PRs, most urgent group first, with what each one waits on", () => {
         const list = projectPrList(st([p(1, { reviewers: ["ana"] }), p(2, { checks: "FAILURE" }), p(3, { reviewDecision: "APPROVED", checks: "SUCCESS" })]), "t1");
@@ -155,15 +76,14 @@ describe("projectPrList (the notes' Pull requests section)", () => {
         ]);
     });
 
+    test("a PR a session in this project owns is on its pane, not in the list", () => {
+        const owner = { id: "s", tabId: "t1", blockId: "b", state: "working", since: 0, lastAt: 0, prs: ["https://github.com/acme/api/pull/2"] };
+        const list = projectPrList({ ...st([p(1), p(2)]), sessions: [owner] } as unknown as WintosState, "t1");
+        expect(list.map((r) => r.pr.number)).toEqual([1]);
+    });
+
     test("no PR data yet, or no project, is an empty list", () => {
         expect(projectPrList({ now: 0, sessions: [], projects: [] } as unknown as WintosState, "t1")).toEqual([]);
-    });
-});
-
-describe("rowView of an unread reply", () => {
-    test("a done session's reply you haven't read says so", () => {
-        const r: Row = { tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, unread: true, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "done", since: 5, lastAt: 5, turnEndedAt: 5 }] };
-        expect(rowView(r, { dir: "/p", mtime: 0, title: "X", next: "Ship it", pr: [] }, "T", 10)).toMatchObject({ next: "New reply · Ship it", tone: "apricot" });
     });
 });
 
@@ -173,5 +93,105 @@ describe("prProjects", () => {
         const other = { ...pr, number: 6, url: "https://github.com/acme/api/pull/6" };
         const state = { now: 0, sessions: [], projects: [{ id: "t1", title: "X", titleLocked: false, pr: ["acme/api#5"], dir: "/d", mtime: 0 }], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs: [pr, other] } } }, snoozes: { [pr.url]: { until: 1e15, movedAt: pr.createdAt } } } as unknown as WintosState;
         expect([...prProjects(["t1"], state)]).toEqual([[pr.url, "t1"]]);
+    });
+
+    test("a closed project keeps its PRs, through its shelf; an open one claiming the same PR wins", () => {
+        const pr = { repo: "acme/api", number: 5, url: "https://github.com/acme/api/pull/5", title: "t", author: "me", isDraft: false, createdAt: "2026-09-28T08:00:00Z", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b" };
+        const other = { ...pr, number: 6, url: "https://github.com/acme/api/pull/6" };
+        const shelved = (url: string) => [{ sessionId: "s", script: "x", label: "l", at: 0, prs: [url] }];
+        const state = {
+            now: 0, sessions: [],
+            projects: [{ id: "open", title: "O", titleLocked: false, pr: ["acme/api#6"], dir: "/o", mtime: 0 }, { id: "closed", title: "C", titleLocked: false, dir: "/c", mtime: 0 }],
+            shelf: { closed: [...shelved(pr.url), ...shelved(other.url)] },
+            plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs: [pr, other] } } },
+        } as unknown as WintosState;
+        expect(Object.fromEntries(prProjects(["open"], state))).toEqual({ [pr.url]: "closed", [other.url]: "open" });
+    });
+});
+
+describe("sessionHeader (the header on a Claude pane)", () => {
+    const base = { repo: "acme/api", title: "t", author: "me", isDraft: false, conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, createdAt: "2026-09-21T08:00:00Z" };
+    const p = (n: number, extra: object = {}) => ({ ...base, number: n, url: `https://github.com/acme/api/pull/${n}`, branch: `DEV-77-thing`, ...extra });
+    const sess = (extra: object = {}) => ({ id: "s", tabId: "t1", blockId: "b", state: "working", since: 0, lastAt: 0, cwd: "/w/DEV-88-other", ...extra });
+    const st = (sessions: object[], prs: object[] = []) =>
+        ({ now: Date.parse("2026-09-28T09:00:00Z"), sessions, projects: [], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs } } } }) as unknown as WintosState;
+
+    test("no Claude session in the pane, no header", () => expect(sessionHeader(st([]), "b")).toBeUndefined());
+    test("an ended session has none either", () => expect(sessionHeader(st([sess({ state: "ended" })]), "b")).toBeUndefined());
+
+    test("its PRs with their queue group and why; the task and branch from the first PR", () => {
+        const h = sessionHeader(st([sess({ prs: [p(1).url, p(2).url] })], [p(1, { checks: "FAILURE" }), p(2, { reviewers: ["ana"] })]), "b")!;
+        expect(h.prs.map((x) => [x.number, x.group, x.text])).toEqual([[1, "fix", "CI red"], [2, "chase", "chase · waiting on ana · 5 wd"]]);
+        expect([h.task, h.branch]).toEqual(["DEV-77", "DEV-77-thing"]);
+    });
+
+    test("a past-SLA PR makes the stripe brick, a fix apricot, nothing else none", () => {
+        expect(sessionHeader(st([sess({ prs: [p(1).url, p(2).url] })], [p(1, { checks: "FAILURE" }), p(2, { reviewers: ["ana"] })]), "b")!.tone).toBe("brick");
+        expect(sessionHeader(st([sess({ prs: [p(1).url] })], [p(1, { checks: "FAILURE" })]), "b")!.tone).toBe("apricot");
+        expect(sessionHeader(st([sess({ prs: [p(1).url] })], [p(1, { createdAt: "2026-09-28T08:00:00Z" })]), "b")!.tone).toBeUndefined();
+    });
+
+    test("done PRs drop out: one gone from the PR list has no chip, a merged one only counts", () => {
+        const h = sessionHeader(st([sess({ prs: ["https://github.com/acme/api/pull/9", p(3).url, p(1).url] })], [p(3, { mergedAt: "2026-09-27T08:00:00Z" }), p(1)]), "b")!;
+        expect([h.prs.map((x) => x.number), h.merged]).toEqual([[1], 1]);
+    });
+
+    test("most urgent first; the repo only on a PR outside the session's own; a draft says so", () => {
+        const other = { ...p(7, { reviewers: ["ana"] }), repo: "acme/Wint.Embedding.Service", url: "https://github.com/acme/Wint.Embedding.Service/pull/7" };
+        const h = sessionHeader(st([sess({ prs: [p(2).url, other.url, p(1).url] })], [p(2, { isDraft: true, createdAt: "2026-09-28T08:00:00Z" }), other, p(1, { conflict: true })]), "b")!;
+        expect(h.prs.map((x) => [x.number, x.repo, x.text])).toEqual([[1, undefined, "merge conflict"], [7, "Embedding", "chase · waiting on ana · 5 wd"], [2, undefined, "draft"]]);
+    });
+
+    test("the fixer at work on the PR's commit says so on its chip", () => {
+        const fixer = { conflicts: true, queued: [], runs: [{ id: "r", kind: "conflict", url: p(1).url, head: "h1", route: "fresh", at: 1, startedAt: 2 }] };
+        const state = { ...st([sess({ prs: [p(1).url] })], [p(1, { conflict: true, head: "h1" })]), fixer } as unknown as WintosState;
+        expect(sessionHeader(state, "b")!.prs[0].text).toBe("fixing the conflict…");
+    });
+
+    test("without PR data yet, every PR shows as a bare number", () =>
+        expect(sessionHeader({ ...st([sess({ prs: [p(9).url] })]), plugins: {} } as unknown as WintosState, "b")!.prs).toEqual([{ url: p(9).url, number: 9 }]));
+
+    test("⌥⌘G opens the PR the queue would put first", () => {
+        const h = sessionHeader(st([sess({ prs: [p(1).url, p(2).url] })], [p(1, { reviewers: ["ana"], createdAt: "2026-09-28T08:00:00Z" }), p(2, { checks: "FAILURE" })]), "b");
+        expect(urgentPr(h)?.number).toBe(2);
+    });
+
+    test("without PRs the task and branch come from where it runs", () => {
+        const h = sessionHeader(st([sess()]), "b")!;
+        expect([h.task, h.branch]).toEqual(["DEV-88", "DEV-88-other"]);
+    });
+});
+
+describe("projectSessions (the notes' Sessions section, and ⌥⌘1–9)", () => {
+    const st = {
+        now: 0, projects: [],
+        sessions: [
+            { id: "a", tabId: "t", blockId: "b2", state: "waiting", since: 0, lastAt: 0, status: { text: "reading the failing test", at: 0 }, name: { text: "fixing the parser", by: "session", at: 0 }, prs: ["https://github.com/o/r/pull/1"] },
+            { id: "b", tabId: "t", blockId: "b1", state: "working", since: 0, lastAt: 0, label: "first" },
+            { id: "c", tabId: "t", blockId: "gone", state: "waiting", since: 0, lastAt: 0 },
+            { id: "d", tabId: "t", blockId: "b3", state: "ended", since: 0, lastAt: 0 },
+        ],
+        shelf: { t: [{ sessionId: "z", script: "s", label: "l", title: "Deploy the stack", at: 0, prs: ["https://github.com/o/r/pull/2"] }] },
+    } as unknown as WintosState;
+    test("a pane running two sessions (a fork in the background) lists both", () => {
+        const both = { ...st, sessions: [...(st.sessions as never[]), { id: "f", tabId: "t", blockId: "b1", state: "waiting", since: 0, lastAt: 0, label: "the fork" }] } as unknown as WintosState;
+        expect(projectSessions(both, "t", ["b1"]).filter((x) => x.kind === "live").map((x) => x.name)).toEqual(["first", "the fork"]);
+    });
+
+    test("live ones in pane order (closed panes and ended sessions left out), then the shelved, each with its PRs", () => {
+        const list = projectSessions(st, "t", ["b1", "b2", "b3"]);
+        expect(list.map((x) => [x.kind, x.name, x.prs.map((p) => p.number)])).toEqual([["live", "first", []], ["live", "fixing the parser", [1]], ["shelved", "Deploy the stack", [2]]]);
+    });
+});
+
+describe("when you last touched a session and a project", () => {
+    const sess = (id: string, extra: object = {}) => ({ id, tabId: "t", blockId: "b", state: "waiting", since: 0, lastAt: 5, ...extra });
+    test("a session: the later of looking at it and prompting it, else its last event", () => {
+        const state = { now: 0, projects: [], sessions: [], seen: { a: 30 } } as unknown as WintosState;
+        expect([sessionTouched(state, sess("a", { promptAt: 20 }) as never), sessionTouched(state, sess("b", { promptAt: 20 }) as never), sessionTouched(state, sess("c") as never)]).toEqual([30, 20, 5]);
+    });
+    test("a project: the latest of its sessions, live or shelved, and its shelvings; none without either", () => {
+        const state = { now: 0, projects: [], sessions: [sess("a", { promptAt: 20 })], seen: { z: 50 }, shelf: { t: [{ sessionId: "z", script: "x", label: "l", at: 40 }] } } as unknown as WintosState;
+        expect([projectTouched(state, "t"), projectTouched(state, "other")]).toEqual([50, undefined]);
     });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { PR } from "../daemon/prs/group";
-import { initials, keepSelection, queueModel, reviewerChips } from "./prs";
+import type { FixRun } from "../daemon/fixer/runner";
+import { fixNote, initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns } from "./prs";
 
 const MON = Date.parse("2026-09-28T09:00:00Z");
 const pr = (p: Partial<PR>): PR => ({
@@ -24,6 +25,11 @@ describe("queueModel", () => {
         ]));
 
     test("header counts: yours are the four you act on, team is the rest", () => expect([m.yours, m.waiting, m.team]).toEqual([4, 0, 1]));
+
+    test("someone else's draft asked of your team is not shown: it asks nothing yet", () => {
+        const d = queueModel([pr({ number: 7, author: "bo.k", requestedTeam: true, isDraft: true })], "me", MON);
+        expect([d.groups, d.team]).toEqual([[], 0]);
+    });
 
     test("your PRs waiting on others count as waiting, not yours", () => {
         const w = queueModel([pr({ number: 6, reviewers: ["ana"] })], "me", MON);
@@ -137,5 +143,48 @@ describe("reviewerChips", () => {
     test("nobody asked on a ready PR is a 'none' chip; on a draft it is nothing", () => {
         expect(reviewerChips(pr({ reviewers: [] }), 2)).toEqual({ chips: [], more: 0, none: true, approved: [] });
         expect(reviewerChips(pr({ reviewers: [], isDraft: true }), 2)).toEqual({ chips: [], more: 0, none: false, approved: [] });
+    });
+});
+
+describe("rowColumns", () => {
+    test("the list alone or a wide split shows every column", () => expect(rowColumns(1400)).toEqual({ size: true, names: true }));
+    test("a little narrower, the size bar goes first", () => expect(rowColumns(900)).toEqual({ size: false, names: true }));
+    test("beside a page on a laptop, names become initials too", () => expect(rowColumns(500)).toEqual({ size: false, names: false }));
+});
+
+describe("matchesPr", () => {
+    const p = { repo: "acme/api", number: 1479, title: "Fix the rounding", author: "ana.b", branch: "ABC-12-rounding" } as Parameters<typeof matchesPr>[0];
+    test.each([
+        ["", true],
+        ["rounding", true],
+        ["ROUND acme", true],
+        ["1479", true],
+        ["#1479", true],
+        ["ana", true],
+        ["abc-12", true],
+        ["rounding vat", false],
+    ])("%s → %s", (q, out) => expect(matchesPr(p, q)).toBe(out));
+});
+
+test("an unreleased merge past the SLA is in Release, counted past SLA", () => {
+    const m = queueModel([pr({ url: "r", mergedAt: "2026-09-23T09:00:00Z" })], "me", MON);
+    expect(m.groups.map((g) => g.group)).toEqual(["release"]);
+    expect(m.pastSla).toBe(1);
+});
+
+test("a merged PR asks no reviewer", () => expect(reviewerChips(pr({ mergedAt: "2026-09-23T09:00:00Z" }), 2).none).toBe(false));
+
+describe("fixNote", () => {
+    const pr = { url: "u", head: "h1" } as PR;
+    const run = (o: Partial<FixRun> = {}): FixRun => ({ id: "r", kind: "conflict", url: "u", head: "h1", route: "fresh", at: 1, ...o });
+    test("says what the fixer does about the PR's current commit only", () => {
+        expect(fixNote(run({ head: "h0" }), pr, [])).toBeUndefined();
+        expect(fixNote(undefined, pr, [])).toBeUndefined();
+        expect(fixNote(run(), pr, ["r"])).toEqual({ text: "fixing the conflict next" });
+        expect(fixNote(run({ startedAt: 2 }), pr, [])).toEqual({ text: "fixing the conflict…" });
+        expect(fixNote(run(), pr, [])).toEqual({ text: "fixing the conflict next" });
+        expect(fixNote(run({ kind: "ci", route: "pane" }), pr, [])).toEqual({ text: "red CI sent to its session" });
+        expect(fixNote(run({ endedAt: 2, exit: 0, result: "Pushed." }), pr, [])).toEqual({ text: "tried to fix the conflict: Pushed." });
+        expect(fixNote(run({ endedAt: 2, exit: 1 }), pr, [])).toEqual({ text: "fixing the conflict failed", brick: true });
     });
 });

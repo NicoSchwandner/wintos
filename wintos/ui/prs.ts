@@ -1,4 +1,5 @@
-import { ageLabel, Group, GROUPS, groupOf, isSnoozed, isStacked, lastMovement, PR, qualifier, type Snoozes } from "../daemon/prs/group";
+import type { FixRun } from "../daemon/fixer/runner";
+import { ageLabel, byUrgency, Group, GROUPS, groupOf, isSnoozed, isStacked, lastMovement, PR, qualifier, type Snoozes } from "../daemon/prs/group";
 
 // children: PRs stacked on this one that only wait for it (spec: stacked PRs sit under their base).
 export type QueueRow = { pr: PR; group: Group; mine: boolean; age: { text: string; late: boolean }; qualifier?: { text: string; brick?: boolean }; total: number; repoShort: string; children: QueueRow[] };
@@ -6,7 +7,6 @@ export type QueueRow = { pr: PR; group: Group; mine: boolean; age: { text: strin
 const ACTS: Group[] = ["merge", "fix", "review", "chase"];
 
 // Longest untouched first: the older the last review or push, the more it is owed.
-const byUrgency = (a: QueueRow, b: QueueRow) => lastMovement(a.pr).localeCompare(lastMovement(b.pr));
 // snoozed: looked at and handed on; out of the groups and the counts until it wakes.
 export type QueueModel = { groups: { group: Group; rows: QueueRow[] }[]; snoozed: QueueRow[]; yours: number; waiting: number; team: number; pastSla: number };
 
@@ -16,7 +16,8 @@ export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes 
         return { pr, group, mine: pr.author === me, age: ageLabel(pr, now), qualifier: qualifier(pr, group, { reviewers: false }), total: pr.additions + pr.deletions, repoShort: pr.repo.split("/").pop()!, children: [] };
     };
     const snoozed = prs.filter((p) => isSnoozed(p, snoozes, now)).map(toRow);
-    const all = prs.filter((p) => !isSnoozed(p, snoozes, now)).map(toRow);
+    // Someone else's draft asks nothing of your team yet, whoever is requested on it.
+    const all = prs.filter((p) => !isSnoozed(p, snoozes, now)).map(toRow).filter((r) => !(r.group === "team" && r.pr.isDraft));
     const byUrl = new Map(all.map((r) => [r.pr.url, r]));
     const numbers = new Map(prs.map((p) => [p.url, p.number])); // snoozed bases too
     // A stacked PR that asks nothing of you waits under its base; one that does keeps its own
@@ -42,7 +43,7 @@ export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes 
         yours: rows.length - team - waiting,
         waiting,
         team,
-        pastSla: rows.filter((r) => r.group === "chase" || (r.group === "review" && r.age.late)).length,
+        pastSla: rows.filter((r) => r.group === "chase" || r.group === "release" || (r.group === "review" && r.age.late)).length,
     };
 }
 
@@ -65,9 +66,32 @@ export function keepSelection(before: string[], after: string[], selected: strin
 }
 
 // Who a PR waits on, as chips beside it (a wrapped "waiting on a, b, team" line was unreadable).
-// A ready PR nobody is asked on shows "none"; a draft is nobody's yet.
+// A ready PR nobody is asked on shows "none"; a draft is nobody's yet, a merged one nobody's any more.
 // With nobody still asked, whoever approved is shown (✓) instead.
 export function reviewerChips(pr: PR, max: number): { chips: string[]; more: number; none: boolean; approved: string[] } {
     const approved = pr.reviewers.length ? [] : (pr.approvedBy ?? []).slice(0, max);
-    return { chips: pr.reviewers.slice(0, max), more: Math.max(0, pr.reviewers.length - max), none: !pr.isDraft && pr.reviewers.length === 0 && !approved.length, approved };
+    return { chips: pr.reviewers.slice(0, max), more: Math.max(0, pr.reviewers.length - max), none: !pr.isDraft && !pr.mergedAt && pr.reviewers.length === 0 && !approved.length, approved };
+}
+
+// Which optional columns fit beside a readable title: the size bar goes first, then the names
+// (the author's, and reviewers' in full rather than initials).
+export type RowColumns = { size: boolean; names: boolean };
+export const rowColumns = (width: number): RowColumns => ({ size: width >= 1000, names: width >= 850 });
+
+// The PR list's filter (f): every word of the query appears in the PR's repo, number, title,
+// author or branch.
+export function matchesPr(pr: Pick<PR, "repo" | "number" | "title" | "author" | "branch">, query: string): boolean {
+    const hay = `${pr.repo} #${pr.number} ${pr.title} ${pr.author} ${pr.branch}`.toLowerCase();
+    return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+}
+
+// What the fixer is doing about a PR, on its row: only about the commit the PR is at now.
+export function fixNote(run: FixRun | undefined, pr: PR, queued: string[]): { text: string; brick?: boolean } | undefined {
+    if (!run || run.head !== pr.head) return undefined;
+    const what = run.kind === "conflict" ? "the conflict" : "red CI";
+    if (run.route === "pane") return { text: `${what} sent to its session` };
+    if (queued.includes(run.id)) return { text: `fixing ${what} next` };
+    if (!run.endedAt) return { text: run.startedAt ? `fixing ${what}…` : `fixing ${what} next` };
+    if (run.exit === 0) return { text: `tried to fix ${what}${run.result ? `: ${run.result}` : ""}` };
+    return { text: `fixing ${what} failed${run.result ? `: ${run.result}` : ""}`, brick: true };
 }

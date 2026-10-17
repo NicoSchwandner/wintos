@@ -27,3 +27,9 @@ export const T = {
     ui: "'Schibsted Grotesk', ui-sans-serif, system-ui, sans-serif",
     mono: "'JetBrains Mono', ui-monospace, monospace",
 } as const;
+
+// The open project's row in the sidebar.
+export const ACTIVE: React.CSSProperties = { background: T.borderActive, boxShadow: `inset 3px 0 0 ${T.emphasis}` };
+
+// A session's state as a dot, on its pane header and its chip.
+export const SESSION_DOT = { working: T.moss, waiting: T.apricot, parked: T.muted, done: T.dim, idle: T.dim, ended: T.dim } as const;

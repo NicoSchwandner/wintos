@@ -111,6 +111,7 @@ export function Sessions({ tabId, state, size }: { tabId: string; state?: Wintos
                             <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</span>
                             <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10, color: T.faint }}>{live ? x.session.state : `shelved ${relTime(Date.now() - x.item.at)}`}</span>
                         </button>
+                        {x.kind === "live" && x.session.status && <span style={{ paddingLeft: 54, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.session.status.text}</span>}
                         {(x.prs.length > 0 || x.merged > 0) && (
                             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 5, paddingLeft: 54 }}>
                                 {x.prs.map((c) => <PrChipButton key={c.url} chip={c} small />)}

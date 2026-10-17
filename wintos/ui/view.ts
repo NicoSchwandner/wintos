@@ -154,8 +154,8 @@ const chipsOf = (state: WintosState, urls: string[] = []) => {
 // The PR ⌥⌘G opens from the focused pane: the one the queue would put first (chips come sorted).
 export const urgentPr = (h: SessionHeader | undefined) => h?.prs[0];
 
-// What a live session is called: the status line it keeps (`wintos status`), else its first prompt.
-export const sessionName = (s: Session) => s.status?.text ?? s.label ?? "session";
+// What a live session is called: its name, else its first prompt. The status line is never the name.
+export const sessionName = (s: Session) => s.name?.text ?? s.label ?? "session";
 
 // A project's sessions, as its notes list them and ⌥⌘1–9 counts them: the live ones in pane
 // order (blockIds, the tab's), then the shelved ones newest first; each with its PRs as chips.

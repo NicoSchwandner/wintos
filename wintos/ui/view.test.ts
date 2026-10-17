@@ -166,7 +166,7 @@ describe("projectSessions (the notes' Sessions section, and ⌥⌘1–9)", () =>
     const st = {
         now: 0, projects: [],
         sessions: [
-            { id: "a", tabId: "t", blockId: "b2", state: "waiting", since: 0, lastAt: 0, status: { text: "fixing the parser", at: 0 }, prs: ["https://github.com/o/r/pull/1"] },
+            { id: "a", tabId: "t", blockId: "b2", state: "waiting", since: 0, lastAt: 0, status: { text: "reading the failing test", at: 0 }, name: { text: "fixing the parser", by: "session", at: 0 }, prs: ["https://github.com/o/r/pull/1"] },
             { id: "b", tabId: "t", blockId: "b1", state: "working", since: 0, lastAt: 0, label: "first" },
             { id: "c", tabId: "t", blockId: "gone", state: "waiting", since: 0, lastAt: 0 },
             { id: "d", tabId: "t", blockId: "b3", state: "ended", since: 0, lastAt: 0 },

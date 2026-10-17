@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { endSessions, finishSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, liveSessionsIn } from "./reduce";
+import { acceptSuggestedName, endSessions, finishSession, nameSession, renameSession, titleSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, liveSessionsIn } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -145,6 +145,33 @@ describe("a question mid-turn (AskUserQuestion, ExitPlanMode)", () => {
 
     test("any other tool changes nothing", () => {
         expect(only(run([ev(prompt), tool("PreToolUse", "Bash"), tool("PostToolUse", "Bash")])).state).toBe("working");
+    });
+});
+
+describe("a session's name", () => {
+    const live = () => run([ev(prompt)]);
+    const id = prompt.session_id;
+
+    test("the session proposes it; it stands unless you rename it", () => {
+        expect(only(nameSession(live(), "blk-1", "Retention backfill: review fixes", 5000)).name).toEqual({ text: "Retention backfill: review fixes", by: "session", at: 5000 });
+    });
+
+    test("your name sticks: the session's next one is only a suggestion, which you can take", () => {
+        const yours = renameSession(live(), id, "My name", 5000);
+        const suggested = nameSession(yours, "blk-1", "Its name", 6000);
+        expect(only(suggested).name).toEqual({ text: "My name", by: "you", at: 5000, suggested: "Its name" });
+        expect(only(acceptSuggestedName(suggested, id, 7000)).name).toEqual({ text: "Its name", by: "you", at: 7000 });
+    });
+
+    test("a model's name only fills in where nobody named the session", () => {
+        expect(only(titleSession(live(), id, "Model name", 5000)).name).toEqual({ text: "Model name", by: "model", at: 5000 });
+        expect(only(titleSession(nameSession(live(), "blk-1", "Own", 5000), id, "Model name", 6000)).name?.text).toBe("Own");
+        expect(only(titleSession(titleSession(live(), id, "First", 5000), id, "Second", 6000)).name?.text).toBe("Second");
+    });
+
+    test("a first prompt that is a paste, an image or a link names nothing", () => {
+        for (const p of ['"""\n<pasted_content id="1">x', "[Image #1] look", "https://github.com/o/r/pull/1", "❯ fix the parser please"])
+            expect(only(run([ev({ ...prompt, prompt: p })])).label).toBe(p.startsWith("❯") ? "fix the parser please" : undefined);
     });
 });
 

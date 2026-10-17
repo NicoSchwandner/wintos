@@ -16,7 +16,8 @@ import { titlePrompt, writeTitle } from "../shelf/title";
 import { fixJob, fixPrompt } from "../fixer/plan";
 import type { PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, endSessions, leavingFor, unparkSession } from "../sessions/reduce";
+import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -24,6 +25,7 @@ export type WintosServer = { http: http.Server; close: () => void };
 const DEFAULT_UI_ORIGINS = ["http://localhost:5173"];
 const MAX_BODY = 1_000_000;
 const MAX_STATUS = 160;
+const MAX_NAME = 60;
 const MAX_STEPS = 15;
 const MAX_STEP = 40;
 const MAX_TODO = 80;
@@ -61,11 +63,35 @@ export async function startServer(opts: { root: string; port: number; host?: str
     let titling = Promise.resolve();
     const titleShelved = (item: Shelved, project?: string) => {
         const cmd = opts.recapCmd;
-        if (!cmd || item.title) return;
+        if (!cmd || item.title || item.named) return;
         titling = titling.then(async () => {
             const title = await writeTitle(cmd, titlePrompt({ project, gist: item.gist, status: item.name, label: item.label }));
             if (!title) return;
             saveShelf(withTitle(shelf, item.sessionId, title));
+            broadcast();
+        });
+    };
+    // A session nobody named gets one from what it did, after a turn, and again once its PRs or
+    // lane changed. One at a time, behind the shelf titles.
+    const modelNamedFor = new Map<string, string>();
+    const nameByModel = (sessionId: string, transcript: string, project?: string) => {
+        const cmd = opts.recapCmd;
+        const s = sessions.get(sessionId);
+        if (!cmd || !s || (s.name && s.name.by !== "model") || modelNamedFor.get(sessionId) === nameKey(s)) return;
+        modelNamedFor.set(sessionId, nameKey(s));
+        titling = titling.then(async () => {
+            let text = "";
+            try {
+                text = readFileSync(transcript, "utf8");
+            } catch {}
+            const prompts = userPrompts(text);
+            if (!prompts.length) return;
+            const byUrl = new Map((ghData()?.prs ?? []).map((pr) => [pr.url, pr]));
+            const open = (s.prs ?? []).map((u) => byUrl.get(u)).filter((pr): pr is PR => !!pr);
+            const name = await writeTitle(cmd, namePrompt({ project, prompts, prs: open.map((pr) => `#${pr.number} ${pr.title}`), lane: s.lane?.name, branch: open[0]?.branch }));
+            if (!name) return;
+            sessions = titleSession(sessions, sessionId, name, Date.now());
+            saveSessions();
             broadcast();
         });
     };
@@ -77,7 +103,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const gist = recapper.gistOf(sessionId);
         const name = sessions.get(sessionId)?.status?.text;
         const owned = sessions.get(sessionId)?.prs;
-        const item: Shelved = { sessionId, script, label: label ?? gist ?? "session", ...(name ? { name } : {}), gist, ...(owned?.length ? { prs: owned } : {}), at: Date.now() };
+        const given = sessions.get(sessionId)?.name;
+        const item: Shelved = { sessionId, script, label: label ?? gist ?? "session", ...(name ? { name } : {}), ...(given ? { named: given } : {}), gist, ...(owned?.length ? { prs: owned } : {}), at: Date.now() };
         saveShelf(shelve(shelf, basename(p.dir), item, 14));
         titleShelved(item, p.title);
         return true;
@@ -209,6 +236,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const shelved = Object.values(shelf).flat().find((i) => i.sessionId === p.session_id);
                 if (runs && shelved) {
                     saveShelf(unshelve(shelf, p.session_id));
+                    // Its name comes back with it, as whoever gave it.
+                    const back = sessions.get(p.session_id);
+                    if (shelved.named && back && !back.name) sessions = new Map(sessions).set(back.id, { ...back, name: shelved.named });
                     if (shelved.prs?.length) sessions = claimPrs(sessions, ev.blockId, shelved.prs) ?? sessions;
                 }
                 // A PR this session touched leaves any shelved session that had it.
@@ -216,6 +246,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (touched.length && releasePrs(shelf, touched) !== shelf) saveShelf(releasePrs(shelf, touched));
                 saveSessions();
                 const tp = (p as { transcript_path?: unknown }).transcript_path;
+                if (p.hook_event_name === "Stop" && typeof tp === "string") nameByModel(p.session_id, tp, store.byTab(ev.tabId)?.title);
                 recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now());
                 if (p.hook_event_name === "UserPromptSubmit") markSeen(p.session_id); // you read it to answer it
                 const text =
@@ -364,6 +395,21 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!isSafe(blockId) || !reason || !isSafe(reason) || reason.length > MAX_TITLE)
                     return send(res, 400, `need a one-line reason up to ${MAX_TITLE} characters`);
                 sessions = parkSession(sessions, blockId, reason, Date.now(), sid);
+                saveSessions();
+                broadcast();
+                return send(res, 200, "");
+            }
+            // `wintos name`: the session names itself. ⌥⌘N: you rename it, or take its suggestion.
+            const named = /^\/blocks\/([^/]+)\/name$/.exec(url.pathname);
+            const renamed = /^\/sessions\/([^/]+)\/name(\/accept)?$/.exec(url.pathname);
+            if (req.method === "POST" && (named || renamed)) {
+                const accept = !!renamed?.[2];
+                const b = (await body(req)) as { text?: unknown };
+                const text = typeof b?.text === "string" ? b.text.trim() : "";
+                if (!accept && (!text || !isSafe(text) || text.length > MAX_NAME)) return send(res, 400, `need a one-line name up to ${MAX_NAME} characters`);
+                const now = Date.now();
+                if (named) sessions = nameSession(sessions, decodeURIComponent(named[1]), text, now, sid);
+                else sessions = accept ? acceptSuggestedName(sessions, decodeURIComponent(renamed![1]), now) : renameSession(sessions, decodeURIComponent(renamed![1]), text, now);
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");

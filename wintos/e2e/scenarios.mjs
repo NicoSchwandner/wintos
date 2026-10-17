@@ -614,6 +614,27 @@ await scenario("23 · a page that closes itself (a sign-in popup) closes its pan
     if (!(await evalIn(t, `!!document.querySelector("[data-wintos=sidebar-list]")`))) throw new Error("the window stopped rendering after the page closed itself");
 });
 
+await scenario("24 · a session proposes its name, ⌥⌘N renames it for good, and its next name waits as a suggestion", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const blockId = await until("a focused pane", () => evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`));
+    const post = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const named = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((x) => x.id === "e2e-name")?.name;
+    await post("/events", { tabId, blockId, payload: { session_id: "e2e-name", hook_event_name: "UserPromptSubmit", prompt: "e2e name" } });
+    await post(`/blocks/${blockId}/name?session=e2e-name`, { text: "Retention backfill review" });
+    await until("the proposed name in its header, with its minute", () => evalIn(t, `[...document.querySelectorAll("[data-wintos=session-header]")].some((h) => h.innerText.includes("Retention backfill review") && h.innerText.includes("change the name"))`));
+    await press(t, "n", { code: "KeyN", keyCode: 78, mods: ["alt", "meta"] });
+    await until("the name field", () => evalIn(t, `!!document.querySelector("[data-wintos=name-session] input")`));
+    await cdpFocus(t, "[data-wintos=name-session] input");
+    await evalIn(t, `document.querySelector("[data-wintos=name-session] input").select()`);
+    await cdp(t, "Input.insertText", { text: "My name for it" });
+    await press(t, "Enter", { keyCode: 13 });
+    await until("your name, kept", async () => (await named())?.by === "you" && (await named())?.text === "My name for it");
+    await post(`/blocks/${blockId}/name?session=e2e-name`, { text: "Its next name" });
+    await until("its suggestion, beside your name", () => evalIn(t, `[...document.querySelectorAll("[data-wintos=session-header]")].some((h) => h.innerText.includes("My name for it") && h.innerText.includes("Its next name"))`));
+    await post("/events", { tabId, blockId, payload: { session_id: "e2e-name", hook_event_name: "SessionEnd", reason: "prompt_input_exit" } });
+});
+
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
 // must not cost the run its results.
 await scenario("clean-up · the panes this run opened are closed", async () => {

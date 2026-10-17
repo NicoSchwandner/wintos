@@ -1,3 +1,4 @@
+import type { SessionName } from "../sessions/reduce";
 // Claude sessions closed in a project, kept to resume: ⌘W on a session pane puts it here, and a
 // session that runs again (resumed from here or by hand) leaves. Keyed by the project's folder,
 // so a project closed and reopened in a new tab keeps its shelf.
@@ -5,8 +6,9 @@
 // What a row shows, clearest first: title (3 to 6 words, written after shelving), name (the
 // session's status line then), the gist of its last recap, label (its first prompt).
 // prs: the PRs it owned when shelved; it keeps them until another session touches one.
-export type Shelved = { sessionId: string; script: string; label: string; title?: string; name?: string; gist?: string; prs?: string[]; at: number };
-export const shelvedName = (s: Shelved) => s.title ?? s.name ?? s.gist ?? s.label;
+// named: the session's own name when shelved (`wintos name`, ⌥⌘N), which comes back with it.
+export type Shelved = { sessionId: string; script: string; label: string; title?: string; name?: string; named?: SessionName; gist?: string; prs?: string[]; at: number };
+export const shelvedName = (s: Shelved) => s.named?.text ?? s.title ?? s.name ?? s.gist ?? s.label;
 
 export const withTitle = (shelf: Shelf, sessionId: string, title: string): Shelf =>
     Object.fromEntries(Object.entries(shelf).map(([f, l]) => [f, l.map((i) => (i.sessionId === sessionId ? { ...i, title } : i))]));

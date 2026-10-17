@@ -319,6 +319,17 @@ describe("wintos status", () => {
     });
 });
 
+describe("wintos name", () => {
+    test("proposes this session's name; you have a minute to change it", async () => {
+        const d = await fakeDaemon("");
+        const out = await new Promise<string>((resolve) =>
+            require("child_process").execFile(CLI, ["name", "Retention", "backfill"], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+        );
+        expect(out.trim()).toBe("name: Retention backfill (Nico can change it with ⌥⌘N for a minute; carry on)");
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/name?session=s-1", body: { text: "Retention backfill" } });
+    });
+});
+
 describe("wintos lane and step", () => {
     const cli = (args: string[], port: number) =>
         new Promise<string>((resolve) => require("child_process").execFile(CLI, args, { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(port) } }, (_e: unknown, so: string) => resolve(so)));

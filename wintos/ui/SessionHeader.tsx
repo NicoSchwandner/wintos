@@ -8,7 +8,7 @@ import { SESSION_DOT, T } from "./tokens";
 import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
 import type { Lane } from "../daemon/sessions/reduce";
-import { relTime, sessionHeader, urgentPr, type PrChip } from "./view";
+import { relTime, sessionHeader, sessionName, urgentPr, type PrChip } from "./view";
 
 
 // Above a Claude pane: its state, what it works on, its own status line and its PRs' verdicts.
@@ -29,6 +29,9 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                     {s.state}
                     {s.state !== "working" && ` ${relTime(now - s.since)}`}
                 </span>
+                <span data-wintos="session-name" style={{ color: T.emphasis, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>{sessionName(s)}</span>
+                {s.name?.by === "session" && now - s.name.at < NAME_PROPOSAL_MS && <Key k="⌥⌘N" label={`change the name · ${Math.min(60, Math.ceil((NAME_PROPOSAL_MS - (now - s.name.at)) / 1000))}s`} />}
+                {s.name?.suggested && <Key k="⌥⌘N" label={`it suggests “${s.name.suggested}”`} />}
                 {h.task && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>{h.task}</span>}
                 {h.branch && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.branch}</span>}
             </div>
@@ -56,6 +59,8 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
 SessionHeader.displayName = "SessionHeader";
 
 const HEADER_CHIPS = 4;
+// The session's own name stands unless you change it within this minute (the session carries on).
+const NAME_PROPOSAL_MS = 60_000;
 
 // One PR as a chip: its number and what is next, in its queue group's colour; a click opens the PR.
 export function PrChipButton({ chip: p, keyHint, small }: { chip: PrChip; keyHint?: string; small?: boolean }) {

@@ -279,6 +279,57 @@ describe("notes", () => {
     });
 });
 
+describe("a session's name", () => {
+    const state = async () => (await (await fetch(base + "/state")).json());
+    const id = prompt.session_id;
+
+    test("the session names itself, you rename it, and its next one waits as a suggestion you can take", async () => {
+        await event(prompt);
+        expect((await post(`/blocks/blk-1/name?session=${id}`, { text: "Retention backfill" })).status).toBe(200);
+        expect((await state()).sessions[0].name).toMatchObject({ text: "Retention backfill", by: "session" });
+        await post(`/sessions/${id}/name`, { text: "My own" });
+        await post(`/blocks/blk-1/name?session=${id}`, { text: "Its next" });
+        expect((await state()).sessions[0].name).toMatchObject({ text: "My own", by: "you", suggested: "Its next" });
+        await post(`/sessions/${id}/name/accept`, {});
+        expect((await state()).sessions[0].name).toMatchObject({ text: "Its next", by: "you" });
+        expect((await post(`/sessions/${id}/name`, { text: "" })).status).toBe(400);
+    });
+
+    test("a session nobody named gets one from what you asked it; one that named itself keeps its own", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-name-"));
+        writeFileSync(join(dir, "model"), `#!/bin/sh\ncat > "${dir}/prompt"\necho '"Retention backfill review fixes"'\n`, { mode: 0o755 });
+        const transcript = join(dir, "t.jsonl");
+        writeFileSync(transcript, JSON.stringify({ type: "user", message: { content: "Fix the review comments on the retention backfill" } }) + "\n");
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: join(dir, "model") });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event(prompt);
+        await event({ ...prompt, hook_event_name: "Stop", transcript_path: transcript });
+        for (let i = 0; i < 50 && !(await state()).sessions[0].name; i++) await new Promise((r) => setTimeout(r, 50));
+        expect((await state()).sessions[0].name).toMatchObject({ text: "Retention backfill review fixes", by: "model" });
+        expect(readFileSync(join(dir, "prompt"), "utf8")).toContain("- Fix the review comments on the retention backfill");
+        await event({ ...prompt, session_id: "own" });
+        await post(`/blocks/blk-1/name?session=own`, { text: "Its own" });
+        await event({ ...prompt, session_id: "own", hook_event_name: "Stop", transcript_path: transcript });
+        await new Promise((r) => setTimeout(r, 300));
+        expect((await state()).sessions.find((x: { id: string }) => x.id === "own").name).toMatchObject({ text: "Its own", by: "session" });
+    });
+
+    test("shelved, it keeps its name, and resumed it has it again", async () => {
+        const script = `cd '/w' && claude --resume '${id}'`;
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await post(`/sessions/${id}/name`, { text: "My own" });
+        await post("/projects/tab-1/shelf", { script, label: "x" });
+        expect((await state()).shelf["tab-1"][0].named).toMatchObject({ text: "My own", by: "you" });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event({ ...prompt, hook_event_name: "SessionStart", source: "resume" });
+        expect((await state()).sessions[0].name).toMatchObject({ text: "My own", by: "you" });
+    });
+});
+
 describe("the PR fixer", () => {
     const CONFLICTED = "https://github.com/o/r/pull/5", RED = "https://github.com/o/r/pull/6";
     const prs = [

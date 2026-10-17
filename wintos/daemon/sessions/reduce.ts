@@ -18,6 +18,7 @@ export type Session = {
     restored?: boolean; // saved at the last quit, its Claude not started again yet
     prs?: string[]; // PR links its gh pr commands named, oldest first
     status?: { text: string; at: number }; // its own line on what it is doing (`wintos status`)
+    name?: SessionName;
     lane?: Lane; // the process it follows and where it is in it (`wintos lane`, `wintos step`)
     turnEndedAt?: number; // the last Stop: a reply the developer may not have read yet
     outcome?: { text: string; at: number }; // how the last turn with text ended: its first line of prose
@@ -78,8 +79,13 @@ function outcomeOf(reply: unknown): string | undefined {
     const text = line?.replace(/^[>*+-]\s+|^\d+\.\s+/, "").replace(/[*_`]+/g, "").trim();
     return text ? text.slice(0, OUTCOME_MAX) : undefined;
 }
-const labelOf = (prompt?: string) =>
-    prompt && (prompt.length > LABEL_MAX ? `${prompt.slice(0, LABEL_MAX - 1).trimEnd()}…` : prompt);
+// A first prompt that is a paste, an image or a bare link says nothing about the work.
+const NO_LABEL = /^(\s*("""|<pasted_content|\[Image #)|\s*https?:\/\/\S+\s*$)/;
+const labelOf = (raw?: string) => {
+    const prompt = raw?.replace(/^\s*❯\s*/, "");
+    if (!prompt || NO_LABEL.test(prompt)) return undefined;
+    return prompt.length > LABEL_MAX ? `${prompt.slice(0, LABEL_MAX - 1).trimEnd()}…` : prompt;
+};
 
 // Only these events move a session. SubagentStop fires when a subagent finishes while the
 // main loop keeps working, and Notification fires for attachments and permission prompts;
@@ -126,6 +132,7 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     if (resume) session.resume = resume;
     if (prev?.prs) session.prs = prev.prs;
     if (prev?.status) session.status = prev.status;
+    if (prev?.name) session.name = prev.name;
     const said = name === "Stop" ? outcomeOf(ev.payload.last_assistant_message) : undefined;
     const outcome = said ? { text: said, at: now } : prev?.outcome;
     if (outcome) session.outcome = outcome;
@@ -184,6 +191,34 @@ export function unparkSession(sessions: Map<string, Session>, sessionId: string,
     if (!s || (s.state !== "parked" && !s.parkPending)) return sessions;
     const { parkedOn: _on, parkPending: _pending, ...rest } = s;
     return new Map(sessions).set(s.id, s.state === "parked" ? { ...rest, state: "waiting", since: now, lastAt: now } : rest);
+}
+
+// What the session is called everywhere. by: who named it. The session's own (`wintos name`)
+// stands unless you rename it; yours sticks, and a later one of the session's is only
+// suggested. A model's fills in where nobody named it.
+export type SessionName = { text: string; by: "session" | "you" | "model"; at: number; suggested?: string };
+
+export function nameSession(sessions: Map<string, Session>, blockId: string, text: string, now: number, sessionId?: string): Map<string, Session> {
+    const live = liveIn(sessions, blockId, sessionId);
+    if (!live) return sessions;
+    const name: SessionName = live.name?.by === "you" ? { ...live.name, suggested: text } : { text, by: "session", at: now };
+    return new Map(sessions).set(live.id, { ...live, name });
+}
+
+export function renameSession(sessions: Map<string, Session>, sessionId: string, text: string, now: number): Map<string, Session> {
+    const s = sessions.get(sessionId);
+    return s ? new Map(sessions).set(s.id, { ...s, name: { text, by: "you", at: now } }) : sessions;
+}
+
+export function acceptSuggestedName(sessions: Map<string, Session>, sessionId: string, now: number): Map<string, Session> {
+    const suggested = sessions.get(sessionId)?.name?.suggested;
+    return suggested ? renameSession(sessions, sessionId, suggested, now) : sessions;
+}
+
+export function titleSession(sessions: Map<string, Session>, sessionId: string, text: string, now: number): Map<string, Session> {
+    const s = sessions.get(sessionId);
+    if (!s || (s.name && s.name.by !== "model")) return sessions;
+    return new Map(sessions).set(s.id, { ...s, name: { text, by: "model", at: now } });
 }
 
 export function setStatus(sessions: Map<string, Session>, blockId: string, text: string, now: number, sessionId?: string): Map<string, Session> {

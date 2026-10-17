@@ -91,8 +91,8 @@ describe("sidebarModel", () => {
 describe("prsByTab: the PRs its sessions own count too, and the reason names the owner", () => {
     const red = { repo: "acme/api", number: 5, url: "https://github.com/acme/api/pull/5", title: "t", author: "me", isDraft: false, createdAt: "2026-09-28T08:00:00Z", conflict: false, checks: "FAILURE", requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b" };
     const base = { now: Date.parse("2026-09-28T09:00:00Z"), projects: [{ id: "t1", title: "x", titleLocked: false, pr: [], dir: "/d", mtime: 0 }], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs: [red] } } } };
-    test("a live session's PR, named by its status line", () => {
-        const state = { ...base, sessions: [{ id: "s", tabId: "t1", blockId: "b1", state: "parked", since: 0, lastAt: 0, prs: [red.url], status: { text: "deploying the stack", at: 0 } }] } as unknown as WintosState;
+    test("a live session's PR, named by the session's name, never its status line", () => {
+        const state = { ...base, sessions: [{ id: "s", tabId: "t1", blockId: "b1", state: "parked", since: 0, lastAt: 0, prs: [red.url], status: { text: "waiting on CI", at: 0 }, name: { text: "deploying the stack", by: "session", at: 0 } }] } as unknown as WintosState;
         expect(prsByTab(["t1"], state).t1.blocked).toMatchObject({ text: "#5: CI red · deploying the stack", owner: { name: "deploying the stack", blockId: "b1" } });
     });
     test("a shelved session's PR, named by its title, resumable", () => {

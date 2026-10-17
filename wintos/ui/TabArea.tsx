@@ -4,6 +4,7 @@ import { getLayoutModelForStaticTab } from "@/layout/index";
 import { atom, useAtomValue } from "jotai";
 import { memo, useEffect, useMemo } from "react";
 import { ConfirmClose } from "./ConfirmClose";
+import { NameSession } from "./NameSession";
 import "./theme.css";
 import { Key } from "./Key";
 import { Keymap } from "./Keymap";
@@ -70,6 +71,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
             {overlay === "palette" && <Palette names={names} />}
             {overlay === "keymap" && <Keymap />}
             {overlay === "confirm-close" && <ConfirmClose />}
+            {overlay === "name-session" && <NameSession />}
             <UndoToast />
         </div>
     );

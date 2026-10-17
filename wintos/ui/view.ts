@@ -167,3 +167,13 @@ export function projectSessions(state: WintosState, tabId: string, blockIds: str
         ...(state.shelf?.[tabId] ?? []).map((item): ProjectSession => ({ kind: "shelved", item, name: shelvedName(item), ...chipsOf(state, item.prs) })),
     ];
 }
+
+// When you last interacted with a session (looked at it, or prompted it) and with a project (the
+// latest of its sessions', live or shelved, and when you shelved one). Seen is kept per session.
+export const sessionTouched = (state: WintosState, s: Session): number => Math.max(state.seen?.[s.id] ?? 0, s.promptAt ?? 0) || s.lastAt;
+export function projectTouched(state: WintosState, tabId: string): number | undefined {
+    const live = state.sessions.filter((s) => s.tabId === tabId).map((s) => sessionTouched(state, s));
+    const shelved = (state.shelf?.[tabId] ?? []).map((i) => Math.max(i.at, state.seen?.[i.sessionId] ?? 0));
+    const t = Math.max(0, ...live, ...shelved);
+    return t || undefined;
+}

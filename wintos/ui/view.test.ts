@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { inboxKind, inboxTabId, isInboxTab, prProjects, projectSessions, projectTabIds, projectPrList, relTime, sessionHeader, urgentPr, type WintosState } from "./view";
+import { inboxKind, inboxTabId, isInboxTab, prProjects, projectSessions, projectTabIds, projectPrList, projectTouched, relTime, sessionHeader, sessionTouched, urgentPr, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -181,5 +181,17 @@ describe("projectSessions (the notes' Sessions section, and ⌥⌘1–9)", () =>
     test("live ones in pane order (closed panes and ended sessions left out), then the shelved, each with its PRs", () => {
         const list = projectSessions(st, "t", ["b1", "b2", "b3"]);
         expect(list.map((x) => [x.kind, x.name, x.prs.map((p) => p.number)])).toEqual([["live", "first", []], ["live", "fixing the parser", [1]], ["shelved", "Deploy the stack", [2]]]);
+    });
+});
+
+describe("when you last touched a session and a project", () => {
+    const sess = (id: string, extra: object = {}) => ({ id, tabId: "t", blockId: "b", state: "waiting", since: 0, lastAt: 5, ...extra });
+    test("a session: the later of looking at it and prompting it, else its last event", () => {
+        const state = { now: 0, projects: [], sessions: [], seen: { a: 30 } } as unknown as WintosState;
+        expect([sessionTouched(state, sess("a", { promptAt: 20 }) as never), sessionTouched(state, sess("b", { promptAt: 20 }) as never), sessionTouched(state, sess("c") as never)]).toEqual([30, 20, 5]);
+    });
+    test("a project: the latest of its sessions, live or shelved, and its shelvings; none without either", () => {
+        const state = { now: 0, projects: [], sessions: [sess("a", { promptAt: 20 })], seen: { z: 50 }, shelf: { t: [{ sessionId: "z", script: "x", label: "l", at: 40 }] } } as unknown as WintosState;
+        expect([projectTouched(state, "t"), projectTouched(state, "other")]).toEqual([50, undefined]);
     });
 });

@@ -14,6 +14,7 @@ import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from
 import { releasePrs, resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { titlePrompt, writeTitle } from "../shelf/title";
 import { fixJob, fixPrompt } from "../fixer/plan";
+import { reassignPrs } from "../prs/owners";
 import type { PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
@@ -361,6 +362,19 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!isSafe(blockId)) return send(res, 400, "bad block id");
                 sessions = finishSession(sessions, blockId, Date.now(), sid);
                 saveSessions();
+                broadcast();
+                return send(res, 200, "");
+            }
+            // A one-off rebuild of PR ownership (from the sessions' transcripts): url → session id, or null.
+            if (req.method === "POST" && url.pathname === "/prs/owners") {
+                const b = (await body(req)) as { owners?: unknown };
+                const owners = b?.owners;
+                const valid = owners && typeof owners === "object" && Object.entries(owners).every(([u, id]) => PR_URL.test(u) && (id === null || isSafe(id)));
+                if (!valid) return send(res, 400, "need owners: { <PR url>: <session id> | null }");
+                const r = reassignPrs(sessions, shelf, owners as Record<string, string | null>);
+                sessions = r.sessions;
+                saveSessions();
+                saveShelf(r.shelf);
                 broadcast();
                 return send(res, 200, "");
             }

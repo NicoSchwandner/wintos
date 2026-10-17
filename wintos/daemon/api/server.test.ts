@@ -279,6 +279,20 @@ describe("notes", () => {
     });
 });
 
+describe("rebuilding PR ownership", () => {
+    test("/prs/owners moves each PR to its owner, live or shelved, or to nobody; anything else is refused", async () => {
+        const A = "https://github.com/o/r/pull/1", B = "https://github.com/o/r/pull/2";
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A, B] });
+        await post("/projects/tab-1/shelf", { script: `cd '/w' && claude --resume 'z'`, label: "x" });
+        expect((await post("/prs/owners", { owners: { [A]: "z", [B]: null } })).status).toBe(200);
+        const st = await (await fetch(base + "/state")).json();
+        expect([st.sessions[0].prs, st.shelf["tab-1"][0].prs]).toEqual([[], [A]]);
+        expect((await post("/prs/owners", { owners: { "rm -rf": "z" } })).status).toBe(400);
+    });
+});
+
 describe("a session's name", () => {
     const state = async () => (await (await fetch(base + "/state")).json());
     const id = prompt.session_id;

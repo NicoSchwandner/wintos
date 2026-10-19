@@ -14,6 +14,11 @@ describe("reassignPrs (a one-off rebuild of who owns which PR)", () => {
         expect([r.sessions.get("a")!.prs, r.sessions.get("b")!.prs, r.shelf.p[0].prs]).toEqual([["keep", "u3"], ["u1"], ["u4"]]);
     });
 
+    test("also-in lists, named per session, replace that session's own, live or shelved", () => {
+        const r = reassignPrs(new Map([["a", { ...s("a", []), touched: ["old"] }]]), { p: [shelved("z", [])] }, {}, { a: ["u1"], z: ["u2"], gone: ["u3"] });
+        expect([r.sessions.get("a")!.touched, r.shelf.p[0].touched]).toEqual([["u1"], ["u2"]]);
+    });
+
     test("an owner WintOS doesn't know is left out, and the PR keeps its old owner", () => {
         const r = reassignPrs(new Map([["a", s("a", ["u1"])]]), {}, { u1: "gone" });
         expect(r.sessions.get("a")!.prs).toEqual(["u1"]);

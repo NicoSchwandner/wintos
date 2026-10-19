@@ -390,11 +390,14 @@ export async function startServer(opts: { root: string; port: number; host?: str
             }
             // A one-off rebuild of PR ownership (from the sessions' transcripts): url → session id, or null.
             if (req.method === "POST" && url.pathname === "/prs/owners") {
-                const b = (await body(req)) as { owners?: unknown };
+                const b = (await body(req)) as { owners?: unknown; touched?: unknown };
                 const owners = b?.owners;
-                const valid = owners && typeof owners === "object" && Object.entries(owners).every(([u, id]) => PR_URL.test(u) && (id === null || isSafe(id)));
-                if (!valid) return send(res, 400, "need owners: { <PR url>: <session id> | null }");
-                const r = reassignPrs(sessions, shelf, owners as Record<string, string | null>);
+                const touched = b?.touched ?? {};
+                const valid =
+                    owners && typeof owners === "object" && Object.entries(owners).every(([u, id]) => PR_URL.test(u) && (id === null || isSafe(id))) &&
+                    typeof touched === "object" && Object.entries(touched as object).every(([id, urls]) => isSafe(id) && Array.isArray(urls) && urls.every((u) => typeof u === "string" && PR_URL.test(u)));
+                if (!valid) return send(res, 400, "need owners: { <PR url>: <session id> | null }, and touched: { <session id>: [<PR url>, …] }");
+                const r = reassignPrs(sessions, shelf, owners as Record<string, string | null>, touched as Record<string, string[]>);
                 sessions = r.sessions;
                 saveSessions();
                 saveShelf(r.shelf);

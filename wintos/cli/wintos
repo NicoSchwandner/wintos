@@ -2,6 +2,7 @@
 # wintos: small CLI around wintosd.
 #   wintos title <words…>              name this tab's project (used by Claude)
 #   wintos wait <what…>                end this turn parked on something outside (used by Claude)
+#   wintos ask <kind> [<what…>]       end this turn waiting on the developer: answer, decide, approve or unblock
 #   wintos done                        end this turn done: nothing waits on the developer (used by Claude)
 #   wintos status <line…>              what this session is doing now, shown on its pane (used by Claude)
 #   wintos lane <name> <step…>         the process this session follows; ?step is the developer's call (used by Claude)
@@ -118,6 +119,17 @@ todo)
         echo "todo: $(printf '%s\n' "$@" | paste -sd'|' - | sed 's/|/ · /g')"
     fi
     ;;
+ask)
+    shift
+    case "${1:-}" in answer | decide | approve | unblock) ;; *) die "usage: wintos ask answer|decide|approve|unblock [<what you need from them>]" ;; esac
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    kind="$1"
+    shift
+    jq -n --arg k "$kind" --arg t "$*" '{kind: $k, text: $t}' |
+        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/ask$SESSION_Q" >/dev/null ||
+        die "wintosd not reachable on port $PORT, or it refused the text"
+    echo "asks the developer to $kind${*:+: $*}"
+    ;;
 done)
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     echo '{}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/done$SESSION_Q" >/dev/null ||
@@ -150,5 +162,5 @@ hooks)
     *) die "usage: wintos hooks install|uninstall [<claude config dir>]" ;;
     esac
     ;;
-*) die "usage: wintos title <words> | wintos name <words> | wintos wait <what> | wintos done | wintos status <line> | wintos lane <name> <step…> | wintos step <step> [note] | wintos todo <to-do>… | wintos todo done <to-do> | wintos pr <link|owner/repo#n> | wintos hooks install|uninstall [<claude config dir>]" ;;
+*) die "usage: wintos title <words> | wintos name <words> | wintos wait <what> | wintos ask <kind> [<what>] | wintos done | wintos status <line> | wintos lane <name> <step…> | wintos step <step> [note] | wintos todo <to-do>… | wintos todo done <to-do> | wintos pr <link|owner/repo#n> | wintos hooks install|uninstall [<claude config dir>]" ;;
 esac

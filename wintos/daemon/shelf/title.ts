@@ -23,8 +23,14 @@ export function parseTitle(out: string): string | undefined {
     return t && t.split(/\s+/).length <= 8 && t.length <= 60 ? t : undefined;
 }
 
-export const writeTitle = (cmd: string, prompt: string): Promise<string | undefined> =>
+// One prompt through the one-shot model command; undefined when it fails.
+export const oneShot = (cmd: string, prompt: string): Promise<string | undefined> =>
     new Promise((resolve) => {
-        const child = execFile("/bin/sh", ["-c", cmd], { timeout: 120_000, maxBuffer: 1 << 16 }, (err, out) => resolve(err ? undefined : parseTitle(String(out))));
+        const child = execFile("/bin/sh", ["-c", cmd], { timeout: 120_000, maxBuffer: 1 << 16 }, (err, out) => resolve(err ? undefined : String(out)));
         child.stdin?.end(prompt);
     });
+
+export const writeTitle = async (cmd: string, prompt: string): Promise<string | undefined> => {
+    const out = await oneShot(cmd, prompt);
+    return out === undefined ? undefined : parseTitle(out);
+};

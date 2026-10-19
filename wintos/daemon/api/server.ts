@@ -13,13 +13,14 @@ import { dayRecapper } from "../recap/day";
 import { prFact } from "../recap/recap";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
-import { titlePrompt, writeTitle } from "../shelf/title";
+import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
 import { fixJob, fixPrompt } from "../fixer/plan";
 import { reassignPrs, touchPrs } from "../prs/owners";
 import type { PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks } from "../sessions/reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn } from "../sessions/reduce";
+import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -100,6 +101,25 @@ export async function startServer(opts: { root: string; port: number; host?: str
             const name = await writeTitle(cmd, namePrompt({ project, prompts, prs: open.map((pr) => `#${pr.number} ${pr.title}`), lane: s.lane?.name, branch: open[0]?.branch }));
             if (!name) return;
             sessions = titleSession(sessions, sessionId, name, Date.now());
+            saveSessions();
+            broadcast();
+        });
+    };
+    // A turn that ended without saying what it expects (no `wintos ask`, wait or done): the model
+    // reads its last message, and a guess stands in when it can't. Not behind the titles: it is
+    // what the sidebar shows now.
+    let reading = Promise.resolve();
+    const readEndedTurn = (sessionId: string, message: string) => {
+        const s = sessions.get(sessionId);
+        if (!s || s.state !== "waiting" || s.ask || !s.turnEndedAt) return;
+        const turnAt = s.turnEndedAt;
+        const cmd = opts.recapCmd;
+        reading = reading.then(async () => {
+            const out = cmd ? await oneShot(cmd, askPrompt(message)) : undefined;
+            const read = (out && parseAsk(out)) || guessAsk(message);
+            const next = readTurn(sessions, sessionId, turnAt, read);
+            if (next === sessions) return;
+            sessions = next;
             saveSessions();
             broadcast();
         });
@@ -263,6 +283,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 saveSessions();
                 const tp = (p as { transcript_path?: unknown }).transcript_path;
                 if (p.hook_event_name === "Stop" && typeof tp === "string") nameByModel(p.session_id, tp, store.byTab(ev.tabId)?.title);
+                if (p.hook_event_name === "Stop" && typeof p.last_assistant_message === "string" && p.last_assistant_message.trim()) readEndedTurn(p.session_id, p.last_assistant_message);
                 recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now());
                 if (p.hook_event_name === "UserPromptSubmit") markSeen(p.session_id); // you read it to answer it
                 const text =
@@ -368,6 +389,18 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const id = decodeURIComponent(seenSession[1]);
                 if (!isSafe(id)) return send(res, 400, "bad session id");
                 markSeen(id);
+                broadcast();
+                return send(res, 200, "");
+            }
+            const ask = /^\/blocks\/([^/]+)\/ask$/.exec(url.pathname);
+            if (req.method === "POST" && ask) {
+                const blockId = decodeURIComponent(ask[1]);
+                const b = (await body(req)) as { kind?: unknown; text?: unknown };
+                const text = typeof b?.text === "string" ? b.text.trim() : "";
+                if (!isSafe(blockId) || !isAskKind(b?.kind) || (text && (!isSafe(text) || text.length > MAX_TITLE)))
+                    return send(res, 400, `need kind: answer, decide, approve or unblock, and an optional one-line text up to ${MAX_TITLE} characters`);
+                sessions = askSession(sessions, blockId, b.kind, text || undefined, Date.now(), sid);
+                saveSessions();
                 broadcast();
                 return send(res, 200, "");
             }

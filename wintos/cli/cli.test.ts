@@ -379,3 +379,23 @@ describe("wintos done", () => {
         expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/done?session=s-1", body: {} });
     });
 });
+
+describe("wintos ask", () => {
+    const ask = async (args: string[]) => {
+        const d = await fakeDaemon("");
+        const r = await new Promise<{ out: string; code: number }>((resolve) =>
+            require("child_process").execFile(CLI, ["ask", ...args], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (e: { code?: number } | null, so: string) => resolve({ out: so, code: e?.code ?? 0 }))
+        );
+        return { ...r, seen: d.seen };
+    };
+
+    test("sends what this block's session asks of the developer", async () => {
+        const r = await ask(["decide", "two", "bands"]);
+        expect([r.out.trim(), r.seen[0]]).toEqual(["asks the developer to decide: two bands", { url: "/blocks/blk-1/ask?session=s-1", body: { kind: "decide", text: "two bands" } }]);
+    });
+
+    test("a kind it doesn't know is refused before anything is sent", async () => {
+        const r = await ask(["ponder"]);
+        expect([r.code, r.seen]).toEqual([1, []]);
+    });
+});

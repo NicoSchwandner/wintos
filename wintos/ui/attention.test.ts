@@ -120,17 +120,28 @@ describe("rowView after a restart", () => {
 });
 
 describe("rowView of an unread reply", () => {
-    test("a done session's reply you haven't read says so", () => {
-        const r: Row = { tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, unread: true, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "done", since: 5, lastAt: 5, turnEndedAt: 5 }] };
-        expect(rowView(r, { dir: "/p", mtime: 0, title: "X", next: "Ship it", pr: [] }, "T", 10)).toMatchObject({ next: "New reply · Ship it", tone: "apricot" });
+    test("a done session's reply that said nothing falls back to the project's next action", () => {
+        const r: Row = { tabId: "t", band: "read", lastAt: 5, waitingSince: 5, unread: true, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "done", since: 5, lastAt: 5, turnEndedAt: 5 }] };
+        expect(rowView(r, { dir: "/p", mtime: 0, title: "X", next: "Ship it", pr: [] }, "T", 10)).toMatchObject({ next: "Ship it", tone: "blue" });
     });
 });
 
 describe("a row says how the last turn ended", () => {
     const sess = (state: Session["state"], extra: Partial<Session> = {}): Session => ({ id: "s", tabId: "t", blockId: "b", state, since: 5, lastAt: 5, turnEndedAt: 5, outcome: { text: "Fixed the walk", at: 5 }, ...extra });
-    test("unread: New reply, then what it said", () => {
-        const r: Row = { tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, unread: true, sessions: [sess("parked", { parkedOn: "CI" })] };
-        expect(rowView(r, { dir: "/p", mtime: 0, title: "X", next: "Ship it", pr: [] }, "T", 10)).toMatchObject({ next: "New reply · Fixed the walk", tone: "apricot" });
+    test("to read: what it said, in blue", () => {
+        const r: Row = { tabId: "t", band: "read", lastAt: 5, waitingSince: 5, unread: true, sessions: [sess("parked", { parkedOn: "CI" })] };
+        expect(rowView(r, { dir: "/p", mtime: 0, title: "X", next: "Ship it", pr: [] }, "T", 10)).toMatchObject({ next: "Fixed the walk", tone: "blue" });
+    });
+    test("your move: what the turn expects of you, then what about", () => {
+        const move = (ask: Session["ask"], outcome = true) => rowView({ tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, sessions: [sess("waiting", { ask, ...(outcome ? {} : { outcome: undefined }) })] }, undefined, "T", 10).next;
+        expect(move({ kind: "decide", text: "two bands or one", by: "session" })).toBe("Decide · two bands or one");
+        expect(move({ kind: "unblock", by: "model" })).toBe("Unblock · Fixed the walk");
+        expect(move({ kind: "unblock", by: "model" }, false)).toBe("Unblock");
+        expect(move(undefined)).toBe("Fixed the walk");
+    });
+    test("a question mid-turn points at the pane, not at the last turn's outcome", () => {
+        const move = (kind: "answer" | "approve") => rowView({ tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, sessions: [sess("waiting", { ask: { kind, by: "tool" } })] }, undefined, "T", 10).next;
+        expect([move("answer"), move("approve")]).toEqual(["Answer · its question", "Approve · its plan"]);
     });
     test("quiet: what it waits on, else what it said", () => {
         expect(rowView(row("quiet", { sessions: [sess("parked", { parkedOn: "CI" })] }), undefined, "T", NOW).reason).toBe("waiting on CI");

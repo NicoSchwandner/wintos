@@ -1,5 +1,6 @@
 // Design tokens from the WintOS panel spec §8. Colour is a vocabulary: apricot means you are
-// the blocker, brick means something is rotting, moss means a machine is working.
+// the blocker, blue means something to read, brick means something is rotting, moss means a
+// machine is working.
 export const T = {
     ground: "#1d2021",
     terminal: "#1d2021",
@@ -20,6 +21,7 @@ export const T = {
     apricot: "#fe8019",
     brick: "#fb4934",
     moss: "#b8bb26",
+    blue: "#83a598",
     keycapText: "#d5c4a1",
     keycapBg: "#3c3836",
     keycapBorder: "#504945",

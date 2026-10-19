@@ -43,12 +43,8 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     const notStarted = row.sessions.length > 0 && row.sessions.every((s) => s.restored);
     const meta = notStarted ? [link, "not started, opens with the project"].filter(Boolean).join(" · ") : link;
     if (project?.error) return { title, next: `note unreadable: ${project.dir}/project.md`, tone: "brick", age, meta };
-    if (row.band === "needs") {
-        const sessionWaiting = row.sessions.some((s) => s.state === "waiting");
-        const said = lastSaid(row.sessions) ?? project?.next;
-        if (!sessionWaiting && row.unread) return { title, next: said ? `New reply · ${said}` : "New reply", tone: "apricot", age, meta };
-        return { title, next: project?.next ?? "Your turn", tone: "apricot", age, meta };
-    }
+    if (row.band === "needs") return { title, next: askLine(row.sessions) ?? project?.next ?? "Your turn", tone: "apricot", age, meta };
+    if (row.band === "read") return { title, next: lastSaid(row.sessions) ?? project?.next ?? "New reply", tone: "blue", age, meta };
     if (row.band === "running") {
         // Parked beats the next action: it is the live reason nobody needs to act.
         const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
@@ -59,20 +55,33 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     return { title, age, reason: parkedOn ? `waiting on ${parkedOn}` : (lastSaid(row.sessions) ?? prs?.blocked?.text ?? prs?.reason ?? meta ?? age) };
 }
 
+// What the longest-waiting turn expects of you, ahead of what it said: "Decide · two bands or one".
+// A turn not read yet shows what it said.
+const ASK_LABEL = { answer: "Answer", decide: "Decide", approve: "Approve", unblock: "Unblock" } as const;
+function askLine(sessions: Session[]): string | undefined {
+    const s = sessions.filter((x) => x.state === "waiting").sort((a, b) => a.since - b.since)[0];
+    if (!s?.ask) return s?.outcome?.text;
+    // A question mid-turn is in the pane; the last turn's outcome would be stale.
+    if (s.ask.by === "tool") return s.ask.kind === "approve" ? "Approve · its plan" : "Answer · its question";
+    const what = s.ask.text ?? s.outcome?.text;
+    return what ? `${ASK_LABEL[s.ask.kind]} · ${what}` : ASK_LABEL[s.ask.kind];
+}
+
 const lastSaid = (sessions: Session[]) => sessions.filter((s) => s.outcome).sort((a, b) => b.outcome!.at - a.outcome!.at)[0]?.outcome!.text;
 
 // Everything the sidebar and the palette show about the projects, computed once: the bands,
 // each row's text and each project's PRs. `now` ticks the ages.
-// targets: where opening a project that needs you lands: the session waiting longest.
+// targets: where opening a project in Your move or To read lands: the session waiting longest,
+// else the latest reply.
 export type Attention = Ranking & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target> };
 export function attention(tabIds: string[], state: WintosState, names: Record<string, string | undefined>, now: number): Attention {
     const prs = prsByTab(tabIds, state);
     const split = sidebarModel(tabIds, state);
-    const rows = [...split.needs, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale];
+    const rows = [...split.needs, ...split.read, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale];
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const views = Object.fromEntries(rows.map((r) => [r.tabId, rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId])]));
     const targets: Record<string, Target> = {};
-    for (const r of rows.filter((r) => r.band === "needs")) {
+    for (const r of [...split.needs, ...split.read]) {
         const waiting = r.sessions.filter((s) => s.state === "waiting").sort((a, b) => a.since - b.since)[0];
         const reply = r.sessions.filter((s) => isUnread(s, state.seen ?? {})).sort((a, b) => b.turnEndedAt! - a.turnEndedAt!)[0];
         const to = waiting ?? reply;

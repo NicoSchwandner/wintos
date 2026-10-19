@@ -79,8 +79,8 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                         style={{ WebkitAppRegion: "no-drag", display: "inline-flex", alignItems: "center", gap: 7, maxWidth: 240, padding: "5px 10px", borderRadius: 8, border: `1px solid ${isOn ? T.borderActive : T.border}`, background: isOn ? T.cardActive : "transparent", color: isOn ? T.emphasis : T.secondary, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}
                     >
                         {s ? (
-                            // Unread: a ring in the waiting colour until you have looked.
-                            <span style={{ width: 6, height: 6, flexShrink: 0, borderRadius: "50%", background: SESSION_DOT[s.state], boxShadow: unread.has(s.id) && s.state !== "waiting" ? `0 0 0 2px ${T.apricot}` : undefined }} />
+                            // Unread: a ring in the to-read colour until you have looked.
+                            <span style={{ width: 6, height: 6, flexShrink: 0, borderRadius: "50%", background: SESSION_DOT[s.state], boxShadow: unread.has(s.id) && s.state !== "waiting" ? `0 0 0 2px ${T.blue}` : undefined }} />
                         ) : (
                             <span style={{ color: T.muted }}>{GLYPH[c.kind as keyof typeof GLYPH]}</span>
                         )}

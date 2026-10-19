@@ -83,9 +83,49 @@ describe("wintosd API", () => {
     });
 
     test("a Stop shows up in /state as a waiting session", async () => {
-        await event(stop);
+        await event({ ...stop, last_assistant_message: "" });
         const state = await (await fetch(base + "/state")).json();
         expect(state.sessions).toEqual([expect.objectContaining({ tabId: "tab-1", state: "waiting" })]);
+    });
+
+    test("`wintos ask` then Stop waits on the developer for what it asked; a bad kind is a 400", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/ask", { kind: "ponder" })).status).toBe(400);
+        expect((await post("/blocks/blk-1/ask", { kind: "decide", text: "two bands or one" })).status).toBe(200);
+        await event(stop);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions).toEqual([expect.objectContaining({ state: "waiting", ask: { kind: "decide", text: "two bands or one", by: "session" } })]);
+    });
+
+    const settled = async (until: (s: { state: string; ask?: unknown }) => boolean) => {
+        for (let i = 0; i < 50; i++) {
+            const s = (await (await fetch(base + "/state")).json()).sessions[0];
+            if (until(s)) return s;
+            await new Promise((r) => setTimeout(r, 50));
+        }
+        return (await (await fetch(base + "/state")).json()).sessions[0];
+    };
+
+    test("a turn that said nothing is read by the model: an ask, or done for a report", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: `cat > ${join(root, "ask-prompt.txt")}; echo 'approve: the migration plan'` });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        await event(prompt);
+        await event({ ...stop, last_assistant_message: "Here is the plan. Go?" });
+        expect(await settled((s) => !!s.ask)).toMatchObject({ state: "waiting", ask: { kind: "approve", text: "the migration plan", by: "model" } });
+        expect(readFileSync(join(root, "ask-prompt.txt"), "utf8")).toContain("Here is the plan. Go?");
+    });
+
+    test("when the model fails, a guess: a question asks, a report is done", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "exit 1" });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        await event(prompt);
+        await event({ ...stop, last_assistant_message: "Shall I merge it?" });
+        expect(await settled((s) => !!s.ask)).toMatchObject({ state: "waiting", ask: { kind: "answer", text: "Shall I merge it?", by: "guess" } });
+        await event(prompt);
+        await event({ ...stop, last_assistant_message: "Merged." });
+        expect(await settled((s) => s.state === "done")).toMatchObject({ state: "done" });
     });
 
     test("the prompt injection asks for a title only while there is none", async () => {
@@ -116,7 +156,7 @@ describe("wintosd API", () => {
         const ws = new WebSocket(base.replace("http", "ws") + "/ws?token=t0ken", { origin: "http://localhost:5173" });
         const frames: string[] = [];
         await new Promise<void>((resolve) => ws.on("message", (m) => (frames.push(String(m)), frames.length === 1 && resolve())));
-        await event(stop);
+        await event({ ...stop, last_assistant_message: "Ship it?" });
         await new Promise((r) => setTimeout(r, 50));
         expect(JSON.parse(frames[frames.length - 1]).sessions[0].state).toBe("waiting");
         ws.close();

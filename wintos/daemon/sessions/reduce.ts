@@ -3,6 +3,11 @@ export type HookEvent = { tabId: string; blockId: string; payload: HookPayload }
 // parked: the turn ended waiting on something outside (CI, a review), not on the developer.
 // done: the turn ended with the goal met and nothing asked of the developer.
 export type SessionState = "idle" | "working" | "waiting" | "parked" | "done" | "ended";
+// What a turn waiting on the developer expects of them, at a glance. by: who said so: the
+// question tool, the session itself (`wintos ask`), or a reading of its last message.
+export const ASK_KINDS = ["answer", "decide", "approve", "unblock"] as const;
+export type AskKind = (typeof ASK_KINDS)[number];
+export type Ask = { kind: AskKind; text?: string; by: "tool" | "session" | "model" | "guess" };
 export type Session = {
     id: string;
     tabId: string;
@@ -15,6 +20,8 @@ export type Session = {
     parkedOn?: string;
     parkPending?: boolean; // `wintos wait` ran this turn; the turn's Stop parks instead of waiting
     donePending?: boolean; // `wintos done` ran this turn; the turn's Stop ends it done
+    ask?: Ask; // what a waiting turn expects of the developer; none yet while it is being read
+    askPending?: Ask; // `wintos ask` ran this turn; the turn's Stop asks it
     restored?: boolean; // saved at the last quit, its Claude not started again yet
     prs?: string[]; // the PRs it owns: it was the first to touch them (daemon/prs/owners.ts)
     touched?: string[]; // PRs it worked on that another session owns: it is "also in" them
@@ -82,7 +89,7 @@ const TRANSITIONS: Record<string, SessionState> = {
     SessionEnd: "ended",
 };
 
-const ASKING_TOOLS = new Set(["AskUserQuestion", "ExitPlanMode"]);
+const ASKING_TOOLS: Record<string, AskKind> = { AskUserQuestion: "answer", ExitPlanMode: "approve" };
 
 export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now: number): Map<string, Session> {
     const { session_id: id, hook_event_name: name, cwd, prompt, pr_verb } = ev.payload;
@@ -92,7 +99,8 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     // session with its PRs, lane and status. A pane WintOS closes ends its session itself (endSessions).
     const quits = name === "SessionEnd" && ev.payload.reason === "other";
     // A question mid-turn ends no turn, so no Stop says so: its tool's start and end do.
-    const asks = ASKING_TOOLS.has(ev.payload.tool_name ?? "") ? (name === "PreToolUse" ? "waiting" : name === "PostToolUse" ? "working" : undefined) : undefined;
+    const tool = ASKING_TOOLS[ev.payload.tool_name ?? ""];
+    const asks = tool ? (name === "PreToolUse" ? "waiting" : name === "PostToolUse" ? "working" : undefined) : undefined;
     const next = (prev?.restored && name === "SessionStart") || quits ? undefined : (asks ?? TRANSITIONS[name]);
     const parks = name === "Stop" && prev?.parkPending;
     const finishes = name === "Stop" && prev?.donePending;
@@ -110,6 +118,9 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
         parkedOn: parks ? prev.parkedOn : next ? undefined : prev?.parkedOn,
         parkPending: next ? undefined : prev?.parkPending,
         donePending: next ? undefined : prev?.donePending,
+        askPending: next ? undefined : prev?.askPending,
+        // A turn's ask lasts until the session moves on; a Stop with none is read by the daemon.
+        ask: asks === "waiting" ? { kind: tool, by: "tool" } : name === "Stop" && !parks && !finishes ? prev?.askPending : next ? undefined : prev?.ask,
         turnEndedAt: name === "Stop" ? now : prev?.turnEndedAt,
         promptAt: name === "UserPromptSubmit" ? now : prev?.promptAt,
     };
@@ -167,8 +178,8 @@ export function parkSession(sessions: Map<string, Session>, blockId: string, rea
     const live = liveIn(sessions, blockId, sessionId);
     if (!live) return sessions;
     // A turn that already ended waiting on the developer parks now: they parked it from WintOS.
-    if (live.state === "waiting") return new Map(sessions).set(live.id, { ...live, state: "parked", since: now, parkedOn: reason, parkPending: undefined, donePending: undefined, lastAt: now });
-    return new Map(sessions).set(live.id, { ...live, parkedOn: reason, parkPending: true, donePending: undefined, lastAt: now });
+    if (live.state === "waiting") return new Map(sessions).set(live.id, { ...live, state: "parked", since: now, parkedOn: reason, parkPending: undefined, donePending: undefined, ask: undefined, lastAt: now });
+    return new Map(sessions).set(live.id, { ...live, parkedOn: reason, parkPending: true, donePending: undefined, askPending: undefined, lastAt: now });
 }
 
 // ⌘Z after a park: the turn is yours again.
@@ -256,7 +267,22 @@ export function tickTodo(sessions: Map<string, Session>, blockId: string, item: 
 export function finishSession(sessions: Map<string, Session>, blockId: string, now: number, sessionId?: string): Map<string, Session> {
     const live = liveIn(sessions, blockId, sessionId);
     if (!live) return sessions;
-    return new Map(sessions).set(live.id, { ...live, donePending: true, parkPending: undefined, lastAt: now });
+    return new Map(sessions).set(live.id, { ...live, donePending: true, parkPending: undefined, askPending: undefined, lastAt: now });
+}
+
+// `wintos ask` from inside a session: the turn's Stop waits on the developer for this.
+export function askSession(sessions: Map<string, Session>, blockId: string, kind: AskKind, text: string | undefined, now: number, sessionId?: string): Map<string, Session> {
+    const live = liveIn(sessions, blockId, sessionId);
+    if (!live) return sessions;
+    return new Map(sessions).set(live.id, { ...live, askPending: { kind, ...(text ? { text } : {}), by: "session" }, parkPending: undefined, donePending: undefined, lastAt: now });
+}
+
+// What the daemon read in a turn that ended saying nothing (no ask, wait or done): an ask, or
+// "done" for a reply that only reports. turnAt: the Stop it read; a later turn makes it moot.
+export function readTurn(sessions: Map<string, Session>, sessionId: string, turnAt: number, read: Ask | "done"): Map<string, Session> {
+    const s = sessions.get(sessionId);
+    if (!s || s.state !== "waiting" || s.ask || s.turnEndedAt !== turnAt) return sessions;
+    return new Map(sessions).set(s.id, read === "done" ? { ...s, state: "done" } : { ...s, ask: read });
 }
 
 // The sessions a pane runs, not ended: usually one; a fork Claude Code runs in the background

@@ -390,7 +390,7 @@ await scenario("14 · ⌥⌘P parks the session waiting in a pane just opened", 
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
 });
 
-await scenario("14b · a session that parks itself stays in Needs you with its last line until you focus its pane, then goes quiet saying it", async () => {
+await scenario("14b · a session that parks itself stays in To read with its last line until you focus its pane, then goes quiet saying it", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
@@ -407,9 +407,9 @@ await scenario("14b · a session that parks itself stays in Needs you with its l
     const others = [];
     for (const r of await renderers()) if ((await evalIn(r, "window.wintosTabId?.()")) !== tabId) others.push(r);
     const elsewhere = (band, line) => until(`"${line}" in ${band} in another sidebar`, async () => { for (const r of others) if ((await evalIn(r, row(band))).includes(line)) return true; return false; });
-    await elsewhere("needs", "New reply · Pushed the fix; CI is running.");
+    await elsewhere("read", "Pushed the fix; CI is running.");
     await sleep(3000);
-    if (!(await evalIn(t, row("needs")))) throw new Error("acked without its pane ever focused");
+    if (!(await evalIn(t, row("read")))) throw new Error("acked without its pane ever focused");
     await focus(blockId);
     await until("the project quiet", () => evalIn(t, row("quiet")), 8000);
     await elsewhere("quiet", "waiting on CI on #1");
@@ -637,6 +637,25 @@ await scenario("24 · a session proposes its name, ⌥⌘N renames it for good, 
 
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
 // must not cost the run its results.
+await scenario("25 · a turn that asks you to decide sits in Your move saying so, and leaves it once you answer", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    await press(t, "d", { mods: ["meta"] });
+    const blockId = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
+    const post = (hook_event_name, extra = {}) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-ask", hook_event_name, prompt: "e2e ask", ...extra } }) });
+    await post("UserPromptSubmit");
+    await fetch(`http://127.0.0.1:7731/blocks/${blockId}/ask?session=e2e-ask`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "decide", text: "two bands or one" }) });
+    await post("Stop", { last_assistant_message: "Two ways to show it. Which one?" });
+    const row = (band) => `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-band-group=${band}] [data-tabid='${tabId}']")].map((e) => e.innerText).join(" ")`;
+    const others = [];
+    for (const r of await renderers()) if ((await evalIn(r, "window.wintosTabId?.()")) !== tabId) others.push(r);
+    await until("Decide in Your move in another sidebar", async () => { for (const r of others) if ((await evalIn(r, row("needs"))).includes("Decide · two bands or one")) return true; return false; });
+    await post("UserPromptSubmit");
+    await until("out of Your move", async () => !(await evalIn(t, row("needs"))), 8000);
+    await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

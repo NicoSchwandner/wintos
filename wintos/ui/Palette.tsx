@@ -167,7 +167,8 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const title = (id: string) => project(id)?.title ?? names[id] ?? "Untitled";
     const band: Record<string, string> = {};
-    for (const r of model.needs) band[r.tabId] = "needs you";
+    for (const r of model.needs) band[r.tabId] = "your move";
+    for (const r of model.read) band[r.tabId] = "to read";
     for (const r of model.running) band[r.tabId] = "running";
     for (const r of [...model.quiet, ...model.quietMore]) band[r.tabId] = "quiet";
     for (const r of model.quietStale) band[r.tabId] = `out of the sidebar · last touched ${relTime(now - r.lastAt)} ago`;

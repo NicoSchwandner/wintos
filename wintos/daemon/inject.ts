@@ -2,11 +2,11 @@ import { join } from "path";
 import type { Project } from "./projects/store";
 
 // WintOS shows a session whose turn ended as waiting on the developer; this is how Claude says
-// it is waiting on something else instead.
+// what it expects of them, or that it is waiting on something else.
 const WAIT_RULE = `[WintOS] Every turn you end is shown to the developer as "your turn" unless you say otherwise. Just before you stop, read your final message and pick one:
-- It asks the developer something (a question, a decision, a step for them): stop as usual.
+- It asks the developer something: run \`wintos ask <kind> "<what you need, a few words>"\`, then stop. kind: answer (a question), decide (options to pick from), approve (a plan, a change or a step waiting for their go), unblock (something only they can do: a login, an unlock, a manual step).
 - It waits on something outside this conversation (a review, CI, a deploy, a merge, a background job): run \`wintos wait "<what, e.g. review on #123>"\`, then stop. This holds even when you told the developer you are waiting; telling them is not an ask.
-- The goal is met and nothing is asked of them: run \`wintos done\`, then stop.
+- The goal is met and nothing is asked of them, including a report or a PR for them to look at: run \`wintos done\`, then stop.
 Your pane shows one line on what you are doing: run \`wintos status "<one line, e.g. walking the test plan on #352>"\` when you start on this prompt and whenever the plan changes, and before you stop.
 When your instructions give the work a process with named steps (a lane, a checklist), run \`wintos lane <name> <step>…\` once you know it (prefix a step that is the developer's call with ?), then \`wintos step <step> [note]\` each time you move to the next one. When a step turns into several things to do (the test path found three issues), list them with \`wintos todo <to-do>…\` and tick each with \`wintos todo done <to-do>\` as it lands. Your \`gh pr\` commands tell WintOS which PRs are yours; for a PR you work on without one (in the browser, through \`gh api\`), run \`wintos pr <link|owner/repo#n>\`.`;
 

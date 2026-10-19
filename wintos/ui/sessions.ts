@@ -22,7 +22,7 @@ export function paneCloseWarns(sessions: Session[], blockId: string, armed: stri
     return armed !== blockId && sessions.some((s) => s.blockId === blockId && s.state === "working");
 }
 
-// ⌃⇥: the next stop in Needs you, in the order the sidebar shows it, wrapping, so every project
+// ⌃⇥: the next stop in Your move, then To read, in the order the sidebar shows it, wrapping, so every project
 // there is reached and the next one can be read off the screen. A project's waiting sessions are
 // a stop each (longest waiting first); a project there for a PR is one stop, the session behind
 // it (attention's target) or else its terminals. A

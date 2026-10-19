@@ -30,7 +30,8 @@ import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 
 const BAND_STYLE = {
-    needs: { label: "Needs you", color: T.apricot },
+    needs: { label: "Your move", color: T.apricot },
+    read: { label: "To read", color: T.blue },
     running: { label: "Running", color: T.moss },
     quiet: { label: "Quiet", color: T.muted },
 } as const;
@@ -92,7 +93,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const quiet = model ? (expanded ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
     // The cards above the projects are walked too, in the order they show: PRs, On call, Today.
     const cards = [...(state?.day ? ["card:today"] : []), ...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : [])];
-    const switchOrder = model ? [...cards, ...[...model.needs, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId)] : [];
+    const switchOrder = model ? [...cards, ...[...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId)] : [];
 
     useEffect(registerWintosMenu, []);
 
@@ -100,7 +101,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-tabid="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
 
     useEffect(() => {
-        if (state) setLatestSessions(state.sessions, tabIds, model?.needs.map((r) => r.tabId) ?? [], model?.targets ?? {});
+        if (state) setLatestSessions(state.sessions, tabIds, model ? [...model.needs, ...model.read].map((r) => r.tabId) : [], model?.targets ?? {});
     }, [state, tabIds.join(",")]);
 
     // The project title is the source of truth; the tab name follows it.
@@ -198,6 +199,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 ) : (
                     <>
                         <Band kind="needs" count={model.needs.length}>{model.needs.map(renderRow)}</Band>
+                        <Band kind="read" count={model.read.length}>{model.read.map(renderRow)}</Band>
                         <Band kind="running" count={model.running.length}>{model.running.map(renderRow)}</Band>
                         <Band kind="quiet" count={model.quiet.length + model.quietMore.length} shown={quiet.length}>
                             {quiet.map(renderRow)}
@@ -286,7 +288,7 @@ const WalkKeys = () => (
 
 function CardRow(p: RowProps) {
     const { v } = p;
-    const tone = { apricot: T.apricot, brick: T.brick, secondary: T.secondary }[v.tone ?? "secondary"];
+    const tone = { apricot: T.apricot, blue: T.blue, brick: T.brick, secondary: T.secondary }[v.tone ?? "secondary"];
     return (
         <div
             data-tabid={p.tabId}

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { acceptSuggestedName, endSessions, finishSession, nameSession, renameSession, titleSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, liveSessionsIn } from "./reduce";
+import { acceptSuggestedName, askSession, readTurn, endSessions, finishSession, nameSession, renameSession, titleSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, liveSessionsIn } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -140,7 +140,14 @@ describe("a question mid-turn (AskUserQuestion, ExitPlanMode)", () => {
     test.each(["AskUserQuestion", "ExitPlanMode"])("%s waits on you until you answer, then the turn runs on", (t) => {
         const m = run([ev(prompt), tool("PreToolUse", t)]);
         expect(only(m)).toMatchObject({ state: "waiting", since: 1010 });
-        expect(only(run([ev(prompt), tool("PreToolUse", t), tool("PostToolUse", t)])).state).toBe("working");
+        expect(only(run([ev(prompt), tool("PreToolUse", t), tool("PostToolUse", t)]))).toMatchObject({ state: "working", ask: undefined });
+    });
+
+    test("a question asks for an answer, a plan for an approval", () => {
+        expect([only(run([ev(prompt), tool("PreToolUse", "AskUserQuestion")])).ask, only(run([ev(prompt), tool("PreToolUse", "ExitPlanMode")])).ask]).toEqual([
+            { kind: "answer", by: "tool" },
+            { kind: "approve", by: "tool" },
+        ]);
     });
 
     test("any other tool changes nothing", () => {
@@ -221,6 +228,39 @@ describe("restoreSessions (after a WintOS restart)", () => {
         const m = reduceSession(restoreSessions([s("a", "waiting")]), ev({ hook_event_name: "SessionStart", session_id: "a" }), 5);
         expect(only(m)).toMatchObject({ id: "a", state: "waiting" });
         expect(only(m).restored).toBeUndefined();
+    });
+});
+
+describe("askSession (`wintos ask`)", () => {
+    test("the turn's Stop waits on the developer for what it asked; the next prompt clears it", () => {
+        const asked = reduceSession(askSession(run([ev(prompt)]), "blk-1", "decide", "which band colour", 5000), ev(stop), 6000);
+        expect(only(asked)).toMatchObject({ state: "waiting", ask: { kind: "decide", text: "which band colour", by: "session" } });
+        expect(only(reduceSession(asked, ev(prompt), 7000)).ask).toBeUndefined();
+    });
+
+    test("ask, wait and done in one turn: the later call wins", () => {
+        const m = run([ev(prompt)]);
+        expect(only(reduceSession(finishSession(askSession(m, "blk-1", "answer", undefined, 5000), "blk-1", 5100), ev(stop), 6000))).toMatchObject({ state: "done", ask: undefined });
+        expect(only(reduceSession(askSession(parkSession(m, "blk-1", "CI", 5000), "blk-1", "answer", undefined, 5100), ev(stop), 6000))).toMatchObject({ state: "waiting", ask: { kind: "answer" } });
+    });
+
+    test("a Stop without one has no ask yet", () => {
+        expect(only(run([ev(prompt), ev(stop)])).ask).toBeUndefined();
+    });
+});
+
+describe("readTurn (the daemon's reading of a turn that said nothing)", () => {
+    const ended = run([ev(prompt), ev(stop)]);
+    const turnAt = only(ended).turnEndedAt!;
+    test("an ask is kept; a reply that only reports is done", () => {
+        expect(only(readTurn(ended, only(ended).id, turnAt, { kind: "answer", text: "ship it?", by: "model" })).ask).toEqual({ kind: "answer", text: "ship it?", by: "model" });
+        expect(only(readTurn(ended, only(ended).id, turnAt, "done")).state).toBe("done");
+    });
+
+    test("a later turn, or an ask the session gave itself, makes it moot", () => {
+        expect(readTurn(ended, only(ended).id, turnAt - 1, "done")).toBe(ended);
+        const asked = reduceSession(askSession(run([ev(prompt)]), "blk-1", "decide", undefined, 5000), ev(stop), 6000);
+        expect(readTurn(asked, only(asked).id, 6000, "done")).toBe(asked);
     });
 });
 

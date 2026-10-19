@@ -150,6 +150,8 @@ describe("reviewerChips", () => {
         expect(reviewerChips(pr({ reviewers: [] }), 2)).toEqual({ chips: [], more: 0, none: true, approved: [] });
         expect(reviewerChips(pr({ reviewers: [], isDraft: true }), 2)).toEqual({ chips: [], more: 0, none: false, approved: [] });
     });
+    test("changes requested: nobody is asked because the ball is with the author, so no 'none'", () =>
+        expect(reviewerChips(pr({ reviewers: [], changesRequestedBy: "tobi" }), 2).none).toBe(false));
 });
 
 describe("rowColumns", () => {

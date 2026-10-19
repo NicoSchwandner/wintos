@@ -12,6 +12,8 @@ import { T } from "./tokens";
 import { useFocusOnMount } from "./useFocusOnMount";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
+import { standupAsks } from "./prs";
+import { ghPrs } from "./view";
 import { useZoneKeys } from "./zones";
 import { cursorKeys, startCursor } from "./itemCursor";
 
@@ -67,7 +69,7 @@ export const TodayPage = memo(() => {
             <div style={{ flexGrow: 1, minHeight: 0, display: "grid", gridTemplateColumns: "clamp(220px, 26vw, 400px) minmax(0, 760px)", gap: 20, paddingBottom: 18 }}>
                 <Timeline now={now} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflowY: "auto" }}>
-                    <WhatYouDid today={day.date} />
+                    <WhatYouDid today={day.date} focus={day.focus} />
                     {y && (
                         <Panel label={lastDayName(y.date, day.date)} note={day.planned ? `${yItems.filter((i) => i.done).length} done · ${yesterdayItems(day).filter((i) => i.carried).length} carried` : undefined} keys={!day.planned && yesterdayItems(day).some((i) => !i.carried) && <Key k="j k · c" label="carry" />}>
                             {(!day.planned || showYesterday) && (
@@ -97,9 +99,14 @@ export const TodayPage = memo(() => {
 TodayPage.displayName = "TodayPage";
 
 // keys: the panel's own shortcuts, shown on it rather than in a footer.
-// For the daily: the last worked day in at most five lines, condensed by the daemon from the
-// recaps your Claude sessions wrote in each project. Folded; m opens it.
-function WhatYouDid({ today }: { today: string }) {
+// For the daily: the last worked day, a line per real chunk of work, condensed by the daemon from
+// where the time went, what the PRs did and the sessions' recaps; then what you need from the team
+// and today's plan, both read now. Folded; m opens it.
+function WhatYouDid({ today, focus }: { today: string; focus: string }) {
+    const { state } = useWintos();
+    const gh = state ? ghPrs(state) : undefined;
+    const asks = gh ? standupAsks(gh.prs, gh.me, Date.now()) : undefined;
+    const plan = focusList(focus).filter((i) => !i.done).map((i) => i.text);
     const [recap, setRecap] = useState<{ date: string; bullets: string[] } | null | undefined>();
     const [open, setOpen] = useState(false);
     useEffect(() => {
@@ -120,6 +127,8 @@ function WhatYouDid({ today }: { today: string }) {
                             <Rich text={b} size="full" />
                         </li>
                     ))}
+                    {asks && <li data-wintos="standup-asks"><Rich text={`Asks: ${asks}`} size="full" /></li>}
+                    {plan.length > 0 && <li data-wintos="standup-today"><Rich text={`Today: ${plan.join("; ")}`} size="full" /></li>}
                 </ul>
             )}
             {recap && <More open={open} label="Show it, for the daily" onClick={() => setOpen(!open)} />}

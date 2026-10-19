@@ -10,6 +10,7 @@ import { ProjectStore } from "../projects/store";
 import type { Journal } from "../journal/journal";
 import { formatMarkdown } from "../markdown";
 import { dayRecapper } from "../recap/day";
+import { prFact } from "../recap/recap";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { releasePrs, resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { titlePrompt, writeTitle } from "../shelf/title";
@@ -40,7 +41,14 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
-    const recapper = dayRecapper(opts.root, opts.recapCmd, opts.recapExtra);
+    // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
+    const factsOf = (ids: string[], day: string) => {
+        const gh = ghData();
+        if (!gh) return [];
+        const urls = new Set(ids.flatMap((id) => [...(sessions.get(id)?.prs ?? []), ...Object.values(shelf).flat().filter((i) => i.sessionId === id).flatMap((i) => i.prs ?? [])]));
+        return gh.prs.filter((pr) => urls.has(pr.url)).map((pr) => prFact(pr, gh.me, day));
+    };
+    const recapper = dayRecapper(opts.root, opts.recapCmd, opts.recapExtra, factsOf);
     // Ready before you open the Today page: the summarizer takes a minute. Cached, so this is
     // one run a day.
     const warmRecap = setInterval(() => void recapper.recap(Date.now()).catch(() => {}), 30 * 60_000);

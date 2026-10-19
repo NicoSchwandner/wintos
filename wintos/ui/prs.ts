@@ -1,5 +1,5 @@
 import type { FixRun } from "../daemon/fixer/runner";
-import { ageLabel, byUrgency, Group, GROUPS, groupOf, isSnoozed, isStacked, lastMovement, PR, qualifier, type Snoozes } from "../daemon/prs/group";
+import { ageLabel, byUrgency, Group, GROUPS, groupOf, isSnoozed, isStacked, lastMovement, PR, qualifier, workingDaysBetween, type Snoozes } from "../daemon/prs/group";
 
 // children: PRs stacked on this one that only wait for it (spec: stacked PRs sit under their base).
 export type QueueRow = { pr: PR; group: Group; mine: boolean; age: { text: string; late: boolean }; qualifier?: { text: string; brick?: boolean }; total: number; repoShort: string; children: QueueRow[] };
@@ -94,4 +94,15 @@ export function fixNote(run: FixRun | undefined, pr: PR, queued: string[]): { te
     if (!run.endedAt) return { text: run.startedAt ? `fixing ${what}…` : `fixing ${what} next` };
     if (run.exit === 0) return { text: `tried to fix ${what}${run.result ? `: ${run.result}` : ""}` };
     return { text: `fixing ${what} failed${run.result ? `: ${run.result}` : ""}`, brick: true };
+}
+
+// For the standup: your PRs that have waited a working day or more for someone's review. A few by
+// name; more as counts per reviewer, which is what the team needs to hear.
+export function standupAsks(prs: PR[], me: string, now: number): string | undefined {
+    const waiting = prs.filter((p) => p.author === me && !p.isDraft && !p.mergedAt && p.reviewDecision !== "APPROVED" && p.reviewers.length > 0 && workingDaysBetween(lastMovement(p), now) >= 1);
+    if (!waiting.length) return undefined;
+    if (waiting.length <= 2) return waiting.map((p) => `#${p.number} ${p.title} waits for a review from ${p.reviewers.join(" or ")}`).join("; ");
+    const per = new Map<string, number>();
+    for (const p of waiting) for (const r of p.reviewers) per.set(r, (per.get(r) ?? 0) + 1);
+    return `${waiting.length} PRs wait for a review: ${[...per].sort((a, b) => b[1] - a[1]).map(([r, n]) => `${n} on ${r}`).join(", ")}`;
 }

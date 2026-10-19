@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { cutBullets, lastRecaps, lastWorkday, parseBullets, recordActivity, recapPrompt, type Activity } from "./recap";
+import { activeMinutes, cutBullets, mergeByTitle, prFact, lastRecaps, lastWorkday, localDay, parseBullets, recordActivity, recapPrompt, type Activity } from "./recap";
 
 describe("recordActivity", () => {
     test("a session's project and transcript, per day; prompts counted; old days dropped", () => {
@@ -26,23 +26,31 @@ describe("lastRecaps", () => {
 
 describe("bullets", () => {
     const items = [
-        { title: "Idea skill", prompts: 22, recaps: ["We're merging the fast and shape lanes into one idea skill (PR #1403). Next, relaunch the run."] },
-        { title: "Missing documents", prompts: 16, recaps: ["We're closing DEV-29895 gaps where the action already exists but the routine is missing, and more text after that to be cut."] },
+        { title: "Idea skill", minutes: 45, prompts: 22, recaps: ["We're merging the fast and shape lanes into one idea skill (PR #1403). Next, relaunch the run."], facts: ["acme/rules#1403 Merge the lanes into one idea skill (yours, opened today, draft)"] },
+        { title: "Missing documents", minutes: 30, prompts: 16, recaps: ["We're closing DEV-29895 gaps where the action already exists but the routine is missing, and more text after that to be cut."], facts: [] },
     ];
     test("without a summarizer: one per project, its recap's first sentence, no ticket ids, short", () =>
         expect(cutBullets(items)).toEqual([
             "Idea skill: We're merging the fast and shape lanes into one idea skill (PR #1403).",
             "Missing documents: We're closing gaps where the action already exists but the routine is missing, and more…",
         ]));
-    test("a summarizer's answer: its bullet lines, at most five, ticket ids gone", () =>
-        expect(parseBullets("Here you go:\n- A: one\n- B: two (DEV-123)\n* C: three\n- D\n- E\n- F\n")).toEqual(["A: one", "B: two", "C: three", "D", "E"]));
+    test("a summarizer's answer: its bullet lines, as many as there were chunks of work, ticket ids gone", () =>
+        expect(parseBullets("Here you go:\n- A: one\n- B: two (DEV-123)\n* C: three\n- D\n- E\n- F\n")).toEqual(["A: one", "B: two", "C: three", "D", "E", "F"]));
     test("an extra instruction (another source to search) rides along, with the day filled in", () =>
         expect(recapPrompt("2026-10-06", items, "Also search chat for what I sent on {day}.")).toContain("Also search chat for what I sent on 2026-10-06."));
-    test("the prompt names the projects and the rules", () => {
+    test("the prompt weighs by time, carries each project's PR facts, and sets the standup's rules", () => {
         const p = recapPrompt("2026-10-06", items);
-        expect(p).toContain("Idea skill (22 prompts)");
-        expect(p).toContain("at most 5");
-        expect(p).toContain("ticket");
+        expect(p).toContain("## Idea skill (45 min)");
+        expect(p).toContain("- PR acme/rules#1403 Merge the lanes into one idea skill (yours, opened today, draft)");
+        for (const rule of ["most time first", "only the developer uses", "team tooling", "CI", "Review race", "ticket"]) expect(p).toContain(rule);
+    });
+});
+
+describe("activeMinutes", () => {
+    const at = (iso: string) => JSON.stringify({ type: "assistant", timestamp: iso });
+    test("the time a session was busy on a day: gaps over five minutes are breaks, other days don't count", () => {
+        const jsonl = [at("2026-10-16T08:00:00Z"), at("2026-10-16T08:04:00Z"), at("2026-10-16T08:30:00Z"), at("2026-10-16T08:31:00Z"), at("2026-10-15T08:00:00Z"), "junk"].join("\n");
+        expect(activeMinutes(jsonl, localDay(Date.parse("2026-10-16T08:00:00Z")))).toBe(5);
     });
 });
 
@@ -51,5 +59,22 @@ describe("lastWorkday", () => {
     test("never today, and nothing when only weekends are left", () => {
         expect(lastWorkday(["2026-10-09"], "2026-10-09")).toBeUndefined();
         expect(lastWorkday(["2026-10-10", "2026-10-11"], "2026-10-12")).toBeUndefined();
+    });
+});
+
+describe("prFact", () => {
+    const pr = { repo: "acme/api", number: 7, title: "Show large PDFs", author: "me", isDraft: false, createdAt: "2026-10-01T08:00:00Z" } as never as import("../prs/group").PR;
+    const day = localDay(Date.parse("2026-10-16T10:00:00Z"));
+    test("whose it is and where it got to that day", () => {
+        expect(prFact(pr, "me", day)).toBe("acme/api#7 Show large PDFs (yours, ready for review)");
+        expect(prFact({ ...pr, author: "ana", mergedAt: "2026-10-16T10:00:00Z" }, "me", day)).toBe("acme/api#7 Show large PDFs (by ana, merged today)");
+        expect(prFact({ ...pr, isDraft: true, createdAt: "2026-10-16T09:00:00Z" }, "me", day)).toBe("acme/api#7 Show large PDFs (yours, opened today, draft)");
+    });
+});
+
+describe("mergeByTitle", () => {
+    test("a project recorded under two tabs is one item, its time added up", () => {
+        const i = (minutes: number, facts: string[]) => ({ title: "Same", minutes, prompts: 1, recaps: [`r${minutes}`], facts });
+        expect(mergeByTitle([i(10, ["a"]), i(5, ["a", "b"]), { ...i(3, []), title: "Other" }])).toEqual([{ title: "Same", minutes: 15, prompts: 2, recaps: ["r10", "r5"], facts: ["a", "b"], asked: [] }, { ...i(3, []), title: "Other" }]);
     });
 });

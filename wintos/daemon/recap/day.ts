@@ -1,13 +1,13 @@
 import { execFile } from "child_process";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { cutBullets, gist, lastRecaps, lastWorkday, parseBullets, recapPrompt, recordActivity, type Activity, type RecapItem } from "./recap";
+import { activeMinutes, cutBullets, gist, lastRecaps, lastWorkday, localDay, mergeByTitle, MIN_MINUTES, parseBullets, recapPrompt, recordActivity, type Activity, type RecapItem } from "./recap";
+import { userPrompts } from "../sessions/naming";
 
 const KEEP_DAYS = 14;
-const isoDay = (t: number) => {
-    const d = new Date(t);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
+const RECAP_VERSION = "v2";
+const ASKED_KEPT = 4;
+const isoDay = localDay;
 const read = <T>(file: string, fallback: T): T => {
     try {
         return JSON.parse(readFileSync(file, "utf8"));
@@ -19,7 +19,8 @@ const read = <T>(file: string, fallback: T): T => {
 // cmd (WINTOS_RECAP_CMD): reads the prompt on stdin, writes the bullets, e.g. `claude -p --model
 // haiku`. Without it, or when it fails, each project's last recap is cut to its first sentence.
 // extra (WINTOS_RECAP_EXTRA): an instruction added to the prompt, e.g. another source to search.
-export function dayRecapper(root: string, cmd?: string, extra?: string) {
+// factsOf: what the PRs of these sessions did that day, one line each (prFact).
+export function dayRecapper(root: string, cmd?: string, extra?: string, factsOf: (sessionIds: string[], day: string) => string[] = () => []) {
     const activityFile = join(root, ".activity.json");
     const recapFile = join(root, ".recaps.json");
     let activity = read<Activity>(activityFile, {});
@@ -52,15 +53,25 @@ export function dayRecapper(root: string, cmd?: string, extra?: string) {
         const today = isoDay(now);
         const day = lastWorkday(Object.keys(activity), today);
         if (!day) return null;
+        // The key carries the summary's version, so a day summed up by an older one is written again.
+        const key = `${RECAP_VERSION}:${day}`;
         const cached = read<Record<string, string[]>>(recapFile, {});
-        if (cached[day]) return { date: day, bullets: cached[day] };
-        const items = Object.values(activity[day])
-            .map((p) => ({ title: p.title, prompts: p.prompts, recaps: Object.values(p.sessions).flatMap((t) => lastRecaps(safeText(t), day) ?? []) }))
-            .filter((i) => i.prompts > 0 && i.recaps.length)
-            .sort((a, b) => b.prompts - a.prompts);
+        if (cached[key]) return { date: day, bullets: cached[key] };
+        const perTab = Object.values(activity[day])
+            .map((p): RecapItem => {
+                const texts = Object.values(p.sessions).map(safeText);
+                const facts = factsOf(Object.keys(p.sessions), day);
+                const recaps = texts.flatMap((t) => lastRecaps(t, day) ?? []);
+                // Without a recap, what you asked its sessions says what the work was.
+                const asked = recaps.length ? [] : texts.flatMap((t) => userPrompts(t)).slice(-ASKED_KEPT);
+                return { title: p.title, prompts: p.prompts, minutes: texts.reduce((m, t) => m + activeMinutes(t, day), 0), recaps, facts, asked };
+            });
+        const items = mergeByTitle(perTab)
+            .filter((i) => (i.minutes >= MIN_MINUTES || i.facts.some((f) => /(merged|opened) today/.test(f))) && (i.recaps.length || i.facts.length || i.asked?.length))
+            .sort((a, b) => b.minutes - a.minutes);
         const { bullets, final } = items.length ? await summarize(items, day) : { bullets: [], final: true };
         try {
-            if (final) writeFileSync(recapFile, JSON.stringify({ [day]: bullets }));
+            if (final) writeFileSync(recapFile, JSON.stringify({ [key]: bullets }));
         } catch {}
         return { date: day, bullets };
     };

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { PR } from "../daemon/prs/group";
 import type { FixRun } from "../daemon/fixer/runner";
-import { fixNote, initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns } from "./prs";
+import { fixNote, initials, standupAsks, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns } from "./prs";
 
 const MON = Date.parse("2026-09-28T09:00:00Z");
 const pr = (p: Partial<PR>): PR => ({
@@ -186,5 +186,18 @@ describe("fixNote", () => {
         expect(fixNote(run({ kind: "ci", route: "pane" }), pr, [])).toEqual({ text: "red CI sent to its session" });
         expect(fixNote(run({ endedAt: 2, exit: 0, result: "Pushed." }), pr, [])).toEqual({ text: "tried to fix the conflict: Pushed." });
         expect(fixNote(run({ endedAt: 2, exit: 1 }), pr, [])).toEqual({ text: "fixing the conflict failed", brick: true });
+    });
+});
+
+describe("standupAsks", () => {
+    const NOW = Date.parse("2026-10-19T09:00:00Z"); // a Monday
+    const pr = (n: number, o: Partial<PR> = {}): PR => ({ repo: "o/r", number: n, url: `u${n}`, title: `PR ${n}`, author: "me", isDraft: false, createdAt: "2026-10-14T09:00:00Z", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: ["team-x"], additions: 1, deletions: 1, branch: "b", ...o }) as PR;
+    test("a few by name; drafts, approved, merged, others' and fresh ones are no ask", () => {
+        const prs = [pr(1), pr(2, { isDraft: true }), pr(3, { reviewDecision: "APPROVED" }), pr(4, { mergedAt: "x" }), pr(5, { author: "ana" }), pr(6, { createdAt: "2026-10-19T08:00:00Z" }), pr(7, { reviewers: [] })];
+        expect(standupAsks(prs, "me", NOW)).toBe("#1 PR 1 waits for a review from team-x");
+    });
+    test("more than two: counts per reviewer, most first", () => {
+        expect(standupAsks([pr(1), pr(2), pr(3, { reviewers: ["team-ai"] })], "me", NOW)).toBe("3 PRs wait for a review: 2 on team-x, 1 on team-ai");
+        expect(standupAsks([], "me", NOW)).toBeUndefined();
     });
 });

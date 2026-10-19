@@ -43,7 +43,9 @@ export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes 
         yours: rows.length - team - waiting,
         waiting,
         team,
-        pastSla: rows.filter((r) => r.group === "chase" || r.group === "release" || (r.group === "review" && r.age.late)).length,
+        // What you are late on: a review you owe, a release of your merged work, a draft of yours past
+        // its clock. Chase is not: there someone owes you the review.
+        pastSla: rows.filter((r) => r.group === "release" || (r.group === "review" && r.age.late) || (r.group === "fix" && r.pr.isDraft && r.age.late)).length,
     };
 }
 

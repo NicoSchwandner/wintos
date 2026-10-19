@@ -94,6 +94,8 @@ export function groupOf(pr: PR, me: string, now: number): Group {
     // Changes requested stays GitHub's decision until the reviewer reviews again; once you have
     // asked every one of them again, the next move is theirs.
     if (mine && ((pr.reviewDecision === "CHANGES_REQUESTED" && !pr.changesRerequested) || (redChecks(pr) && !pr.isDraft) || pr.conflict)) return "fix";
+    // Nobody reviews a draft, so a draft past its clock has nobody to chase: it is yours to move.
+    if (mine && pr.isDraft && workingDaysBetween(lastMovement(pr), now) >= DRAFT_SLA_WORKING_DAYS) return "fix";
     // GitHub drops a request when you review, so being asked means a review is owed, re-requests included.
     if (!mine && pr.requestedMe) return "review";
     // An approved PR that can't merge yet is waiting on checks or code owners, not on attention.
@@ -109,6 +111,7 @@ export function qualifier(pr: PR, group: Group, opts: { reviewers?: boolean } = 
         if (pr.reviewDecision === "CHANGES_REQUESTED" && !pr.changesRerequested) return { text: pr.changesRequestedBy ? `changes requested by ${pr.changesRequestedBy}` : "changes requested" };
         if (redChecks(pr)) return { text: "CI red", brick: true };
         if (pr.conflict) return { text: "merge conflict", brick: true };
+        if (pr.isDraft) return { text: `draft past its ${DRAFT_SLA_WORKING_DAYS} working days: make it ready or close it`, brick: true };
     }
     if (pr.reviewDecision === "APPROVED" && pr.mergeState === "BLOCKED") return { text: "approved · blocked by required reviews" };
     if (pr.reviewDecision === "APPROVED" && (pr.checks === "PENDING" || pr.checks === "EXPECTED")) return { text: "approved · checks pending" };

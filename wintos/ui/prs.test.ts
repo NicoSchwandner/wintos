@@ -43,7 +43,9 @@ describe("queueModel", () => {
         expect(w.groups[0].rows[0].qualifier?.text).toBe("CI red · stacked on #20");
     });
 
-    test("past SLA counts chases and late reviews", () => expect(m.pastSla).toBe(2));
+    test("past SLA is what you are late on: a late review counts, a chase (someone owes you) does not", () => expect(m.pastSla).toBe(1));
+    test("a draft of yours past its clock counts past SLA too", () =>
+        expect(queueModel([pr({ number: 9, isDraft: true, createdAt: "2026-09-14T09:00:00Z" })], "me", MON).pastSla).toBe(1));
 
     test("empty groups are dropped", () => expect(queueModel([pr({ reviewDecision: "APPROVED", checks: "SUCCESS" })], "me", MON).groups.map((g) => g.group)).toEqual(["merge"]));
 

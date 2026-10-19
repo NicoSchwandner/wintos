@@ -44,9 +44,10 @@ describe("groupOf (spec §4, first match wins)", () => {
         expect(groupOf(pr({ createdAt: "2026-09-24T09:00:00Z" }), "me", MON)).toBe("chase"));
     test("review activity resets the clock", () =>
         expect(groupOf(pr({ createdAt: "2026-09-01T09:00:00Z", lastReviewAt: "2026-09-28T08:00:00Z" }), "me", MON)).toBe("waiting"));
-    test("a draft gets five working days before chase", () => {
+    test("a draft gets five working days, then it is yours to fix: nobody reviews a draft, so there is nobody to chase", () => {
         expect(groupOf(pr({ isDraft: true, createdAt: "2026-09-23T09:00:00Z" }), "me", MON)).toBe("waiting");
-        expect(groupOf(pr({ isDraft: true, createdAt: "2026-09-21T09:00:00Z" }), "me", MON)).toBe("chase");
+        expect(groupOf(pr({ isDraft: true, createdAt: "2026-09-21T09:00:00Z" }), "me", MON)).toBe("fix");
+        expect(qualifier(pr({ isDraft: true, createdAt: "2026-09-21T09:00:00Z" }), "fix")).toEqual({ text: "draft past its 5 working days: make it ready or close it", brick: true });
     });
     test("my PR with nothing to do is Waiting, not the team's: I won't review my own", () =>
         expect(groupOf(pr({ reviewers: ["ana.b"] }), "me", MON)).toBe("waiting"));

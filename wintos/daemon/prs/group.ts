@@ -11,6 +11,7 @@ export type PR = {
     reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED";
     checks?: string; // statusCheckRollup state: SUCCESS, FAILURE, ERROR, PENDING, EXPECTED
     head?: string; // the head commit's oid
+    movedAt?: string; // its momentum: the latest review, review request, ready for review, push or someone else's comment
     conflict: boolean;
     mergeState?: string; // mergeStateStatus: CLEAN, BLOCKED, BEHIND, UNSTABLE, DIRTY, …
     openThreads?: number; // unresolved review threads
@@ -45,7 +46,7 @@ export const DRAFT_SLA_WORKING_DAYS = 5;
 const DAY = 86_400_000;
 const redChecks = (pr: PR) => pr.checks === "FAILURE" || pr.checks === "ERROR";
 const sla = (pr: PR) => (pr.isDraft ? DRAFT_SLA_WORKING_DAYS : SLA_WORKING_DAYS);
-export const lastMovement = (pr: PR) => pr.mergedAt ?? pr.lastReviewAt ?? pr.createdAt;
+export const lastMovement = (pr: PR) => pr.mergedAt ?? pr.movedAt ?? pr.lastReviewAt ?? pr.createdAt;
 // The one urgency order, wherever PRs are ranked: the queue's groups top to bottom, then the
 // one still longest.
 export const byUrgency = (a: { pr: PR; group: Group }, b: { pr: PR; group: Group }) =>
@@ -115,8 +116,11 @@ export function qualifier(pr: PR, group: Group, opts: { reviewers?: boolean } = 
     }
     if (pr.reviewDecision === "APPROVED" && pr.mergeState === "BLOCKED") return { text: "approved · blocked by required reviews" };
     if (pr.reviewDecision === "APPROVED" && (pr.checks === "PENDING" || pr.checks === "EXPECTED")) return { text: "approved · checks pending" };
-    if (opts.reviewers === false) return undefined;
+    // Beside reviewer chips, a chase still names who asked for changes: they owe the re-review.
+    if (opts.reviewers === false) return group === "chase" && pr.changesRequestedBy ? { text: `nudge ${pr.changesRequestedBy}` } : undefined;
     if (group === "chase" && !pr.isDraft && pr.reviewers.length === 0) return { text: "no reviewer assigned" };
+    // Chase: someone owes you the review. Whoever asked for changes owes the re-review.
+    if (group === "chase") return { text: `nudge ${pr.changesRequestedBy ?? pr.reviewers.join(", ")}` };
     if (pr.reviewers.length) return { text: `waiting on ${pr.reviewers.join(", ")}` };
     return undefined;
 }

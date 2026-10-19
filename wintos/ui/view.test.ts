@@ -137,7 +137,7 @@ describe("sessionHeader (the header on a Claude pane)", () => {
 
     test("its PRs with their queue group and why; the task and branch from the first PR", () => {
         const h = sessionHeader(st([sess({ prs: [p(1).url, p(2).url] })], [p(1, { checks: "FAILURE" }), p(2, { reviewers: ["ana"] })]), "b")!;
-        expect(h.prs.map((x) => [x.number, x.group, x.text])).toEqual([[1, "fix", "CI red"], [2, "chase", "chase · waiting on ana · 5 wd"]]);
+        expect(h.prs.map((x) => [x.number, x.group, x.text])).toEqual([[1, "fix", "CI red"], [2, "chase", "chase · nudge ana · 5 wd"]]);
         expect([h.task, h.branch]).toEqual(["DEV-77", "DEV-77-thing"]);
     });
 
@@ -155,7 +155,7 @@ describe("sessionHeader (the header on a Claude pane)", () => {
     test("most urgent first; the repo only on a PR outside the session's own; a draft says so", () => {
         const other = { ...p(7, { reviewers: ["ana"] }), repo: "acme/Wint.Embedding.Service", url: "https://github.com/acme/Wint.Embedding.Service/pull/7" };
         const h = sessionHeader(st([sess({ prs: [p(2).url, other.url, p(1).url] })], [p(2, { isDraft: true, createdAt: "2026-09-28T08:00:00Z" }), other, p(1, { conflict: true })]), "b")!;
-        expect(h.prs.map((x) => [x.number, x.repo, x.text])).toEqual([[1, undefined, "merge conflict"], [7, "Embedding", "chase · waiting on ana · 5 wd"], [2, undefined, "draft"]]);
+        expect(h.prs.map((x) => [x.number, x.repo, x.text])).toEqual([[1, undefined, "merge conflict"], [7, "Embedding", "chase · nudge ana · 5 wd"], [2, undefined, "draft"]]);
     });
 
     test("the fixer at work on the PR's commit says so on its chip", () => {

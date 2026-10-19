@@ -24,7 +24,7 @@ describe("queueModel", () => {
             ["merge", [1]], ["fix", [2]], ["review", [3]], ["chase", [4]], ["team", [5]],
         ]));
 
-    test("header counts: yours are the four you act on, team is the rest", () => expect([m.yours, m.waiting, m.team]).toEqual([4, 0, 1]));
+    test("header counts: yours are the three in your court (the chase waits on others), team is the rest", () => expect([m.yours, m.waiting, m.team]).toEqual([3, 0, 1]));
 
     test("someone else's draft asked of your team is not shown: it asks nothing yet", () => {
         const d = queueModel([pr({ number: 7, author: "bo.k", requestedTeam: true, isDraft: true })], "me", MON);
@@ -44,6 +44,10 @@ describe("queueModel", () => {
     });
 
     test("past SLA is what you are late on: a late review counts, a chase (someone owes you) does not", () => expect(m.pastSla).toBe(1));
+    test("the team's review requests past the SLA have their own count", () => {
+        const t = queueModel([pr({ number: 5, author: "bo.k", requestedTeam: true, createdAt: "2026-09-21T09:00:00Z" }), pr({ number: 6, author: "bo.k", requestedTeam: true })], "me", MON);
+        expect([t.team, t.teamPastSla]).toEqual([2, 1]);
+    });
     test("a draft of yours past its clock counts past SLA too", () =>
         expect(queueModel([pr({ number: 9, isDraft: true, createdAt: "2026-09-14T09:00:00Z" })], "me", MON).pastSla).toBe(1));
 

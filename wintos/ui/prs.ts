@@ -8,7 +8,9 @@ const ACTS: Group[] = ["merge", "fix", "review", "chase"];
 
 // Longest untouched first: the older the last review or push, the more it is owed.
 // snoozed: looked at and handed on; out of the groups and the counts until it wakes.
-export type QueueModel = { groups: { group: Group; rows: QueueRow[] }[]; snoozed: QueueRow[]; yours: number; waiting: number; team: number; pastSla: number };
+// yours: what is in your court (Chase waits on others); teamPastSla: your team's review requests
+// nobody took up in time.
+export type QueueModel = { groups: { group: Group; rows: QueueRow[] }[]; snoozed: QueueRow[]; yours: number; waiting: number; team: number; pastSla: number; teamPastSla: number };
 
 export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes = {}): QueueModel {
     const toRow = (pr: PR): QueueRow => {
@@ -40,11 +42,12 @@ export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes 
     return {
         groups,
         snoozed,
-        yours: rows.length - team - waiting,
+        yours: rows.length - team - waiting - rows.filter((r) => r.group === "chase").length,
         waiting,
         team,
         // What you are late on: a review you owe, a release of your merged work, a draft of yours past
         // its clock. Chase is not: there someone owes you the review.
+        teamPastSla: rows.filter((r) => r.group === "team" && r.age.late).length,
         pastSla: rows.filter((r) => r.group === "release" || (r.group === "review" && r.age.late) || (r.group === "fix" && r.pr.isDraft && r.age.late)).length,
     };
 }

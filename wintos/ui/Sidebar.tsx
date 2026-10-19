@@ -177,7 +177,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 {state && (
                     <div style={{ display: "flex", gap: 8 }}>
                         {queue ? (
-                            <SummaryCard label="PRs" keys="⇧⌘G" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={queue.pastSla ? `${queue.pastSla} past SLA` : undefined} noteColor={T.brick} active={shows("prs")} cursor={switchTarget === "card:prs"} onClick={() => goToInbox("prs")} />
+                            <SummaryCard label="PRs" keys="⇧⌘G" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={[queue.teamPastSla && `${queue.teamPastSla} team past SLA`, queue.pastSla && `${queue.pastSla} yours past SLA`].filter(Boolean).join(" · ") || undefined} noteColor={T.brick} active={shows("prs")} cursor={switchTarget === "card:prs"} onClick={() => goToInbox("prs")} />
                         ) : (
                             <SummaryCard label="PRs" keys="⇧⌘G" stats={[]} note="loading from GitHub" noteColor={T.faint} active={shows("prs")} cursor={switchTarget === "card:prs"} onClick={() => goToInbox("prs")} />
                         )}

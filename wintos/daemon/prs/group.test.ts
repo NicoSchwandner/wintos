@@ -62,6 +62,14 @@ describe("qualifier", () => {
         expect(qualifier(pr({ reviewDecision: "CHANGES_REQUESTED", changesRerequested: true, changesRequestedBy: "ana.b", checks: "FAILURE" }), "fix")).toEqual({ text: "CI red", brick: true }));
     test("red CI is brick", () => expect(qualifier(pr({ checks: "FAILURE" }), "fix")).toEqual({ text: "CI red", brick: true }));
     test("a chased PR with nobody on it says so", () => expect(qualifier(pr(), "chase")).toEqual({ text: "no reviewer assigned" }));
+    test("a chased PR says whom to nudge: who asked for changes, else who is asked to review", () => {
+        expect(qualifier(pr({ reviewers: ["team-x"] }), "chase")).toEqual({ text: "nudge team-x" });
+        expect(qualifier(pr({ reviewers: ["ana", "team-x"], changesRequestedBy: "ana" }), "chase")).toEqual({ text: "nudge ana" });
+        expect(qualifier(pr({ reviewers: ["ana"], changesRequestedBy: "ana" }), "chase", { reviewers: false })).toEqual({ text: "nudge ana" });
+        expect(qualifier(pr({ reviewers: ["team-x"] }), "chase", { reviewers: false })).toBeUndefined();
+    });
+    test("momentum (a push, a re-requested review) keeps an old PR out of Chase", () =>
+        expect(groupOf(pr({ createdAt: "2026-09-01T09:00:00Z", movedAt: "2026-09-28T08:00:00Z", reviewers: ["ana"] }), "me", MON)).toBe("waiting"));
     test("otherwise it names who it waits on", () => expect(qualifier(pr({ reviewers: ["ana.b"] }), "team")).toEqual({ text: "waiting on ana.b" }));
     test("merge needs no qualifier", () => expect(qualifier(pr(), "merge")).toBeUndefined());
     test("merge with open threads says to resolve them first", () => expect(qualifier(pr({ openThreads: 2 }), "merge")).toEqual({ text: "resolve 2 threads first" }));

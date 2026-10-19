@@ -18,8 +18,18 @@ describe("normalize", () => {
             repo: "o/r", number: 7, url: "https://github.com/o/r/pull/7", title: "Add flag", author: "ana",
             isDraft: false, createdAt: "2026-09-25T09:00:00Z", reviewDecision: "REVIEW_REQUIRED", checks: "SUCCESS", head: "abc123",
             conflict: false, requestedMe: true, requestedTeam: false, reviewedByMe: false, reviewers: ["me"],
-            additions: 10, deletions: 2, branch: "DEV-1-flag",
+            additions: 10, deletions: 2, branch: "DEV-1-flag", movedAt: "2026-09-25T09:00:00Z",
         }));
+
+    test("its momentum: the latest human review, (re-)requested review, ready for review, push, or someone else's comment", () => {
+        const at = (n: Partial<Node>) => normalize(node(n), "me", { requestedMe: false, requestedTeam: false }).movedAt;
+        expect(at({})).toBe("2026-09-25T09:00:00Z");
+        expect(at({ commits: { nodes: [{ commit: { oid: "a", committedDate: "2026-10-01T09:00:00Z", statusCheckRollup: null } }] } })).toBe("2026-10-01T09:00:00Z");
+        expect(at({ timelineItems: { nodes: [{ __typename: "ReviewRequestedEvent", createdAt: "2026-10-02T09:00:00Z" }, { __typename: "ReadyForReviewEvent", createdAt: "2026-09-30T09:00:00Z" }] } })).toBe("2026-10-02T09:00:00Z");
+        // The author's own ping and a bot's comment are no momentum.
+        expect(at({ timelineItems: { nodes: [{ __typename: "IssueComment", createdAt: "2026-10-03T09:00:00Z", author: { login: "ana" } }, { __typename: "IssueComment", createdAt: "2026-10-04T09:00:00Z", author: { login: "ci[bot]" } }] } })).toBe("2026-09-25T09:00:00Z");
+        expect(at({ timelineItems: { nodes: [{ __typename: "IssueComment", createdAt: "2026-10-03T09:00:00Z", author: { login: "bo" } }] } })).toBe("2026-10-03T09:00:00Z");
+    });
 
     test("GitHub's merge state is carried", () =>
         expect(normalize(node({ mergeStateStatus: "BLOCKED" }), "me", { requestedMe: false, requestedTeam: false }).mergeState).toBe("BLOCKED"));

@@ -36,13 +36,15 @@ describe("bullets", () => {
         ]));
     test("a summarizer's answer: its bullet lines, as many as there were chunks of work, ticket ids gone", () =>
         expect(parseBullets("Here you go:\n- A: one\n- B: two (DEV-123)\n* C: three\n- D\n- E\n- F\n")).toEqual(["A: one", "B: two", "C: three", "D", "E", "F"]));
+    test("its kind headings stay, as entries of their own; one with no bullet under it goes", () =>
+        expect(parseBullets("## Product work\n- A: one\n- B: two\n## Support\n## Team tooling\n- C: three\n")).toEqual(["## Product work", "A: one", "B: two", "## Team tooling", "C: three"]));
     test("an extra instruction (another source to search) rides along, with the day filled in", () =>
         expect(recapPrompt("2026-10-06", items, "Also search chat for what I sent on {day}.")).toContain("Also search chat for what I sent on 2026-10-06."));
     test("the prompt weighs by time, carries each project's PR facts, and sets the standup's rules", () => {
         const p = recapPrompt("2026-10-06", items);
         expect(p).toContain("## Idea skill (45 min)");
         expect(p).toContain("- PR acme/rules#1403 Merge the lanes into one idea skill (yours, opened today, draft)");
-        for (const rule of ["most time first", "only the developer uses", "team tooling", "CI", "Review race", "ticket"]) expect(p).toContain(rule);
+        for (const rule of ["most time first", "only the developer uses", "team tooling", "CI", "Review race", "ticket", "## Product work", "## Support", "## Team tooling"]) expect(p).toContain(rule);
     });
 });
 

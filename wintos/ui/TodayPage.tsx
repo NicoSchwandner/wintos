@@ -122,11 +122,17 @@ function WhatYouDid({ today, focus }: { today: string; focus: string }) {
         <Panel label={label} note={recap ? undefined : "summarizing…"}>
             {open && recap && (
                 <ul style={{ margin: 0, paddingLeft: 18, listStyle: "disc", display: "flex", flexDirection: "column", gap: 4, fontSize: 13, lineHeight: 1.5, color: T.secondary }}>
-                    {recap.bullets.map((b) => (
-                        <li key={b}>
-                            <Rich text={b} size="full" />
-                        </li>
-                    ))}
+                    {recap.bullets.map((b) =>
+                        /^##\s+/.test(b) ? (
+                            <li key={b} data-wintos="standup-kind" style={{ listStyle: "none", marginLeft: -18, marginTop: 6, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: T.faint }}>
+                                {b.replace(/^##\s+/, "")}
+                            </li>
+                        ) : (
+                            <li key={b}>
+                                <Rich text={b} size="full" />
+                            </li>
+                        ),
+                    )}
                     {asks && <li data-wintos="standup-asks"><Rich text={`Asks: ${asks}`} size="full" /></li>}
                     {plan.length > 0 && <li data-wintos="standup-today"><Rich text={`Today: ${plan.join("; ")}`} size="full" /></li>}
                 </ul>

@@ -5,7 +5,7 @@ import { activeMinutes, cutBullets, gist, lastRecaps, lastWorkday, localDay, mer
 import { userPrompts } from "../sessions/naming";
 
 const KEEP_DAYS = 14;
-const RECAP_VERSION = "v2";
+const RECAP_VERSION = "v3";
 const ASKED_KEPT = 4;
 const isoDay = localDay;
 const read = <T>(file: string, fallback: T): T => {

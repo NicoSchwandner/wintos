@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { acceptSuggestedName, endSessions, finishSession, nameSession, renameSession, titleSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, liveSessionsIn } from "./reduce";
+import { acceptSuggestedName, endSessions, finishSession, nameSession, renameSession, titleSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, liveSessionsIn } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -177,7 +177,8 @@ describe("a session's name", () => {
 
 describe("SessionEnd", () => {
     test("quitting WintOS (reason other) ends nothing: the session keeps its state and PRs for the restart", () => {
-        const m = run([ev(prompt), ev({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: ["https://github.com/o/r/pull/1"] }), ev(stop), ev({ ...stop, hook_event_name: "SessionEnd", reason: "other" })]);
+        const withPrs = new Map([[prompt.session_id, { ...only(run([ev(prompt)])), prs: ["https://github.com/o/r/pull/1"] }]]);
+        const m = [ev(stop), ev({ ...stop, hook_event_name: "SessionEnd", reason: "other" })].reduce((acc, e, i) => reduceSession(acc, e, 2000 + i), withPrs);
         expect(only(m)).toMatchObject({ state: "waiting", prs: ["https://github.com/o/r/pull/1"] });
     });
 
@@ -250,24 +251,14 @@ describe("turnEndedAt", () => {
     });
 });
 
-describe("a session's PRs (PostToolUse on gh pr)", () => {
+describe("a session's PRs", () => {
     const tool = (prs: string[]) => ({ ...stop, hook_event_name: "PostToolUse", prs });
-    const A = "https://github.com/o/r/pull/1", B = "https://github.com/o/r/pull/2";
-    test("collects the PRs its commands touched, once each, newest last", () =>
-        expect(only(run([ev(prompt), ev(tool([A])), ev(tool([B, A]))])).prs).toEqual([B, A]));
-    test("a listing of many PRs claims none", () =>
-        expect(only(run([ev(prompt), ev(tool([A, B, "https://github.com/o/r/pull/3", "https://github.com/o/r/pull/4"]))])).prs).toBeUndefined());
-    test("a tool call never changes the state", () => expect(only(run([ev(stop), ev(tool([A]))])).state).toBe("waiting"));
-    test("the PRs outlive the turn", () => expect(only(run([ev(tool([A])), ev(stop), ev(prompt)])).prs).toEqual([A]));
-    test("a PR has one owner: the last session that touched it takes it from the other", () => {
-        const m = run([ev(prompt), ev(tool([A, B])), ev({ ...prompt, session_id: "other" }, "tab-1", "blk-2"), ev({ ...tool([A]), session_id: "other" }, "tab-1", "blk-2")]);
-        expect([m.get(prompt.session_id)?.prs, m.get("other")?.prs]).toEqual([[B], [A]]);
+    test("a tool call never changes the state", () => expect(only(run([ev(stop), ev(tool(["https://github.com/o/r/pull/1"]))])).state).toBe("waiting"));
+    test("the PRs (who owns which is daemon/prs/owners.ts) outlive the turn", () => {
+        const withPrs = new Map([[prompt.session_id, { ...only(run([ev(prompt)])), prs: ["u1"], touched: ["u2"] }]]);
+        const m = [ev(stop), ev(prompt)].reduce((acc, e, i) => reduceSession(acc, e, 2000 + i), withPrs);
+        expect([only(m).prs, only(m).touched]).toEqual([["u1"], ["u2"]]);
     });
-    test("`wintos pr` claims the same way, for the block's live session", () => {
-        const m = claimPrs(run([ev(prompt), ev(tool([A])), ev({ ...prompt, session_id: "other" }, "tab-1", "blk-2")]), "blk-2", [A])!;
-        expect([m.get(prompt.session_id)?.prs, m.get("other")?.prs]).toEqual([[], [A]]);
-    });
-    test("claiming without a live session there is refused", () => expect(claimPrs(run([ev(prompt)]), "nope", [A])).toBeUndefined());
 });
 
 describe("setStatus (`wintos status`)", () => {

@@ -67,19 +67,31 @@ export function projectPrList(state: WintosState, tabId: string): ProjectPrRow[]
     return rows.sort((a, b) => Number(a.snoozed) - Number(b.snoozed) || byUrgency(a, b));
 }
 
-// Which project each PR belongs to, for "go to project" in the queue. Snoozed PRs included:
-// snoozing a PR doesn't detach it from its project. A closed project keeps its PRs too (its
-// shelf holds their sessions); an open one claiming the same PR wins.
-export function prProjects(tabIds: string[], state: WintosState): Map<string, string> {
+// Which projects each PR belongs to: its owner's first (the session that first touched it), then
+// every project it is also in (a session there worked on it, or its project.md names it). Snoozed
+// PRs included, and closed projects too: their shelf holds their sessions.
+export function prProjectLists(tabIds: string[], state: WintosState): Map<string, string[]> {
     const gh = ghPrs(state);
-    const out = new Map<string, string>();
+    const out = new Map<string, string[]>();
     if (!gh) return out;
-    const closed = state.projects.filter((p) => p.id && !tabIds.includes(p.id)).map((p) => p.id!);
-    for (const id of [...tabIds, ...closed]) {
+    const ids = [...tabIds, ...state.projects.filter((p) => p.id && !tabIds.includes(p.id)).map((p) => p.id!)];
+    const add = (url: string, id: string, first = false) => {
+        const list = (out.get(url) ?? []).filter((x) => x !== id);
+        out.set(url, first ? [id, ...list] : [...list, id]);
+    };
+    for (const id of ids) {
         const p = state.projects.find((x) => x.id === id);
-        if (p) for (const { pr } of projectPrs({ ...p, pr: [...(p.pr ?? []), ...prOwners(state, id).keys()] }, gh.prs, gh.me, state.now).items) if (!out.has(pr.url)) out.set(pr.url, id);
+        const touched = [...state.sessions.filter((s) => s.tabId === id).flatMap((s) => s.touched ?? []), ...(state.shelf?.[id] ?? []).flatMap((i) => i.touched ?? [])];
+        if (p) for (const { pr } of projectPrs({ ...p, pr: [...(p.pr ?? []), ...prOwners(state, id).keys(), ...touched] }, gh.prs, gh.me, state.now).items) add(pr.url, id);
     }
+    // The owner's project leads, wherever it was found.
+    for (const id of ids) for (const url of prOwners(state, id).keys()) if (out.has(url)) add(url, id, true);
     return out;
+}
+
+// The one project a PR goes to ("go to project"): its owner's.
+export function prProjects(tabIds: string[], state: WintosState): Map<string, string> {
+    return new Map([...prProjectLists(tabIds, state)].map(([url, ids]) => [url, ids[0]]));
 }
 
 // The header on a Claude pane: what it works on and what its PRs ask of you.
@@ -159,12 +171,13 @@ export const sessionName = (s: Session) => s.name?.text ?? s.label ?? "session";
 
 // A project's sessions, as its notes list them and ⌥⌘1–9 counts them: the live ones in pane
 // order (blockIds, the tab's), then the shelved ones newest first; each with its PRs as chips.
-export type ProjectSession = ({ kind: "live"; session: Session } | { kind: "shelved"; item: Shelved }) & { name: string; prs: PrChip[]; merged: number };
+// alsoIn: open PRs another session owns that this one worked on too.
+export type ProjectSession = ({ kind: "live"; session: Session } | { kind: "shelved"; item: Shelved }) & { name: string; prs: PrChip[]; merged: number; alsoIn: PrChip[] };
 export function projectSessions(state: WintosState, tabId: string, blockIds: string[]): ProjectSession[] {
     const live = blockIds.flatMap((b) => liveSessionsIn(state.sessions.filter((s) => s.tabId === tabId), b));
     return [
-        ...live.map((session): ProjectSession => ({ kind: "live", session, name: sessionName(session), ...chipsOf(state, session.prs) })),
-        ...(state.shelf?.[tabId] ?? []).map((item): ProjectSession => ({ kind: "shelved", item, name: shelvedName(item), ...chipsOf(state, item.prs) })),
+        ...live.map((session): ProjectSession => ({ kind: "live", session, name: sessionName(session), ...chipsOf(state, session.prs), alsoIn: prChips(state, session.touched ?? []).open })),
+        ...(state.shelf?.[tabId] ?? []).map((item): ProjectSession => ({ kind: "shelved", item, name: shelvedName(item), ...chipsOf(state, item.prs), alsoIn: prChips(state, item.touched ?? []).open })),
     ];
 }
 

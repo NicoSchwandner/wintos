@@ -609,18 +609,31 @@ describe("the shelf", () => {
     const script = (id: string) => `cd '/w' && claude --resume '${id}'`;
     const shelfOf = async () => (await (await fetch(base + "/state")).json()).shelf;
 
-    test("a shelved session keeps its PRs until another session touches one, and takes them back when it runs", async () => {
+    test("a shelved session keeps its PRs whoever touches them later (they are also in that session), and takes them back when it runs", async () => {
         const A = "https://github.com/o/r/pull/1", B = "https://github.com/o/r/pull/2";
         await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
         await event(prompt);
         await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A, B] });
         await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
-        expect((await shelfOf())["tab-1"][0].prs).toEqual([A, B]);
         await post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { hook_event_name: "PostToolUse", session_id: "other", prs: [A] } });
-        expect((await shelfOf())["tab-1"][0].prs).toEqual([B]);
+        const st = await (await fetch(base + "/state")).json();
+        expect([(await shelfOf())["tab-1"][0].prs, st.sessions.find((x: { id: string }) => x.id === "other").touched]).toEqual([[A, B], [A]]);
         await event({ ...prompt, hook_event_name: "SessionStart" });
         const state = await (await fetch(base + "/state")).json();
-        expect(state.sessions.find((x: { id: string }) => x.id === prompt.session_id).prs).toEqual([B]);
+        expect(state.sessions.find((x: { id: string }) => x.id === prompt.session_id).prs).toEqual([A, B]);
+    });
+
+    test("reading a PR (gh pr view) touches nothing; `wintos pr --own` takes it over and the old owner keeps it as also-in", async () => {
+        const A = "https://github.com/o/r/pull/1";
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A], pr_verb: "view" });
+        expect((await (await fetch(base + "/state")).json()).sessions[0].prs ?? []).toEqual([]);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A], pr_verb: "edit" });
+        await post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { ...prompt, session_id: "taker" } });
+        expect((await post("/blocks/blk-2/pr?session=taker", { ref: "o/r#1", own: true })).status).toBe(200);
+        const st = await (await fetch(base + "/state")).json();
+        const by = (id: string) => st.sessions.find((x: { id: string }) => x.id === id);
+        expect([by("taker").prs, by(prompt.session_id).prs, by(prompt.session_id).touched]).toEqual([[A], [], [A]]);
     });
 
     test("`wintos pr` claims a PR named by link or owner/repo#n for the pane's session", async () => {

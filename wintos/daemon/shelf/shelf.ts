@@ -5,9 +5,10 @@ import type { SessionName } from "../sessions/reduce";
 
 // What a row shows, clearest first: title (3 to 6 words, written after shelving), name (the
 // session's status line then), the gist of its last recap, label (its first prompt).
-// prs: the PRs it owned when shelved; it keeps them until another session touches one.
+// prs: the PRs it owned when shelved; it keeps them, whoever touches them later.
 // named: the session's own name when shelved (`wintos name`, ⌥⌘N), which comes back with it.
-export type Shelved = { sessionId: string; script: string; label: string; title?: string; name?: string; named?: SessionName; gist?: string; prs?: string[]; at: number };
+// touched: PRs it worked on that another session owns ("also in").
+export type Shelved = { sessionId: string; script: string; label: string; title?: string; name?: string; named?: SessionName; gist?: string; prs?: string[]; touched?: string[]; at: number };
 export const shelvedName = (s: Shelved) => s.named?.text ?? s.title ?? s.name ?? s.gist ?? s.label;
 
 export const withTitle = (shelf: Shelf, sessionId: string, title: string): Shelf =>
@@ -31,9 +32,3 @@ export function unshelve(shelf: Shelf, sessionId: string): Shelf {
 }
 
 const dropEmpty = (s: Shelf): Shelf => Object.fromEntries(Object.entries(s).filter(([, l]) => l.length));
-
-// PRs another session just touched leave the shelved sessions that had them.
-export function releasePrs(shelf: Shelf, links: string[]): Shelf {
-    if (!Object.values(shelf).some((l) => l.some((i) => i.prs?.some((u) => links.includes(u))))) return shelf;
-    return Object.fromEntries(Object.entries(shelf).map(([f, l]) => [f, l.map((i) => (i.prs?.some((u) => links.includes(u)) ? { ...i, prs: i.prs.filter((u) => !links.includes(u)) } : i))]));
-}

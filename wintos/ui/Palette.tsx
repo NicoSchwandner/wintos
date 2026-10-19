@@ -12,7 +12,7 @@ import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { useZoneKeys } from "./zones";
 import { attention } from "./attention";
-import { ghPrs, prProjects, projectTabIds, relTime, sessionName, type WintosState, projectTouched, sessionTouched } from "./view";
+import { ghPrs, prProjectLists, projectTabIds, relTime, sessionName, type WintosState, projectTouched, sessionTouched } from "./view";
 import { shelvedName } from "../daemon/shelf/shelf";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 
@@ -172,7 +172,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     for (const r of [...model.quiet, ...model.quietMore]) band[r.tabId] = "quiet";
     for (const r of model.quietStale) band[r.tabId] = `out of the sidebar · last touched ${relTime(now - r.lastAt)} ago`;
     const gh = ghPrs(state);
-    const prOf = prProjects(tabIds, state);
+    const prOf = prProjectLists(tabIds, state);
     const sessionsOf = (id: string) => state.sessions.filter((s) => s.tabId === id && s.state !== "ended");
 
     // A project is found by its title first, then its PRs and task ids, its next action, its
@@ -206,10 +206,10 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
         out.push({ id: `c:${p.id}`, kind: "project", title: p.title, subtitle: [status, p.next].filter(Boolean).join(" · "), fields: fields(p.id), recency: (p.mtime ?? 0) / 2, touchedAt: projectTouched(state, p.id!) ?? p.mtime, run: () => reopenProject(p.id!, shelf[0] ? [resumePane(shelf[0].script)] : []) });
     }
     for (const pr of gh?.prs ?? []) {
-        const tab = prOf.get(pr.url);
+        const tabs = prOf.get(pr.url) ?? [];
         out.push({
             id: `pr:${pr.url}`, kind: "pr", title: `#${pr.number} ${pr.title}`,
-            subtitle: [pr.repo, tab ? title(tab) : "no project", pr.author === gh!.me ? "yours" : `by ${pr.author}`].join(" · "),
+            subtitle: [pr.repo, tabs.length ? tabs.map(title).join(" + ") : "no project", pr.author === gh!.me ? "yours" : `by ${pr.author}`].join(" · "),
             fields: [{ text: `${pr.repo}#${pr.number} ${pr.url} ${taskIds(pr.title, pr.branch)}`, weight: 50, ids: true }, { text: pr.branch, weight: 30, fuzzy: true }],
             run: () => runAction(`open-page:${pr.url}`),
         });

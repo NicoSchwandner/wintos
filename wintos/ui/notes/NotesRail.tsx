@@ -112,10 +112,16 @@ export function Sessions({ tabId, state, size }: { tabId: string; state?: Wintos
                             <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10, color: T.faint }}>{live ? x.session.state : `shelved ${relTime(Date.now() - x.item.at)}`}</span>
                         </button>
                         {x.kind === "live" && x.session.status && <span style={{ paddingLeft: 54, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.session.status.text}</span>}
-                        {(x.prs.length > 0 || x.merged > 0) && (
+                        {(x.prs.length > 0 || x.merged > 0 || x.alsoIn.length > 0) && (
                             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 5, paddingLeft: 54 }}>
                                 {x.prs.map((c) => <PrChipButton key={c.url} chip={c} small />)}
                                 {x.merged > 0 && <span style={{ fontSize: 10.5, color: T.faint }}>{x.merged} merged, waiting for a release</span>}
+                                {/* Quiet: PRs another session owns that this one worked on too. */}
+                                {x.alsoIn.map((c) => (
+                                    <span key={c.url} data-wintos="also-in" title="also in this session; another one owns it" style={{ opacity: 0.5 }}>
+                                        <PrChipButton chip={c} small />
+                                    </span>
+                                ))}
                             </div>
                         )}
                     </div>

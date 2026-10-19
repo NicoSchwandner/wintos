@@ -190,6 +190,12 @@ describe("wintos-hook.sh on PostToolUse", () => {
         const d = await fakeDaemon("");
         await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr edit 340 -R WintDev/Wint.HeartMcp --add-reviewer x", ""));
         expect(d.seen[0].body.payload.prs).toEqual(["https://github.com/WintDev/Wint.HeartMcp/pull/340"]);
+        expect(d.seen[0].body.payload.pr_verb).toBe("edit");
+    });
+    test("gh pr view is sent with its verb, so the daemon can leave it out", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr view 56 -R WintDev/Wint.NPAPs", ""));
+        expect(d.seen[0].body.payload).toMatchObject({ pr_verb: "view", prs: ["https://github.com/WintDev/Wint.NPAPs/pull/56"] });
     });
     test("a command that is no gh pr command sends nothing", async () => {
         const d = await fakeDaemon("");
@@ -345,7 +351,12 @@ describe("wintos lane and step", () => {
     test("pr claims a PR for this pane's session, by link or owner/repo#n", async () => {
         const d = await fakeDaemon("https://github.com/o/r/pull/7");
         expect((await cli(["pr", "o/r#7"], d.port)).trim()).toBe("pr: https://github.com/o/r/pull/7");
-        expect(d.seen).toEqual([{ url: "/blocks/blk-1/pr?session=s-1", body: { ref: "o/r#7" } }]);
+        expect(d.seen).toEqual([{ url: "/blocks/blk-1/pr?session=s-1", body: { ref: "o/r#7", own: false } }]);
+    });
+    test("pr --own takes it over from whoever touched it first", async () => {
+        const d = await fakeDaemon("https://github.com/o/r/pull/7");
+        await cli(["pr", "--own", "o/r#7"], d.port);
+        expect(d.seen[0].body).toEqual({ ref: "o/r#7", own: true });
     });
     test("todo lists the step's to-dos; todo done ticks one", async () => {
         const d = await fakeDaemon("");

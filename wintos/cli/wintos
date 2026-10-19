@@ -94,9 +94,12 @@ step)
     ;;
 pr)
     shift
-    [ $# -eq 1 ] || die "usage: wintos pr <PR link | owner/repo#number>"
+    # --own: this session takes the PR over; without it, the first session to touch a PR owns it.
+    own=false
+    [ "${1:-}" = --own ] && own=true && shift
+    [ $# -eq 1 ] || die "usage: wintos pr [--own] <PR link | owner/repo#number>"
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
-    link=$(jq -n --arg r "$1" '{ref: $r}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/pr$SESSION_Q") ||
+    link=$(jq -n --arg r "$1" --argjson own "$own" '{ref: $r, own: $own}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/pr$SESSION_Q") ||
         die "wintosd refused it: name the PR by its link or owner/repo#number, from a session's pane (port $PORT)"
     echo "pr: $link"
     ;;

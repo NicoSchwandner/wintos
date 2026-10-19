@@ -16,7 +16,8 @@ export type Session = {
     parkPending?: boolean; // `wintos wait` ran this turn; the turn's Stop parks instead of waiting
     donePending?: boolean; // `wintos done` ran this turn; the turn's Stop ends it done
     restored?: boolean; // saved at the last quit, its Claude not started again yet
-    prs?: string[]; // PR links its gh pr commands named, oldest first
+    prs?: string[]; // the PRs it owns: it was the first to touch them (daemon/prs/owners.ts)
+    touched?: string[]; // PRs it worked on that another session owns: it is "also in" them
     status?: { text: string; at: number }; // its own line on what it is doing (`wintos status`)
     name?: SessionName;
     lane?: Lane; // the process it follows and where it is in it (`wintos lane`, `wintos step`)
@@ -37,27 +38,11 @@ const MAX_PRS_PER_CALL = 3;
 const PR_LINK = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/;
 
 // The PR links a call names, if it names few enough to be about them.
-function prLinks(named: unknown): string[] {
+export function prLinks(named: unknown): string[] {
     const links = Array.isArray(named) ? named.filter((u): u is string => typeof u === "string" && PR_LINK.test(u)) : [];
     return links.length > MAX_PRS_PER_CALL ? [] : links;
 }
 
-// A PR has one owner, the last session that touched it: claiming takes it from every other one.
-function claim(sessions: Map<string, Session>, ownerId: string, links: string[]): Map<string, Session> {
-    if (!links.length) return sessions;
-    const out = new Map(sessions);
-    for (const [id, s] of sessions) {
-        if (id === ownerId) out.set(id, { ...s, prs: [...(s.prs ?? []).filter((u) => !links.includes(u)), ...links] });
-        else if (s.prs?.some((u) => links.includes(u))) out.set(id, { ...s, prs: s.prs.filter((u) => !links.includes(u)) });
-    }
-    return out;
-}
-
-// `wintos pr <link>` from inside a session. undefined: no live session in that block.
-export function claimPrs(sessions: Map<string, Session>, blockId: string, links: string[], sessionId?: string): Map<string, Session> | undefined {
-    const live = liveIn(sessions, blockId, sessionId);
-    return live ? claim(sessions, live.id, links) : undefined;
-}
 // The lane steps a gh pr command proves were reached, so they move even when the session forgets.
 const PR_STEPS: Record<string, RegExp> = { create: /\bprs?\b/, ready: /^ready$/ };
 function withPrStep(lane: Lane | undefined, verb: unknown): Lane | undefined {
@@ -100,7 +85,7 @@ const TRANSITIONS: Record<string, SessionState> = {
 const ASKING_TOOLS = new Set(["AskUserQuestion", "ExitPlanMode"]);
 
 export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now: number): Map<string, Session> {
-    const { session_id: id, hook_event_name: name, cwd, prompt, prs, pr_verb } = ev.payload;
+    const { session_id: id, hook_event_name: name, cwd, prompt, pr_verb } = ev.payload;
     const prev = sessions.get(id);
     // A resumed session starting up is still where it was at quit (a turn waiting on you). Quitting
     // WintOS ends every Claude with reason "other": that ends nothing, so the restart finds the
@@ -131,6 +116,7 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     const resume = typeof ev.payload.resume === "string" ? ev.payload.resume : prev?.resume;
     if (resume) session.resume = resume;
     if (prev?.prs) session.prs = prev.prs;
+    if (prev?.touched) session.touched = prev.touched;
     if (prev?.status) session.status = prev.status;
     if (prev?.name) session.name = prev.name;
     const said = name === "Stop" ? outcomeOf(ev.payload.last_assistant_message) : undefined;
@@ -141,7 +127,7 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     const out = new Map(sessions);
     for (const s of leavingFor(sessions, ev)) out.delete(s.id);
     out.set(id, session);
-    return name === "PostToolUse" ? claim(out, id, prLinks(prs)) : out;
+    return out;
 }
 
 // The sessions an event puts out of its block. A saved one goes when anything reports from the
@@ -281,7 +267,7 @@ export const liveSessionIn = (sessions: Iterable<Session>, blockId: string): Ses
 // The session a `wintos` call comes from: the one it names (CLAUDE_CODE_SESSION_ID), so a pane
 // running several (a fork Claude Code runs in the background shares its pane) never mixes them
 // up; without a name, the pane's.
-const liveIn = (sessions: Map<string, Session>, blockId: string, sessionId?: string) => {
+export const liveIn = (sessions: Map<string, Session>, blockId: string, sessionId?: string) => {
     const named = sessionId ? sessions.get(sessionId) : undefined;
     return named && named.state !== "ended" ? named : liveSessionIn(sessions.values(), blockId);
 };

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { inboxKind, inboxTabId, isInboxTab, prProjects, projectSessions, projectTabIds, projectPrList, projectTouched, relTime, sessionHeader, sessionTouched, urgentPr, type WintosState } from "./view";
+import { inboxKind, inboxTabId, isInboxTab, prProjectLists, prProjects, projectSessions, projectTabIds, projectPrList, projectTouched, relTime, sessionHeader, sessionTouched, urgentPr, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -95,7 +95,7 @@ describe("prProjects", () => {
         expect([...prProjects(["t1"], state)]).toEqual([[pr.url, "t1"]]);
     });
 
-    test("a closed project keeps its PRs, through its shelf; an open one claiming the same PR wins", () => {
+    test("a closed project keeps its PRs, through its shelf; it leads for a PR its session owns, an open one naming it too is also in", () => {
         const pr = { repo: "acme/api", number: 5, url: "https://github.com/acme/api/pull/5", title: "t", author: "me", isDraft: false, createdAt: "2026-09-28T08:00:00Z", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b" };
         const other = { ...pr, number: 6, url: "https://github.com/acme/api/pull/6" };
         const shelved = (url: string) => [{ sessionId: "s", script: "x", label: "l", at: 0, prs: [url] }];
@@ -105,7 +105,23 @@ describe("prProjects", () => {
             shelf: { closed: [...shelved(pr.url), ...shelved(other.url)] },
             plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs: [pr, other] } } },
         } as unknown as WintosState;
-        expect(Object.fromEntries(prProjects(["open"], state))).toEqual({ [pr.url]: "closed", [other.url]: "open" });
+        expect(Object.fromEntries(prProjects(["open"], state))).toEqual({ [pr.url]: "closed", [other.url]: "closed" });
+        expect(prProjectLists(["open"], state).get(other.url)).toEqual(["closed", "open"]);
+    });
+});
+
+describe("prProjectLists (a PR in several projects)", () => {
+    test("the owner's project first, then every project a session also worked on it in", () => {
+        const pr = { repo: "acme/api", number: 5, url: "https://github.com/acme/api/pull/5", title: "t", author: "me", isDraft: false, createdAt: "2026-09-28T08:00:00Z", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b" };
+        const state = {
+            now: 0,
+            projects: [{ id: "fixer", title: "F", titleLocked: false, dir: "/f", mtime: 0 }, { id: "receipt", title: "R", titleLocked: false, dir: "/r", mtime: 0 }],
+            sessions: [{ id: "x", tabId: "fixer", blockId: "b", state: "waiting", since: 0, lastAt: 0, touched: [pr.url] }],
+            shelf: { receipt: [{ sessionId: "owner", script: "s", label: "l", at: 0, prs: [pr.url] }] },
+            plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs: [pr] } } },
+        } as unknown as WintosState;
+        expect(prProjectLists(["fixer", "receipt"], state).get(pr.url)).toEqual(["receipt", "fixer"]);
+        expect(prProjects(["fixer", "receipt"], state).get(pr.url)).toBe("receipt");
     });
 });
 

@@ -12,14 +12,14 @@ import { formatMarkdown } from "../markdown";
 import { dayRecapper } from "../recap/day";
 import { prFact } from "../recap/recap";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
-import { releasePrs, resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
+import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { titlePrompt, writeTitle } from "../shelf/title";
 import { fixJob, fixPrompt } from "../fixer/plan";
-import { reassignPrs } from "../prs/owners";
+import { reassignPrs, touchPrs } from "../prs/owners";
 import type { PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, claimPrs, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession } from "../sessions/reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks } from "../sessions/reduce";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -104,6 +104,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
             broadcast();
         });
     };
+    const applyTouch = (r: { sessions: Map<string, Session>; shelf: Shelf }) => {
+        sessions = r.sessions;
+        if (r.shelf !== shelf) saveShelf(r.shelf);
+    };
     // false: no project on that tab.
     const shelveSession = (tabId: string, sessionId: string, script: string, label?: string) => {
         const p = store.byTab(tabId);
@@ -113,7 +117,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const name = sessions.get(sessionId)?.status?.text;
         const owned = sessions.get(sessionId)?.prs;
         const given = sessions.get(sessionId)?.name;
-        const item: Shelved = { sessionId, script, label: label ?? gist ?? "session", ...(name ? { name } : {}), ...(given ? { named: given } : {}), gist, ...(owned?.length ? { prs: owned } : {}), at: Date.now() };
+        const touched = sessions.get(sessionId)?.touched;
+        const item: Shelved = { sessionId, script, label: label ?? gist ?? "session", ...(name ? { name } : {}), ...(given ? { named: given } : {}), ...(touched?.length ? { touched } : {}), gist, ...(owned?.length ? { prs: owned } : {}), at: Date.now() };
         saveShelf(shelve(shelf, basename(p.dir), item, 14));
         titleShelved(item, p.title);
         return true;
@@ -249,11 +254,12 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     // Its name comes back with it, as whoever gave it.
                     const back = sessions.get(p.session_id);
                     if (shelved.named && back && !back.name) sessions = new Map(sessions).set(back.id, { ...back, name: shelved.named });
-                    if (shelved.prs?.length) sessions = claimPrs(sessions, ev.blockId, shelved.prs) ?? sessions;
+                    const again = sessions.get(p.session_id);
+                    const union = (a: string[] = [], b: string[] = []) => [...new Set([...a, ...b])];
+                    if (again) sessions = new Map(sessions).set(again.id, { ...again, prs: union(again.prs, shelved.prs), touched: union(again.touched, shelved.touched) });
                 }
-                // A PR this session touched leaves any shelved session that had it.
-                const touched = p.hook_event_name === "PostToolUse" ? (sessions.get(p.session_id)?.prs ?? []) : [];
-                if (touched.length && releasePrs(shelf, touched) !== shelf) saveShelf(releasePrs(shelf, touched));
+                // A gh pr command that acts on a PR touches it; reading one (gh pr view) does not.
+                if (p.hook_event_name === "PostToolUse" && p.pr_verb !== "view") applyTouch(touchPrs(sessions, shelf, p.session_id, prLinks(p.prs)));
                 saveSessions();
                 const tp = (p as { transcript_path?: unknown }).transcript_path;
                 if (p.hook_event_name === "Stop" && typeof tp === "string") nameByModel(p.session_id, tp, store.byTab(ev.tabId)?.title);
@@ -472,13 +478,12 @@ export async function startServer(opts: { root: string; port: number; host?: str
             const claimed = /^\/blocks\/([^/]+)\/pr$/.exec(url.pathname);
             if (req.method === "POST" && claimed) {
                 const blockId = decodeURIComponent(claimed[1]);
-                const b = (await body(req)) as { ref?: unknown };
+                const b = (await body(req)) as { ref?: unknown; own?: unknown };
                 const link = typeof b?.ref === "string" ? prLink(b.ref) : undefined;
                 if (!isSafe(blockId) || !link) return send(res, 400, "need a PR link or owner/repo#number");
-                const next = claimPrs(sessions, blockId, [link], sid);
-                if (!next) return send(res, 400, "no live session in this pane");
-                sessions = next;
-                if (releasePrs(shelf, [link]) !== shelf) saveShelf(releasePrs(shelf, [link]));
+                const live = liveIn(sessions, blockId, sid);
+                if (!live) return send(res, 400, "no live session in this pane");
+                applyTouch(touchPrs(sessions, shelf, live.id, [link], b.own === true));
                 saveSessions();
                 broadcast();
                 return send(res, 200, link);

@@ -21,7 +21,7 @@ import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
-import { ghPrs, prOwners, prProjects, relTime } from "./view";
+import { ghPrs, prOwners, prProjectLists, prProjects, relTime } from "./view";
 
 export const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
     merge: { label: "Merge", note: "approved, green, waiting on the button", color: T.moss },
@@ -79,9 +79,11 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const tabIds = useAtomValue(atoms.workspace)?.tabids ?? [];
     const projectOf = state ? prProjects(tabIds, state) : new Map<string, string>();
     const titleOf = (tabId: string) => state?.projects.find((p) => p.id === tabId)?.title ?? "its project";
+    const lists = state ? prProjectLists(tabIds, state) : new Map<string, string[]>();
+    // The owner's project; the others it is also in follow, and o goes to the owner's.
     const projectLabel = (url: string) => {
-        const id = projectOf.get(url);
-        return id && `${titleOf(id)}${tabIds.includes(id) ? "" : " · closed, o opens it again"}`;
+        const [id, ...also] = lists.get(url) ?? [];
+        return id && `${titleOf(id)}${tabIds.includes(id) ? "" : " · closed, o opens it again"}${also.length ? ` · also in ${also.map(titleOf).join(", ")}` : ""}`;
     };
     // o: the session that owns the PR (resumed from the shelf if need be), else its project, else
     // a new project for it whose Claude prompt starts with the PR's link.

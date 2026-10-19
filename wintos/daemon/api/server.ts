@@ -120,7 +120,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
     };
     // One saved before sessions carried their resume command resumes from its directory.
     const shelveLive = (l: Session) => {
-        const script = l.resume ?? (l.cwd && `cd '${l.cwd.replace(/'/g, "'\\''")}' && claude --resume '${l.id}'`);
+        // A session never prompted saved no conversation: resuming it only says "No conversation found".
+        const script = l.resume ?? (l.cwd && (l.promptAt || l.label) && `cd '${l.cwd.replace(/'/g, "'\\''")}' && claude --resume '${l.id}'`);
         if (script && resumedSession(script) === l.id) shelveSession(l.tabId, l.id, script, l.label);
     };
     const sockets = new Set<WebSocket>();

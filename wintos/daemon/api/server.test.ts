@@ -699,6 +699,13 @@ describe("the shelf", () => {
         expect((await shelfOf())["tab-1"]).toEqual([expect.objectContaining({ sessionId: "old", script: "cd '/w/it'\\''s' && claude --resume 'old'" })]);
     });
 
+    test("a session never prompted has no conversation to resume, so closing its project shelves nothing", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ hook_event_name: "SessionStart", source: "startup", session_id: "empty", cwd: "/w" });
+        await post("/projects/tab-1/shelve-all", {});
+        expect(await shelfOf()).toEqual({});
+    });
+
     test("closing the project (⇧⌘W) shelves every session it runs first, and a second time changes nothing", async () => {
         await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
         await event({ ...prompt, session_id: "a", resume: script("a") });

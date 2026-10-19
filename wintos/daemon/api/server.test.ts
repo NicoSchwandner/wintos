@@ -279,6 +279,17 @@ describe("notes", () => {
     });
 });
 
+describe("forgetting shelved sessions", () => {
+    test("/shelf/forget takes them off the shelf; anything but session ids is refused", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await post("/projects/tab-1/shelf", { script: `cd '/w' && claude --resume 'dead'`, label: "x" });
+        await post("/projects/tab-1/shelf", { script: `cd '/w' && claude --resume 'kept'`, label: "y" });
+        expect((await post("/shelf/forget", { sessionIds: ["dead"] })).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).shelf["tab-1"].map((i: { sessionId: string }) => i.sessionId)).toEqual(["kept"]);
+        expect((await post("/shelf/forget", { sessionIds: "dead" })).status).toBe(400);
+    });
+});
+
 describe("rebuilding PR ownership", () => {
     test("/prs/owners moves each PR to its owner, live or shelved, or to nobody; anything else is refused", async () => {
         const A = "https://github.com/o/r/pull/1", B = "https://github.com/o/r/pull/2";

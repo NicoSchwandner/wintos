@@ -374,6 +374,14 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, "");
             }
+            // Shelved sessions that can't be resumed (never prompted, so no conversation) come off.
+            if (req.method === "POST" && url.pathname === "/shelf/forget") {
+                const b = (await body(req)) as { sessionIds?: unknown };
+                if (!Array.isArray(b?.sessionIds) || !b.sessionIds.every(isSafe)) return send(res, 400, "need sessionIds: [<session id>, …]");
+                saveShelf((b.sessionIds as string[]).reduce((sh, id) => unshelve(sh, id), shelf));
+                broadcast();
+                return send(res, 200, "");
+            }
             // A one-off rebuild of PR ownership (from the sessions' transcripts): url → session id, or null.
             if (req.method === "POST" && url.pathname === "/prs/owners") {
                 const b = (await body(req)) as { owners?: unknown };

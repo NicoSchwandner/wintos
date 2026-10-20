@@ -1,7 +1,7 @@
-import { readFileSync, watch, writeFileSync, type FSWatcher } from "fs";
+import { mkdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "fs";
 import http from "http";
 import type { AddressInfo } from "net";
-import { basename, join } from "path";
+import { basename, dirname, join } from "path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { injection } from "../inject";
 import { Plugin, PluginRunner } from "../plugins/runner";
@@ -40,7 +40,7 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
     const factsOf = (ids: string[], day: string) => {
@@ -152,8 +152,21 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const sockets = new Set<WebSocket>();
     let port = opts.port;
 
+    // Your short names for repos (n in the PR list), in your config: read again whenever it changes,
+    // so a hand edit shows without a restart.
+    let repoNames: { mtime: number; names: Record<string, string> } = { mtime: -1, names: {} };
+    const namesOfRepos = () => {
+        if (!opts.repoNamesFile) return {};
+        let mtime = 0;
+        try {
+            mtime = statSync(opts.repoNamesFile).mtimeMs;
+        } catch {}
+        if (mtime !== repoNames.mtime) repoNames = { mtime, names: readJson<Record<string, string>>(opts.repoNamesFile, {}) };
+        return repoNames.names;
+    };
     const state = () => ({
         now: Date.now(),
+        repoNames: namesOfRepos(),
         sessions: [...sessions.values()],
         projects: store.list().map(({ body: _body, ...p }) => p),
         plugins: runner.results,
@@ -296,6 +309,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 return (await runner.run(decodeURIComponent(plugin[1]))) ? send(res, 200, "") : send(res, 404, "no such plugin");
             }
             if (req.method === "GET" && url.pathname === "/projects/texts") return json(res, store.texts());
+            if (req.method === "POST" && url.pathname === "/repos/name") {
+                const b = (await body(req)) as { repo?: unknown; short?: unknown };
+                if (!opts.repoNamesFile) return send(res, 404, "no repo names file");
+                if (typeof b?.repo !== "string" || !/^[\w.-]+\/[\w.-]+$/.test(b.repo) || typeof b.short !== "string" || b.short.trim().length > 16) return send(res, 400, "need repo (owner/name) and short, up to 16 characters; empty removes it");
+                const { [b.repo]: _was, ...rest } = namesOfRepos();
+                const names = b.short.trim() ? { ...rest, [b.repo]: b.short.trim() } : rest;
+                mkdirSync(dirname(opts.repoNamesFile), { recursive: true });
+                writeFileSync(opts.repoNamesFile, JSON.stringify(names, null, 2) + "\n");
+                broadcast();
+                return send(res, 200, "");
+            }
             if (req.method === "GET" && url.pathname === "/day/recap") return json(res, await recapper.recap(Date.now()));
             const standupItem = /^\/day\/recap\/([^/]+)$/.exec(url.pathname);
             if (req.method === "POST" && standupItem) {

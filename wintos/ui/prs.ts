@@ -3,7 +3,7 @@ import { ageLabel, byUrgency, Group, GROUPS, groupOf, isSnoozed, isStacked, last
 
 // children: PRs stacked on this one that only wait for it (spec: stacked PRs sit under their base).
 // counts: the PRs card number this row is in, yours or the team's; sla: it is also counted past SLA.
-export type QueueRow = { pr: PR; group: Group; mine: boolean; age: { text: string; late: boolean }; qualifier?: { text: string; brick?: boolean }; total: number; repoShort: string; children: QueueRow[]; counts?: "yours" | "team"; sla?: "yours" | "team" };
+export type QueueRow = { pr: PR; group: Group; mine: boolean; age: { text: string; late: boolean }; qualifier?: { text: string; brick?: boolean }; total: number; children: QueueRow[]; counts?: "yours" | "team"; sla?: "yours" | "team" };
 
 const ACTS: Group[] = ["merge", "fix", "review", "chase"];
 
@@ -16,7 +16,7 @@ export type QueueModel = { groups: { group: Group; rows: QueueRow[] }[]; snoozed
 export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes = {}): QueueModel {
     const toRow = (pr: PR): QueueRow => {
         const group = groupOf(pr, me, now);
-        return { pr, group, mine: pr.author === me, age: ageLabel(pr, now), qualifier: qualifier(pr, group, { reviewers: false }), total: pr.additions + pr.deletions, repoShort: pr.repo.split("/").pop()!, children: [] };
+        return { pr, group, mine: pr.author === me, age: ageLabel(pr, now), qualifier: qualifier(pr, group, { reviewers: false }), total: pr.additions + pr.deletions, children: [] };
     };
     const snoozed = prs.filter((p) => isSnoozed(p, snoozes, now)).map(toRow);
     // Someone else's draft asks nothing of your team yet, whoever is requested on it.

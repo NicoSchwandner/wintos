@@ -8,7 +8,7 @@ import { liveSessionIn, liveSessionsIn, type Session } from "../daemon/sessions/
 import { shelvedName, type Shelved } from "../daemon/shelf/shelf";
 import type { FixerState } from "../daemon/fixer/runner";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]>; fixer?: FixerState };
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]>; fixer?: FixerState; repoNames?: Record<string, string> };
 export type Tone = "apricot" | "blue" | "brick" | "secondary";
 export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
 
@@ -123,8 +123,8 @@ export function sessionHeader(state: WintosState, blockId: string): SessionHeade
 }
 
 // A session's open PRs as chips, most urgent first, each saying what is next in plain words;
-// the done ones drop out, the merged ones waiting for a release only count. repo: on a PR outside
-// the session's own repo. Before the first PR fetch every PR shows as a bare number.
+// the done ones drop out, the merged ones waiting for a release only count. repo: its short name
+// (repoLabel). Before the first PR fetch every PR shows as a bare number.
 export type PrChip = { url: string; number: number; group?: Group; text?: string; repo?: string };
 export type SessionPrs = { open: PrChip[]; merged: number };
 export function prChips(state: WintosState, urls: string[]): SessionPrs {
@@ -133,18 +133,31 @@ export function prChips(state: WintosState, urls: string[]): SessionPrs {
     const byUrl = new Map(gh.prs.map((p) => [p.url, p]));
     const known = urls.map((u) => byUrl.get(u)).filter((p): p is PR => !!p);
     const open = known.filter((p) => !p.mergedAt);
-    const counts = new Map<string, number>();
-    for (const p of open) counts.set(p.repo, (counts.get(p.repo) ?? 0) + 1);
-    const home = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const label = repoLabeler(state);
     const chips = open.map((pr): PrChip => {
         const group = groupOf(pr, gh.me, state.now);
-        const repo = pr.repo === home ? undefined : shortRepo(pr.repo);
-        return { url: pr.url, number: pr.number, group, text: chipText(pr, group, state), ...(repo ? { repo } : {}) };
+        return { url: pr.url, number: pr.number, group, text: chipText(pr, group, state), repo: label(pr.repo) };
     });
     return { open: chips.sort((a, b) => GROUPS.indexOf(a.group!) - GROUPS.indexOf(b.group!)), merged: known.length - open.length };
 }
 
-const shortRepo = (repo: string) => repo.split("/").pop()!.replace(/^Wint\./, "").replace(/\.Service$/, "");
+// Every repo's short name, given the PRs WintOS knows.
+export function repoLabeler(state: WintosState): (repo: string) => string {
+    const repos = ghPrs(state)?.prs.map((p) => p.repo) ?? [];
+    return (repo) => repoLabel(repo, state.repoNames ?? {}, repos);
+}
+
+// A repo's short name: yours (n in the PR list), else its name without the dotted prefix most of
+// the repos share and without a trailing ".Service".
+export function repoLabel(repo: string, names: Record<string, string>, repos: string[]): string {
+    if (names[repo]) return names[repo];
+    const name = repo.split("/").pop()!;
+    const prefixes = repos.map((r) => /^[^.]+\./.exec(r.split("/").pop()!)?.[0]).filter(Boolean);
+    const common = prefixes.filter((p) => p === prefixes.sort((a, b) => prefixes.filter((x) => x === b).length - prefixes.filter((x) => x === a).length)[0])[0];
+    const shared = common && prefixes.filter((p) => p === common).length * 2 >= new Set(repos).size ? common : undefined;
+    const bare = shared && name.startsWith(shared) ? name.slice(shared.length) : name;
+    return bare.replace(/\.Service$/, "") || name;
+}
 
 function chipText(pr: PR, group: Group, state: WintosState): string {
     const fixer = state.fixer;

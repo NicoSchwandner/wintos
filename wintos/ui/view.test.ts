@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { inboxKind, inboxTabId, isInboxTab, prProjectLists, prProjects, projectSessions, projectTabIds, projectPrList, projectTouched, relTime, sessionHeader, sessionTouched, urgentPr, type WintosState } from "./view";
+import { repoLabel, inboxKind, inboxTabId, isInboxTab, prProjectLists, prProjects, projectSessions, projectTabIds, projectPrList, projectTouched, relTime, sessionHeader, sessionTouched, urgentPr, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -152,10 +152,10 @@ describe("sessionHeader (the header on a Claude pane)", () => {
         expect([h.prs.map((x) => x.number), h.merged]).toEqual([[1], 1]);
     });
 
-    test("most urgent first; the repo only on a PR outside the session's own; a draft says so", () => {
-        const other = { ...p(7, { reviewers: ["ana"] }), repo: "acme/Wint.Embedding.Service", url: "https://github.com/acme/Wint.Embedding.Service/pull/7" };
-        const h = sessionHeader(st([sess({ prs: [p(2).url, other.url, p(1).url] })], [p(2, { isDraft: true, createdAt: "2026-09-28T08:00:00Z" }), other, p(1, { conflict: true })]), "b")!;
-        expect(h.prs.map((x) => [x.number, x.repo, x.text])).toEqual([[1, undefined, "merge conflict"], [7, "Embedding", "chase · nudge ana · 5 wd"], [2, undefined, "draft"]]);
+    test("most urgent first, each with its repo's short name; a draft says so", () => {
+        const other = { ...p(7, { reviewers: ["ana"] }), repo: "acme/Acme.Embedding.Service", url: "https://github.com/acme/Acme.Embedding.Service/pull/7" };
+        const h = sessionHeader({ ...st([sess({ prs: [p(2).url, other.url, p(1).url] })], [p(2, { isDraft: true, createdAt: "2026-09-28T08:00:00Z" }), other, p(1, { conflict: true })]), repoNames: { "acme/api": "API" } }, "b")!;
+        expect(h.prs.map((x) => [x.number, x.repo, x.text])).toEqual([[1, "API", "merge conflict"], [7, "Embedding", "chase · nudge ana · 5 wd"], [2, "API", "draft"]]);
     });
 
     test("the fixer at work on the PR's commit says so on its chip", () => {
@@ -209,5 +209,16 @@ describe("when you last touched a session and a project", () => {
     test("a project: the latest of its sessions, live or shelved, and its shelvings; none without either", () => {
         const state = { now: 0, projects: [], sessions: [sess("a", { promptAt: 20 })], seen: { z: 50 }, shelf: { t: [{ sessionId: "z", script: "x", label: "l", at: 40 }] } } as unknown as WintosState;
         expect([projectTouched(state, "t"), projectTouched(state, "other")]).toEqual([50, undefined]);
+    });
+});
+
+describe("repoLabel", () => {
+    const repos = ["o/Acme.Docs.Service", "o/Acme.Api", "o/Core", "x/Other.Thing"];
+    test("your short name first", () => expect(repoLabel("o/Acme.Docs.Service", { "o/Acme.Docs.Service": "DS" }, repos)).toBe("DS"));
+    test("else the name without the prefix most repos share and a trailing .Service", () => {
+        expect(repoLabel("o/Acme.Docs.Service", {}, repos)).toBe("Docs");
+        expect(repoLabel("o/Core", {}, repos)).toBe("Core");
+        expect(repoLabel("x/Other.Thing", {}, repos)).toBe("Other.Thing");
+        expect(repoLabel("o/Acme.Api", {}, ["o/Acme.Api"])).toBe("Api");
     });
 });

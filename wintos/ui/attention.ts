@@ -3,7 +3,7 @@ import type { Session } from "../daemon/sessions/reduce";
 import type { Project } from "../daemon/projects/store";
 import { isSnoozed, projectPrs, type ProjectPrs } from "../daemon/prs/group";
 import type { Target } from "./sessions";
-import { ghPrs, prOwners, relTime, type Owner, type RowView, type WintosState } from "./view";
+import { ghPrs, prOwners, relTime, repoLabeler, type Owner, type RowView, type WintosState } from "./view";
 
 // Which projects need you, why, and in what order: the one place that decides it. The sidebar,
 // the palette and ⌃⇥ read it; it is given live sessions (those whose pane still exists).
@@ -33,12 +33,12 @@ export function sidebarModel(tabIds: string[], state: WintosState): Ranking {
     return rank(tabIds, state.sessions, state.now, touched, state.seen);
 }
 
-export function rowView(row: Row, project: Project | undefined, tabName: string | undefined, now: number, prs?: ProjectPrs): RowView {
+export function rowView(row: Row, project: Project | undefined, tabName: string | undefined, now: number, prs?: ProjectPrs, label: (repo: string) => string = (r) => r.split("/").pop()!): RowView {
     const title = project?.title ?? tabName ?? "Untitled";
     const since = row.band === "needs" ? row.waitingSince! : row.lastAt;
     const age = since > 0 ? relTime(now - since) : "";
     const first = prs?.items[0]?.pr;
-    const link = first ? `#${first.number} · ${first.branch}` : project?.pr?.[0];
+    const link = first ? `${label(first.repo)} #${first.number} · ${first.branch}` : project?.pr?.[0];
     // Restored at the last restart: shown as it was, but its Claude starts only when you open it.
     const notStarted = row.sessions.length > 0 && row.sessions.every((s) => s.restored);
     const meta = notStarted ? [link, "not started, opens with the project"].filter(Boolean).join(" · ") : link;
@@ -79,7 +79,8 @@ export function attention(tabIds: string[], state: WintosState, names: Record<st
     const split = sidebarModel(tabIds, state);
     const rows = [...split.needs, ...split.read, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale];
     const project = (id: string) => state.projects.find((p) => p.id === id);
-    const views = Object.fromEntries(rows.map((r) => [r.tabId, rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId])]));
+    const label = repoLabeler(state);
+    const views = Object.fromEntries(rows.map((r) => [r.tabId, rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label)]));
     const targets: Record<string, Target> = {};
     for (const r of [...split.needs, ...split.read]) {
         const waiting = r.sessions.filter((s) => s.state === "waiting").sort((a, b) => a.since - b.since)[0];

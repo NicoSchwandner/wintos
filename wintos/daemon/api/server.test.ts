@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "fs";
 import type { AddressInfo } from "net";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -856,5 +856,24 @@ describe("the shelf", () => {
         await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
         expect((await post("/projects/tab-1/shelf", { script: "rm -rf ~", label: "x" })).status).toBe(400);
         expect((await post("/projects/tab-9/shelf", { script: script("s1"), label: "x" })).status).toBe(404);
+    });
+});
+
+describe("repo short names", () => {
+    test("saved to your file, shown in the state, a hand edit too; empty removes one; bad input is a 400", async () => {
+        const file = join(root, "cfg", "repos.json");
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", repoNamesFile: file });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        const names = async () => (await (await fetch(base + "/state")).json()).repoNames;
+        expect((await post("/repos/name", { repo: "o/Acme.Docs.Service", short: " DS " })).status).toBe(200);
+        expect([await names(), JSON.parse(readFileSync(file, "utf8"))]).toEqual([{ "o/Acme.Docs.Service": "DS" }, { "o/Acme.Docs.Service": "DS" }]);
+        writeFileSync(file, JSON.stringify({ "o/Acme.Docs.Service": "DS", "o/Core": "C" }));
+        utimesSync(file, new Date(), new Date(Date.now() + 5000));
+        expect(await names()).toEqual({ "o/Acme.Docs.Service": "DS", "o/Core": "C" });
+        await post("/repos/name", { repo: "o/Core", short: "" });
+        expect(await names()).toEqual({ "o/Acme.Docs.Service": "DS" });
+        expect((await post("/repos/name", { repo: "nope", short: "x" })).status).toBe(400);
+        expect((await post("/repos/name", { repo: "o/r", short: "x".repeat(17) })).status).toBe(400);
     });
 });

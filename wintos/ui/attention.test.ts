@@ -53,9 +53,13 @@ describe("rowView", () => {
 });
 
 describe("rowView with PRs", () => {
-    const blocked = { items: [{ pr: { number: 4803, branch: "fix/bank-retry" } as never, group: "chase" as const }], blocked: { since: NOW, text: "Nobody has looked at #4803 in 4 working days", tone: "brick" as const, url: "https://github.com/o/r/pull/4803" } };
+    const blocked = { items: [{ pr: { repo: "o/r", number: 4803, branch: "fix/bank-retry" } as never, group: "chase" as const }], blocked: { since: NOW, text: "Nobody has looked at #4803 in 4 working days", tone: "brick" as const, url: "https://github.com/o/r/pull/4803" } };
     test("a PR that needs you is the quiet row's line, not a reason to need you", () =>
         expect(rowView(row("quiet"), { dir: "/p", mtime: 0 }, "T", NOW, blocked)).toMatchObject({ reason: "Nobody has looked at #4803 in 4 working days" }));
+    test("its PR line carries the repo's short name", () => {
+        expect(rowView(row("running"), undefined, "T", NOW, blocked).meta).toBe("r #4803 · fix/bank-retry");
+        expect(rowView(row("running"), undefined, "T", NOW, blocked, () => "R").meta).toBe("R #4803 · fix/bank-retry");
+    });
     test("a waiting session still wins the next-action line", () =>
         expect(rowView(row("needs", { waitingSince: NOW, sessions: [{ state: "waiting" } as never] }), undefined, "T", NOW, blocked)).toMatchObject({ next: "Your turn", tone: "apricot" }));
     test("quiet rows take the PR's reason", () =>

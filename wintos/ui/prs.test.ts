@@ -60,8 +60,8 @@ describe("queueModel", () => {
 
     test("empty groups are dropped", () => expect(queueModel([pr({ reviewDecision: "APPROVED", checks: "SUCCESS" })], "me", MON).groups.map((g) => g.group)).toEqual(["merge"]));
 
-    test("a row carries the diff total and the short repo name", () =>
-        expect(m.groups[0].rows[0]).toMatchObject({ total: 4, repoShort: "api", mine: true }));
+    test("a row carries the diff total", () =>
+        expect(m.groups[0].rows[0]).toMatchObject({ total: 4, mine: true }));
 });
 
 describe("initials", () => {

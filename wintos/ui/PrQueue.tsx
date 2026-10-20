@@ -21,7 +21,7 @@ import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
-import { ghPrs, prOwners, prProjectLists, prProjects, relTime } from "./view";
+import { ghPrs, prOwners, prProjectLists, prProjects, relTime, repoLabel } from "./view";
 
 export const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
     merge: { label: "Merge", note: "approved, green, waiting on the button", color: T.moss },
@@ -54,6 +54,15 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     // f: narrows the list to the PRs matching what you type; Esc clears it, ⏎ goes back to the rows.
     const [filter, setFilter] = useState<string | null>(null);
     const filterRef = useRef<HTMLInputElement>(null);
+    // n: the short name of the selected PR's repo, typed here; ⏎ saves it to your names file.
+    const [naming, setNaming] = useState<{ repo: string; text: string } | null>(null);
+    const repos = gh?.prs.map((p) => p.repo) ?? [];
+    const labelOf = (repo: string) => repoLabel(repo, state?.repoNames ?? {}, repos);
+    const saveName = () => {
+        if (naming) void daemonFetch("/repos/name", { method: "POST", body: { repo: naming.repo, short: naming.text } }).catch(() => {});
+        setNaming(null);
+        focusRef.current?.focus();
+    };
     const model = gh ? queueModel(filter ? gh.prs.filter((p) => matchesPr(p, filter)) : gh.prs, gh.me, now, state?.snoozes) : null;
     // A stacked PR's row follows its base, one indent per step; the cursor walks them in order.
     const withStack = (r: QueueRow, depth = 0): { r: QueueRow; depth: number }[] => [{ r, depth }, ...r.children.flatMap((c) => withStack(c, depth + 1))];
@@ -118,6 +127,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
         // ⏎ reads the PR: focus goes with it. A click opens it beside the list and stays there.
         Enter: () => (r ? (wantPane("⏎ opens the PR"), openPr(r)) : false),
         o: () => (r ? goToProject(r) : false),
+        n: (e) => void (!e.repeat && r && setNaming({ repo: r.pr.repo, text: labelOf(r.pr.repo) })),
         r: (e) => void (e.repeat || refresh()),
         z: (e) => {
             if (!r || e.repeat) return;
@@ -147,6 +157,26 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                     <Key k="r" label="" />
                 </span>
             </div>
+            {naming && (
+                <div style={{ margin: "0 26px 12px", display: "flex", alignItems: "center", gap: 12, fontSize: 12, color: T.muted }}>
+                    <span>Short name for {naming.repo}</span>
+                    <input
+                        autoFocus
+                        value={naming.text}
+                        maxLength={16}
+                        data-wintos="repo-name"
+                        onChange={(e) => setNaming({ ...naming, text: e.target.value })}
+                        onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") e.preventDefault(), saveName();
+                            if (e.key === "Escape") e.preventDefault(), setNaming(null), focusRef.current?.focus();
+                        }}
+                        style={{ width: 120, padding: "4px 8px", background: T.card, border: `1px solid ${T.borderActive}`, borderRadius: 8, outline: "none", color: T.text, fontFamily: T.mono, fontSize: 12 }}
+                    />
+                    <Key k="⏎" label="save, on every chip" />
+                    <Key k="esc" label="keep it" />
+                </div>
+            )}
             {filter !== null && (
                 <input
                     ref={filterRef}
@@ -167,7 +197,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                     <div key={group} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         <GroupHeader {...HEADERS[group]} count={rows.length} />
                         {rows.flatMap((row) => withStack(row)).map(({ r, depth }) => (
-                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectLabel(r.pr.url)} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectLabel(r.pr.url)} repo={labelOf(r.pr.repo)} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 ))}
@@ -175,7 +205,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                     <div style={{ display: "flex", flexDirection: "column", gap: 2, opacity: 0.6 }}>
                         <GroupHeader label="Snoozed" note="back next working day, or when it moves · z wakes" color={T.muted} count={model.snoozed.length} />
                         {model.snoozed.map((r) => (
-                            <PrRow key={r.pr.url} r={r} depth={0} project={projectLabel(r.pr.url)} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={0} project={projectLabel(r.pr.url)} repo={labelOf(r.pr.repo)} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 )}
@@ -186,6 +216,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                 <Key k="⏎" label="open" />
                 <Key k="o" label={flat[cursor] && !projectOf.has(flat[cursor].pr.url) ? "open as new project" : "go to project"} off={!flat[cursor]} />
                 <Key k="z" label="snooze" />
+                <Key k="n" label="name its repo" off={!flat[cursor]} />
                 <Key k="c" label="fix red CI" off={!canFixCi} />
                 <Key k="a" label={fixer?.conflicts ? "conflicts: stop fixing them" : "conflicts: fix them"} />
                 {pageOpen && <KeyOr keys={["esc", "⌘L"]} label="to the page" />}
@@ -247,7 +278,7 @@ function GroupHeader({ label, note, color, count }: { label: string; note: strin
 }
 
 // project: the title of the project this PR belongs to, for its marker (o goes there).
-function PrRow({ r, depth, project, cursor, cols, fix, onOpen }: { r: QueueRow; depth: number; project?: string; cursor: boolean; cols: RowColumns; fix?: { text: string; brick?: boolean }; onOpen: () => void }) {
+function PrRow({ r, depth, project, repo, cursor, cols, fix, onOpen }: { r: QueueRow; depth: number; project?: string; repo: string; cursor: boolean; cols: RowColumns; fix?: { text: string; brick?: boolean }; onOpen: () => void }) {
     const { pr } = r;
     const compact = !cols.names;
     return (
@@ -286,7 +317,7 @@ function PrRow({ r, depth, project, cursor, cols, fix, onOpen }: { r: QueueRow; 
             <span title={project ? `Project: ${project} (o)` : "No project"} style={{ width: 12, flexShrink: 0, textAlign: "center", fontSize: 11, color: project ? T.moss : "transparent" }}>◆</span>
             {/* The repo gives way; the number never does. */}
             <span style={{ width: compact ? 120 : 150, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: "0.6em", fontFamily: T.mono, fontSize: 10.5, color: T.faint, whiteSpace: "nowrap" }}>
-                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{r.repoShort}</span>
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{repo}</span>
                 <span style={{ flexShrink: 0 }}>#{pr.number}</span>
             </span>
         </div>

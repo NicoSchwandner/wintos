@@ -48,6 +48,8 @@ describe("queueModel", () => {
         const t = queueModel([pr({ number: 5, author: "bo.k", requestedTeam: true, createdAt: "2026-09-21T09:00:00Z" }), pr({ number: 6, author: "bo.k", requestedTeam: true })], "me", MON);
         expect([t.team, t.teamPastSla]).toEqual([2, 1]);
     });
+    test("the rows behind the card's numbers say which one they are in; chase and waiting are in neither", () =>
+        expect(m.groups.flatMap((g) => g.rows.map((r) => [r.pr.number, r.counts]))).toEqual([[1, "yours"], [2, "yours"], [3, "yours"], [4, undefined], [5, "team"]]));
     test("the rows behind the past-SLA counts carry the mark, the rest don't", () => {
         const t = queueModel([pr({ number: 5, url: "t", author: "bo.k", requestedTeam: true, createdAt: "2026-09-21T09:00:00Z" }), ...prs], "me", MON);
         const marks = t.groups.flatMap((g) => g.rows.map((r) => [r.pr.number, r.sla]));

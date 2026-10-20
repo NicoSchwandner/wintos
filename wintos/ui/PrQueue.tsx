@@ -208,6 +208,9 @@ async function dispatchCiFix(url: string): Promise<void> {
     await type("\r");
 }
 
+// Inline in a clipped one-line title: its own line box, or the border is cut off.
+const TAG: React.CSSProperties = { display: "inline-block", fontSize: 10, lineHeight: "13px", verticalAlign: "1px", border: `1px solid ${T.keycapBorder}`, borderRadius: 5, padding: "0 5px", marginRight: 8, color: T.muted };
+
 const CHIP: React.CSSProperties = { flexShrink: 0, maxWidth: 96, padding: "2px 7px", borderRadius: 10, border: `1px solid ${T.keycapBorder}`, fontSize: 10.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
 function Reviewers({ r, names }: { r: QueueRow; names: boolean }) {
@@ -255,6 +258,8 @@ function PrRow({ r, depth, project, cursor, cols, fix, onOpen }: { r: QueueRow; 
             onClick={onOpen}
             style={{ display: "flex", alignItems: "center", gap: 16, height: 44, padding: "0 12px", marginLeft: depth * 22, overflow: "hidden", borderRadius: 10, cursor: "pointer", background: cursor ? T.cardActive : "transparent", border: `1px solid ${cursor ? T.borderActive : "transparent"}` }}
         >
+            {/* Which of the PRs card's numbers this row is in. */}
+            <span data-wintos="pr-counts" data-counts={r.counts} title={r.counts ? `counted in the PRs card: ${r.counts}` : undefined} style={{ width: 3, height: 20, marginRight: -10, flexShrink: 0, borderRadius: 2, background: r.counts === "yours" ? T.apricot : r.counts === "team" ? T.title : "transparent" }} />
             {depth > 0 && <span style={{ marginRight: -8, fontFamily: T.mono, color: T.faint }}>└</span>}
             <span style={{ width: 54, flexShrink: 0, fontFamily: T.mono, fontSize: 12.5, color: r.age.late ? T.brick : T.quietTitle }}>{r.age.text}</span>
             <span style={{ width: compact ? 22 : 118, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
@@ -271,8 +276,8 @@ function PrRow({ r, depth, project, cursor, cols, fix, onOpen }: { r: QueueRow; 
                 <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>{r.total}</span>
             </span>}
             <span style={{ flexGrow: 1, minWidth: 0, fontSize: 13.5, color: T.title, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {r.sla && <span data-wintos="pr-sla" title={r.sla === "team" ? "counted in the team's past SLA" : "counted in yours past SLA"} style={{ fontSize: 10, border: `1px solid ${T.brick}`, borderRadius: 5, padding: "1px 5px", marginRight: 8, color: T.brick }}>past SLA</span>}
-                {pr.isDraft && <span style={{ fontSize: 10, border: `1px solid ${T.keycapBorder}`, borderRadius: 5, padding: "1px 5px", marginRight: 8, color: T.muted }}>draft</span>}
+                {r.sla && <span data-wintos="pr-sla" title={r.sla === "team" ? "counted in the team's past SLA" : "counted in yours past SLA"} style={{ ...TAG, borderColor: T.brick, color: T.brick }}>past SLA</span>}
+                {pr.isDraft && <span style={TAG}>draft</span>}
                 {pr.title}
                 {r.qualifier && <span style={{ fontSize: 11, color: r.qualifier.brick ? T.brick : T.muted }}> — {r.qualifier.text}</span>}
                 {fix && <span data-wintos="pr-fix" style={{ fontSize: 11, color: fix.brick ? T.brick : T.apricot }}> · {fix.text}</span>}

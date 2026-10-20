@@ -213,4 +213,11 @@ describe("standupAsks", () => {
         expect(standupAsks([pr(1), pr(2), pr(3, { reviewers: ["team-ai"] })], "me", NOW)).toBe("3 PRs wait for a review: 2 on team-x, 1 on team-ai");
         expect(standupAsks([], "me", NOW)).toBeUndefined();
     });
+    test("with your team known: how many wait within it, a teammate named only from three on, others' teams counted in the total only", () => {
+        const team = ["team-x", "ana", "bo"];
+        const prs = [pr(1), pr(2, { reviewers: ["ana"] }), pr(3, { reviewers: ["ana"] }), pr(4, { reviewers: ["ana", "zed"] }), pr(5, { reviewers: ["bo"] }), pr(6, { reviewers: ["team-ai"] })];
+        expect(standupAsks(prs, "me", NOW, team)).toBe("6 PRs wait for a review, 5 within the team: 3 on ana");
+        expect(standupAsks([pr(1), pr(6, { reviewers: ["team-ai"] })], "me", NOW, team)).toBe("2 PRs wait for a review, 1 within the team");
+        expect(standupAsks([pr(6, { reviewers: ["team-ai"] })], "me", NOW, team)).toBeUndefined();
+    });
 });

@@ -109,9 +109,20 @@ export function fixNote(run: FixRun | undefined, pr: PR, queued: string[]): { te
 
 // For the standup: your PRs that have waited a working day or more for someone's review. A few by
 // name; more as counts per reviewer, which is what the team needs to hear.
-export function standupAsks(prs: PR[], me: string, now: number): string | undefined {
+// team: the reviewers that are your own team. Then only it is asked: how many wait on it, and a
+// teammate by name only when they hold TEAM_NAMED or more.
+const TEAM_NAMED = 3;
+export function standupAsks(prs: PR[], me: string, now: number, team?: string[]): string | undefined {
     const waiting = prs.filter((p) => p.author === me && !p.isDraft && !p.mergedAt && p.reviewDecision !== "APPROVED" && p.reviewers.length > 0 && workingDaysBetween(lastMovement(p), now) >= 1);
     if (!waiting.length) return undefined;
+    if (team) {
+        const ours = waiting.filter((p) => p.reviewers.some((r) => team.includes(r)));
+        if (!ours.length) return undefined;
+        const per = new Map<string, number>();
+        for (const p of ours) for (const r of p.reviewers) if (team.includes(r) && r !== team[0]) per.set(r, (per.get(r) ?? 0) + 1);
+        const named = [...per].filter(([, n]) => n >= TEAM_NAMED).sort((a, b) => b[1] - a[1]).map(([r, n]) => `${n} on ${r}`);
+        return `${waiting.length} PR${waiting.length > 1 ? "s wait" : " waits"} for a review, ${ours.length} within the team${named.length ? `: ${named.join(", ")}` : ""}`;
+    }
     if (waiting.length <= 2) return waiting.map((p) => `#${p.number} ${p.title} waits for a review from ${p.reviewers.join(" or ")}`).join("; ");
     const per = new Map<string, number>();
     for (const p of waiting) for (const r of p.reviewers) per.set(r, (per.get(r) ?? 0) + 1);

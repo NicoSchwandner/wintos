@@ -1,4 +1,4 @@
-// wintos plugin: open pull requests that concern you, as JSON on stdout: {"me", "prs": PR[]}.
+// wintos plugin: open pull requests that concern you, as JSON on stdout: {"me", "prs": PR[], "team"?}.
 // The same three searches as github.com/pulls: yours, asked of you, asked of your teams; plus
 // yours merged in the last month but not yet released to main.
 import { execFileSync } from "child_process";
@@ -62,4 +62,14 @@ for (const pr of byUrl.values()) {
         if (open) pr.openThreads = open;
     } catch {}
 }
-process.stdout.write(JSON.stringify({ me, prs: linkStacks([...byUrl.values()]) }));
+// WINTOS_TEAM (org/team-slug): your own team, as the reviewers that count as it: the team itself
+// and its members. A failed lookup leaves it out rather than failing the PRs.
+const teamSpec = /^([^/\s]+)\/([^/\s]+)$/.exec(process.env.WINTOS_TEAM ?? "");
+let team: string[] | undefined;
+if (teamSpec) {
+    try {
+        const [, org, slug] = teamSpec;
+        team = [gh(["api", `orgs/${org}/teams/${slug}`, "--jq", ".name"]).trim(), ...gh(["api", "--paginate", `orgs/${org}/teams/${slug}/members`, "--jq", ".[].login"]).split("\n").filter(Boolean)];
+    } catch {}
+}
+process.stdout.write(JSON.stringify({ me, prs: linkStacks([...byUrl.values()]), ...(team ? { team } : {}) }));

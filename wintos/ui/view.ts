@@ -20,8 +20,9 @@ export function relTime(ms: number): string {
     return `${Math.floor(s / 86_400)}d`;
 }
 
-export function ghPrs(state: WintosState): { me: string; prs: PR[] } | undefined {
-    return state.plugins?.["gh-prs"]?.data as { me: string; prs: PR[] } | undefined;
+// team: the reviewers that count as your own team (WINTOS_TEAM), when set.
+export function ghPrs(state: WintosState): { me: string; prs: PR[]; team?: string[] } | undefined {
+    return state.plugins?.["gh-prs"]?.data as { me: string; prs: PR[]; team?: string[] } | undefined;
 }
 
 // The Inbox is the one tab that is not a project (pkg/wcore/inbox.go); a tab not loaded yet is one.

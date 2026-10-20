@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { activeMinutes, cutBullets, mergeByTitle, prFact, lastRecaps, lastWorkday, localDay, parseBullets, recordActivity, recapPrompt, type Activity } from "./recap";
+import { activeMinutes, cutItems, mergeByTitle, prFact, lastRecaps, lastWorkday, localDay, recordActivity, recapPrompt, type Activity } from "./recap";
 
 describe("recordActivity", () => {
     test("a session's project and transcript, per day; prompts counted; old days dropped", () => {
@@ -30,22 +30,21 @@ describe("bullets", () => {
         { title: "Missing documents", minutes: 30, prompts: 16, recaps: ["We're closing DEV-29895 gaps where the action already exists but the routine is missing, and more text after that to be cut."], facts: [] },
     ];
     test("without a summarizer: one per project, its recap's first sentence, no ticket ids, short", () =>
-        expect(cutBullets(items)).toEqual([
-            "Idea skill: We're merging the fast and shape lanes into one idea skill (PR #1403).",
-            "Missing documents: We're closing gaps where the action already exists but the routine is missing, and more…",
+        expect(cutItems(items)).toEqual([
+            { id: "0", project: "Idea skill", text: "Idea skill: We're merging the fast and shape lanes into one idea skill (PR #1403).", details: [] },
+            { id: "1", project: "Missing documents", text: "Missing documents: We're closing gaps where the action already exists but the routine is missing, and more…", details: [] },
         ]));
-    test("a summarizer's answer: its bullet lines, as many as there were chunks of work, ticket ids gone", () =>
-        expect(parseBullets("Here you go:\n- A: one\n- B: two (DEV-123)\n* C: three\n- D\n- E\n- F\n")).toEqual(["A: one", "B: two", "C: three", "D", "E", "F"]));
-    test("its kind headings stay, as entries of their own; one with no bullet under it goes", () =>
-        expect(parseBullets("## Product work\n- A: one\n- B: two\n## Support\n## Team tooling\n- C: three\n")).toEqual(["## Product work", "A: one", "B: two", "## Team tooling", "C: three"]));
     test("an extra instruction (another source to search) rides along, with the day filled in", () =>
         expect(recapPrompt("2026-10-06", items, "Also search chat for what I sent on {day}.")).toContain("Also search chat for what I sent on 2026-10-06."));
-    test("the prompt weighs by time, carries each project's PR facts, and sets the standup's rules", () => {
+    test("the prompt carries each project's time, the developer's own messages and PR facts, and sets the standup's rules", () => {
         const p = recapPrompt("2026-10-06", items);
-        expect(p).toContain("## Idea skill (45 min)");
+        expect(p).toContain("## Idea skill (45 min, 22 messages from the developer)");
         expect(p).toContain("- PR acme/rules#1403 Merge the lanes into one idea skill (yours, opened today, draft)");
-        for (const rule of ["most time first", "only the developer uses", "team tooling", "CI", "Review race", "ticket", "## Product work", "## Support", "## Team tooling"]) expect(p).toContain(rule);
+        for (const rule of ["[<project, exactly as named below>] <status>", "own effort first", "few messages from the developer", "only the developer uses", "CI", "Review race", "ticket"]) expect(p).toContain(rule);
+        expect(p).not.toContain("rewrote");
     });
+    test("your rewrites ride along as examples, draft beside yours", () =>
+        expect(recapPrompt("2026-10-06", items, undefined, [{ draft: "Merged: x", mine: "Merged PR: x" }])).toContain("write the way their versions do:\nDraft:\nMerged: x\nTheirs:\nMerged PR: x"));
 });
 
 describe("activeMinutes", () => {

@@ -1,4 +1,5 @@
 import type { PR } from "../prs/group";
+import type { StandupItem } from "./standup";
 // What you did on a day, for the daily: the projects you spent time in, each with what its PRs did
 // and the recaps its Claude sessions wrote, condensed to a bullet per real chunk of work. The daemon records which project each
 // session ran in as the events arrive, since a transcript only knows its folder and a session
@@ -33,8 +34,8 @@ export function lastRecaps(jsonl: string, day: string): string | undefined {
     return last;
 }
 
-// A sanity cap, not a target: one bullet per real chunk of work.
-const MAX = 12;
+// A sanity cap, not a target: one item per real chunk of work.
+export const MAX_ITEMS = 12;
 // The cut-down fallback without a summarizer stays short.
 const FALLBACK_MAX = 5;
 // Under this, a project is noise unless one of its PRs did something that day.
@@ -63,48 +64,37 @@ export function activeMinutes(jsonl: string, day: string): number {
     return Math.round(busy / 60_000);
 }
 // Ticket ids (ABC-1234) mean nothing a day later; the project's name says what it was.
-const noTickets = (s: string) => s.replace(/\s*\(?\b[A-Z][A-Z0-9]+-\d+\b\)?/g, "").replace(/\s{2,}/g, " ").trim();
+export const noTickets = (s: string) => s.replace(/\s*\(?\b[A-Z][A-Z0-9]+-\d+\b\)?/g, "").replace(/\s{2,}/g, " ").trim();
 const short = (s: string, n = 110) => (s.length > n ? `${s.slice(0, s.lastIndexOf(" ", n - 1))}…` : s);
 
 const firstSentence = (s: string) => /^.*?[.!?](?=\s|$)/.exec(s)?.[0] ?? s;
 export const gist = (recap: string) => short(firstSentence(noTickets(recap)));
 
-export function cutBullets(items: RecapItem[]): string[] {
-    return items.slice(0, FALLBACK_MAX).map((i) => short(`${i.title}: ${firstSentence(noTickets(i.recaps[i.recaps.length - 1] ?? ""))}`));
+// Without a summarizer: a project's last recap, cut to its first sentence, as its one item.
+export function cutItems(items: RecapItem[]): StandupItem[] {
+    return items.slice(0, FALLBACK_MAX).map((i, n) => ({ id: String(n), project: i.title, text: short(`${i.title}: ${firstSentence(noTickets(i.recaps[i.recaps.length - 1] ?? ""))}`), details: [] }));
 }
 
 // extra: the user's own addition, e.g. another source to search; {day} becomes the day.
-export function recapPrompt(day: string, items: RecapItem[], extra?: string): string {
+// examples: drafts the developer rewrote, beside their version.
+export function recapPrompt(day: string, items: RecapItem[], extra?: string, examples: { draft: string; mine: string }[] = []): string {
     return [
-        `Write what a developer did on ${day}, for their team's daily standup: what their colleagues want to hear.`,
-        `Below are the projects they worked in, most time first, each with the minutes its coding sessions were busy, what its pull requests did that day, and the summaries the sessions wrote.`,
+        `Write what a developer did on ${day} as the items they read out at their team's daily standup: what their colleagues want to hear.`,
+        `Below are the projects they worked in, each with the minutes its coding sessions were busy, how many messages the developer sent those sessions (their own effort; an agent did the rest), what its pull requests did that day, and the summaries the sessions wrote.`,
         `Rules:`,
-        `- One bullet per real chunk of work, as many as there were. A project can be more than one chunk, or none.`,
-        `- Group the bullets under these headings, in this order, each on its own line, leaving out one with nothing under it: "## Product work" (features and fixes for the product), "## Support" (incidents, errors, helping others), "## Team tooling" (tools and workflow the team shares). Judge each project by its work, not its repository: one repository can hold several kinds.`,
-        `- Under each heading, most time first, by the minutes given for each project.`,
-        `- Leave out work on tools only the developer uses: repositories under their own GitHub account (not their organisation's), their personal settings, rules or skills. A tool the team uses is team tooling and stays.`,
-        `- Leave out reviews of other people's pull requests, unless they reviewed 4 or more that day: then one bullet, "Review race: reviewed N pull requests".`,
-        `- Say what changed for the product or the team, with the pull requests' outcomes (opened, ready for review, merged). Never mention CI, Copilot, commits, pushes, tests passing, logins or other process steps.`,
-        `- Start each bullet with a short name for the work and a colon; never mention ticket ids like ABC-1234; under 160 characters each.`,
-        `Output only the headings and the bullets, each bullet line starting with "- ".`,
+        `- One item per real chunk of work, as many as there were. A project can be more than one item, or none.`,
+        `- An item is one line "- [<project, exactly as named below>] <status>: <short name for the work>", where the status says where it got to (Ready for review, Merged, In prod, In progress, Draft), then at most two detail lines under it, each "  - " and under 120 characters, saying what changed for the product or the team.`,
+        `- The developer's own effort first: most messages first, then most time.`,
+        `- Leave out work whose only news is a step an agent took with few messages from the developer: it reached a test environment, or its test was run for them.`,
+        `- Leave out work on tools only the developer uses: repositories under their own GitHub account (not their organisation's), their personal settings, rules or skills. A tool the team uses stays.`,
+        `- Leave out reviews of other people's pull requests, unless they reviewed 4 or more that day: then one item, "Review race: reviewed N pull requests".`,
+        `- Never mention CI, Copilot, commits, pushes, tests passing, logins or other process steps, nor ticket ids like ABC-1234. The item line stays under 100 characters.`,
+        `Output only the items.`,
+        ...(examples.length ? [`The developer rewrote earlier drafts like this; write the way their versions do:`, ...examples.map((e) => `Draft:\n${e.draft}\nTheirs:\n${e.mine}`)] : []),
         ...(extra ? [extra.split("{day}").join(day)] : []),
         "",
-        ...items.map((i) => [`## ${i.title} (${i.minutes} min)`, ...i.facts.map((f) => `- PR ${f}`), ...i.recaps.map((r) => `- ${r}`), ...(i.asked ?? []).map((a) => `- Asked: ${a}`)].join("\n")),
+        ...items.map((i) => [`## ${i.title} (${i.minutes} min, ${i.prompts} messages from the developer)`, ...i.facts.map((f) => `- PR ${f}`), ...i.recaps.map((r) => `- ${r}`), ...(i.asked ?? []).map((a) => `- Asked: ${a}`)].join("\n")),
     ].join("\n");
-}
-
-// The bullets, and the kind headings between them ("## Product work"), each an entry of its own.
-export const HEADING = /^##\s+/;
-export function parseBullets(out: string): string[] {
-    const lines = out
-        .split("\n")
-        .map((l) => (HEADING.test(l.trim()) ? l.trim() : /^\s*[-*•]\s+(.*)$/.exec(l)?.[1]))
-        .filter((l): l is string => !!l?.trim())
-        .map((l) => (HEADING.test(l) ? l : noTickets(l)));
-    // A heading with nothing under it says nothing.
-    const kept = lines.filter((l, i) => !HEADING.test(l) || (i + 1 < lines.length && !HEADING.test(lines[i + 1])));
-    let bullets = 0;
-    return kept.filter((l) => HEADING.test(l) || ++bullets <= MAX);
 }
 
 // The day a summary is about: the last workday before today with work in it. A weekend's

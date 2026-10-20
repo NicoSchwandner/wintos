@@ -641,7 +641,52 @@ describe("the daily recap", () => {
         srv.close();
         srv = await startServer({ root, port: 0, token: "t0ken" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
-        expect(await (await fetch(base + "/day/recap")).json()).toEqual({ date: day, bullets: ["Idea skill: We merged the two lanes."] });
+        expect(await (await fetch(base + "/day/recap")).json()).toEqual({ date: day, items: [{ id: "0", project: "Idea skill", text: "Idea skill: We merged the two lanes.", details: [], dropped: false, top: false, edited: false }] });
+    });
+
+    describe("from a summarizer, curated", () => {
+        const day = "2026-10-06";
+        const restart = async (recapCmd?: string) => {
+            srv.close();
+            srv = await startServer({ root, port: 0, token: "t0ken", recapCmd });
+            base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        };
+        beforeEach(async () => {
+            const work = (minutes: number[]) => minutes.map((m) => JSON.stringify({ timestamp: `${day}T12:${String(m).padStart(2, "0")}:00Z`, type: "assistant" }));
+            const long = join(root, "long.jsonl"), mine = join(root, "mine.jsonl");
+            writeFileSync(long, [...work([0, 4, 8, 12, 16, 20, 24, 28]), JSON.stringify({ timestamp: `${day}T15:00:00Z`, type: "system", subtype: "away_summary", content: "Claude tested it." })].join("\n"));
+            writeFileSync(mine, [...work([0, 4, 8, 12]), JSON.stringify({ timestamp: `${day}T15:00:00Z`, type: "system", subtype: "away_summary", content: "We built it." })].join("\n"));
+            writeFileSync(join(root, ".activity.json"), JSON.stringify({ [day]: { "tab-1": { title: "Agent ran", prompts: 1, sessions: { a: long } }, "tab-2": { title: "Intake", prompts: 12, sessions: { b: mine } } } }));
+            const model = join(root, "model.sh");
+            writeFileSync(model, `cat > ${join(root, "recap-prompt.txt")}\nprintf -- '- [Intake] Ready for review: Document intake\\n  - Register-only intake (DEV-1)\\n- [Agent ran] Merged: Benefit-tax fix\\n'`, { mode: 0o755 });
+            await restart(model);
+        });
+
+        test("its items, with project and details; the developer's own effort leads the prompt", async () => {
+            const r = await (await fetch(base + "/day/recap")).json();
+            expect(r.items.map((i: { project: string; text: string; details: string[] }) => [i.project, i.text, i.details])).toEqual([["Intake", "Ready for review: Document intake", ["Register-only intake"]], ["Agent ran", "Merged: Benefit-tax fix", []]]);
+            const prompt = readFileSync(join(root, "recap-prompt.txt"), "utf8");
+            expect(prompt.indexOf("## Intake (")).toBeLessThan(prompt.indexOf("## Agent ran ("));
+        });
+
+        test("drop, lift and rewrite an item; it stays so after a restart, and the rewrite teaches the next prompt", async () => {
+            await fetch(base + "/day/recap");
+            expect((await post("/day/recap/1", { top: true })).status).toBe(200);
+            await post("/day/recap/0", { drop: true });
+            const r = await (await post("/day/recap/0", { text: "Ready for review: DO holds every document\n- Register-only" })).json();
+            expect(r.items.map((i: { id: string; dropped: boolean; top: boolean; text: string }) => [i.id, i.top, i.dropped, i.text])).toEqual([["1", true, false, "Merged: Benefit-tax fix"], ["0", false, true, "Ready for review: DO holds every document"]]);
+            await restart(join(root, "model.sh"));
+            expect((await (await fetch(base + "/day/recap")).json()).items.map((i: { id: string }) => i.id)).toEqual(["1", "0"]);
+            writeFileSync(join(root, ".recaps.json"), "{}");
+            await fetch(base + "/day/recap");
+            expect(readFileSync(join(root, "recap-prompt.txt"), "utf8")).toContain("Theirs:\nReady for review: DO holds every document\n- Register-only");
+        });
+
+        test("a bad change is a 400, an item not on the day a 404", async () => {
+            expect((await post("/day/recap/0", { drop: "yes" })).status).toBe(400);
+            expect((await post("/day/recap/0", {})).status).toBe(400);
+            expect((await post("/day/recap/9", { drop: true })).status).toBe(404);
+        });
     });
 });
 

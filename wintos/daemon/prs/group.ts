@@ -29,6 +29,7 @@ export type PR = {
     defaultBranch?: string; // the repo's
     stackedOn?: string; // url of the open PR whose branch is `base`, when that PR is in the list
     mergedAt?: string; // merged into the default branch, not yet on main
+    releasePr?: { url: string; draft: boolean }; // an open PR releasing that branch to main
 };
 
 // On another branch than the repo's default: merging it would land on that branch, not ship.
@@ -82,7 +83,8 @@ export function isSnoozed(pr: PR, snoozes: Snoozes, now: number): boolean {
 }
 
 export function groupOf(pr: PR, me: string, now: number): Group {
-    if (pr.mergedAt) return workingDaysBetween(pr.mergedAt, now) >= SLA_WORKING_DAYS ? "release" : "waiting";
+    // A ready release PR is your part done: the release is the reviewers' now.
+    if (pr.mergedAt) return workingDaysBetween(pr.mergedAt, now) >= SLA_WORKING_DAYS && !(pr.releasePr && !pr.releasePr.draft) ? "release" : "waiting";
     const mine = pr.author === me;
     const approved = pr.reviewDecision === "APPROVED";
     // No CI at all is green: a repo without checks must still reach Merge. BLOCKED is GitHub
@@ -107,7 +109,7 @@ export function groupOf(pr: PR, me: string, now: number): Group {
 // reviewers: false leaves out who it waits on, for views that show reviewers themselves.
 export function qualifier(pr: PR, group: Group, opts: { reviewers?: boolean } = {}): { text: string; brick?: boolean } | undefined {
     if (group === "merge") return pr.openThreads ? { text: `resolve ${pr.openThreads} thread${pr.openThreads === 1 ? "" : "s"} first` } : undefined;
-    if (pr.mergedAt) return { text: "merged, not on main" };
+    if (pr.mergedAt) return { text: pr.releasePr && !pr.releasePr.draft ? "merged, in the release PR" : "merged, not on main" };
     if (group === "fix") {
         if (pr.reviewDecision === "CHANGES_REQUESTED" && !pr.changesRerequested) return { text: pr.changesRequestedBy ? `changes requested by ${pr.changesRequestedBy}` : "changes requested" };
         if (redChecks(pr)) return { text: "CI red", brick: true };

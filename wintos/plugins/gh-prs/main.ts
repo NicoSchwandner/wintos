@@ -46,10 +46,25 @@ for (const n of merged) {
     }
 }
 
+// An open PR from the branch into main is the release; fail-open: without it, it asks for one.
+const releases: Record<string, { url: string; draft: boolean }> = {};
+for (const n of unreleased(merged, ahead)) {
+    const repo = n.repository.nameWithOwner;
+    if (repo in releases) continue;
+    try {
+        const open = JSON.parse(gh(["pr", "list", "-R", repo, "--base", "main", "--head", n.baseRefName!, "--state", "open", "--json", "url,isDraft"])) as { url: string; isDraft: boolean }[];
+        const pr = open.find((p) => !p.isDraft) ?? open[0];
+        if (pr) releases[repo] = { url: pr.url, draft: pr.isDraft };
+    } catch {}
+}
+
 const byUrl = new Map<string, ReturnType<typeof normalize>>();
 const directUrls = new Set(direct.map((n) => n.url));
-for (const n of [...unreleased(merged, ahead), ...mine, ...teams, ...direct])
-    byUrl.set(n.url, normalize(n, me, { requestedMe: directUrls.has(n.url), requestedTeam: !directUrls.has(n.url) && teams.some((t) => t.url === n.url) }));
+for (const n of [...unreleased(merged, ahead), ...mine, ...teams, ...direct]) {
+    const pr = normalize(n, me, { requestedMe: directUrls.has(n.url), requestedTeam: !directUrls.has(n.url) && teams.some((t) => t.url === n.url) });
+    const release = pr.mergedAt ? releases[pr.repo] : undefined;
+    byUrl.set(n.url, release ? { ...pr, releasePr: release } : pr);
+}
 // Open threads only matter for your approved PRs GitHub blocks (the conversation rule); asking
 // for them in the search made it too heavy for GitHub (HTTP 502). Fail-open: a miss keeps it blocked.
 for (const pr of byUrl.values()) {

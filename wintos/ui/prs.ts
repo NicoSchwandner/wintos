@@ -2,7 +2,8 @@ import type { FixRun } from "../daemon/fixer/runner";
 import { ageLabel, byUrgency, Group, GROUPS, groupOf, isSnoozed, isStacked, lastMovement, PR, qualifier, workingDaysBetween, type Snoozes } from "../daemon/prs/group";
 
 // children: PRs stacked on this one that only wait for it (spec: stacked PRs sit under their base).
-export type QueueRow = { pr: PR; group: Group; mine: boolean; age: { text: string; late: boolean }; qualifier?: { text: string; brick?: boolean }; total: number; repoShort: string; children: QueueRow[] };
+// sla: this row is one the Inbox card counts past SLA, yours or the team's.
+export type QueueRow = { pr: PR; group: Group; mine: boolean; age: { text: string; late: boolean }; qualifier?: { text: string; brick?: boolean }; total: number; repoShort: string; children: QueueRow[]; sla?: "yours" | "team" };
 
 const ACTS: Group[] = ["merge", "fix", "review", "chase"];
 
@@ -36,6 +37,12 @@ export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes 
         } else r.qualifier = { text: r.qualifier ? `${r.qualifier.text} · stacked on ${on}` : `stacked on ${on}`, brick: r.qualifier?.brick };
     }
     const rows = all.filter((r) => !nested.has(r));
+    // What you are late on: a review you owe, a release of your merged work, a draft of yours past
+    // its clock. Chase is not: there someone owes you the review.
+    for (const r of rows) {
+        if (r.group === "team" && r.age.late) r.sla = "team";
+        else if (r.group === "release" || (r.group === "review" && r.age.late) || (r.group === "fix" && r.pr.isDraft && r.age.late)) r.sla = "yours";
+    }
     const groups = GROUPS.map((group) => ({ group, rows: rows.filter((r) => r.group === group).sort(byUrgency) })).filter((g) => g.rows.length);
     const team = rows.filter((r) => r.group === "team").length;
     const waiting = rows.filter((r) => r.group === "waiting").length;
@@ -45,10 +52,8 @@ export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes 
         yours: rows.length - team - waiting - rows.filter((r) => r.group === "chase").length,
         waiting,
         team,
-        // What you are late on: a review you owe, a release of your merged work, a draft of yours past
-        // its clock. Chase is not: there someone owes you the review.
-        teamPastSla: rows.filter((r) => r.group === "team" && r.age.late).length,
-        pastSla: rows.filter((r) => r.group === "release" || (r.group === "review" && r.age.late) || (r.group === "fix" && r.pr.isDraft && r.age.late)).length,
+        teamPastSla: rows.filter((r) => r.sla === "team").length,
+        pastSla: rows.filter((r) => r.sla === "yours").length,
     };
 }
 

@@ -48,6 +48,11 @@ describe("queueModel", () => {
         const t = queueModel([pr({ number: 5, author: "bo.k", requestedTeam: true, createdAt: "2026-09-21T09:00:00Z" }), pr({ number: 6, author: "bo.k", requestedTeam: true })], "me", MON);
         expect([t.team, t.teamPastSla]).toEqual([2, 1]);
     });
+    test("the rows behind the past-SLA counts carry the mark, the rest don't", () => {
+        const t = queueModel([pr({ number: 5, url: "t", author: "bo.k", requestedTeam: true, createdAt: "2026-09-21T09:00:00Z" }), ...prs], "me", MON);
+        const marks = t.groups.flatMap((g) => g.rows.map((r) => [r.pr.number, r.sla]));
+        expect(marks).toEqual([[1, undefined], [2, undefined], [3, "yours"], [4, undefined], [5, "team"], [5, undefined]]);
+    });
     test("a draft of yours past its clock counts past SLA too", () =>
         expect(queueModel([pr({ number: 9, isDraft: true, createdAt: "2026-09-14T09:00:00Z" })], "me", MON).pastSla).toBe(1));
 

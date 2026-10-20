@@ -271,6 +271,7 @@ function PrRow({ r, depth, project, cursor, cols, fix, onOpen }: { r: QueueRow; 
                 <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>{r.total}</span>
             </span>}
             <span style={{ flexGrow: 1, minWidth: 0, fontSize: 13.5, color: T.title, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {r.sla && <span data-wintos="pr-sla" title={r.sla === "team" ? "counted in the team's past SLA" : "counted in yours past SLA"} style={{ fontSize: 10, border: `1px solid ${T.brick}`, borderRadius: 5, padding: "1px 5px", marginRight: 8, color: T.brick }}>past SLA</span>}
                 {pr.isDraft && <span style={{ fontSize: 10, border: `1px solid ${T.keycapBorder}`, borderRadius: 5, padding: "1px 5px", marginRight: 8, color: T.muted }}>draft</span>}
                 {pr.title}
                 {r.qualifier && <span style={{ fontSize: 11, color: r.qualifier.brick ? T.brick : T.muted }}> — {r.qualifier.text}</span>}

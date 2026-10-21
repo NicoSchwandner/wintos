@@ -56,6 +56,8 @@ describe("rowView with PRs", () => {
     const blocked = { items: [{ pr: { repo: "o/r", number: 4803, branch: "fix/bank-retry" } as never, group: "chase" as const }], blocked: { since: NOW, text: "Nobody has looked at #4803 in 4 working days", tone: "brick" as const, url: "https://github.com/o/r/pull/4803" } };
     test("a PR that needs you is the quiet row's line, not a reason to need you", () =>
         expect(rowView(row("quiet"), { dir: "/p", mtime: 0 }, "T", NOW, blocked)).toMatchObject({ reason: "Nobody has looked at #4803 in 4 working days" }));
+    test("a PR only the notes name shows by its short name, not its link", () =>
+        expect(rowView(row("running"), { dir: "/p", mtime: 0, pr: ["https://github.com/o/Acme.Docs/pull/72"] }, "T", NOW, undefined, () => "Docs").meta).toBe("Docs #72"));
     test("its PR line carries the repo's short name", () => {
         expect(rowView(row("running"), undefined, "T", NOW, blocked).meta).toBe("r #4803 · fix/bank-retry");
         expect(rowView(row("running"), undefined, "T", NOW, blocked, () => "R").meta).toBe("R #4803 · fix/bank-retry");

@@ -326,7 +326,7 @@ function CardRow(p: RowProps) {
                 </span>
             </div>
             {v.next && <div style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty" } as React.CSSProperties}><Rich text={v.next} size="rail" links={false} /></div>}
-            {v.meta && <div style={{ fontFamily: T.mono, fontSize: 9.5, color: T.muted }}>{v.meta}</div>}
+            {v.meta && <div title={v.meta} style={{ fontFamily: T.mono, fontSize: 9.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.meta}</div>}
         </div>
     );
 }

@@ -39,7 +39,9 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     const since = row.band === "needs" ? row.waitingSince! : row.lastAt;
     const age = since > 0 ? relTime(now - since) : "";
     const first = prs?.items[0]?.pr;
-    const link = first ? `${label(first.repo)} #${first.number} · ${first.branch}` : project?.pr?.[0];
+    // A PR only the notes name (not in the PR list): its short name, not its link.
+    const noted = project?.pr?.[0]?.replace(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+).*$/, (_m, repo: string, n: string) => `${label(repo)} #${n}`);
+    const link = first ? `${label(first.repo)} #${first.number} · ${first.branch}` : noted;
     // Restored at the last restart: shown as it was, but its Claude starts only when you open it.
     const notStarted = row.sessions.length > 0 && row.sessions.every((s) => s.restored);
     const meta = notStarted ? [link, "not started, opens with the project"].filter(Boolean).join(" · ") : link;

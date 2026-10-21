@@ -16,9 +16,11 @@ import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 const HANDOFF = "wintos:focus";
 const HANDOFF_TTL_MS = 5000;
 
-let latest: { sessions: Session[]; tabIds: string[]; needs: string[]; targets: Record<string, Target> } = { sessions: [], tabIds: [], needs: [], targets: {} };
-export const setLatestSessions = (sessions: Session[], tabIds: string[], needs: string[], targets: Record<string, Target> = {}) =>
-    (latest = { sessions, tabIds, needs, targets });
+// woke: closed projects with a due wake, top of Your move: ⌃⇥ reopens them first.
+type Woke = { projectId: string; script: string };
+let latest: { sessions: Session[]; tabIds: string[]; needs: string[]; targets: Record<string, Target>; woke: Woke[] } = { sessions: [], tabIds: [], needs: [], targets: {}, woke: [] };
+export const setLatestSessions = (sessions: Session[], tabIds: string[], needs: string[], targets: Record<string, Target> = {}, woke: Woke[] = []) =>
+    (latest = { sessions, tabIds, needs, targets, woke });
 // The daemon's snapshot, not the Sidebar's copy: that one lags a pane opened a moment ago.
 export const latestSessions = () => currentState()?.sessions ?? latest.sessions;
 
@@ -206,6 +208,7 @@ export function jumpBack(): boolean {
 }
 
 export function jumpToNextWaiting(): boolean {
+    if (latest.woke[0]) return reopenProject(latest.woke[0].projectId, [resumePane(latest.woke[0].script)]), true;
     const lm = getLayoutModelForStaticTab();
     const current = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
     const t = nextNeedsYou(latest.sessions, latest.tabIds, whereYouAre(), current, latest.needs, latest.targets);

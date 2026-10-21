@@ -14,6 +14,9 @@ export const switchTargetAtom = atom(null as string | null);
 
 let order: string[] = [];
 export const setSwitchOrder = (tabIds: string[]) => (order = tabIds);
+// "wake:<project>" stops: a closed project's due wake, which opening reopens on its session.
+let wakeStops: Record<string, () => void> = {};
+export const setWakeStops = (stops: Record<string, () => void>) => (wakeStops = stops);
 // Where closing a project lands: the uppermost project in the sidebar.
 export const topProject = (closing: string) => order.find((id) => id !== closing);
 
@@ -38,6 +41,7 @@ export function switchProject(delta: 1 | -1, cmdHeld: boolean): void {
 function go(target: string | null): void {
     if (target === "card:prs" || target === "card:oncall") goToInbox(target.slice(5) as InboxList);
     else if (target === "card:today") openView("day");
+    else if (target?.startsWith("wake:")) wakeStops[target]?.();
     else if (target) enterProject(target);
     else focusArea("terminal");
 }

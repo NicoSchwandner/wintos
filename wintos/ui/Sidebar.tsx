@@ -11,14 +11,14 @@ import type { Row } from "../daemon/ranking/rank";
 import { Key } from "./Key";
 import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
-import { closedWakes, useWakeDelivery } from "./wakes";
+import { closedWakes, useWakeDelivery, type ClosedWake } from "./wakes";
 import { TodayCard } from "./TodayCard";
 import { GameLine } from "./GameIndicator";
 import { meetingsFrom } from "./meetings";
 import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, reopenProject, resumePane, setLatestSessions } from "./focus";
-import { setSwitchOrder, switchTargetAtom } from "./switcher";
+import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
 import { closeProjectTab, registerWintosMenu } from "./menu";
 import { isPage, mainViewAtom, renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
@@ -96,16 +96,18 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const quiet = model ? (expanded ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
     // The cards above the projects are walked too, in the order they show: PRs, On call, Today.
     const cards = [...(state?.day ? ["card:today"] : []), ...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : [])];
-    const switchOrder = model ? [...cards, ...[...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId)] : [];
+    const switchOrder = model ? [...cards, ...wokeClosed.map((w) => `wake:${w.projectId}`), ...[...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId)] : [];
 
     useEffect(registerWintosMenu, []);
 
     useEffect(() => void setSwitchOrder(switchOrder), [switchOrder.join(",")]);
+    const reopenWoke = (w: ClosedWake) => reopenProject(w.projectId, [resumePane(w.script)]);
+    useEffect(() => void setWakeStops(Object.fromEntries(wokeClosed.map((w) => [`wake:${w.projectId}`, () => reopenWoke(w)]))), [wokeClosed.map((w) => w.sessionId).join(",")]);
     useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-tabid="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
 
     useEffect(() => {
-        if (state) setLatestSessions(state.sessions, tabIds, model ? [...model.needs, ...model.read].map((r) => r.tabId) : [], model?.targets ?? {});
-    }, [state, tabIds.join(",")]);
+        if (state) setLatestSessions(state.sessions, tabIds, model ? [...model.needs, ...model.read].map((r) => r.tabId) : [], model?.targets ?? {}, wokeClosed);
+    }, [state, tabIds.join(","), wokeClosed.map((w) => w.sessionId).join(",")]);
 
     // The project title is the source of truth; the tab name follows it.
     useEffect(() => {
@@ -203,7 +205,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     <>
                         <Band kind="needs" count={model.needs.length + wokeClosed.length}>
                             {wokeClosed.map((w) => (
-                                <CardRow key={`wake:${w.sessionId}`} tabId={w.projectId} v={{ title: w.title, next: w.line, tone: "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⇧⌘P finds it too" }} active={false} cursor={false} renaming={false} onOpen={() => reopenProject(w.projectId, [resumePane(w.script)])} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
+                                <CardRow key={`wake:${w.sessionId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌃⇥ or ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
                             ))}
                             {model.needs.map(renderRow)}
                         </Band>

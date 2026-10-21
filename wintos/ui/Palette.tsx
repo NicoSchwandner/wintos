@@ -12,7 +12,8 @@ import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { useZoneKeys } from "./zones";
 import { attention } from "./attention";
-import { ghPrs, prProjectLists, projectTabIds, relTime, sessionName, type WintosState, projectTouched, sessionTouched } from "./view";
+import { ghPrs, prProjectLists, prRef, projectTabIds, relTime, sessionName, type WintosState, projectTouched, sessionTouched } from "./view";
+import { closedWakes } from "./wakes";
 import { shelvedName } from "../daemon/shelf/shelf";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 
@@ -198,13 +199,17 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
         subtitle: [band[id], project(id)?.next].filter(Boolean).join(" · "),
         fields: fields(id), recency: project(id)?.mtime, touchedAt: projectTouched(state, id) ?? project(id)?.mtime, run: opens(id),
     }));
+    const wokeClosed = closedWakes(state.wakes ?? {}, state.shelf ?? {}, state.projects, tabIds, (u) => prRef(state, u));
     // Closed: its folder is still there, its tab is not. Opening it reopens it in a new tab.
     for (const p of state.projects) {
         if (!p.id || !p.title || p.error || tabIds.includes(p.id) || ids.includes(p.id)) continue;
         // Shelved: closed with sessions on its shelf. It reopens on the newest; the rest stay shelved.
         const shelf = state.shelf?.[p.id] ?? [];
-        const status = shelf.length ? `shelved · ${shelf.length} session${shelf.length === 1 ? "" : "s"} · ⏎ reopens it on the newest` : "closed · ⏎ reopens it";
-        out.push({ id: `c:${p.id}`, kind: "project", title: p.title, subtitle: [status, p.next].filter(Boolean).join(" · "), fields: fields(p.id), recency: (p.mtime ?? 0) / 2, touchedAt: projectTouched(state, p.id!) ?? p.mtime, run: () => reopenProject(p.id!, shelf[0] ? [resumePane(shelf[0].script)] : []) });
+        // A due wake opens it on the session that wakes, and puts it first.
+        const woke = wokeClosed.find((w) => w.projectId === p.id);
+        const script = woke?.script ?? shelf[0]?.script;
+        const status = woke ? `${woke.line}; ⏎` : shelf.length ? `shelved · ${shelf.length} session${shelf.length === 1 ? "" : "s"} · ⏎ reopens it on the newest` : "closed · ⏎ reopens it";
+        out.push({ id: `c:${p.id}`, kind: "project", title: p.title, subtitle: [status, p.next].filter(Boolean).join(" · "), fields: fields(p.id), recency: woke ? woke.due : (p.mtime ?? 0) / 2, touchedAt: projectTouched(state, p.id!) ?? p.mtime, run: () => reopenProject(p.id!, script ? [resumePane(script)] : []) });
     }
     for (const pr of gh?.prs ?? []) {
         const tabs = prOf.get(pr.url) ?? [];

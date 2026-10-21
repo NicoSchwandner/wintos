@@ -21,8 +21,8 @@ import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn } from "../sessions/reduce";
 import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
-import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, WAKE_EVENTS, waitingOn, type PrNow, type Wakes } from "../wakes/wakes";
-import { prNow } from "../wakes/github";
+import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, WAKE_EVENTS, waitingOn, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
+import { prNow, type Who } from "../wakes/github";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -42,7 +42,7 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; prNow?: (url: string) => Promise<PrNow | undefined>; wakeEveryMs?: number }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
     const factsOf = (ids: string[], day: string) => {
@@ -66,7 +66,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
         if (checking || !waiting.length) return;
         checking = true;
         try {
-            const now = Object.fromEntries(await Promise.all(waiting.map(async (u) => [u, await (opts.prNow ?? prNow)(u)] as const)));
+            const gh = ghData() as { me: string; team?: string[] } | undefined;
+            const who: Who = { me: gh?.me ?? "", team: gh?.team };
+            const eventsOf = (u: string) => [...new Set(Object.values(wakes).filter((w) => w.pr === u).map((w) => w.until))];
+            const now = Object.fromEntries(await Promise.all(waiting.map(async (u) => [u, await (opts.prNow ?? prNow)(u, who, eventsOf(u))] as const)));
             const next = afterCheck(wakes, Date.now(), now);
             for (const w of next.dropped) console.error(`[wintosd] wake dropped: ${waitingOn(w)} for session ${w.sessionId} (expired, or it can't happen any more)`);
             if (JSON.stringify(next.wakes) !== JSON.stringify(wakes)) {
@@ -586,7 +589,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const b = (await body(req)) as { until?: unknown; pr?: unknown; prompt?: unknown };
                 const link = typeof b?.pr === "string" ? prLink(b.pr) : undefined;
                 const prompt = typeof b?.prompt === "string" ? b.prompt.trim() : "";
-                if (!isWakeEvent(b?.until)) return send(res, 400, `unknown event ${JSON.stringify(b?.until ?? "")}: use one of ${WAKE_EVENTS.join(", ")} (green: its CI passed; merged: merged into its base; released: its merge is on main)`);
+                if (!isWakeEvent(b?.until)) return send(res, 400, `unknown event ${JSON.stringify(b?.until ?? "")}: use one of ${WAKE_EVENTS.join(", ")} (green: its CI passed; merged: merged into its base; released: its merge is on main; rereview: you or your team are asked to review it again; comments: someone reviewed or commented on it)`);
                 if (!link) return send(res, 400, `can't read the PR ${JSON.stringify(b?.pr ?? "")}: give its link (https://github.com/owner/repo/pull/123) or owner/repo#123`);
                 if (!prompt || prompt.length > MAX_PROMPT) return send(res, 400, `need the prompt to continue with, up to ${MAX_PROMPT} characters: what you will do once it happens, written as an instruction to yourself`);
                 const now = Date.now();

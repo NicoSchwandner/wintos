@@ -11,20 +11,20 @@ import type { Row } from "../daemon/ranking/rank";
 import { Key } from "./Key";
 import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
-import { useWakeDelivery } from "./wakes";
+import { closedWakes, useWakeDelivery } from "./wakes";
 import { TodayCard } from "./TodayCard";
 import { GameLine } from "./GameIndicator";
 import { meetingsFrom } from "./meetings";
 import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
-import { editMine, enterProject, focusArea, setLatestSessions } from "./focus";
+import { editMine, enterProject, focusArea, reopenProject, resumePane, setLatestSessions } from "./focus";
 import { setSwitchOrder, switchTargetAtom } from "./switcher";
 import { closeProjectTab, registerWintosMenu } from "./menu";
 import { isPage, mainViewAtom, renamingAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { attention } from "./attention";
-import { ghPrs, inboxKind, isInboxTab, type InboxList, projectTabIds, RowView } from "./view";
+import { ghPrs, inboxKind, isInboxTab, type InboxList, prRef, projectTabIds, relTime, RowView } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
@@ -71,7 +71,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const shows = (list: InboxList) => !isPage(mainView) && inboxKind(tabs[activeTabId]) === list;
     const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
     const { state: raw, offline } = useWintos();
-    useWakeDelivery(raw?.wakes, raw?.sessions, activeTabId);
+    useWakeDelivery(raw?.wakes, raw?.sessions, raw?.shelf?.[activeTabId], activeTabId);
+    const wokeClosed = raw ? closedWakes(raw.wakes ?? {}, raw.shelf ?? {}, raw.projects, tabIds, (u) => prRef(raw, u)) : [];
     useFreshPaneLists(raw?.sessions, tabs);
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
     const now = useNow();
@@ -200,7 +201,12 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     </div>
                 ) : (
                     <>
-                        <Band kind="needs" count={model.needs.length}>{model.needs.map(renderRow)}</Band>
+                        <Band kind="needs" count={model.needs.length + wokeClosed.length}>
+                            {wokeClosed.map((w) => (
+                                <CardRow key={`wake:${w.sessionId}`} tabId={w.projectId} v={{ title: w.title, next: w.line, tone: "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⇧⌘P finds it too" }} active={false} cursor={false} renaming={false} onOpen={() => reopenProject(w.projectId, [resumePane(w.script)])} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
+                            ))}
+                            {model.needs.map(renderRow)}
+                        </Band>
                         <Band kind="read" count={model.read.length}>{model.read.map(renderRow)}</Band>
                         <Band kind="running" count={model.running.length}>{model.running.map(renderRow)}</Band>
                         <Band kind="quiet" count={model.quiet.length + model.quietMore.length} shown={quiet.length}>

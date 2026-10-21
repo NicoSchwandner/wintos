@@ -2,7 +2,7 @@
 # wintos: small CLI around wintosd.
 #   wintos title <words…>              name this tab's project (used by Claude)
 #   wintos wait <what…>                end this turn parked on something outside (used by Claude)
-#   wintos wake <event> <pr> <prompt…> park until a PR is green, merged or released, then get the prompt (used by Claude)
+#   wintos wake <event> <pr> <prompt…> park until a PR is green, merged, released, re-requested or commented on, then get the prompt (used by Claude)
 #   wintos wake cancel                 drop this session's wake
 #   wintos ask <kind> [<what…>]       end this turn waiting on the developer: answer, decide, approve or unblock
 #   wintos done                        end this turn done: nothing waits on the developer (used by Claude)
@@ -61,10 +61,13 @@ wake)
   event   green     its CI passed on the latest commit
           merged    merged into its base branch
           released  its merge commit is on main
+          rereview  you (or your team) are asked to review it again, after your review
+          comments  someone reviewed or commented on it, after the wake was set
   pr      a link (https://github.com/owner/repo/pull/123) or owner/repo#123
   prompt  what you will do then, as an instruction to yourself
 e.g.  wintos wake green WintDev/Core#13617 "CI is green: submit the approval on #13617"
       wintos wake released https://github.com/o/r/pull/285 "check the re-embed progress in prod and report"
+      wintos wake rereview o/r#90 "re-review the fixes against your earlier comments"
       wintos wake cancel     (drops it)
 One wake per session; a new one replaces it. It expires after 5 working days.'
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID): a wake types into this pane, so run it from the session that should continue"
@@ -191,5 +194,5 @@ hooks)
     *) die "usage: wintos hooks install|uninstall [<claude config dir>]" ;;
     esac
     ;;
-*) die "usage: wintos title <words> | wintos name <words> | wintos wait <what> | wintos wake <green|merged|released> <pr> <prompt> | wintos wake cancel | wintos ask <kind> [<what>] | wintos done | wintos status <line> | wintos lane <name> <step…> | wintos step <step> [note] | wintos todo <to-do>… | wintos todo done <to-do> | wintos pr <link|owner/repo#n> | wintos hooks install|uninstall [<claude config dir>]" ;;
+*) die "usage: wintos title <words> | wintos name <words> | wintos wait <what> | wintos wake <green|merged|released|rereview|comments> <pr> <prompt> | wintos wake cancel | wintos ask <kind> [<what>] | wintos done | wintos status <line> | wintos lane <name> <step…> | wintos step <step> [note] | wintos todo <to-do>… | wintos todo done <to-do> | wintos pr <link|owner/repo#n> | wintos hooks install|uninstall [<claude config dir>]" ;;
 esac

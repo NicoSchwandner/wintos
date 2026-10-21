@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { afterCheck, expiresAt, reached, rollup, wakePrompt, waitingOn, wakesWhen, type PrNow, type Wake } from "./wakes";
+import { afterCheck, expiresAt, isLogic, reached, rollup, wakePrompt, waitingOn, wakesWhen, type PrNow, type Wake } from "./wakes";
 
 const pr = (o: Partial<PrNow> = {}): PrNow => ({ state: "OPEN", checks: "pending", released: false, ...o });
 const URL = "https://github.com/o/r/pull/7";
@@ -7,11 +7,48 @@ const wake = (o: Partial<Wake> = {}): Wake => ({ sessionId: "s", pr: URL, until:
 
 describe("reached", () => {
     test("green when its CI is; merged once merged; released once on main", () => {
-        expect([reached("green", pr({ checks: "green" })), reached("green", pr({ checks: "red" }))]).toEqual([true, false]);
-        expect([reached("merged", pr({ state: "MERGED" })), reached("merged", pr())]).toEqual([true, false]);
-        expect([reached("released", pr({ state: "MERGED", released: true })), reached("released", pr({ state: "MERGED" }))]).toEqual([true, false]);
+        expect([reached("green", pr({ checks: "green" }), 0), reached("green", pr({ checks: "red" }), 0)]).toEqual([true, false]);
+        expect([reached("merged", pr({ state: "MERGED" }), 0), reached("merged", pr(), 0)]).toEqual([true, false]);
+        expect([reached("released", pr({ state: "MERGED", released: true }), 0), reached("released", pr({ state: "MERGED" }), 0)]).toEqual([true, false]);
     });
 });
+
+describe("review events", () => {
+    test("a re-review when you are requested again; feedback only when it came after the wake was set", () => {
+        expect([reached("rereview", pr({ requestedAgain: true }), 0), reached("rereview", pr(), 0)]).toEqual([true, false]);
+        expect([reached("comments", pr({ feedbackAt: 20 }), 10), reached("comments", pr({ feedbackAt: 5 }), 10)]).toEqual([true, false]);
+    });
+    test("a merged PR wants no more review: the wake is dropped", () =>
+        expect(afterCheck({ a: wake({ until: "rereview" }) }, 50, { [URL]: pr({ state: "MERGED", requestedAgain: true }) }).dropped).toHaveLength(1));
+    test("a due re-review carries how much logic changed; past the limit the session asks instead", () => {
+        const small = afterCheck({ a: wake({ until: "rereview", prompt: "re-review the fixes" }) }, 50, { [URL]: pr({ requestedAgain: true, logicLines: 12 }) }).wakes.a;
+        expect([small.lines, wakePrompt(small)]).toEqual([12, "[WintOS wake: o/r#7 asks for your review again; 12 lines of logic changed since your review] re-review the fixes"]);
+        const big = wakePrompt({ ...small, lines: 240 });
+        expect(big).toContain("Don't re-review it.");
+        expect(big).toContain('wintos ask approve "re-review o/r#7: 240 lines of logic changed"');
+        const unknown = afterCheck({ a: wake({ until: "rereview" }) }, 50, { [URL]: pr({ requestedAgain: true }) }).wakes.a;
+        expect(wakePrompt(unknown)).toContain("an unknown amount of logic changed");
+    });
+    test("feedback comes with the triage: small fixes yes, a different approach is the developer's", () =>
+        expect(wakePrompt(wake({ until: "comments", prompt: "work the comments." }))).toMatch(/^\[WintOS wake: o\/r#7 has new review feedback\] work the comments\. Triage each comment first: .*wintos ask decide/));
+});
+
+test.each([
+    ["src/Service/Booking.cs", true],
+    ["web/app/page.tsx", true],
+    ["Wint.Core.Tests/BookingTests.cs", false],
+    ["src/Booking.Tests/X.cs", false],
+    ["ui/view.test.ts", false],
+    ["Data/Migrations/20261021_Add.cs", false],
+    ["Data/AppModelSnapshot.cs", false],
+    ["Api/Client.g.cs", false],
+    ["package-lock.json", false],
+    ["README.md", false],
+    [".github/workflows/ci.yml", false],
+    ["Directory.Packages.props", false],
+    ["src/Api/Api.csproj", false],
+    ["Snapshots/Report.verified.txt", false],
+])("%s is logic: %s", (path, logic) => expect(isLogic(path)).toBe(logic));
 
 describe("rollup", () => {
     test("all passed (or skipped) is green, any failure red, anything running pending, none none", () => {
@@ -43,7 +80,7 @@ test("expires five working days later, a weekend not counted", () =>
 test("what the pane shows while it waits, and what the session is told", () => {
     expect(waitingOn(wake({ until: "released" }))).toBe("o/r#7 to be released");
     expect(waitingOn(wake())).toBe("o/r#7 to go green");
-    expect([wakesWhen(wake()), wakesWhen(wake({ until: "merged" }))]).toEqual(["wakes when o/r#7 goes green", "wakes when o/r#7 is merged"]);
+    expect([wakesWhen(wake()), wakesWhen(wake({ until: "merged" })), wakesWhen(wake({ until: "rereview" }))]).toEqual(["wakes when o/r#7 goes green", "wakes when o/r#7 is merged", "wakes when o/r#7 asks for a re-review"]);
     expect(wakesWhen(wake(), "R #7")).toBe("wakes when R #7 goes green");
     expect(wakePrompt(wake({ until: "released" }))).toBe("[WintOS wake: o/r#7 is released] approve it");
 });

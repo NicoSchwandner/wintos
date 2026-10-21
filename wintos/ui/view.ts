@@ -145,6 +145,12 @@ export function prChips(state: WintosState, urls: string[]): SessionPrs {
     return { open: chips.sort((a, b) => GROUPS.indexOf(a.group!) - GROUPS.indexOf(b.group!)), merged: known.length - open.length };
 }
 
+// A PR as the window names it, by its repo's short name: "DMS #211".
+export function prRef(state: WintosState, url: string): string {
+    const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);
+    return m ? `${repoLabeler(state)(m[1])} #${m[2]}` : url;
+}
+
 // Every repo's short name, given the PRs WintOS knows.
 export function repoLabeler(state: WintosState): (repo: string) => string {
     const repos = ghPrs(state)?.prs.map((p) => p.repo) ?? [];

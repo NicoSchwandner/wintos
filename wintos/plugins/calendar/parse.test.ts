@@ -54,6 +54,20 @@ DTEND:20261002T133000Z
 ATTENDEE;PARTSTAT=DECLINED:mailto:dev@example.com
 END:VEVENT
 BEGIN:VEVENT
+UID:invited
+SUMMARY:Climbing
+DTSTART:20261002T150000Z
+DTEND:20261002T160000Z
+ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:dev@example.com
+END:VEVENT
+BEGIN:VEVENT
+UID:maybe
+SUMMARY:Maybe
+DTSTART:20261002T160000Z
+DTEND:20261002T163000Z
+ATTENDEE;PARTSTAT=TENTATIVE:mailto:dev@example.com
+END:VEVENT
+BEGIN:VEVENT
 UID:holiday
 SUMMARY:Holiday
 DTSTART;VALUE=DATE:20261002
@@ -77,7 +91,12 @@ describe("icsToMeetings", () => {
         expect(rows()).toEqual([
             ["Daily (moved)", "2026-10-02T09:00:00.000Z", "https://meet.google.com/abc-defg-hij"],
             ["Refinement", "2026-10-02T11:30:00.000Z", "https://meet.google.com/xyz-uvwx-rst"],
+            ["Climbing", "2026-10-02T15:00:00.000Z", null],
+            ["Maybe", "2026-10-02T16:00:00.000Z", null],
         ]));
+
+    test("an invite you haven't accepted says so; accepted ones and your own say nothing", () =>
+        expect(icsToMeetings(ICS, FROM, TO).map((m) => [m.title, m.reply ?? null])).toEqual([["Daily (moved)", null], ["Refinement", null], ["Climbing", "pending"], ["Maybe", "tentative"]]));
 
     test("all-day events are kept but marked, so the sidebar can leave them out", () => {
         const all = icsToMeetings(ICS, FROM, TO, { keepAllDay: true });
@@ -86,9 +105,10 @@ describe("icsToMeetings", () => {
 
     test("the room: a booked room's account among the attendees, else a location that is no link", () => {
         const rooms = (r?: string[]) => icsToMeetings(ICS, FROM, TO, { rooms: r }).map((m) => [m.title, m.room ?? null]);
-        expect(rooms(["BigRoom@example.com"])).toEqual([["Daily (moved)", "Kitchen"], ["Refinement", "Bigroom"]]);
-        expect(rooms(["bigroom@example.com=Room (Big)"])).toEqual([["Daily (moved)", "Kitchen"], ["Refinement", "Room (Big)"]]);
-        expect(rooms()).toEqual([["Daily (moved)", "Kitchen"], ["Refinement", null]]);
+        const rest = [["Climbing", null], ["Maybe", null]];
+        expect(rooms(["BigRoom@example.com"])).toEqual([["Daily (moved)", "Kitchen"], ["Refinement", "Bigroom"], ...rest]);
+        expect(rooms(["bigroom@example.com=Room (Big)"])).toEqual([["Daily (moved)", "Kitchen"], ["Refinement", "Room (Big)"], ...rest]);
+        expect(rooms()).toEqual([["Daily (moved)", "Kitchen"], ["Refinement", null], ...rest]);
     });
 
     test("an empty or broken feed gives no meetings rather than throwing", () => {

@@ -1,9 +1,10 @@
 // Meetings come from any plugin that reports `meetings: [{ title, start, end, url?, room? }]` (ISO
 // times), so the calendar source can change without the sidebar knowing.
-export type Meeting = { title: string; start: number; end: number; url?: string; room?: string };
+// unaccepted: an invite you have not said yes to (pending or tentative).
+export type Meeting = { title: string; start: number; end: number; url?: string; room?: string; unaccepted?: boolean };
 export const WARN_MS = 2 * 60_000;
 
-type Raw = { title?: unknown; start?: unknown; end?: unknown; url?: unknown; room?: unknown; allDay?: unknown };
+type Raw = { title?: unknown; start?: unknown; end?: unknown; url?: unknown; room?: unknown; allDay?: unknown; reply?: unknown };
 
 export function meetingsFrom(plugins: Record<string, { ok?: boolean; at?: number; data?: unknown }> = {}): Meeting[] {
     const out: Meeting[] = [];
@@ -14,22 +15,24 @@ export function meetingsFrom(plugins: Record<string, { ok?: boolean; at?: number
             const start = typeof x?.start === "string" ? Date.parse(x.start) : NaN;
             const end = typeof x?.end === "string" ? Date.parse(x.end) : NaN;
             if (typeof x?.title !== "string" || !(end > start) || x.allDay === true) continue;
-            out.push({ title: x.title, start, end, ...(typeof x.url === "string" && /^https?:\/\//.test(x.url) ? { url: x.url } : {}), ...(typeof x.room === "string" && x.room ? { room: x.room } : {}) });
+            out.push({ title: x.title, start, end, ...(typeof x.url === "string" && /^https?:\/\//.test(x.url) ? { url: x.url } : {}), ...(typeof x.room === "string" && x.room ? { room: x.room } : {}), ...(x.reply === "pending" || x.reply === "tentative" ? { unaccepted: true } : {}) });
         }
     }
     return out.sort((a, b) => a.start - b.start);
 }
 
 // Today's, by the local clock: the ones on now (earliest first), the next to start with any
-// starting with it, and the first to start after those. soon: the next starts within WARN_MS,
+// starting with it, and the first to start after those. Of those at the same time, one you
+// accepted comes first. soon: the next starts within WARN_MS,
 // which is when the card and the window's edge warn.
 export function nextMeetings(list: Meeting[], now: number): { now?: Meeting; nowAll: Meeting[]; next?: Meeting; nextAll: Meeting[]; after?: Meeting; msLeft?: number; soon: boolean } {
     const day = new Date(now).toDateString();
     const today = list.filter((m) => new Date(m.start).toDateString() === day);
+    const accepted = (a: Meeting, b: Meeting) => Number(!!a.unaccepted) - Number(!!b.unaccepted);
     const upcoming = today.filter((m) => m.start > now);
-    const next = upcoming[0];
-    const nextAll = next ? upcoming.filter((m) => m.start === next.start) : [];
-    const nowAll = today.filter((m) => m.start <= now && now < m.end);
+    const nextAll = upcoming.filter((m) => m.start === upcoming[0]?.start).sort(accepted);
+    const next = nextAll[0];
+    const nowAll = today.filter((m) => m.start <= now && now < m.end).sort(accepted);
     const msLeft = next ? next.start - now : undefined;
     return { now: nowAll[0], nowAll, next, nextAll, after: upcoming.find((m) => m.start > next!.start), msLeft, soon: msLeft !== undefined && msLeft <= WARN_MS };
 }

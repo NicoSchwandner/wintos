@@ -41,6 +41,12 @@ describe("nextMeetings", () => {
         expect([n.nextAll.map((x) => x.title), n.after?.title]).toEqual([["A", "B"], "C"]);
     });
 
+    test("of two at the same time, the one you accepted is shown, whichever the feed lists first", () => {
+        const both = meetingsFrom({ c: { data: { meetings: [m("Climbing", "14:00", "15:30", { reply: "pending" }), m("Lunch", "14:00", "15:00")] } } });
+        expect(nextMeetings(both, Date.parse(at("13:00"))).nextAll.map((x) => [x.title, !!x.unaccepted])).toEqual([["Lunch", false], ["Climbing", true]]);
+        expect(nextMeetings(both, Date.parse(at("14:10"))).now?.title).toBe("Lunch");
+    });
+
     test("every meeting on now is listed, the earliest first", () => {
         const n = nextMeetings(meetingsFrom({ c: { data: { meetings: [m("Long", "13:00", "15:00"), m("Overlap", "13:30", "14:00")] } } }), Date.parse(at("13:40")));
         expect([n.now?.title, n.nowAll.map((x) => x.title)]).toEqual(["Long", ["Long", "Overlap"]]);

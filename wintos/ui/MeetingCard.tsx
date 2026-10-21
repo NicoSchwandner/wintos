@@ -16,7 +16,10 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
     const on = shown === n.now;
     const then = on ? n.next : n.after;
     const together = on ? n.nowAll : n.nextAll;
-    const alongside = together.length - 1;
+    // A clash is another you accepted too; an invite you haven't answered is only an option.
+    const others = together.filter((m) => m !== shown);
+    const clashes = others.filter((m) => !m.unaccepted).length;
+    const invites = others.length - clashes;
     // ⇧⌘J joins whichever of them has a link, so the key shows when any does.
     const joinable = together.some((m) => m.url);
     return (
@@ -37,7 +40,9 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
                 <span style={{ color: n.soon ? T.apricot : on ? T.emphasis : T.muted }}>{on ? `ends ${countdown(shown.end - now)}` : countdown(n.msLeft!)}</span>
             </div>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shown.title}</span>
-            {alongside > 0 && <span style={{ fontSize: 11, color: T.apricot }}>+{alongside} at the same time</span>}
+            {shown.unaccepted && <span style={{ fontSize: 11, color: T.muted }}>not accepted yet</span>}
+            {clashes > 0 && <span data-wintos="meeting-clash" style={{ fontSize: 11, color: T.apricot }}>+{clashes} at the same time, accepted too</span>}
+            {invites > 0 && <span data-wintos="meeting-invites" style={{ fontSize: 11, color: T.faint }}>+{invites} invite{invites > 1 ? "s" : ""} at the same time you haven't accepted</span>}
             {(then || joinable) && (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 11, color: T.faint }}>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{then ? `then ${clock(then.start)} ${then.title}` : ""}</span>

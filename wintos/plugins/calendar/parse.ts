@@ -1,6 +1,7 @@
 import ICAL from "ical.js";
 
-export type IcsMeeting = { title: string; start: string; end: string; url?: string; room?: string; allDay?: boolean };
+// reply: your answer to an invite you have not accepted; none is accepted, or your own event.
+export type IcsMeeting = { title: string; start: string; end: string; url?: string; room?: string; allDay?: boolean; reply?: "pending" | "tentative" };
 
 // A call link in the event: Google's own property first, else the first known one in the text.
 const CALL = /https:\/\/(?:meet\.google\.com|[\w.-]*zoom\.us|teams\.microsoft\.com)\/[^\s<>"\\]+/;
@@ -22,10 +23,12 @@ function roomOf(item: ICAL.Event, rooms: Map<string, string>): string | undefine
     return loc && !/https?:\/\//.test(loc) ? loc : undefined;
 }
 
-// The calendar's owner, as Google names a primary calendar's feed after its address.
-function declinedBy(item: ICAL.Event, me: string | undefined): boolean {
-    if (!me) return false;
-    return item.component.getAllProperties("attendee").some((a) => String(a.getFirstValue()).toLowerCase() === `mailto:${me}` && String(a.getParameter("partstat")).toUpperCase() === "DECLINED");
+// The calendar owner's answer to the event, as Google names a primary calendar's feed after its
+// address; undefined when they are no attendee (their own event).
+function replyOf(item: ICAL.Event, me: string | undefined): string | undefined {
+    if (!me) return undefined;
+    const a = item.component.getAllProperties("attendee").find((x) => String(x.getFirstValue()).toLowerCase() === `mailto:${me}`);
+    return a ? String(a.getParameter("partstat") ?? "NEEDS-ACTION").toUpperCase() : undefined;
 }
 
 // The meetings of an iCal feed that overlap [from, to), recurring ones expanded with their
@@ -61,11 +64,13 @@ function meetingsOf(cal: ICAL.Component, from: number, to: number, opts: { keepA
         const s = start.toJSDate().getTime();
         const e = end.toJSDate().getTime();
         if (e <= from || s >= to) return;
-        if (String(item.component.getFirstPropertyValue("status") ?? "").toUpperCase() === "CANCELLED" || declinedBy(item, me)) return;
+        const answer = replyOf(item, me);
+        if (String(item.component.getFirstPropertyValue("status") ?? "").toUpperCase() === "CANCELLED" || answer === "DECLINED") return;
+        const reply = answer === "NEEDS-ACTION" ? "pending" : answer === "TENTATIVE" ? "tentative" : undefined;
         if (start.isDate && !opts.keepAllDay) return;
         const url = callUrl(item) ?? callUrl(series);
         const room = roomOf(item, rooms);
-        out.push({ title: item.summary || "(no title)", start: new Date(s).toISOString(), end: new Date(e).toISOString(), ...(url ? { url } : {}), ...(room ? { room } : {}), ...(start.isDate ? { allDay: true } : {}) });
+        out.push({ title: item.summary || "(no title)", start: new Date(s).toISOString(), end: new Date(e).toISOString(), ...(url ? { url } : {}), ...(room ? { room } : {}), ...(start.isDate ? { allDay: true } : {}), ...(reply ? { reply } : {}) });
     };
     for (const master of masters.values()) {
         if (!master.isRecurring()) {

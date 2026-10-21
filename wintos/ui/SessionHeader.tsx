@@ -6,9 +6,10 @@ import { runAction } from "./menu";
 import { HEADERS } from "./PrQueue";
 import { SESSION_DOT, T } from "./tokens";
 import { useNow } from "./useNow";
-import { useWintos } from "./useWintos";
+import { daemonFetch, useWintos } from "./useWintos";
+import { wakesWhen } from "../daemon/wakes/wakes";
 import type { Lane } from "../daemon/sessions/reduce";
-import { relTime, sessionHeader, sessionName, urgentPr, type PrChip } from "./view";
+import { relTime, repoLabeler, sessionHeader, sessionName, urgentPr, type PrChip, type WintosState } from "./view";
 
 
 // Above a Claude pane: its state, what it works on, its own status line and its PRs' verdicts.
@@ -46,6 +47,23 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}> · {relTime(now - s.status.at)}</span>
                 </div>
             )}
+            {h.wake && (
+                <div data-wintos="session-wake" style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, color: T.blue, whiteSpace: "nowrap" }} title={h.wake.prompt}>
+                    <span style={{ flexShrink: 0 }}>{h.wake.due ? "wakes now" : wakesWhen(h.wake, state && wakeRef(state, h.wake.pr))}:</span>
+                    <span style={{ color: T.secondary, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.wake.prompt}</span>
+                    <button
+                        type="button"
+                        data-wintos="wake-cancel"
+                        tabIndex={-1}
+                        title="cancel the wake"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => void daemonFetch(`/blocks/${encodeURIComponent(blockId)}/wake/cancel?session=${encodeURIComponent(s.id)}`, { method: "POST", body: {} }).catch(() => {})}
+                        style={{ flexShrink: 0, padding: "0 4px", background: "transparent", border: "none", cursor: "pointer", color: T.muted, fontSize: 13, lineHeight: 1 }}
+                    >
+                        ×
+                    </button>
+                </div>
+            )}
             {/* One line: the most urgent few; the rest, and the merged ones, are in the notes' Sessions. */}
             {h.prs.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
@@ -59,6 +77,10 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
 SessionHeader.displayName = "SessionHeader";
 
 const HEADER_CHIPS = 4;
+const wakeRef = (state: WintosState, url: string) => {
+    const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);
+    return m ? `${repoLabeler(state)(m[1])} #${m[2]}` : undefined;
+};
 // The session's own name stands unless you change it within this minute (the session carries on).
 const NAME_PROPOSAL_MS = 60_000;
 

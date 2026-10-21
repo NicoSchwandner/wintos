@@ -1,4 +1,4 @@
-import type { Wakes } from "../daemon/wakes/wakes";
+import type { Wake, Wakes } from "../daemon/wakes/wakes";
 import type { Day } from "../daemon/journal/journal";
 import type { KeyStats } from "../daemon/keyboard/keyboard";
 import type { PluginResult } from "../daemon/plugins/runner";
@@ -97,8 +97,10 @@ export function prProjects(tabIds: string[], state: WintosState): Map<string, st
 }
 
 // The header on a Claude pane: what it works on and what its PRs ask of you.
+// wake: the next prompt it waits to be given (wintos wake).
 export type SessionHeader = {
     session: Session;
+    wake?: Wake;
     task?: string;
     branch?: string;
     prs: PrChip[];
@@ -120,7 +122,8 @@ export function sessionHeader(state: WintosState, blockId: string): SessionHeade
     const task = [...open.flatMap((p) => [p.branch, p.title]), where ?? ""].map((t) => TASK_ID.exec(t)?.[0]).find(Boolean)?.toUpperCase();
     const groups = prs.map((p) => p.group);
     const tone = groups.some((g) => g === "chase" || g === "release") ? "brick" : groups.includes("fix") ? "apricot" : undefined;
-    return { session, ...(task && { task }), ...(branch && { branch }), prs, merged, ...(tone && { tone }) };
+    const wake = state.wakes?.[session.id];
+    return { session, ...(task && { task }), ...(branch && { branch }), prs, merged, ...(tone && { tone }), ...(wake && { wake }) };
 }
 
 // A session's open PRs as chips, most urgent first, each saying what is next in plain words;

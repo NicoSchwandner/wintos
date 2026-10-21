@@ -47,6 +47,8 @@ export function expiresAt(now: number): number {
 
 // What a pane is shown while it waits, and what the session is told when it wakes.
 export const waitingOn = (w: Pick<Wake, "pr" | "until">) => `${refOf(w.pr)} ${w.until === "green" ? "to go green" : `to be ${w.until}`}`;
+// ref: how the window names the PR (its repo's short name), else owner/repo#n.
+export const wakesWhen = (w: Pick<Wake, "pr" | "until">, ref = refOf(w.pr)) => `wakes when ${ref} ${w.until === "green" ? "goes green" : `is ${w.until}`}`;
 export const wakePrompt = (w: Wake) => `[WintOS wake: ${refOf(w.pr)} is ${w.until === "green" ? "green" : w.until}] ${w.prompt}`;
 const refOf = (url: string) => url.replace(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+).*$/, "$1#$2");
 

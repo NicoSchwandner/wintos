@@ -331,7 +331,7 @@ describe("wintos name", () => {
         const out = await new Promise<string>((resolve) =>
             require("child_process").execFile(CLI, ["name", "Retention", "backfill"], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
         );
-        expect(out.trim()).toBe("name: Retention backfill (Nico can change it with ⌥⌘N for a minute; carry on)");
+        expect(out.trim()).toBe("name: Retention backfill (the developer can change it with ⌥⌘N for a minute; carry on)");
         expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/name?session=s-1", body: { text: "Retention backfill" } });
     });
 });

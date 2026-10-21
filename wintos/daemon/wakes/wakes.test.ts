@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { afterCheck, expiresAt, reached, rollup, wakePrompt, waitingOn, type PrNow, type Wake } from "./wakes";
+import { afterCheck, expiresAt, reached, rollup, wakePrompt, waitingOn, wakesWhen, type PrNow, type Wake } from "./wakes";
 
 const pr = (o: Partial<PrNow> = {}): PrNow => ({ state: "OPEN", checks: "pending", released: false, ...o });
 const URL = "https://github.com/o/r/pull/7";
@@ -43,5 +43,7 @@ test("expires five working days later, a weekend not counted", () =>
 test("what the pane shows while it waits, and what the session is told", () => {
     expect(waitingOn(wake({ until: "released" }))).toBe("o/r#7 to be released");
     expect(waitingOn(wake())).toBe("o/r#7 to go green");
+    expect([wakesWhen(wake()), wakesWhen(wake({ until: "merged" }))]).toEqual(["wakes when o/r#7 goes green", "wakes when o/r#7 is merged"]);
+    expect(wakesWhen(wake(), "R #7")).toBe("wakes when R #7 goes green");
     expect(wakePrompt(wake({ until: "released" }))).toBe("[WintOS wake: o/r#7 is released] approve it");
 });

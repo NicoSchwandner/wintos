@@ -158,6 +158,12 @@ describe("sessionHeader (the header on a Claude pane)", () => {
         expect(h.prs.map((x) => [x.number, x.repo, x.text])).toEqual([[1, "API", "merge conflict"], [7, "Embedding", "chase · nudge ana · 5 wd"], [2, "API", "draft"]]);
     });
 
+    test("a wake it waits for is on its header", () => {
+        const wake = { sessionId: "s", pr: p(1).url, until: "released", prompt: "check prod", at: 0, expires: 9 };
+        expect(sessionHeader({ ...st([sess()]), wakes: { s: wake } } as unknown as WintosState, "b")!.wake).toEqual(wake);
+        expect(sessionHeader(st([sess()]), "b")!.wake).toBeUndefined();
+    });
+
     test("the fixer at work on the PR's commit says so on its chip", () => {
         const fixer = { conflicts: true, queued: [], runs: [{ id: "r", kind: "conflict", url: p(1).url, head: "h1", route: "fresh", at: 1, startedAt: 2 }] };
         const state = { ...st([sess({ prs: [p(1).url] })], [p(1, { conflict: true, head: "h1" })]), fixer } as unknown as WintosState;

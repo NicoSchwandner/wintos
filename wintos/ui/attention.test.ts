@@ -181,3 +181,16 @@ describe("attention targets: where a click on a row that needs you lands", () =>
         expect([a.needs, a.targets.t1]).toEqual([[], undefined]);
     });
 });
+
+describe("a due wake on its way", () => {
+    const wake = { sessionId: "s1", pr: "https://github.com/o/r/pull/7", until: "rereview" as const, prompt: "re-review", at: 0, expires: 9, due: 5 };
+    const st = (o: object) => ({ now: NOW, sessions: [], projects: [{ id: "t1", dir: "/p", mtime: 0, title: "Review" }], wakes: { s1: wake }, ...o }) as never;
+    test("keeps its project in Your move while the session resumes, with what woke it", () => {
+        const a = attention(["t1"], st({ shelf: { t1: [{ sessionId: "s1", script: "x", label: "l", at: 0 }] } }), {}, NOW);
+        expect([a.needs.map((r) => r.tabId), a.views.t1.next, a.views.t1.tone]).toEqual([["t1"], "r #7 asks for your re-review · waking the session", "apricot"]);
+    });
+    test("no due wake, no lift", () => {
+        const a = attention(["t1"], st({ wakes: { s1: { ...wake, due: undefined } }, shelf: { t1: [{ sessionId: "s1", script: "x", label: "l", at: 0 }] } }), {}, NOW);
+        expect(a.needs).toEqual([]);
+    });
+});

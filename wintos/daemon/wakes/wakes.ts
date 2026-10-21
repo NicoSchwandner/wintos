@@ -41,6 +41,15 @@ const NOT_LOGIC = [
 ];
 export const isLogic = (path: string) => !NOT_LOGIC.some((re) => re.test(path));
 
+// The lines of logic in changed (since your review), counting only the PR's own files. A PR that
+// changes no code but Markdown (prompts, rules, docs repos) has its Markdown as its logic.
+export function logicLinesOf(changed: { f: string; n: number }[], prFiles: string[]): number {
+    const own = new Set(prFiles);
+    const markdownOnly = !prFiles.some(isLogic) && prFiles.some((f) => /\.md$/.test(f));
+    const counts = (f: string) => isLogic(f) || (markdownOnly && /\.md$/.test(f) && !/^\.[^/]+\//.test(f));
+    return changed.filter((x) => own.has(x.f) && counts(x.f)).reduce((n, x) => n + x.n, 0);
+}
+
 // since: when the wake was set; feedback before it was already there.
 export function reached(until: WakeEvent, pr: PrNow, since: number): boolean {
     if (until === "green") return pr.checks === "green";

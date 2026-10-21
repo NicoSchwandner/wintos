@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { closedWakes, deliverable } from "./wakes";
+import { closedWakes, deliverable, resumes } from "./wakes";
 
 const wake = { sessionId: "s", pr: "https://github.com/o/r/pull/7", until: "released" as const, prompt: "check prod", at: 0, expires: 9, due: 5 };
 const session = (o = {}) => ({ id: "s", tabId: "t", blockId: "b", state: "parked", since: 0, lastAt: 0, ...o }) as never;
@@ -26,4 +26,9 @@ test("a due wake whose project is closed waits there, named by its project and w
     ]);
     expect(closedWakes({ s: wake }, shelf, projects, ["closed"], () => "R #7")).toEqual([]);
     expect(closedWakes({ s: { ...wake, due: undefined } }, shelf, projects, ["open"], () => "R #7")).toEqual([]);
+});
+
+test("a pane that already resumes the session counts, so it isn't resumed twice", () => {
+    expect(resumes([undefined, "cd '/w' && claude --resume 's'"], "s")).toBe(true);
+    expect(resumes(["cd '/w' && claude --resume 'other'"], "s")).toBe(false);
 });

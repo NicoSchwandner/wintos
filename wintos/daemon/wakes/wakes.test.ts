@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { afterCheck, expiresAt, isLogic, reached, rollup, wakePrompt, waitingOn, wakesWhen, type PrNow, type Wake } from "./wakes";
+import { afterCheck, expiresAt, isLogic, logicLinesOf, reached, rollup, wakePrompt, waitingOn, wakesWhen, type PrNow, type Wake } from "./wakes";
 
 const pr = (o: Partial<PrNow> = {}): PrNow => ({ state: "OPEN", checks: "pending", released: false, ...o });
 const URL = "https://github.com/o/r/pull/7";
@@ -83,4 +83,11 @@ test("what the pane shows while it waits, and what the session is told", () => {
     expect([wakesWhen(wake()), wakesWhen(wake({ until: "merged" })), wakesWhen(wake({ until: "rereview" }))]).toEqual(["wakes when o/r#7 goes green", "wakes when o/r#7 is merged", "wakes when o/r#7 asks for a re-review"]);
     expect(wakesWhen(wake(), "R #7")).toBe("wakes when R #7 goes green");
     expect(wakePrompt(wake({ until: "released" }))).toBe("[WintOS wake: o/r#7 is released] approve it");
+});
+
+describe("logicLinesOf", () => {
+    test("only the PR's own files, and only logic: a base merge and tests don't count", () =>
+        expect(logicLinesOf([{ f: "src/A.cs", n: 10 }, { f: "src/ATests.cs", n: 30 }, { f: "src/FromBase.cs", n: 99 }, { f: "README.md", n: 5 }], ["src/A.cs", "src/ATests.cs", "README.md"])).toBe(10));
+    test("a PR of Markdown only (a rules repo): its Markdown is its logic, tooling folders still not", () =>
+        expect(logicLinesOf([{ f: "content/rules/x.md", n: 40 }, { f: ".claude/notes.md", n: 7 }], ["content/rules/x.md", ".claude/notes.md"])).toBe(40));
 });

@@ -8,6 +8,7 @@ import { rememberReturn, returnFocus, wantPane } from "./focusOwner";
 import { currentState, daemonFetch } from "./useWintos";
 import { flog, where } from "./focusLog";
 import { inboxKind } from "./view";
+import { noteResume } from "./resuming";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 
 // Every Wave tab runs in its own renderer, so a renderer can only magnify blocks of its own
@@ -75,6 +76,7 @@ export function takeReopen(): void {
     if (Date.now() - r.at >= HANDOFF_TTL_MS) return;
     const tabId = globalStore.get(atoms.staticTabId);
     flog(`reopen project ${r.projectId.slice(0, 6)} in this tab`);
+    for (const p of r.panes) noteResume(p["cmd:initscript"] as string | undefined);
     void daemonFetch(`/projects/${encodeURIComponent(r.projectId)}/reopen`, { method: "POST", body: { tabId } }).then(async () => {
         const [first, ...rest] = r.panes;
         if (!first) return;
@@ -119,6 +121,7 @@ function landOn({ blockId, find, resume, restore }: Target): void {
         const tab = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))));
         const there = tab?.blockids?.find((id) => globalStore.get(getWaveObjectAtom<Block>(makeORef("block", id)))?.meta?.["cmd:initscript"] === resume);
         if (there && lm) return focusBlock(there);
+        noteResume(resume);
         return void createBlock({ meta: resumePane(resume) });
     }
     wantPane(blockId ? "landing on a session" : "landing on the terminals");

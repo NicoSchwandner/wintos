@@ -3,7 +3,8 @@ import type { Session } from "../daemon/sessions/reduce";
 import type { Project } from "../daemon/projects/store";
 import { isSnoozed, projectPrs, type ProjectPrs } from "../daemon/prs/group";
 import type { Target } from "./sessions";
-import { ghPrs, prOwners, relTime, repoLabeler, type Owner, type RowView, type WintosState } from "./view";
+import { ghPrs, prOwners, prRef, relTime, repoLabeler, type Owner, type RowView, type WintosState } from "./view";
+import { WOKE } from "./wakes";
 
 // Which projects need you, why, and in what order: the one place that decides it. The sidebar,
 // the palette and ⌃⇥ read it; it is given live sessions (those whose pane still exists).
@@ -55,6 +56,25 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     return { title, age, reason: parkedOn ? `waiting on ${parkedOn}` : (lastSaid(row.sessions) ?? prs?.blocked?.text ?? prs?.reason ?? meta ?? age) };
 }
 
+// Open projects with a due wake on its way (the session resuming, or between turns): they stay
+// in Your move until the prompt is typed, rather than passing through Quiet and back.
+export function wakingTabs(state: WintosState, tabIds: string[]): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const w of Object.values(state.wakes ?? {})) {
+        if (!w.due) continue;
+        const live = state.sessions.find((s) => s.id === w.sessionId && s.state !== "ended");
+        const tabId = live?.tabId ?? tabIds.find((id) => state.shelf?.[id]?.some((x) => x.sessionId === w.sessionId));
+        if (tabId && tabIds.includes(tabId)) out[tabId] = `${prRef(state, w.pr)} ${WOKE[w.until]} · waking the session`;
+    }
+    return out;
+}
+export function waking(split: Ranking, tabs: Record<string, string>): Ranking {
+    const moved = (rows: Row[]) => rows.filter((r) => tabs[r.tabId]);
+    const kept = (rows: Row[]) => rows.filter((r) => !tabs[r.tabId]);
+    const lifted = [...moved(split.read), ...moved(split.running), ...moved(split.quiet), ...moved(split.quietMore), ...moved(split.quietStale)].map((r) => ({ ...r, band: "needs" as const }));
+    return { ...split, needs: [...lifted, ...split.needs], read: kept(split.read), running: kept(split.running), quiet: kept(split.quiet), quietMore: kept(split.quietMore), quietStale: kept(split.quietStale) };
+}
+
 // What the longest-waiting turn expects of you, ahead of what it said: "Decide · two bands or one".
 // A turn not read yet shows what it said.
 const ASK_LABEL = { answer: "Answer", decide: "Decide", approve: "Approve", unblock: "Unblock" } as const;
@@ -76,11 +96,12 @@ const lastSaid = (sessions: Session[]) => sessions.filter((s) => s.outcome).sort
 export type Attention = Ranking & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target> };
 export function attention(tabIds: string[], state: WintosState, names: Record<string, string | undefined>, now: number): Attention {
     const prs = prsByTab(tabIds, state);
-    const split = sidebarModel(tabIds, state);
+    const lines = wakingTabs(state, tabIds);
+    const split = waking(sidebarModel(tabIds, state), lines);
     const rows = [...split.needs, ...split.read, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale];
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const label = repoLabeler(state);
-    const views = Object.fromEntries(rows.map((r) => [r.tabId, rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label)]));
+    const views = Object.fromEntries(rows.map((r) => [r.tabId, lines[r.tabId] ? { ...rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label), next: lines[r.tabId], tone: "apricot" as const } : rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label)]));
     const targets: Record<string, Target> = {};
     for (const r of [...split.needs, ...split.read]) {
         const waiting = r.sessions.filter((s) => s.state === "waiting").sort((a, b) => a.since - b.since)[0];

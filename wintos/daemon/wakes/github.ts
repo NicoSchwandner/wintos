@@ -1,5 +1,5 @@
 import { execFile } from "child_process";
-import { isLogic, rollup, type PrNow, type WakeEvent } from "./wakes";
+import { logicLinesOf, rollup, type PrNow, type WakeEvent } from "./wakes";
 
 // main is where a release lands; a repo without one releases on the merge itself.
 const RELEASE_BRANCH = "main";
@@ -76,8 +76,7 @@ async function logicLines(url: string, from: string, to: string): Promise<number
             gh(["api", `repos/${m[1]}/${m[2]}/compare/${from}...${to}`, "--jq", "[.files[] | {f: .filename, n: .changes}]"]),
             gh(["api", "--paginate", `repos/${m[1]}/${m[2]}/pulls/${m[3]}/files`, "--jq", ".[].filename"]),
         ]);
-        const prFiles = new Set(own.split("\n").filter(Boolean));
-        return (JSON.parse(changed) as { f: string; n: number }[]).filter((x) => prFiles.has(x.f) && isLogic(x.f)).reduce((n, x) => n + x.n, 0);
+        return logicLinesOf(JSON.parse(changed) as { f: string; n: number }[], own.split("\n").filter(Boolean));
     } catch {
         return undefined;
     }

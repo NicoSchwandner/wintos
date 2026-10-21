@@ -1,10 +1,13 @@
+import { globalStore } from "@/app/store/jotaiStore";
 import { ObjectService } from "@/app/store/services";
+import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { getLayoutModelForStaticTab, LayoutTreeActionType, newLayoutNode, type LayoutTreeInsertNodeAction } from "@/layout/index";
 import { useEffect } from "react";
 import { wakePrompt, type Wakes } from "../daemon/wakes/wakes";
 import type { Session } from "../daemon/sessions/reduce";
 import type { Shelved } from "../daemon/shelf/shelf";
 import { resumePane } from "./focus";
+import { noteResume, resumingNow } from "./resuming";
 import { typeIntoPane } from "./typeIntoPane";
 import { daemonFetch } from "./useWintos";
 
@@ -34,7 +37,7 @@ export function closedWakes(wakes: Wakes, shelf: Record<string, Shelved[]>, proj
         return [{ projectId, title: projects.find((p) => p.id === projectId)?.title ?? "Closed project", sessionId: w.sessionId, script: item.script, due: w.due, line: `${ref(w.pr)} ${WOKE[w.until]} · opening it resumes the session` }];
     });
 }
-const WOKE = { green: "went green", merged: "was merged", released: "was released", rereview: "asks for your re-review", comments: "got review feedback" } as const;
+export const WOKE = { green: "went green", merged: "was merged", released: "was released", rereview: "asks for your re-review", comments: "got review feedback" } as const;
 
 // A pane beside the others that leaves your focus where it is.
 async function addPaneQuietly(meta: MetaType): Promise<void> {
@@ -43,11 +46,17 @@ async function addPaneQuietly(meta: MetaType): Promise<void> {
     getLayoutModelForStaticTab().treeReducer(insert);
 }
 
+// A pane of this tab already resuming the session (reopening the project on it): one more would
+// run the same session twice.
+export const resumes = (scripts: (string | undefined)[], sessionId: string) => scripts.some((x) => x?.includes(`--resume '${sessionId}'`));
+function tabScripts(tabId: string): (string | undefined)[] {
+    const ids = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.blockids ?? [];
+    return ids.map((id) => globalStore.get(getWaveObjectAtom<Block>(makeORef("block", id)))?.meta?.["cmd:initscript"] as string | undefined);
+}
+
 // Whichever window claims a wake first types it; the daemon says yes to one only. A resume is
 // started once, then waits for the session to come up.
 const busy = new Set<string>();
-const resumed = new Map<string, number>();
-const RESUME_GRACE_MS = 3 * 60_000;
 export function useWakeDelivery(wakes: Wakes | undefined, sessions: Session[] | undefined, shelf: Shelved[] | undefined, tabId: string): void {
     const due = wakes && sessions ? deliverable(wakes, sessions, shelf ?? [], tabId) : [];
     const key = due.map((d) => `${d.kind}:${d.sessionId}`).join(" ");
@@ -55,8 +64,8 @@ export function useWakeDelivery(wakes: Wakes | undefined, sessions: Session[] | 
         for (const d of due) {
             if (busy.has(d.sessionId)) continue;
             if (d.kind === "resume") {
-                if (Date.now() - (resumed.get(d.sessionId) ?? 0) < RESUME_GRACE_MS) continue;
-                resumed.set(d.sessionId, Date.now());
+                if (resumingNow(d.sessionId) || resumes(tabScripts(tabId), d.sessionId)) continue;
+                noteResume(d.script);
                 void addPaneQuietly(resumePane(d.script)).catch(() => {});
                 continue;
             }

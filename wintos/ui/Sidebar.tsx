@@ -11,6 +11,7 @@ import type { Row } from "../daemon/ranking/rank";
 import { Key } from "./Key";
 import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
+import { useWakeDelivery } from "./wakes";
 import { TodayCard } from "./TodayCard";
 import { GameLine } from "./GameIndicator";
 import { meetingsFrom } from "./meetings";
@@ -70,6 +71,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const shows = (list: InboxList) => !isPage(mainView) && inboxKind(tabs[activeTabId]) === list;
     const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
     const { state: raw, offline } = useWintos();
+    useWakeDelivery(raw?.wakes, raw?.sessions, activeTabId);
     useFreshPaneLists(raw?.sessions, tabs);
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
     const now = useNow();

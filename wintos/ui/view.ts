@@ -1,3 +1,4 @@
+import type { Wakes } from "../daemon/wakes/wakes";
 import type { Day } from "../daemon/journal/journal";
 import type { KeyStats } from "../daemon/keyboard/keyboard";
 import type { PluginResult } from "../daemon/plugins/runner";
@@ -8,7 +9,7 @@ import { liveSessionIn, liveSessionsIn, type Session } from "../daemon/sessions/
 import { shelvedName, type Shelved } from "../daemon/shelf/shelf";
 import type { FixerState } from "../daemon/fixer/runner";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]>; fixer?: FixerState; repoNames?: Record<string, string> };
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]>; fixer?: FixerState; repoNames?: Record<string, string>; wakes?: Wakes };
 export type Tone = "apricot" | "blue" | "brick" | "secondary";
 export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
 

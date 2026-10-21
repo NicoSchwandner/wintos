@@ -877,3 +877,51 @@ describe("repo short names", () => {
         expect((await post("/repos/name", { repo: "o/r", short: "x".repeat(17) })).status).toBe(400);
     });
 });
+
+describe("wakes", () => {
+    const URL7 = "https://github.com/o/r/pull/7";
+    let pr: { state: "OPEN" | "MERGED" | "CLOSED"; checks: "green" | "red" | "pending" | "none"; released: boolean } | undefined;
+    const st = async () => (await fetch(base + "/state")).json();
+    beforeEach(async () => {
+        pr = { state: "OPEN", checks: "pending", released: false };
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", prNow: async () => pr, wakeEveryMs: 20 });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event(prompt);
+    });
+    const until = async (f: () => Promise<boolean>) => {
+        for (let i = 0; i < 100 && !(await f()); i++) await new Promise((r) => setTimeout(r, 10));
+    };
+
+    test("set: the session parks on it; it turns due when the event comes, once delivered it is gone", async () => {
+        expect((await post("/blocks/blk-1/wake", { until: "released", pr: "o/r#7", prompt: "check the re-embed in prod" })).status).toBe(200);
+        const s = await st();
+        // Mid-turn, as a session runs it: the turn ends parked.
+        expect([s.wakes[prompt.session_id].pr, s.sessions[0].parkPending, s.sessions[0].parkedOn]).toEqual([URL7, true, "o/r#7 to be released"]);
+        pr = { state: "MERGED", checks: "green", released: true };
+        await until(async () => !!(await st()).wakes[prompt.session_id]?.due);
+        expect((await st()).wakes[prompt.session_id].due).toBeGreaterThan(0);
+        expect((await post(`/wakes/${prompt.session_id}/delivered`, {})).status).toBe(200);
+        expect((await post(`/wakes/${prompt.session_id}/delivered`, {})).status).toBe(409);
+        expect((await st()).wakes).toEqual({});
+    });
+
+    test("not due before its event, and dropped when it can't happen any more", async () => {
+        await post("/blocks/blk-1/wake", { until: "merged", pr: URL7, prompt: "update the docs" });
+        expect((await post(`/wakes/${prompt.session_id}/delivered`, {})).status).toBe(409);
+        pr = { state: "CLOSED", checks: "none", released: false };
+        await until(async () => !(await st()).wakes[prompt.session_id]);
+        expect((await st()).wakes).toEqual({});
+    });
+
+    test("cancel; and every mistake says how to get it right", async () => {
+        await post("/blocks/blk-1/wake", { until: "green", pr: URL7, prompt: "approve" });
+        expect(await (await post("/blocks/blk-1/wake/cancel", {})).text()).toBe("cancelled");
+        expect((await st()).wakes).toEqual({});
+        const err = async (b: object) => (await post("/blocks/blk-1/wake", b)).text();
+        expect(await err({ until: "deployed", pr: URL7, prompt: "x" })).toContain("use one of green, merged, released");
+        expect(await err({ until: "green", pr: "#7", prompt: "x" })).toContain("owner/repo#123");
+        expect(await err({ until: "green", pr: URL7, prompt: " " })).toContain("need the prompt");
+        expect(await (await post("/blocks/nope/wake", { until: "green", pr: URL7, prompt: "x" })).text()).toContain("no live Claude session");
+    });
+});

@@ -21,6 +21,8 @@ import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn } from "../sessions/reduce";
 import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
+import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, WAKE_EVENTS, waitingOn, type PrNow, type Wakes } from "../wakes/wakes";
+import { prNow } from "../wakes/github";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -40,7 +42,7 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; prNow?: (url: string) => Promise<PrNow | undefined>; wakeEveryMs?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
     const factsOf = (ids: string[], day: string) => {
@@ -54,6 +56,30 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // one run a day.
     const warmRecap = setInterval(() => void recapper.recap(Date.now()).catch(() => {}), 30 * 60_000);
     warmRecap.unref();
+    // Each wake's PR is asked about on its own: a PR merged into main has left the PR list.
+    const wakesFile = join(opts.root, ".wakes.json");
+    let wakes = readJson<Wakes>(wakesFile, {});
+    const saveWakes = () => writeFileSync(wakesFile, JSON.stringify(wakes));
+    let checking = false;
+    const checkWakes = async () => {
+        const waiting = [...new Set(Object.values(wakes).filter((w) => !w.due).map((w) => w.pr))];
+        if (checking || !waiting.length) return;
+        checking = true;
+        try {
+            const now = Object.fromEntries(await Promise.all(waiting.map(async (u) => [u, await (opts.prNow ?? prNow)(u)] as const)));
+            const next = afterCheck(wakes, Date.now(), now);
+            for (const w of next.dropped) console.error(`[wintosd] wake dropped: ${waitingOn(w)} for session ${w.sessionId} (expired, or it can't happen any more)`);
+            if (JSON.stringify(next.wakes) !== JSON.stringify(wakes)) {
+                wakes = next.wakes;
+                saveWakes();
+                broadcast();
+            }
+        } finally {
+            checking = false;
+        }
+    };
+    const wakeTimer = setInterval(() => void checkWakes(), opts.wakeEveryMs ?? 2 * 60_000);
+    wakeTimer.unref();
     const uiOrigins = new Set(opts.uiOrigins ?? [...DEFAULT_UI_ORIGINS, ...(process.env.WINTOS_UI_ORIGINS?.split(",") ?? [])]);
     // Saved on every change and restored at start, so a restart doesn't forget who waits on you.
     const sessionFile = join(opts.root, ".sessions.json");
@@ -167,6 +193,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const state = () => ({
         now: Date.now(),
         repoNames: namesOfRepos(),
+        wakes,
         sessions: [...sessions.values()],
         projects: store.list().map(({ body: _body, ...p }) => p),
         plugins: runner.results,
@@ -544,6 +571,44 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, "");
             }
+            // `wintos wake`: the session's next step, typed into it when a PR reaches an event.
+            const wake = /^\/blocks\/([^/]+)\/wake(\/cancel)?$/.exec(url.pathname);
+            if (req.method === "POST" && wake) {
+                const live = liveIn(sessions, decodeURIComponent(wake[1]), sid);
+                if (!live) return send(res, 400, "no live Claude session in this pane: run wintos wake from the session that should continue");
+                if (wake[2]) {
+                    const had = !!wakes[live.id];
+                    delete wakes[live.id];
+                    saveWakes();
+                    broadcast();
+                    return send(res, 200, had ? "cancelled" : "no wake was set");
+                }
+                const b = (await body(req)) as { until?: unknown; pr?: unknown; prompt?: unknown };
+                const link = typeof b?.pr === "string" ? prLink(b.pr) : undefined;
+                const prompt = typeof b?.prompt === "string" ? b.prompt.trim() : "";
+                if (!isWakeEvent(b?.until)) return send(res, 400, `unknown event ${JSON.stringify(b?.until ?? "")}: use one of ${WAKE_EVENTS.join(", ")} (green: its CI passed; merged: merged into its base; released: its merge is on main)`);
+                if (!link) return send(res, 400, `can't read the PR ${JSON.stringify(b?.pr ?? "")}: give its link (https://github.com/owner/repo/pull/123) or owner/repo#123`);
+                if (!prompt || prompt.length > MAX_PROMPT) return send(res, 400, `need the prompt to continue with, up to ${MAX_PROMPT} characters: what you will do once it happens, written as an instruction to yourself`);
+                const now = Date.now();
+                const w = { sessionId: live.id, pr: link, until: b.until, prompt, at: now, expires: expiresAt(now) };
+                wakes = { ...wakes, [live.id]: w };
+                saveWakes();
+                sessions = parkSession(sessions, live.blockId, waitingOn(w), now, live.id);
+                saveSessions();
+                broadcast();
+                void checkWakes();
+                return json(res, w);
+            }
+            // The window that typed a due wake into its pane: once only, whichever window asks first.
+            const delivered = /^\/wakes\/([^/]+)\/delivered$/.exec(url.pathname);
+            if (req.method === "POST" && delivered) {
+                const id = decodeURIComponent(delivered[1]);
+                if (!wakes[id]?.due) return send(res, 409, "no wake due for that session");
+                delete wakes[id];
+                saveWakes();
+                broadcast();
+                return send(res, 200, "");
+            }
             const claimed = /^\/blocks\/([^/]+)\/pr$/.exec(url.pathname);
             if (req.method === "POST" && claimed) {
                 const blockId = decodeURIComponent(claimed[1]);
@@ -625,6 +690,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             watcher?.close();
             journalWatcher?.close();
             clearInterval(warmRecap);
+            clearInterval(wakeTimer);
             runner.stop();
             clearTimeout(pending);
             for (const s of sockets) s.terminate();

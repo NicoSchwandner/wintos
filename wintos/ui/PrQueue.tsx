@@ -13,9 +13,7 @@ import type { Group } from "../daemon/prs/group";
 import { runAction } from "./menu";
 import { Key, KeyOr } from "./Key";
 import { fixNote, initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns, type QueueRow, type RowColumns } from "./prs";
-import { RpcApi } from "@/app/store/wshclientapi";
-import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { stringToBase64 } from "@/util/util";
+import { typeIntoPane } from "./typeIntoPane";
 import type { FixRun } from "../daemon/fixer/runner";
 import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
@@ -227,16 +225,12 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
 PrQueue.displayName = "PrQueue";
 
 // The same route an automatic run takes: a live owning session gets the prompt typed into its
-// pane (text, then Enter, so Claude doesn't take both for one paste); the daemon runs the rest.
+// pane; the daemon runs the rest.
 async function dispatchCiFix(url: string): Promise<void> {
     const res = await daemonFetch("/fixer/ci", { method: "POST", body: { url } }).catch(() => undefined);
     if (!res?.ok) return;
     const r = (await res.json()) as { run: FixRun; blockId?: string; prompt?: string };
-    if (!r.blockId || !r.prompt) return;
-    const type = (text: string) => RpcApi.ControllerInputCommand(TabRpcClient, { blockid: r.blockId!, inputdata64: stringToBase64(text) });
-    await type(r.prompt);
-    await new Promise((done) => setTimeout(done, 300));
-    await type("\r");
+    if (r.blockId && r.prompt) await typeIntoPane(r.blockId, r.prompt);
 }
 
 // Inline in a clipped one-line title: its own line box, or the border is cut off.

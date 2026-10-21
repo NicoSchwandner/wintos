@@ -399,3 +399,42 @@ describe("wintos ask", () => {
         expect([r.code, r.seen]).toEqual([1, []]);
     });
 });
+
+describe("wintos wake", () => {
+    const wake = async (args: string[], status = 200, reply = '{"pr":"https://github.com/o/r/pull/7","until":"released","prompt":"check prod"}') => {
+        const seen: { url: string; body: unknown }[] = [];
+        server = http.createServer((req, res) => {
+            let b = "";
+            req.on("data", (c) => (b += c));
+            req.on("end", () => (seen.push({ url: req.url!, body: b && JSON.parse(b) }), (res.statusCode = status), res.end(reply)));
+        });
+        const port = await new Promise<number>((r) => server!.listen(0, "127.0.0.1", () => r((server!.address() as AddressInfo).port)));
+        const r = await new Promise<{ out: string; err: string; code: number }>((resolve) =>
+            require("child_process").execFile(CLI, ["wake", ...args], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(port) } }, (e: { code?: number } | null, so: string, se: string) => resolve({ out: so, err: se, code: e?.code ?? 0 }))
+        );
+        return { ...r, seen };
+    };
+
+    test("sends the event, the PR and the prompt, and tells the session to end its turn", async () => {
+        const r = await wake(["released", "o/r#7", "check", "prod"]);
+        expect(r.seen[0]).toEqual({ url: "/blocks/blk-1/wake?session=s-1", body: { until: "released", pr: "o/r#7", prompt: "check prod" } });
+        expect(r.out).toContain("wakes when https://github.com/o/r/pull/7 is released: check prod\nNow end your turn");
+    });
+
+    test("too few arguments: refused before anything is sent, with the usage and examples", async () => {
+        const r = await wake(["released", "o/r#7"]);
+        expect([r.code, r.seen]).toEqual([1, []]);
+        expect(r.err).toContain("need an event, a PR and a prompt (got 2 argument(s))");
+        expect(r.err).toContain("e.g.  wintos wake green");
+    });
+
+    test("the daemon's reason for refusing is shown, with the usage", async () => {
+        const r = await wake(["deployed", "o/r#7", "x"], 400, "unknown event \"deployed\": use one of green, merged, released");
+        expect([r.code, r.err]).toEqual([1, expect.stringContaining("unknown event \"deployed\": use one of green, merged, released\nusage: wintos wake")]);
+    });
+
+    test("cancel", async () => {
+        const r = await wake(["cancel"], 200, "cancelled");
+        expect([r.seen[0].url, r.out.trim()]).toEqual(["/blocks/blk-1/wake/cancel?session=s-1", "cancelled"]);
+    });
+});

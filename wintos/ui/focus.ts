@@ -65,7 +65,8 @@ export function enterProject(tabId: string, find?: string): void {
 const REOPEN = "wintos:reopen";
 export function reopenProject(projectId: string, panes: MetaType[] = []): void {
     localStorage.setItem(REOPEN, JSON.stringify({ projectId, panes, at: Date.now() }));
-    getApi().createTab();
+    // Opened on a session it had: a Claude in the starter terminal would be a second, empty one.
+    getApi().createTab({ plain: panes.length > 0 });
 }
 export const resumePane = (script: string): MetaType => ({ view: "term", controller: "shell", "cmd:initscript": script });
 export function takeReopen(): void {

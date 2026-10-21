@@ -225,6 +225,16 @@ func getNextTabName(tabNames []string) string {
 
 // returns tabid
 func CreateTab(ctx context.Context, workspaceId string, tabName string, activateTab bool, isInitialLaunch bool) (string, error) {
+	return createTabWith(ctx, workspaceId, tabName, activateTab, isInitialLaunch, GetNewTabLayout())
+}
+
+// WintOS: a tab whose first terminal is a plain shell, for reopening a project on a session it
+// already had; a Claude starting there would be one session too many.
+func CreatePlainTab(ctx context.Context, workspaceId string, activateTab bool) (string, error) {
+	return createTabWith(ctx, workspaceId, "", activateTab, false, GetPlainTabLayout())
+}
+
+func createTabWith(ctx context.Context, workspaceId string, tabName string, activateTab bool, isInitialLaunch bool, layout PortableLayout) (string, error) {
 	if tabName == "" {
 		ws, err := GetWorkspace(ctx, workspaceId)
 		if err != nil {
@@ -254,7 +264,7 @@ func CreateTab(ctx context.Context, workspaceId string, tabName string, activate
 
 	// No need to apply an initial layout for the initial launch, since the starter layout will get applied after onboarding modal dismissal
 	if !isInitialLaunch {
-		err = ApplyPortableLayout(ctx, tab.OID, GetNewTabLayout(), true)
+		err = ApplyPortableLayout(ctx, tab.OID, layout, true)
 		if err != nil {
 			return tab.OID, fmt.Errorf("error applying new tab layout: %w", err)
 		}

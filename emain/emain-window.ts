@@ -130,6 +130,8 @@ type WindowActionQueueEntry =
       }
     | {
           op: "createtab";
+          // WintOS: its first terminal starts no Claude (reopening a project on a session).
+          plain?: boolean;
       }
     | {
           op: "closetab";
@@ -528,8 +530,8 @@ export class WaveBrowserWindow extends BaseWindow {
         }
     }
 
-    async queueCreateTab() {
-        await this._queueActionInternal({ op: "createtab" });
+    async queueCreateTab(plain = false) {
+        await this._queueActionInternal({ op: "createtab", plain });
     }
 
     async queueCloseTab(tabId: string) {
@@ -569,7 +571,7 @@ export class WaveBrowserWindow extends BaseWindow {
                 // have to use "===" here to get the typechecker to work :/
                 switch (entry.op) {
                     case "createtab":
-                        tabId = await WorkspaceService.CreateTab(this.workspaceId, null, true);
+                        tabId = entry.plain ? await WorkspaceService.CreatePlainTab(this.workspaceId, true) : await WorkspaceService.CreateTab(this.workspaceId, null, true);
                         break;
                     case "switchtab":
                         tabId = entry.tabId;
@@ -750,11 +752,11 @@ ipcMain.on("set-active-tab", async (event, tabId) => {
     await ww?.setActiveTab(tabId, true);
 });
 
-ipcMain.on("create-tab", async (event, _opts) => {
+ipcMain.on("create-tab", async (event, opts?: { plain?: boolean }) => {
     const senderWc = event.sender;
     const ww = getWaveWindowByWebContentsId(senderWc.id);
     if (ww != null) {
-        await ww.queueCreateTab();
+        await ww.queueCreateTab(opts?.plain === true);
     }
     event.returnValue = true;
     return null;

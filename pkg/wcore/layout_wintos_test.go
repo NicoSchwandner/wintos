@@ -38,6 +38,16 @@ func TestNewTabCanOptOutOfClaude(t *testing.T) {
 	}
 }
 
+// Reopening a project on a session it had: its first terminal starts nothing, whatever the
+// new-project command is.
+func TestPlainTabStartsNoClaude(t *testing.T) {
+	t.Setenv("WINTOS_NEW_PROJECT_CMD", "claude")
+	layout := GetPlainTabLayout()
+	if len(layout) != 1 || layout[0].BlockDef == nil || layout[0].BlockDef.Meta[waveobj.MetaKey_CmdInitScript] != nil {
+		t.Fatalf("plain tab layout = %+v", layout)
+	}
+}
+
 // A project is a tab; closing its last pane must leave the project open (and the window with it).
 func TestDeletingLastBlockKeepsTheTab(t *testing.T) {
 	ctx := initTestWStore(t)

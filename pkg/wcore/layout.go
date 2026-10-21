@@ -81,6 +81,16 @@ func GetNewTabLayout() PortableLayout {
 	}
 }
 
+func GetPlainTabLayout() PortableLayout {
+	meta := waveobj.MetaMapType{
+		waveobj.MetaKey_View:       "term",
+		waveobj.MetaKey_Controller: "shell",
+	}
+	return PortableLayout{
+		{IndexArr: []int{0}, BlockDef: &waveobj.BlockDef{Meta: meta}, Focused: true},
+	}
+}
+
 func GetLayoutIdForTab(ctx context.Context, tabId string) (string, error) {
 	tabObj, err := wstore.DBGet[*waveobj.Tab](ctx, tabId)
 	if err != nil {

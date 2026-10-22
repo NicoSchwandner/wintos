@@ -82,6 +82,12 @@ describe("wintos-hook.sh tells the daemon which session the pane runs", () => {
         expect(d.seen[0].body.payload.resume).toBe("cd '/x' && claude --resume 's-1'");
     });
 
+    test("a headless `claude -p` run from inside a session sends nothing: it is part of that session's work", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync(env(d.port, { CLAUDE_CODE_ENTRYPOINT: "sdk-cli" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "throwaway", cwd: "/x" }));
+        expect(d.seen).toEqual([]);
+    });
+
     test("a background fork's carries none", async () => {
         const d = await fakeDaemon("");
         await runHookAsync(env(d.port, { CLAUDE_CODE_SESSION_KIND: "bg" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "fork", cwd: "/x" }));

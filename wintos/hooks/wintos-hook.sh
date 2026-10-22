@@ -3,19 +3,22 @@
 # from, and prints the daemon's answer (the prompt injection for UserPromptSubmit).
 # Never fails and never waits long: a missing daemon must not slow Claude down.
 [ -n "$WAVETERM_TABID" ] || exit 0
+# A headless `claude -p` run started from inside a session inherits its pane but is part of that
+# session's work: shown as a session of its own it has no pane to open, and one cut off (the Mac
+# asleep) stays "working" for good.
+[ "${CLAUDE_CODE_ENTRYPOINT:-}" = "sdk-cli" ] && exit 0
 payload="$(cat)"
 
 # The block's init script is what Wave runs when the app starts, so pointing it at this
 # session makes a quit-and-relaunch resume it. It is set on a prompt, not on a new session's
 # start: Claude saves nothing to resume until the first prompt. A resumed one is saved already. Quitting WintOS ends sessions with
 # reason "other"; only a deliberate exit clears the command.
-# Only an interactive session you started owns its block: a `claude -p` run from inside it
-# (CLAUDE_CODE_ENTRYPOINT=sdk-cli) inherits the block id and would otherwise make the next
-# launch resume a throwaway session. CLAUDE_CODE_CHILD_SESSION can't tell them apart: Claude
-# sets it for everything it spawns, the interactive session's own hooks included. Nor does a fork
-# Claude Code runs in the background (CLAUDE_CODE_SESSION_KIND=bg): it inherits the pane's id too.
+# Only an interactive session you started owns its block: a fork Claude Code runs in the
+# background (CLAUDE_CODE_SESSION_KIND=bg) inherits the pane's id too, and would otherwise make
+# the next launch resume it. CLAUDE_CODE_CHILD_SESSION can't tell them apart: Claude sets it for
+# everything it spawns, the interactive session's own hooks included.
 resume=""
-if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" != "sdk-cli" ] && [ "${CLAUDE_CODE_SESSION_KIND:-}" != "bg" ]; then
+if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_SESSION_KIND:-}" != "bg" ]; then
     wsh="${WAVETERM_WSHBINDIR:+$WAVETERM_WSHBINDIR/}wsh"
     case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.reason // .source // "")' 2>/dev/null)" in
     UserPromptSubmit:* | SessionStart:resume)

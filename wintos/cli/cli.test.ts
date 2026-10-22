@@ -155,6 +155,14 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         expect(w.calls()).toBe("");
     });
 
+    test("nor a fork whose own process doesn't say it is one: its transcript does", () => {
+        const w = fakeWsh();
+        const t = join(tmp(), "fork.jsonl");
+        writeFileSync(t, [JSON.stringify({ type: "ai-title", sessionId: "fork" }), JSON.stringify({ type: "attachment", sessionKind: "bg" })].join("\n"));
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", source: "resume", session_id: "fork", cwd: "/x", transcript_path: t }));
+        expect(w.calls()).toBe("");
+    });
+
     test("a new session's start does not, since Claude saves nothing to resume before the first prompt", () => {
         const w = fakeWsh();
         runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", source: "startup", session_id: "s-1", cwd: "/x" }));

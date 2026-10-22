@@ -17,8 +17,15 @@ payload="$(cat)"
 # background (CLAUDE_CODE_SESSION_KIND=bg) inherits the pane's id too, and would otherwise make
 # the next launch resume it. CLAUDE_CODE_CHILD_SESSION can't tell them apart: Claude sets it for
 # everything it spawns, the interactive session's own hooks included.
+# A fork made from inside the session runs its first events in the pane's own process, without
+# that variable; its transcript says what it is from its first lines on.
+background="${CLAUDE_CODE_SESSION_KIND:-}"
+if [ "$background" != "bg" ]; then
+    transcript="$(printf '%s' "$payload" | jq -r '.transcript_path // empty' 2>/dev/null)"
+    [ -n "$transcript" ] && [ -r "$transcript" ] && head -n 40 "$transcript" | grep -q '"sessionKind":"bg"' && background=bg
+fi
 resume=""
-if [ -n "$WAVETERM_BLOCKID" ] && [ "${CLAUDE_CODE_SESSION_KIND:-}" != "bg" ]; then
+if [ -n "$WAVETERM_BLOCKID" ] && [ "$background" != "bg" ]; then
     wsh="${WAVETERM_WSHBINDIR:+$WAVETERM_WSHBINDIR/}wsh"
     case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.reason // .source // "")' 2>/dev/null)" in
     UserPromptSubmit:* | SessionStart:resume)

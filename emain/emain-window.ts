@@ -130,8 +130,9 @@ type WindowActionQueueEntry =
       }
     | {
           op: "createtab";
-          // WintOS: its first terminal starts no Claude (reopening a project on a session).
-          plain?: boolean;
+          // WintOS: reopening a project on a session: the tab's first pane is this one, and no
+          // Claude of its own starts there.
+          first?: MetaType;
       }
     | {
           op: "closetab";
@@ -530,8 +531,8 @@ export class WaveBrowserWindow extends BaseWindow {
         }
     }
 
-    async queueCreateTab(plain = false) {
-        await this._queueActionInternal({ op: "createtab", plain });
+    async queueCreateTab(first?: MetaType) {
+        await this._queueActionInternal({ op: "createtab", first });
     }
 
     async queueCloseTab(tabId: string) {
@@ -571,7 +572,7 @@ export class WaveBrowserWindow extends BaseWindow {
                 // have to use "===" here to get the typechecker to work :/
                 switch (entry.op) {
                     case "createtab":
-                        tabId = entry.plain ? await WorkspaceService.CreatePlainTab(this.workspaceId, true) : await WorkspaceService.CreateTab(this.workspaceId, null, true);
+                        tabId = entry.first ? await WorkspaceService.CreatePlainTab(this.workspaceId, true, entry.first) : await WorkspaceService.CreateTab(this.workspaceId, null, true);
                         break;
                     case "switchtab":
                         tabId = entry.tabId;
@@ -752,11 +753,11 @@ ipcMain.on("set-active-tab", async (event, tabId) => {
     await ww?.setActiveTab(tabId, true);
 });
 
-ipcMain.on("create-tab", async (event, opts?: { plain?: boolean }) => {
+ipcMain.on("create-tab", async (event, opts?: { first?: MetaType }) => {
     const senderWc = event.sender;
     const ww = getWaveWindowByWebContentsId(senderWc.id);
     if (ww != null) {
-        await ww.queueCreateTab(opts?.plain === true);
+        await ww.queueCreateTab(opts?.first);
     }
     event.returnValue = true;
     return null;

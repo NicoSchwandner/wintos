@@ -42,8 +42,17 @@ func TestNewTabCanOptOutOfClaude(t *testing.T) {
 // new-project command is.
 func TestPlainTabStartsNoClaude(t *testing.T) {
 	t.Setenv("WINTOS_NEW_PROJECT_CMD", "claude")
-	layout := GetPlainTabLayout()
+	layout := GetPlainTabLayout(nil)
 	if len(layout) != 1 || layout[0].BlockDef == nil || layout[0].BlockDef.Meta[waveobj.MetaKey_CmdInitScript] != nil {
+		t.Fatalf("plain tab layout = %+v", layout)
+	}
+}
+
+// The pane the project reopens on is the tab's first, not swapped in for a starter afterwards.
+func TestPlainTabStartsOnTheGivenPane(t *testing.T) {
+	layout := GetPlainTabLayout(waveobj.MetaMapType{waveobj.MetaKey_CmdInitScript: "claude --resume 's'"})
+	meta := layout[0].BlockDef.Meta
+	if meta[waveobj.MetaKey_CmdInitScript] != "claude --resume 's'" || meta[waveobj.MetaKey_View] != "term" || !layout[0].Focused {
 		t.Fatalf("plain tab layout = %+v", layout)
 	}
 }

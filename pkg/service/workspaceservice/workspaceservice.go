@@ -128,17 +128,18 @@ func (svc *WorkspaceService) CreateTab_Meta() tsgenmeta.MethodMeta {
 
 func (svc *WorkspaceService) CreatePlainTab_Meta() tsgenmeta.MethodMeta {
 	return tsgenmeta.MethodMeta{
-		ArgNames:   []string{"workspaceId", "activateTab"},
+		ArgNames:   []string{"workspaceId", "activateTab", "first"},
 		ReturnDesc: "tabId",
 	}
 }
 
-// WintOS: a new tab whose first terminal starts no Claude (reopening a project on a session).
-func (svc *WorkspaceService) CreatePlainTab(workspaceId string, activateTab bool) (string, waveobj.UpdatesRtnType, error) {
+// WintOS: a new tab whose first pane is given and starts no Claude of its own (reopening a
+// project on a session).
+func (svc *WorkspaceService) CreatePlainTab(workspaceId string, activateTab bool, first waveobj.MetaMapType) (string, waveobj.UpdatesRtnType, error) {
 	ctx, cancelFn := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer cancelFn()
 	ctx = waveobj.ContextWithUpdates(ctx)
-	tabId, err := wcore.CreatePlainTab(ctx, workspaceId, activateTab)
+	tabId, err := wcore.CreatePlainTab(ctx, workspaceId, activateTab, first)
 	if err != nil {
 		return "", nil, fmt.Errorf("error creating tab: %w", err)
 	}

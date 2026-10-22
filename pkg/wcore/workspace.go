@@ -228,10 +228,12 @@ func CreateTab(ctx context.Context, workspaceId string, tabName string, activate
 	return createTabWith(ctx, workspaceId, tabName, activateTab, isInitialLaunch, GetNewTabLayout())
 }
 
-// WintOS: a tab whose first terminal is a plain shell, for reopening a project on a session it
-// already had; a Claude starting there would be one session too many.
-func CreatePlainTab(ctx context.Context, workspaceId string, activateTab bool) (string, error) {
-	return createTabWith(ctx, workspaceId, "", activateTab, false, GetPlainTabLayout())
+// WintOS: a tab for reopening a project on a session it already had, its first pane given
+// (the session's resume). A Claude in a starter terminal would be one session too many, and a
+// starter swapped for the pane afterwards races the layout's orphan cleanup, which deletes the
+// new pane before it is laid out.
+func CreatePlainTab(ctx context.Context, workspaceId string, activateTab bool, first waveobj.MetaMapType) (string, error) {
+	return createTabWith(ctx, workspaceId, "", activateTab, false, GetPlainTabLayout(first))
 }
 
 func createTabWith(ctx context.Context, workspaceId string, tabName string, activateTab bool, isInitialLaunch bool, layout PortableLayout) (string, error) {

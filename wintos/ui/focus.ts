@@ -1,5 +1,5 @@
 import { globalStore } from "@/app/store/jotaiStore";
-import { atoms, createBlock, getApi, replaceBlock } from "@/store/global";
+import { atoms, createBlock, getApi } from "@/store/global";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import type { Session } from "../daemon/sessions/reduce";
 import { nextNeedsYou, Target } from "./sessions";
@@ -65,8 +65,9 @@ export function enterProject(tabId: string, find?: string): void {
 const REOPEN = "wintos:reopen";
 export function reopenProject(projectId: string, panes: MetaType[] = []): void {
     localStorage.setItem(REOPEN, JSON.stringify({ projectId, panes, at: Date.now() }));
-    // Opened on a session it had: a Claude in the starter terminal would be a second, empty one.
-    getApi().createTab({ plain: panes.length > 0 });
+    // Opened on a session it had: that pane is the tab's first, so no starter terminal runs a
+    // second, empty Claude, and none is swapped out (which raced the layout's orphan cleanup).
+    getApi().createTab(panes[0] ? { first: panes[0] } : undefined);
 }
 export const resumePane = (script: string): MetaType => ({ view: "term", controller: "shell", "cmd:initscript": script });
 export function takeReopen(): void {
@@ -79,21 +80,20 @@ export function takeReopen(): void {
     flog(`reopen project ${r.projectId.slice(0, 6)} in this tab`);
     for (const p of r.panes) noteResume(p["cmd:initscript"] as string | undefined);
     void daemonFetch(`/projects/${encodeURIComponent(r.projectId)}/reopen`, { method: "POST", body: { tabId } }).then(async () => {
-        const [first, ...rest] = r.panes;
-        if (!first) return;
-        // The first pane takes the new tab's starter terminal's place. Closing the starter after
-        // adding the panes races the layout's pending inserts and leaves an empty leaf behind.
-        const starter = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.blockids?.[0];
-        if (starter && (await laidOut(starter))) await replaceBlock(starter, { meta: first }, true);
-        else await createBlock({ meta: first });
+        // The first pane came with the tab (createTab's first); the rest join once the layout
+        // has applied its own pending actions, whose orphan cleanup would delete a pane added
+        // before it is laid out.
+        const rest = r.panes.slice(1);
+        if (!rest.length || !(await layoutSettled(tabId))) return;
         for (const meta of rest) await createBlock({ meta });
     });
 }
 
-// The layout node arrives a moment after the block; up to ~2 s.
-async function laidOut(blockId: string): Promise<boolean> {
+async function layoutSettled(tabId: string): Promise<boolean> {
     for (let i = 0; i < 120; i++) {
-        if (getLayoutModelForStaticTab()?.getNodeByBlockId(blockId)) return true;
+        const layoutId = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.layoutstate;
+        const layout = layoutId && globalStore.get(getWaveObjectAtom<LayoutState>(makeORef("layout", layoutId)));
+        if (layout && !layout.pendingbackendactions?.length && layout.rootnode) return true;
         await new Promise((r) => requestAnimationFrame(r));
     }
     return false;

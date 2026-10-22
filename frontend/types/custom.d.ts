@@ -126,7 +126,7 @@ declare global {
         switchWorkspace: (workspaceId: string) => void; // switch-workspace
         deleteWorkspace: (workspaceId: string) => void; // delete-workspace
         setActiveTab: (tabId: string) => void; // set-active-tab
-        createTab: (opts?: { plain?: boolean }) => void; // create-tab; plain: no Claude in its first terminal
+        createTab: (opts?: { first?: MetaType }) => void; // create-tab; first: the tab's first pane, no Claude of its own
         closeTab: (workspaceId: string, tabId: string, confirmClose: boolean) => Promise<boolean>; // close-tab
         setWindowInitStatus: (status: "ready" | "wave-ready") => void; // set-window-init-status
         onWaveInit: (callback: (initOpts: WaveInitOpts) => void) => void; // wave-init

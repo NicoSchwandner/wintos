@@ -65,7 +65,7 @@ wake)
           comments  someone reviewed or commented on it, after the wake was set
   pr      a link (https://github.com/owner/repo/pull/123) or owner/repo#123
   prompt  what you will do then, as an instruction to yourself
-e.g.  wintos wake green WintDev/Core#13617 "CI is green: submit the approval on #13617"
+e.g.  wintos wake green acme/api#123 "CI is green: submit the approval on #123"
       wintos wake released https://github.com/o/r/pull/285 "check the re-embed progress in prod and report"
       wintos wake rereview o/r#90 "re-review the fixes against your earlier comments"
       wintos wake cancel     (drops it)

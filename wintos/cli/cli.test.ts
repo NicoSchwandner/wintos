@@ -202,14 +202,14 @@ describe("wintos-hook.sh on PostToolUse", () => {
     });
     test("a PR named by number and repo counts too", async () => {
         const d = await fakeDaemon("");
-        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr edit 340 -R WintDev/Wint.HeartMcp --add-reviewer x", ""));
-        expect(d.seen[0].body.payload.prs).toEqual(["https://github.com/WintDev/Wint.HeartMcp/pull/340"]);
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr edit 340 -R acme/mcp --add-reviewer x", ""));
+        expect(d.seen[0].body.payload.prs).toEqual(["https://github.com/acme/mcp/pull/340"]);
         expect(d.seen[0].body.payload.pr_verb).toBe("edit");
     });
     test("gh pr view is sent with its verb, so the daemon can leave it out", async () => {
         const d = await fakeDaemon("");
-        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr view 56 -R WintDev/Wint.NPAPs", ""));
-        expect(d.seen[0].body.payload).toMatchObject({ pr_verb: "view", prs: ["https://github.com/WintDev/Wint.NPAPs/pull/56"] });
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr view 56 -R acme/proposals", ""));
+        expect(d.seen[0].body.payload).toMatchObject({ pr_verb: "view", prs: ["https://github.com/acme/proposals/pull/56"] });
     });
     test("a command that is no gh pr command sends nothing", async () => {
         const d = await fakeDaemon("");

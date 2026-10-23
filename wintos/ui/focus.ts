@@ -107,7 +107,7 @@ export function focusSession(t: Target): void {
 
 // Arriving in a project: on the session asked for, else back in an unsaved mine.md edit (its
 // view left as it was, so the draft stays), else on the terminals.
-function landOn({ blockId, find, resume, restore }: Target): void {
+function landOn({ blockId, find, resume, restore, unmagnify }: Target): void {
     if (find) {
         rememberReturn();
         globalStore.set(findInNotesAtom, find);
@@ -130,8 +130,10 @@ function landOn({ blockId, find, resume, restore }: Target): void {
     // Magnify is a mode you choose (⌘M): landing on a session keeps it, never starts it. An
     // Inbox tab is always in it (one page at a time).
     const lm = getLayoutModelForStaticTab();
-    if (lm && globalStore.get(lm.magnifiedNodeIdAtom)) magnifyBlock(blockId);
-    else focusBlock(blockId);
+    const magnified = lm && globalStore.get(lm.magnifiedNodeIdAtom);
+    if (magnified && unmagnify && lm.getNodeByBlockId(blockId)?.id !== magnified) lm.magnifyNodeToggle(magnified);
+    else if (magnified) return void magnifyBlock(blockId);
+    focusBlock(blockId);
 }
 
 const mineEditor = () => document.querySelector<HTMLElement>("[data-wintos=mine-editor]");
@@ -219,6 +221,6 @@ export function jumpToNextWaiting(): boolean {
     // Where this jump started, for ⌃⇧⇥ to go back to.
     if (t) localStorage.setItem(BEFORE_JUMP, JSON.stringify({ tabId: globalStore.get(atoms.staticTabId), blockId: current ?? "" }));
     // A project in Needs you for a PR nobody here owns has no session to land on: its terminals.
-    if (t) focusSession("blockId" in t ? t : { tabId: t.tabId, blockId: "" });
+    if (t) focusSession({ ...("blockId" in t ? t : { tabId: t.tabId, blockId: "" }), unmagnify: true });
     return true;
 }

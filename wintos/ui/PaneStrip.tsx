@@ -17,6 +17,10 @@ import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
 import { isInboxTab, relTime } from "./view";
 
+// A pane's chip is edged in its session's colour when it is not the one shown: what waits on you
+// or is working reads at a glance even with another pane magnified.
+const STATE_BORDER: Record<string, string> = { waiting: T.apricot, working: T.moss };
+
 const GLYPH = { terminal: "›_", web: "◎", other: "□" } as const;
 
 // One chip per pane of this tab (Claude sessions, terminals, browser pages), in projects and the
@@ -76,7 +80,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                         tabIndex={-1}
                         data-key="⌘H / ⌘L"
                         onClick={() => focusSession({ tabId, blockId: c.blockId })}
-                        style={{ WebkitAppRegion: "no-drag", display: "inline-flex", alignItems: "center", gap: 7, maxWidth: 240, padding: "5px 10px", borderRadius: 8, border: `1px solid ${isOn ? T.borderActive : T.border}`, background: isOn ? T.cardActive : "transparent", color: isOn ? T.emphasis : T.secondary, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}
+                        style={{ WebkitAppRegion: "no-drag", display: "inline-flex", alignItems: "center", gap: 7, maxWidth: 240, padding: "5px 10px", borderRadius: 8, border: `1px solid ${isOn ? T.borderActive : (STATE_BORDER[s?.state ?? ""] ?? T.border)}`, background: isOn ? T.cardActive : "transparent", color: isOn ? T.emphasis : T.secondary, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}
                     >
                         {s ? (
                             // Unread: a ring in the to-read colour until you have looked.

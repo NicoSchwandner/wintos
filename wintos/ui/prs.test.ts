@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { PR } from "../daemon/prs/group";
-import { initials, keepSelection, queueModel, reviewerChips } from "./prs";
+import type { FixRun } from "../daemon/fixer/runner";
+import { fixNote, initials, standupAsks, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns } from "./prs";
 
 const MON = Date.parse("2026-09-28T09:00:00Z");
 const pr = (p: Partial<PR>): PR => ({
@@ -23,7 +24,12 @@ describe("queueModel", () => {
             ["merge", [1]], ["fix", [2]], ["review", [3]], ["chase", [4]], ["team", [5]],
         ]));
 
-    test("header counts: yours are the four you act on, team is the rest", () => expect([m.yours, m.waiting, m.team]).toEqual([4, 0, 1]));
+    test("header counts: yours are the three in your court (the chase waits on others), team is the rest", () => expect([m.yours, m.waiting, m.team]).toEqual([3, 0, 1]));
+
+    test("someone else's draft asked of your team is not shown: it asks nothing yet", () => {
+        const d = queueModel([pr({ number: 7, author: "bo.k", requestedTeam: true, isDraft: true })], "me", MON);
+        expect([d.groups, d.team]).toEqual([[], 0]);
+    });
 
     test("your PRs waiting on others count as waiting, not yours", () => {
         const w = queueModel([pr({ number: 6, reviewers: ["ana"] })], "me", MON);
@@ -37,12 +43,25 @@ describe("queueModel", () => {
         expect(w.groups[0].rows[0].qualifier?.text).toBe("CI red · stacked on #20");
     });
 
-    test("past SLA counts chases and late reviews", () => expect(m.pastSla).toBe(2));
+    test("past SLA is what you are late on: a late review counts, a chase (someone owes you) does not", () => expect(m.pastSla).toBe(1));
+    test("the team's review requests past the SLA have their own count", () => {
+        const t = queueModel([pr({ number: 5, author: "bo.k", requestedTeam: true, createdAt: "2026-09-21T09:00:00Z" }), pr({ number: 6, author: "bo.k", requestedTeam: true })], "me", MON);
+        expect([t.team, t.teamPastSla]).toEqual([2, 1]);
+    });
+    test("the rows behind the card's numbers say which one they are in; chase and waiting are in neither", () =>
+        expect(m.groups.flatMap((g) => g.rows.map((r) => [r.pr.number, r.counts]))).toEqual([[1, "yours"], [2, "yours"], [3, "yours"], [4, undefined], [5, "team"]]));
+    test("the rows behind the past-SLA counts carry the mark, the rest don't", () => {
+        const t = queueModel([pr({ number: 5, url: "t", author: "bo.k", requestedTeam: true, createdAt: "2026-09-21T09:00:00Z" }), ...prs], "me", MON);
+        const marks = t.groups.flatMap((g) => g.rows.map((r) => [r.pr.number, r.sla]));
+        expect(marks).toEqual([[1, undefined], [2, undefined], [3, "yours"], [4, undefined], [5, "team"], [5, undefined]]);
+    });
+    test("a draft of yours past its clock counts past SLA too", () =>
+        expect(queueModel([pr({ number: 9, isDraft: true, createdAt: "2026-09-14T09:00:00Z" })], "me", MON).pastSla).toBe(1));
 
     test("empty groups are dropped", () => expect(queueModel([pr({ reviewDecision: "APPROVED", checks: "SUCCESS" })], "me", MON).groups.map((g) => g.group)).toEqual(["merge"]));
 
-    test("a row carries the diff total and the short repo name", () =>
-        expect(m.groups[0].rows[0]).toMatchObject({ total: 4, repoShort: "api", mine: true }));
+    test("a row carries the diff total", () =>
+        expect(m.groups[0].rows[0]).toMatchObject({ total: 4, mine: true }));
 });
 
 describe("initials", () => {
@@ -137,5 +156,70 @@ describe("reviewerChips", () => {
     test("nobody asked on a ready PR is a 'none' chip; on a draft it is nothing", () => {
         expect(reviewerChips(pr({ reviewers: [] }), 2)).toEqual({ chips: [], more: 0, none: true, approved: [] });
         expect(reviewerChips(pr({ reviewers: [], isDraft: true }), 2)).toEqual({ chips: [], more: 0, none: false, approved: [] });
+    });
+    test("changes requested: nobody is asked because the ball is with the author, so no 'none'", () =>
+        expect(reviewerChips(pr({ reviewers: [], changesRequestedBy: "tobi" }), 2).none).toBe(false));
+});
+
+describe("rowColumns", () => {
+    test("the list alone or a wide split shows every column", () => expect(rowColumns(1400)).toEqual({ size: true, names: true }));
+    test("a little narrower, the size bar goes first", () => expect(rowColumns(900)).toEqual({ size: false, names: true }));
+    test("beside a page on a laptop, names become initials too", () => expect(rowColumns(500)).toEqual({ size: false, names: false }));
+});
+
+describe("matchesPr", () => {
+    const p = { repo: "acme/api", number: 1479, title: "Fix the rounding", author: "ana.b", branch: "ABC-12-rounding" } as Parameters<typeof matchesPr>[0];
+    test.each([
+        ["", true],
+        ["rounding", true],
+        ["ROUND acme", true],
+        ["1479", true],
+        ["#1479", true],
+        ["ana", true],
+        ["abc-12", true],
+        ["rounding vat", false],
+    ])("%s → %s", (q, out) => expect(matchesPr(p, q)).toBe(out));
+});
+
+test("an unreleased merge past the SLA is in Release, counted past SLA", () => {
+    const m = queueModel([pr({ url: "r", mergedAt: "2026-09-23T09:00:00Z" })], "me", MON);
+    expect(m.groups.map((g) => g.group)).toEqual(["release"]);
+    expect(m.pastSla).toBe(1);
+});
+
+test("a merged PR asks no reviewer", () => expect(reviewerChips(pr({ mergedAt: "2026-09-23T09:00:00Z" }), 2).none).toBe(false));
+
+describe("fixNote", () => {
+    const pr = { url: "u", head: "h1" } as PR;
+    const run = (o: Partial<FixRun> = {}): FixRun => ({ id: "r", kind: "conflict", url: "u", head: "h1", route: "fresh", at: 1, ...o });
+    test("says what the fixer does about the PR's current commit only", () => {
+        expect(fixNote(run({ head: "h0" }), pr, [])).toBeUndefined();
+        expect(fixNote(undefined, pr, [])).toBeUndefined();
+        expect(fixNote(run(), pr, ["r"])).toEqual({ text: "fixing the conflict next" });
+        expect(fixNote(run({ startedAt: 2 }), pr, [])).toEqual({ text: "fixing the conflict…" });
+        expect(fixNote(run(), pr, [])).toEqual({ text: "fixing the conflict next" });
+        expect(fixNote(run({ kind: "ci", route: "pane" }), pr, [])).toEqual({ text: "red CI sent to its session" });
+        expect(fixNote(run({ endedAt: 2, exit: 0, result: "Pushed." }), pr, [])).toEqual({ text: "tried to fix the conflict: Pushed." });
+        expect(fixNote(run({ endedAt: 2, exit: 1 }), pr, [])).toEqual({ text: "fixing the conflict failed", brick: true });
+    });
+});
+
+describe("standupAsks", () => {
+    const NOW = Date.parse("2026-10-19T09:00:00Z"); // a Monday
+    const pr = (n: number, o: Partial<PR> = {}): PR => ({ repo: "o/r", number: n, url: `u${n}`, title: `PR ${n}`, author: "me", isDraft: false, createdAt: "2026-10-14T09:00:00Z", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: ["team-x"], additions: 1, deletions: 1, branch: "b", ...o }) as PR;
+    test("a few by name; drafts, approved, merged, others' and fresh ones are no ask", () => {
+        const prs = [pr(1), pr(2, { isDraft: true }), pr(3, { reviewDecision: "APPROVED" }), pr(4, { mergedAt: "x" }), pr(5, { author: "ana" }), pr(6, { createdAt: "2026-10-19T08:00:00Z" }), pr(7, { reviewers: [] })];
+        expect(standupAsks(prs, "me", NOW)).toBe("#1 PR 1 waits for a review from team-x");
+    });
+    test("more than two: counts per reviewer, most first", () => {
+        expect(standupAsks([pr(1), pr(2), pr(3, { reviewers: ["team-ai"] })], "me", NOW)).toBe("3 PRs wait for a review: 2 on team-x, 1 on team-ai");
+        expect(standupAsks([], "me", NOW)).toBeUndefined();
+    });
+    test("with your team known: how many wait within it, a teammate named only from three on, others' teams counted in the total only", () => {
+        const team = ["team-x", "ana", "bo"];
+        const prs = [pr(1), pr(2, { reviewers: ["ana"] }), pr(3, { reviewers: ["ana"] }), pr(4, { reviewers: ["ana", "zed"] }), pr(5, { reviewers: ["bo"] }), pr(6, { reviewers: ["team-ai"] })];
+        expect(standupAsks(prs, "me", NOW, team)).toBe("6 PRs wait for a review, 5 within the team: 3 on ana");
+        expect(standupAsks([pr(1), pr(6, { reviewers: ["team-ai"] })], "me", NOW, team)).toBe("2 PRs wait for a review, 1 within the team");
+        expect(standupAsks([pr(6, { reviewers: ["team-ai"] })], "me", NOW, team)).toBeUndefined();
     });
 });

@@ -1,11 +1,16 @@
-import { rank, Ranking, Row } from "../daemon/ranking/rank";
+import type { Wake, Wakes } from "../daemon/wakes/wakes";
+import type { Day } from "../daemon/journal/journal";
+import type { KeyStats } from "../daemon/keyboard/keyboard";
 import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
-import { GROUPS, isSnoozed, isStacked, lastMovement, projectPrs, qualifier, type Group, type PR, type ProjectPrs, type Snoozes } from "../daemon/prs/group";
-import type { Session } from "../daemon/sessions/reduce";
+import { ageLabel, byUrgency, GROUPS, groupOf, isSnoozed, isStacked, projectPrs, qualifier, type Group, type PR, type Snoozes } from "../daemon/prs/group";
+import { fixNote } from "./prs";
+import { liveSessionIn, liveSessionsIn, type Session } from "../daemon/sessions/reduce";
+import { shelvedName, type Shelved } from "../daemon/shelf/shelf";
+import type { FixerState } from "../daemon/fixer/runner";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number> };
-export type Tone = "apricot" | "brick" | "secondary";
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]>; fixer?: FixerState; repoNames?: Record<string, string>; wakes?: Wakes };
+export type Tone = "apricot" | "blue" | "brick" | "secondary";
 export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
 
 export function relTime(ms: number): string {
@@ -16,60 +21,40 @@ export function relTime(ms: number): string {
     return `${Math.floor(s / 86_400)}d`;
 }
 
-export function ghPrs(state: WintosState): { me: string; prs: PR[] } | undefined {
-    return state.plugins?.["gh-prs"]?.data as { me: string; prs: PR[] } | undefined;
-}
-
-export function prsByTab(tabIds: string[], state: WintosState): Record<string, ProjectPrs> {
-    const gh = ghPrs(state);
-    if (!gh) return {};
-    const out: Record<string, ProjectPrs> = {};
-    const awake = gh.prs.filter((pr) => !isSnoozed(pr, state.snoozes ?? {}, state.now));
-    for (const id of tabIds) {
-        const p = state.projects.find((x) => x.id === id);
-        if (p) out[id] = projectPrs(p, awake, gh.me, state.now);
-    }
-    return out;
-}
-
-export function sidebarModel(tabIds: string[], state: WintosState): Ranking {
-    const touched = Object.fromEntries(state.projects.filter((p) => p.id).map((p) => [p.id!, p.mtime]));
-    const byTab = prsByTab(tabIds, state);
-    const blocked = Object.fromEntries(Object.entries(byTab).filter(([, v]) => v.blocked).map(([k, v]) => [k, v.blocked!.since]));
-    return rank(tabIds, state.sessions, state.now, touched, blocked, state.seen);
-}
-
-export function rowView(row: Row, project: Project | undefined, tabName: string | undefined, now: number, prs?: ProjectPrs): RowView {
-    const title = project?.title ?? tabName ?? "Untitled";
-    const since = row.band === "needs" ? row.waitingSince! : row.lastAt;
-    const age = since > 0 ? relTime(now - since) : "";
-    const first = prs?.items[0]?.pr;
-    const link = first ? `#${first.number} · ${first.branch}` : project?.pr?.[0];
-    // Restored at the last restart: shown as it was, but its Claude starts only when you open it.
-    const notStarted = row.sessions.length > 0 && row.sessions.every((s) => s.restored);
-    const meta = notStarted ? [link, "not started, opens with the project"].filter(Boolean).join(" · ") : link;
-    if (project?.error) return { title, next: `note unreadable: ${project.dir}/project.md`, tone: "brick", age, meta };
-    if (row.band === "needs") {
-        const sessionWaiting = row.sessions.some((s) => s.state === "waiting");
-        if (!sessionWaiting && row.unread) return { title, next: project?.next ? `New reply · ${project.next}` : "New reply", tone: "apricot", age, meta };
-        if (!sessionWaiting && prs?.blocked) return { title, next: prs.blocked.text, tone: prs.blocked.tone, age, meta };
-        return { title, next: project?.next ?? "Your turn", tone: "apricot", age, meta };
-    }
-    if (row.band === "running") {
-        // Parked beats the next action: it is the live reason nobody needs to act.
-        const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
-        return { title, next: parkedOn ? `Waiting on ${parkedOn}` : (project?.next ?? "Claude is working"), tone: "secondary", age, meta };
-    }
-    return { title, age, reason: prs?.reason ?? meta ?? age };
+// team: the reviewers that count as your own team (WINTOS_TEAM), when set.
+export function ghPrs(state: WintosState): { me: string; prs: PR[]; team?: string[] } | undefined {
+    return state.plugins?.["gh-prs"]?.data as { me: string; prs: PR[]; team?: string[] } | undefined;
 }
 
 // The Inbox is the one tab that is not a project (pkg/wcore/inbox.go); a tab not loaded yet is one.
-export const isInboxTab = (tab: Tab | undefined) => tab?.meta?.["wintos:inbox"] === true;
+// Two Inbox tabs, PRs and On call; true is an Inbox from before the split, which held the PRs.
+export type InboxList = "prs" | "oncall";
+export function inboxKind(tab: Tab | undefined): InboxList | undefined {
+    const v = tab?.meta?.["wintos:inbox"];
+    return v === true || v === "prs" ? "prs" : v === "oncall" ? "oncall" : undefined;
+}
+export const isInboxTab = (tab: Tab | undefined) => inboxKind(tab) !== undefined;
 // An empty placeholder saved by an earlier version (meta wintos:blank) is not a project either;
 // one that gained panes is.
 const oldPlaceholder = (tab: Tab | undefined) => tab?.meta?.["wintos:blank"] === true && !tab.blockids?.length;
 export const projectTabIds = (ids: string[], tabs: Record<string, Tab | undefined>) => ids.filter((id) => !isInboxTab(tabs[id]) && !oldPlaceholder(tabs[id]));
-export const inboxTabId = (ids: string[], tabs: Record<string, Tab | undefined>) => ids.find((id) => isInboxTab(tabs[id]));
+export const inboxTabId = (ids: string[], tabs: Record<string, Tab | undefined>, list: InboxList) => ids.find((id) => inboxKind(tabs[id]) === list);
+
+// Who owns a PR in a project: the live session there that touched it last, else a shelved one
+// (resumed by its script). One owner each; the daemon moves a PR to whoever touches it.
+export type Owner = { name: string; blockId: string } | { name: string; resume: string };
+export function prOwners(state: WintosState, tabId: string): Map<string, Owner> {
+    const owners = new Map<string, Owner>();
+    for (const s of state.shelf?.[tabId] ?? []) for (const u of s.prs ?? []) owners.set(u, { name: shelvedName(s), resume: s.script });
+    for (const s of state.sessions.filter((s) => s.tabId === tabId && s.state !== "ended")) for (const u of s.prs ?? []) owners.set(u, { name: sessionName(s), blockId: s.blockId });
+    return owners;
+}
+
+// Which shelved session a closed project reopens on for a PR: the one that owns it, else one
+// that touched it, else the newest (a review that only read the PR owns nothing yet).
+export function reopenFor(shelf: Shelved[], url: string): Shelved | undefined {
+    return shelf.find((s) => s.prs?.includes(url)) ?? shelf.find((s) => s.touched?.includes(url)) ?? shelf[0];
+}
 
 // The notes' Pull requests section: every PR of the project, snoozed ones included (marked,
 // last), most urgent group first, each with what it waits on.
@@ -80,25 +65,158 @@ export function projectPrList(state: WintosState, tabId: string): ProjectPrRow[]
     const project = state.projects.find((p) => p.id === tabId);
     if (!gh || !project) return [];
     const numbers = new Map(gh.prs.map((p) => [p.url, p.number]));
-    const rows = projectPrs(project, gh.prs, gh.me, state.now).items.map(({ pr, group }): ProjectPrRow => {
+    // A PR a session here owns is on that session's pane header, or its shelf row, instead.
+    const owned = new Set(prOwners(state, tabId).keys());
+    const rows = projectPrs(project, gh.prs.filter((p) => !owned.has(p.url)), gh.me, state.now).items.map(({ pr, group }): ProjectPrRow => {
         const on = !isStacked(pr) ? undefined : pr.stackedOn && numbers.has(pr.stackedOn) ? `#${numbers.get(pr.stackedOn)}` : pr.base;
         const note = [qualifier(pr, group)?.text, on && `stacked on ${on}`].filter(Boolean).join(" · ") || undefined;
         return { pr, group, note, snoozed: isSnoozed(pr, state.snoozes ?? {}, state.now) };
     });
-    return rows.sort(
-        (a, b) => Number(a.snoozed) - Number(b.snoozed) || GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || lastMovement(a.pr).localeCompare(lastMovement(b.pr))
-    );
+    return rows.sort((a, b) => Number(a.snoozed) - Number(b.snoozed) || byUrgency(a, b));
 }
 
-// Which project each PR belongs to, for "go to project" in the queue. Snoozed PRs included:
-// snoozing a PR doesn't detach it from its project.
-export function prProjects(tabIds: string[], state: WintosState): Map<string, string> {
+// Which projects each PR belongs to: its owner's first (the session that first touched it), then
+// every project it is also in (a session there worked on it, or its project.md names it). Snoozed
+// PRs included, and closed projects too: their shelf holds their sessions.
+export function prProjectLists(tabIds: string[], state: WintosState): Map<string, string[]> {
     const gh = ghPrs(state);
-    const out = new Map<string, string>();
+    const out = new Map<string, string[]>();
     if (!gh) return out;
-    for (const id of tabIds) {
+    const ids = [...tabIds, ...state.projects.filter((p) => p.id && !tabIds.includes(p.id)).map((p) => p.id!)];
+    const add = (url: string, id: string, first = false) => {
+        const list = (out.get(url) ?? []).filter((x) => x !== id);
+        out.set(url, first ? [id, ...list] : [...list, id]);
+    };
+    for (const id of ids) {
         const p = state.projects.find((x) => x.id === id);
-        if (p) for (const { pr } of projectPrs(p, gh.prs, gh.me, state.now).items) if (!out.has(pr.url)) out.set(pr.url, id);
+        const touched = [...state.sessions.filter((s) => s.tabId === id).flatMap((s) => s.touched ?? []), ...(state.shelf?.[id] ?? []).flatMap((i) => i.touched ?? [])];
+        if (p) for (const { pr } of projectPrs({ ...p, pr: [...(p.pr ?? []), ...prOwners(state, id).keys(), ...touched] }, gh.prs, gh.me, state.now).items) add(pr.url, id);
     }
+    // The owner's project leads, wherever it was found.
+    for (const id of ids) for (const url of prOwners(state, id).keys()) if (out.has(url)) add(url, id, true);
     return out;
+}
+
+// The one project a PR goes to ("go to project"): its owner's.
+export function prProjects(tabIds: string[], state: WintosState): Map<string, string> {
+    return new Map([...prProjectLists(tabIds, state)].map(([url, ids]) => [url, ids[0]]));
+}
+
+// The header on a Claude pane: what it works on and what its PRs ask of you.
+// wake: the next prompt it waits to be given (wintos wake).
+export type SessionHeader = {
+    session: Session;
+    wake?: Wake;
+    task?: string;
+    branch?: string;
+    prs: PrChip[];
+    merged: number;
+    tone?: "apricot" | "brick"; // a PR here needs a fix (apricot) or is past the SLA (brick)
+};
+
+const TASK_ID = /\b[A-Z][A-Z0-9]+-\d+\b/i;
+
+export function sessionHeader(state: WintosState, blockId: string): SessionHeader | undefined {
+    const session = liveSessionIn(state.sessions, blockId);
+    if (!session) return undefined;
+    const gh = ghPrs(state);
+    const byUrl = new Map((gh?.prs ?? []).map((p) => [p.url, p]));
+    const { open: prs, merged } = prChips(state, session.prs ?? []);
+    const open = (session.prs ?? []).map((u) => byUrl.get(u)).filter((p): p is PR => !!p);
+    const where = session.cwd?.split("/").pop();
+    const branch = open[0]?.branch ?? where;
+    const task = [...open.flatMap((p) => [p.branch, p.title]), where ?? ""].map((t) => TASK_ID.exec(t)?.[0]).find(Boolean)?.toUpperCase();
+    const groups = prs.map((p) => p.group);
+    const tone = groups.some((g) => g === "chase" || g === "release") ? "brick" : groups.includes("fix") ? "apricot" : undefined;
+    const wake = state.wakes?.[session.id];
+    return { session, ...(task && { task }), ...(branch && { branch }), prs, merged, ...(tone && { tone }), ...(wake && { wake }) };
+}
+
+// A session's open PRs as chips, most urgent first, each saying what is next in plain words;
+// the done ones drop out, the merged ones waiting for a release only count. repo: its short name
+// (repoLabel). Before the first PR fetch every PR shows as a bare number.
+export type PrChip = { url: string; number: number; group?: Group; text?: string; repo?: string };
+export type SessionPrs = { open: PrChip[]; merged: number };
+export function prChips(state: WintosState, urls: string[]): SessionPrs {
+    const gh = ghPrs(state);
+    if (!gh) return { open: urls.map((url) => ({ url, number: Number(url.split("/").pop()) })), merged: 0 };
+    const byUrl = new Map(gh.prs.map((p) => [p.url, p]));
+    const known = urls.map((u) => byUrl.get(u)).filter((p): p is PR => !!p);
+    const open = known.filter((p) => !p.mergedAt);
+    const label = repoLabeler(state);
+    const chips = open.map((pr): PrChip => {
+        const group = groupOf(pr, gh.me, state.now);
+        return { url: pr.url, number: pr.number, group, text: chipText(pr, group, state), repo: label(pr.repo) };
+    });
+    return { open: chips.sort((a, b) => GROUPS.indexOf(a.group!) - GROUPS.indexOf(b.group!)), merged: known.length - open.length };
+}
+
+// A PR as the window names it, by its repo's short name: "DMS #211".
+export function prRef(state: WintosState, url: string): string {
+    const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);
+    return m ? `${repoLabeler(state)(m[1])} #${m[2]}` : url;
+}
+
+// Every repo's short name, given the PRs WintOS knows.
+export function repoLabeler(state: WintosState): (repo: string) => string {
+    const repos = ghPrs(state)?.prs.map((p) => p.repo) ?? [];
+    return (repo) => repoLabel(repo, state.repoNames ?? {}, repos);
+}
+
+// A repo's short name: yours (n in the PR list), else its name without the dotted prefix most of
+// the repos share and without a trailing ".Service".
+export function repoLabel(repo: string, names: Record<string, string>, repos: string[]): string {
+    if (names[repo]) return names[repo];
+    const name = repo.split("/").pop()!;
+    const prefixes = repos.map((r) => /^[^.]+\./.exec(r.split("/").pop()!)?.[0]).filter(Boolean);
+    const common = prefixes.filter((p) => p === prefixes.sort((a, b) => prefixes.filter((x) => x === b).length - prefixes.filter((x) => x === a).length)[0])[0];
+    const shared = common && prefixes.filter((p) => p === common).length * 2 >= new Set(repos).size ? common : undefined;
+    const bare = shared && name.startsWith(shared) ? name.slice(shared.length) : name;
+    return bare.replace(/\.Service$/, "") || name;
+}
+
+function chipText(pr: PR, group: Group, state: WintosState): string {
+    const fixer = state.fixer;
+    const fix = fixNote(fixer?.runs.find((r) => r.url === pr.url), pr, fixer?.queued ?? []);
+    if (fix) return fix.text;
+    const why = qualifier(pr, group)?.text;
+    if (group === "merge") return why ?? "merge it";
+    if (group === "fix") return why ?? "fix";
+    if (group === "review") return "review asked";
+    if (group === "team") return "team review";
+    if (group === "chase") return ["chase", why, ageLabel(pr, state.now).text].filter(Boolean).join(" · ");
+    return pr.isDraft && !why ? "draft" : (why ?? "waiting");
+}
+
+const chipsOf = (state: WintosState, urls: string[] = []) => {
+    const { open, merged } = prChips(state, urls);
+    return { prs: open, merged };
+};
+
+// The PR ⌥⌘G opens from the focused pane: the one the queue would put first (chips come sorted).
+export const urgentPr = (h: SessionHeader | undefined) => h?.prs[0];
+
+// What a live session is called: its name, else its first prompt. The status line is never the name.
+export const sessionName = (s: Session) => s.name?.text ?? s.label ?? "session";
+
+// A project's sessions, as its notes list them and ⌥⌘1–9 counts them: the live ones in pane
+// order (blockIds, the tab's), then the shelved ones newest first; each with its PRs as chips.
+// alsoIn: open PRs another session owns that this one worked on too.
+export type ProjectSession = ({ kind: "live"; session: Session } | { kind: "shelved"; item: Shelved }) & { name: string; prs: PrChip[]; merged: number; alsoIn: PrChip[] };
+export function projectSessions(state: WintosState, tabId: string, blockIds: string[]): ProjectSession[] {
+    const live = blockIds.flatMap((b) => liveSessionsIn(state.sessions.filter((s) => s.tabId === tabId), b));
+    return [
+        ...live.map((session): ProjectSession => ({ kind: "live", session, name: sessionName(session), ...chipsOf(state, session.prs), alsoIn: prChips(state, session.touched ?? []).open })),
+        ...(state.shelf?.[tabId] ?? []).map((item): ProjectSession => ({ kind: "shelved", item, name: shelvedName(item), ...chipsOf(state, item.prs), alsoIn: prChips(state, item.touched ?? []).open })),
+    ];
+}
+
+// When you last interacted with a session (looked at it, or prompted it) and with a project (the
+// latest of its sessions', live or shelved, and when you shelved one). Seen is kept per session.
+export const sessionTouched = (state: WintosState, s: Session): number => Math.max(state.seen?.[s.id] ?? 0, s.promptAt ?? 0) || s.lastAt;
+export function projectTouched(state: WintosState, tabId: string): number | undefined {
+    const live = state.sessions.filter((s) => s.tabId === tabId).map((s) => sessionTouched(state, s));
+    const shelved = (state.shelf?.[tabId] ?? []).map((i) => Math.max(i.at, state.seen?.[i.sessionId] ?? 0));
+    const t = Math.max(0, ...live, ...shelved);
+    return t || undefined;
 }

@@ -62,6 +62,10 @@ export function useWintos(): Snapshot {
     return s;
 }
 
+export function parkBlock(blockId: string): Promise<Response> {
+    return daemonFetch(`/blocks/${encodeURIComponent(blockId)}/wait`, { method: "POST", body: { reason: "parked by you" } });
+}
+
 export function setProjectTitle(tabId: string, title: string, manual: boolean): Promise<Response> {
     return daemonFetch(`/projects/${encodeURIComponent(tabId)}/title`, { method: "POST", body: { title, manual } });
 }

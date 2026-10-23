@@ -65,6 +65,36 @@ describe("wintos-hook.sh", () => {
     });
 });
 
+describe("wintos-hook.sh and a question mid-turn", () => {
+    test.each(["PreToolUse", "PostToolUse"])("%s of AskUserQuestion goes to the daemon without the question itself", async (name) => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, JSON.stringify({ hook_event_name: name, session_id: "s", cwd: "/x", tool_name: "AskUserQuestion", tool_input: { questions: [{ question: "secret?" }] } }));
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: name, session_id: "s", cwd: "/x", tool_name: "AskUserQuestion" });
+    });
+});
+
+describe("wintos-hook.sh tells the daemon which session the pane runs", () => {
+    const env = (port: number, extra: Record<string, string> = {}) => ({ CLAUDE_CODE_ENTRYPOINT: "cli", WAVETERM_TABID: "t", WAVETERM_BLOCKID: "blk", WAVETERM_WSHBINDIR: tmp(), WINTOS_PORT: String(port), ...extra });
+
+    test("its prompt carries the resume command", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync(env(d.port), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/x" }));
+        expect(d.seen[0].body.payload.resume).toBe("cd '/x' && claude --resume 's-1'");
+    });
+
+    test("a headless `claude -p` run from inside a session sends nothing: it is part of that session's work", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync(env(d.port, { CLAUDE_CODE_ENTRYPOINT: "sdk-cli" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "throwaway", cwd: "/x" }));
+        expect(d.seen).toEqual([]);
+    });
+
+    test("a background fork's carries none", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync(env(d.port, { CLAUDE_CODE_SESSION_KIND: "bg" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "fork", cwd: "/x" }));
+        expect(d.seen[0].body.payload).not.toHaveProperty("resume");
+    });
+});
+
 describe("wintos-hook.sh keeps the block's resume command", () => {
     // A fake wsh that records its arguments, one call per line.
     const fakeWsh = () => {
@@ -81,6 +111,18 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         const w = fakeWsh();
         runHook(env(w.dir), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/tmp/it's here", prompt: "hi" }));
         expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/tmp/it'\\''s here' && claude --resume 's-1'\n`);
+    });
+
+    test("a session of another Claude account resumes in that account", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir, { CLAUDE_CONFIG_DIR: "/Users/n/.claude-private" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/Users/n/personal" }));
+        expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/Users/n/personal' && CLAUDE_CONFIG_DIR='/Users/n/.claude-private' claude --resume 's-1'\n`);
+    });
+
+    test("without one set, the resume sets none: setting it, even to the default, changes the account's keychain item", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir, { CLAUDE_CONFIG_DIR: "" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/Users/n/work" }));
+        expect(w.calls()).not.toContain("CLAUDE_CONFIG_DIR");
     });
 
     test("quitting WintOS (SessionEnd reason other) keeps the resume command", () => {
@@ -107,10 +149,30 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         expect(w.calls()).toBe("");
     });
 
-    test("SessionStart does not, since Claude saves nothing to resume before the first prompt", () => {
+    test("nor does a fork Claude Code runs in the background: it shares the pane, the pane is its parent's", () => {
         const w = fakeWsh();
-        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", session_id: "s-1", cwd: "/x" }));
+        runHook(env(w.dir, { CLAUDE_CODE_SESSION_KIND: "bg" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "fork", cwd: "/x" }));
         expect(w.calls()).toBe("");
+    });
+
+    test("nor a fork whose own process doesn't say it is one: its transcript does", () => {
+        const w = fakeWsh();
+        const t = join(tmp(), "fork.jsonl");
+        writeFileSync(t, [JSON.stringify({ type: "ai-title", sessionId: "fork" }), JSON.stringify({ type: "attachment", sessionKind: "bg" })].join("\n"));
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", source: "resume", session_id: "fork", cwd: "/x", transcript_path: t }));
+        expect(w.calls()).toBe("");
+    });
+
+    test("a new session's start does not, since Claude saves nothing to resume before the first prompt", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", source: "startup", session_id: "s-1", cwd: "/x" }));
+        expect(w.calls()).toBe("");
+    });
+
+    test("a resumed session's start does: it is saved already, and closed before a prompt it still shelves", () => {
+        const w = fakeWsh();
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", source: "resume", session_id: "s-1", cwd: "/x" }));
+        expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/x' && claude --resume 's-1'\n`);
     });
 
     test("other events leave the block alone", () => {
@@ -123,6 +185,36 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         const w = fakeWsh();
         runHook({ WAVETERM_TABID: "t", WAVETERM_WSHBINDIR: w.dir, WINTOS_PORT: "1" }, JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s", cwd: "/x" }));
         expect(w.calls()).toBe("");
+    });
+});
+
+describe("wintos-hook.sh on PostToolUse", () => {
+    const post = (command: string, stdout: string) => JSON.stringify({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", tool_name: "Bash", tool_input: { command }, tool_response: { stdout } });
+    test("sends only the PR links of a gh pr command, not the output", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr create --fill", "https://github.com/o/r/pull/12\n"));
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", prs: ["https://github.com/o/r/pull/12"], pr_verb: "create" });
+    });
+    test("gh pr ready is sent even when it names no PR link, so the lane can move", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr ready 12", "✓ Pull request o/r#12 is marked as \"ready for review\"\n"));
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", prs: [], pr_verb: "ready" });
+    });
+    test("a PR named by number and repo counts too", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr edit 340 -R acme/mcp --add-reviewer x", ""));
+        expect(d.seen[0].body.payload.prs).toEqual(["https://github.com/acme/mcp/pull/340"]);
+        expect(d.seen[0].body.payload.pr_verb).toBe("edit");
+    });
+    test("gh pr view is sent with its verb, so the daemon can leave it out", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr view 56 -R acme/proposals", ""));
+        expect(d.seen[0].body.payload).toMatchObject({ pr_verb: "view", prs: ["https://github.com/acme/proposals/pull/56"] });
+    });
+    test("a command that is no gh pr command sends nothing", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("ls", "https://github.com/o/r/pull/12"));
+        expect(d.seen).toEqual([]);
     });
 });
 
@@ -143,8 +235,25 @@ describe("wintos hooks", () => {
         expect(s.model).toBe("x");
         expect(s.hooks.Stop).toHaveLength(2);
         expect(s.hooks.Stop[0].hooks[0].command).toBe("mine.sh");
-        for (const e of ["SessionStart", "UserPromptSubmit", "Stop", "SubagentStop", "Notification", "SessionEnd"])
+        for (const e of ["SessionStart", "UserPromptSubmit", "Stop", "SubagentStop", "Notification", "SessionEnd", "PreToolUse", "PostToolUse"])
             expect(s.hooks[e].filter((h: any) => h.hooks[0].command.endsWith("wintos-hook.sh"))).toHaveLength(1);
+        // A question to the developer mid-turn: before it, the turn waits on them; after it, it runs on.
+        expect([s.hooks.PreToolUse[0].matcher, s.hooks.PostToolUse[0].matcher]).toEqual(["AskUserQuestion|ExitPlanMode", "Bash|AskUserQuestion|ExitPlanMode"]);
+    });
+
+    test("a Claude config dir given names where they go; another account's settings stay as they were", () => {
+        const { settings, read } = setup();
+        const other = tmp();
+        execFileSync(CLI, ["hooks", "install", other], { env: { ...process.env, WINTOS_CLAUDE_SETTINGS: settings } });
+        const s = JSON.parse(readFileSync(join(other, "settings.json"), "utf8"));
+        expect(s.hooks.Stop[0].hooks[0].command).toMatch(/wintos-hook\.sh$/);
+        expect(read().hooks.Stop).toHaveLength(1);
+        execFileSync(CLI, ["hooks", "uninstall", other]);
+        expect(JSON.parse(readFileSync(join(other, "settings.json"), "utf8"))).toEqual({});
+    });
+
+    test("a config dir that does not exist is refused", () => {
+        expect(() => execFileSync(CLI, ["hooks", "install", join(tmp(), "nope")], { stdio: "pipe" })).toThrow(/no such Claude config dir/);
     });
 
     test("hooks without a command (prompt/agent types) survive install and uninstall", () => {
@@ -206,10 +315,10 @@ describe("wintos wait", () => {
     test("parks this block's session on what it waits for", async () => {
         const d = await fakeDaemon("");
         const out = await new Promise<string>((resolve) =>
-            require("child_process").execFile(CLI, ["wait", "CI", "on", "#1479"], { env: { ...process.env, WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+            require("child_process").execFile(CLI, ["wait", "CI", "on", "#1479"], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
         );
         expect(out.trim()).toBe("waiting on: CI on #1479");
-        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/wait", body: { reason: "CI on #1479" } });
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/wait?session=s-1", body: { reason: "CI on #1479" } });
     });
 
     test("outside WintOS it explains instead of guessing", () => {
@@ -219,13 +328,127 @@ describe("wintos wait", () => {
     });
 });
 
+describe("wintos status", () => {
+    test("sets this block's session's line", async () => {
+        const d = await fakeDaemon("");
+        const out = await new Promise<string>((resolve) =>
+            require("child_process").execFile(CLI, ["status", "Walking", "the", "plan"], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+        );
+        expect(out.trim()).toBe("status: Walking the plan");
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/status?session=s-1", body: { text: "Walking the plan" } });
+    });
+});
+
+describe("wintos name", () => {
+    test("proposes this session's name; you have a minute to change it", async () => {
+        const d = await fakeDaemon("");
+        const out = await new Promise<string>((resolve) =>
+            require("child_process").execFile(CLI, ["name", "Retention", "backfill"], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+        );
+        expect(out.trim()).toBe("name: Retention backfill (the developer can change it with ⌥⌘N for a minute; carry on)");
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/name?session=s-1", body: { text: "Retention backfill" } });
+    });
+});
+
+describe("wintos lane and step", () => {
+    const cli = (args: string[], port: number) =>
+        new Promise<string>((resolve) => require("child_process").execFile(CLI, args, { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(port) } }, (_e: unknown, so: string) => resolve(so)));
+    test("lane sends the name and steps; step the step and its note", async () => {
+        const d = await fakeDaemon("");
+        expect((await cli(["lane", "feature", "Design", "?Approve spec", "Build"], d.port)).trim()).toBe("lane: feature (Design · ?Approve spec · Build)");
+        expect((await cli(["step", "Build", "slice", "2", "of", "3"], d.port)).trim()).toBe("step: Build (slice 2 of 3)");
+        expect(d.seen).toEqual([
+            { url: "/blocks/blk-1/lane?session=s-1", body: { name: "feature", steps: ["Design", "?Approve spec", "Build"] } },
+            { url: "/blocks/blk-1/step?session=s-1", body: { step: "Build", note: "slice 2 of 3" } },
+        ]);
+    });
+    test("pr claims a PR for this pane's session, by link or owner/repo#n", async () => {
+        const d = await fakeDaemon("https://github.com/o/r/pull/7");
+        expect((await cli(["pr", "o/r#7"], d.port)).trim()).toBe("pr: https://github.com/o/r/pull/7");
+        expect(d.seen).toEqual([{ url: "/blocks/blk-1/pr?session=s-1", body: { ref: "o/r#7", own: false } }]);
+    });
+    test("pr --own takes it over from whoever touched it first", async () => {
+        const d = await fakeDaemon("https://github.com/o/r/pull/7");
+        await cli(["pr", "--own", "o/r#7"], d.port);
+        expect(d.seen[0].body).toEqual({ ref: "o/r#7", own: true });
+    });
+    test("todo lists the step's to-dos; todo done ticks one", async () => {
+        const d = await fakeDaemon("");
+        expect((await cli(["todo", "Narrow list", "Name search"], d.port)).trim()).toBe("todo: Narrow list · Name search");
+        expect((await cli(["todo", "done", "Name search"], d.port)).trim()).toBe("todo done: Name search");
+        expect(d.seen).toEqual([
+            { url: "/blocks/blk-1/todo?session=s-1", body: { items: ["Narrow list", "Name search"] } },
+            { url: "/blocks/blk-1/todo?session=s-1", body: { done: "Name search" } },
+        ]);
+    });
+});
+
 describe("wintos done", () => {
     test("ends this block's session turn as done", async () => {
         const d = await fakeDaemon("");
         const out = await new Promise<string>((resolve) =>
-            require("child_process").execFile(CLI, ["done"], { env: { ...process.env, WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+            require("child_process").execFile(CLI, ["done"], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
         );
         expect(out.trim()).toBe("done: nothing waits on the developer");
-        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/done", body: {} });
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/done?session=s-1", body: {} });
+    });
+});
+
+describe("wintos ask", () => {
+    const ask = async (args: string[]) => {
+        const d = await fakeDaemon("");
+        const r = await new Promise<{ out: string; code: number }>((resolve) =>
+            require("child_process").execFile(CLI, ["ask", ...args], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (e: { code?: number } | null, so: string) => resolve({ out: so, code: e?.code ?? 0 }))
+        );
+        return { ...r, seen: d.seen };
+    };
+
+    test("sends what this block's session asks of the developer", async () => {
+        const r = await ask(["decide", "two", "bands"]);
+        expect([r.out.trim(), r.seen[0]]).toEqual(["asks the developer to decide: two bands", { url: "/blocks/blk-1/ask?session=s-1", body: { kind: "decide", text: "two bands" } }]);
+    });
+
+    test("a kind it doesn't know is refused before anything is sent", async () => {
+        const r = await ask(["ponder"]);
+        expect([r.code, r.seen]).toEqual([1, []]);
+    });
+});
+
+describe("wintos wake", () => {
+    const wake = async (args: string[], status = 200, reply = '{"pr":"https://github.com/o/r/pull/7","until":"released","prompt":"check prod"}') => {
+        const seen: { url: string; body: unknown }[] = [];
+        server = http.createServer((req, res) => {
+            let b = "";
+            req.on("data", (c) => (b += c));
+            req.on("end", () => (seen.push({ url: req.url!, body: b && JSON.parse(b) }), (res.statusCode = status), res.end(reply)));
+        });
+        const port = await new Promise<number>((r) => server!.listen(0, "127.0.0.1", () => r((server!.address() as AddressInfo).port)));
+        const r = await new Promise<{ out: string; err: string; code: number }>((resolve) =>
+            require("child_process").execFile(CLI, ["wake", ...args], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(port) } }, (e: { code?: number } | null, so: string, se: string) => resolve({ out: so, err: se, code: e?.code ?? 0 }))
+        );
+        return { ...r, seen };
+    };
+
+    test("sends the event, the PR and the prompt, and tells the session to end its turn", async () => {
+        const r = await wake(["released", "o/r#7", "check", "prod"]);
+        expect(r.seen[0]).toEqual({ url: "/blocks/blk-1/wake?session=s-1", body: { until: "released", pr: "o/r#7", prompt: "check prod" } });
+        expect(r.out).toContain("wakes when https://github.com/o/r/pull/7 is released: check prod\nNow end your turn");
+    });
+
+    test("too few arguments: refused before anything is sent, with the usage and examples", async () => {
+        const r = await wake(["released", "o/r#7"]);
+        expect([r.code, r.seen]).toEqual([1, []]);
+        expect(r.err).toContain("need an event, a PR and a prompt (got 2 argument(s))");
+        expect(r.err).toContain("e.g.  wintos wake green");
+    });
+
+    test("the daemon's reason for refusing is shown, with the usage", async () => {
+        const r = await wake(["deployed", "o/r#7", "x"], 400, "unknown event \"deployed\": use one of green, merged, released");
+        expect([r.code, r.err]).toEqual([1, expect.stringContaining("unknown event \"deployed\": use one of green, merged, released\nusage: wintos wake")]);
+    });
+
+    test("cancel", async () => {
+        const r = await wake(["cancel"], 200, "cancelled");
+        expect([r.seen[0].url, r.out.trim()]).toEqual(["/blocks/blk-1/wake/cancel?session=s-1", "cancelled"]);
     });
 });

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync, readdirSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync, readdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -14,6 +14,12 @@ describe("the folder belongs to its tab, whatever the file says", () => {
         const f = join(dir, "project.md");
         writeFileSync(f, readFileSync(f, "utf8").replace(/^id: .*$/m, `id: ${id}`));
     };
+
+    test("a hidden folder is no project", () => {
+        const root = mkdtempSync(join(tmpdir(), "wintos-store-"));
+        mkdirSync(join(root, ".fixer"));
+        expect(new ProjectStore(root).list()).toEqual([]);
+    });
 
     test("a session rewriting the id keeps the project on its tab, and the id is put back", () => {
         const s = new ProjectStore(root);

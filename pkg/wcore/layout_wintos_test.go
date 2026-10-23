@@ -38,6 +38,25 @@ func TestNewTabCanOptOutOfClaude(t *testing.T) {
 	}
 }
 
+// Reopening a project on a session it had: its first terminal starts nothing, whatever the
+// new-project command is.
+func TestPlainTabStartsNoClaude(t *testing.T) {
+	t.Setenv("WINTOS_NEW_PROJECT_CMD", "claude")
+	layout := GetPlainTabLayout(nil)
+	if len(layout) != 1 || layout[0].BlockDef == nil || layout[0].BlockDef.Meta[waveobj.MetaKey_CmdInitScript] != nil {
+		t.Fatalf("plain tab layout = %+v", layout)
+	}
+}
+
+// The pane the project reopens on is the tab's first, not swapped in for a starter afterwards.
+func TestPlainTabStartsOnTheGivenPane(t *testing.T) {
+	layout := GetPlainTabLayout(waveobj.MetaMapType{waveobj.MetaKey_CmdInitScript: "claude --resume 's'"})
+	meta := layout[0].BlockDef.Meta
+	if meta[waveobj.MetaKey_CmdInitScript] != "claude --resume 's'" || meta[waveobj.MetaKey_View] != "term" || !layout[0].Focused {
+		t.Fatalf("plain tab layout = %+v", layout)
+	}
+}
+
 // A project is a tab; closing its last pane must leave the project open (and the window with it).
 func TestDeletingLastBlockKeepsTheTab(t *testing.T) {
 	ctx := initTestWStore(t)
@@ -89,15 +108,15 @@ func TestEnsureInboxCreatesOnce(t *testing.T) {
 	inboxes := 0
 	for _, id := range ws.TabIds {
 		tab, _ := wstore.DBGet[*waveobj.Tab](ctx, id)
-		if tab.Meta[MetaKey_WintosInbox] == true {
+		if IsInbox(tab) {
 			inboxes++
 			if len(tab.BlockIds) != 0 {
 				t.Fatalf("new Inbox has blocks: %v", tab.BlockIds)
 			}
 		}
 	}
-	if inboxes != 1 {
-		t.Fatalf("inboxes = %d, want 1", inboxes)
+	if inboxes != 2 {
+		t.Fatalf("inboxes = %d, want 2 (PRs and On call)", inboxes)
 	}
 }
 
@@ -120,14 +139,14 @@ func TestClosingLastProjectActivatesInbox(t *testing.T) {
 	var active string
 	var err error
 	for _, id := range ws.TabIds {
-		if id != inbox {
+		if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, id); !IsInbox(tab) {
 			if active, err = DeleteTab(ctx, ws.OID, id, true); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
-	if active != inbox {
-		t.Fatalf("active after closing the last project = %q, want the Inbox %q", active, inbox)
+	if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, active); !IsInbox(tab) {
+		t.Fatalf("active after closing the last project = %q, want an Inbox tab (PRs %q)", active, inbox)
 	}
 }
 
@@ -141,12 +160,12 @@ func TestNewWorkspaceHasAnInbox(t *testing.T) {
 			inboxes++
 		}
 	}
-	if inboxes != 1 {
-		t.Fatalf("a new workspace has %d Inbox tabs, want 1", inboxes)
+	if inboxes != 2 {
+		t.Fatalf("a new workspace has %d Inbox tabs, want 2 (PRs and On call)", inboxes)
 	}
 }
 
-// A workspace that lost every tab comes back with only the Inbox, and it is active.
+// A workspace that lost every tab comes back with only the Inbox tabs, the PRs one active.
 func TestEmptyWorkspaceGetsOnlyTheInbox(t *testing.T) {
 	ctx, ws := newTestWorkspace(t)
 	ws.TabIds, ws.ActiveTabId = nil, ""
@@ -157,10 +176,29 @@ func TestEmptyWorkspaceGetsOnlyTheInbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	ws, _ = GetWorkspace(ctx, ws.OID)
-	if len(ws.TabIds) != 1 {
-		t.Fatalf("tabs = %v, want only the Inbox", ws.TabIds)
+	if len(ws.TabIds) != 2 {
+		t.Fatalf("tabs = %v, want only the two Inbox tabs", ws.TabIds)
 	}
-	if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, ws.ActiveTabId); !IsInbox(tab) {
+	if tab, _ := wstore.DBGet[*waveobj.Tab](ctx, ws.ActiveTabId); InboxKind(tab) != InboxPRs {
 		t.Fatalf("active tab %q is not the Inbox", ws.ActiveTabId)
+	}
+}
+
+// PRs and On call are two tabs, one of each; an Inbox from before the split is the PRs one.
+func TestInboxesAreOneOfEachKind(t *testing.T) {
+	ctx, ws := newTestWorkspace(t)
+	kinds := map[string]int{}
+	ws, _ = GetWorkspace(ctx, ws.OID)
+	for _, id := range ws.TabIds {
+		tab, _ := wstore.DBGet[*waveobj.Tab](ctx, id)
+		if k := InboxKind(tab); k != "" {
+			kinds[k]++
+		}
+	}
+	if kinds[InboxPRs] != 1 || kinds[InboxOnCall] != 1 {
+		t.Fatalf("inbox kinds = %v, want one prs and one oncall", kinds)
+	}
+	if InboxKind(&waveobj.Tab{Meta: waveobj.MetaMapType{MetaKey_WintosInbox: true}}) != InboxPRs {
+		t.Fatal("an Inbox from before the split should read as the PRs one")
 	}
 }

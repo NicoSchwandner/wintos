@@ -289,6 +289,30 @@ export function initIpcHandlers() {
     });
 
     const hasBeforeInputRegisteredMap = new Map<number, boolean>();
+    // WintOS: pages whose focused element takes text (a GitHub comment), as their preload reports.
+    // There the page keeps its own editing keys, though WintOS binds them elsewhere.
+    const editingPages = new Set<number>();
+    const PAGE_EDIT_KEYS = ["Escape", "Cmd:Enter", "Cmd:k", "Cmd:e", "Cmd:i", "Cmd:b", "Shift:Cmd:p"];
+    // WintOS: macOS never hands ⌘Esc to the window, so while a ⌘J/⌘K walk runs, the app takes it
+    // system-wide, for that moment only. The timeout lets go of it should the walk never end.
+    let walkEscTimer: NodeJS.Timeout | undefined;
+    const releaseWalkEsc = () => (clearTimeout(walkEscTimer), electron.globalShortcut.unregister("Command+Escape"));
+    // WintOS: the tab running a walk. A page's ⌘ release, or a key there that comes without ⌘
+    // because the release was missed, ends it; the page's own DOM drops the release now and then.
+    let walkTab: Electron.WebContents | undefined;
+    electron.ipcMain.on("wintos-walking", (event: Electron.IpcMainEvent, on: boolean) => {
+        releaseWalkEsc();
+        walkTab = on ? event.sender : undefined;
+        if (!on) return;
+        const sender = event.sender;
+        electron.globalShortcut.register("Command+Escape", () => (releaseWalkEsc(), sender.isDestroyed() || sender.send("wintos-walk-esc")));
+        walkEscTimer = setTimeout(releaseWalkEsc, 15_000);
+    });
+    electron.ipcMain.on("wintos-native-undo", (event: Electron.IpcMainEvent) => event.sender.undo());
+    electron.ipcMain.on("wintos-page-editing", (event: Electron.IpcMainEvent, editing: boolean) => {
+        if (editing) editingPages.add(event.sender.id);
+        else editingPages.delete(event.sender.id);
+    });
 
     electron.ipcMain.on("webview-focus", (event: Electron.IpcMainEvent, focusedId: number) => {
         webviewFocusId = focusedId;
@@ -307,10 +331,16 @@ export function initIpcHandlers() {
             webviewWc.on("before-input-event", (e, input) => {
                 let waveEvent = keyutil.adaptFromElectronKeyEvent(input);
                 handleCtrlShiftState(parentWc, waveEvent);
+                if (walkTab && !walkTab.isDestroyed() && (input.type == "keyUp" ? input.key == "Meta" : !input.meta)) {
+                    walkTab.send("wintos-walk-meta-up");
+                }
                 if (webviewFocusId != focusedId) {
                     return;
                 }
                 if (input.type != "keyDown") {
+                    return;
+                }
+                if (editingPages.has(focusedId) && PAGE_EDIT_KEYS.some((k) => keyutil.checkKeyPressed(waveEvent, k))) {
                     return;
                 }
                 for (let keyDesc of webviewKeys) {
@@ -324,8 +354,15 @@ export function initIpcHandlers() {
             });
             webviewWc.on("destroyed", () => {
                 hasBeforeInputRegisteredMap.delete(focusedId);
+                editingPages.delete(focusedId);
             });
         }
+    });
+
+    // WintOS: a tab asks for the window's mode when it starts, as it may have missed the event.
+    electron.ipcMain.on("wintos-is-fullscreen", (event) => {
+        const ww = getWaveWindowByWebContentsId(event.sender.id);
+        event.returnValue = !!ww && !ww.isDestroyed() && ww.isFullScreen();
     });
 
     electron.ipcMain.on("register-global-webview-keys", (event, keys: string[]) => {

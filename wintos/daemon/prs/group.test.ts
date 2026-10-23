@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { ageLabel, groupOf, isSnoozed, nextWorkingDayStart, PR, projectPrs, prsForProject, qualifier, workingDaysBetween } from "./group";
+import { ageLabel, groupOf, isSnoozed, isStacked, nextWorkingDayStart, PR, projectPrs, prsForProject, qualifier, workingDaysBetween } from "./group";
 
 // Monday 2026-09-28 09:00 UTC
 const MON = Date.parse("2026-09-28T09:00:00Z");
@@ -22,9 +22,13 @@ describe("groupOf (spec §4, first match wins)", () => {
         expect(groupOf(pr({ reviewDecision: "APPROVED", checks: "SUCCESS", conflict: true }), "me", MON)).toBe("fix"));
     test("GitHub blocking the merge (code owners still owed) keeps it out of merge", () =>
         expect(groupOf(pr({ reviewDecision: "APPROVED", checks: "SUCCESS", mergeState: "BLOCKED" }), "me", MON)).not.toBe("merge"));
+    test("approved, green and blocked only by open comment threads is yours to merge", () =>
+        expect(groupOf(pr({ reviewDecision: "APPROVED", checks: "SUCCESS", mergeState: "BLOCKED", openThreads: 2 }), "me", MON)).toBe("merge"));
     test("red CI on a draft is work in progress, not a fix", () =>
         expect(groupOf(pr({ isDraft: true, checks: "FAILURE" }), "me", MON)).toBe("waiting"));
     test("fix: changes requested", () => expect(groupOf(pr({ reviewDecision: "CHANGES_REQUESTED" }), "me", MON)).toBe("fix"));
+    test("changes requested, all asked again: waiting on them, not yours", () =>
+        expect(groupOf(pr({ reviewDecision: "CHANGES_REQUESTED", changesRerequested: true, reviewers: ["ana.b"], lastReviewAt: "2026-09-28T09:00:00Z" }), "me", MON)).toBe("waiting"));
     test("fix: CI red", () => expect(groupOf(pr({ checks: "FAILURE" }), "me", MON)).toBe("fix"));
     test("fix beats chase", () =>
         expect(groupOf(pr({ checks: "FAILURE", createdAt: "2026-09-01T00:00:00Z" }), "me", MON)).toBe("fix"));
@@ -40,9 +44,10 @@ describe("groupOf (spec §4, first match wins)", () => {
         expect(groupOf(pr({ createdAt: "2026-09-24T09:00:00Z" }), "me", MON)).toBe("chase"));
     test("review activity resets the clock", () =>
         expect(groupOf(pr({ createdAt: "2026-09-01T09:00:00Z", lastReviewAt: "2026-09-28T08:00:00Z" }), "me", MON)).toBe("waiting"));
-    test("a draft gets five working days before chase", () => {
+    test("a draft gets five working days, then it is yours to fix: nobody reviews a draft, so there is nobody to chase", () => {
         expect(groupOf(pr({ isDraft: true, createdAt: "2026-09-23T09:00:00Z" }), "me", MON)).toBe("waiting");
-        expect(groupOf(pr({ isDraft: true, createdAt: "2026-09-21T09:00:00Z" }), "me", MON)).toBe("chase");
+        expect(groupOf(pr({ isDraft: true, createdAt: "2026-09-21T09:00:00Z" }), "me", MON)).toBe("fix");
+        expect(qualifier(pr({ isDraft: true, createdAt: "2026-09-21T09:00:00Z" }), "fix")).toEqual({ text: "draft past its 5 working days: make it ready or close it", brick: true });
     });
     test("my PR with nothing to do is Waiting, not the team's: I won't review my own", () =>
         expect(groupOf(pr({ reviewers: ["ana.b"] }), "me", MON)).toBe("waiting"));
@@ -53,10 +58,21 @@ describe("groupOf (spec §4, first match wins)", () => {
 describe("qualifier", () => {
     test("names who asked for changes", () =>
         expect(qualifier(pr({ reviewDecision: "CHANGES_REQUESTED", changesRequestedBy: "ana.b" }), "fix")).toEqual({ text: "changes requested by ana.b" }));
+    test("changes asked for again: the red CI is what is yours", () =>
+        expect(qualifier(pr({ reviewDecision: "CHANGES_REQUESTED", changesRerequested: true, changesRequestedBy: "ana.b", checks: "FAILURE" }), "fix")).toEqual({ text: "CI red", brick: true }));
     test("red CI is brick", () => expect(qualifier(pr({ checks: "FAILURE" }), "fix")).toEqual({ text: "CI red", brick: true }));
     test("a chased PR with nobody on it says so", () => expect(qualifier(pr(), "chase")).toEqual({ text: "no reviewer assigned" }));
+    test("a chased PR says whom to nudge: who asked for changes, else who is asked to review", () => {
+        expect(qualifier(pr({ reviewers: ["team-x"] }), "chase")).toEqual({ text: "nudge team-x" });
+        expect(qualifier(pr({ reviewers: ["ana", "team-x"], changesRequestedBy: "ana" }), "chase")).toEqual({ text: "nudge ana" });
+        expect(qualifier(pr({ reviewers: ["ana"], changesRequestedBy: "ana" }), "chase", { reviewers: false })).toEqual({ text: "nudge ana" });
+        expect(qualifier(pr({ reviewers: ["team-x"] }), "chase", { reviewers: false })).toBeUndefined();
+    });
+    test("momentum (a push, a re-requested review) keeps an old PR out of Chase", () =>
+        expect(groupOf(pr({ createdAt: "2026-09-01T09:00:00Z", movedAt: "2026-09-28T08:00:00Z", reviewers: ["ana"] }), "me", MON)).toBe("waiting"));
     test("otherwise it names who it waits on", () => expect(qualifier(pr({ reviewers: ["ana.b"] }), "team")).toEqual({ text: "waiting on ana.b" }));
     test("merge needs no qualifier", () => expect(qualifier(pr(), "merge")).toBeUndefined());
+    test("merge with open threads says to resolve them first", () => expect(qualifier(pr({ openThreads: 2 }), "merge")).toEqual({ text: "resolve 2 threads first" }));
     test("approved but blocked says why it can't merge", () =>
         expect(qualifier(pr({ reviewDecision: "APPROVED", mergeState: "BLOCKED" }), "team")).toEqual({ text: "approved · blocked by required reviews" }));
     test("approved with pending checks says so", () =>
@@ -93,10 +109,11 @@ describe("projectPrs", () => {
         pr({ number: 2, title: "DEV-9 b", createdAt: "2026-09-21T09:00:00Z" }),
         pr({ number: 3, title: "DEV-9 c", reviewers: ["bo.k"], createdAt: "2026-09-28T08:00:00Z" }),
     ];
-    test("groups the project's PRs and blocks on the oldest one that needs you", () => {
+    test("groups the project's PRs and blocks on the most urgent one that needs you, in the queue's order", () => {
         const r = projectPrs({ pr: [], title: "DEV-9" }, prs, "me", MON);
         expect(r.items.map((i) => [i.pr.number, i.group])).toEqual([[1, "fix"], [2, "chase"], [3, "waiting"]]);
-        expect(r.blocked).toEqual({ since: Date.parse("2026-09-21T09:00:00Z"), text: "Nobody has looked at #2 in 5 working days", tone: "brick" });
+        expect(r.blocked).toMatchObject({ text: "#1: changes requested by ana.b", tone: "apricot" });
+        expect(projectPrs({ pr: [], title: "DEV-9" }, [prs[1], prs[2]], "me", MON).blocked).toMatchObject({ since: Date.parse("2026-09-21T09:00:00Z"), text: "Nobody has looked at #2 in 5 working days", tone: "brick" });
     });
     test("a fix is yours to do: apricot, naming what happened", () => {
         const r = projectPrs({ pr: [], title: "DEV-9" }, [prs[0]], "me", MON);
@@ -119,6 +136,11 @@ describe("groupOf a stacked PR", () => {
 
     test("on the default branch it is Merge as before", () => {
         expect(groupOf(pr({ ...ready, base: "development", defaultBranch: "development" }), "me", MON)).toBe("merge");
+    });
+
+    test("a release (the default branch into main) is no stack: approved and green, it is Merge", () => {
+        expect(groupOf(pr({ ...ready, branch: "development", base: "main", defaultBranch: "development" }), "me", MON)).toBe("merge");
+        expect(isStacked(pr({ branch: "development", base: "main", defaultBranch: "development" }))).toBe(false);
     });
 
     test("stacked but needing a fix is still Fix", () => {
@@ -150,4 +172,22 @@ describe("qualifier without reviewers (the queue shows them as chips)", () => {
         expect(qualifier(pr({ reviewers: [], createdAt: "2026-09-01T09:00:00Z" }), "chase", { reviewers: false })).toBeUndefined();
         expect(qualifier(pr({ checks: "FAILURE" }), "fix", { reviewers: false })).toEqual({ text: "CI red", brick: true });
     });
+});
+
+describe("a merged PR not yet on the release branch", () => {
+    // Merged Wednesday 2026-09-23: three working days before MON.
+    const merged = (mergedAt = "2026-09-23T09:00:00Z") => pr({ mergedAt, reviewDecision: "APPROVED", checks: "SUCCESS" });
+    test("past two working days it asks for a release", () => expect(groupOf(merged(), "me", MON)).toBe("release"));
+    test("within two working days it waits", () => expect(groupOf(merged("2026-09-25T09:00:00Z"), "me", MON)).toBe("waiting"));
+    test("its age counts from the merge", () => expect(ageLabel(merged(), MON).text).toBe("3 wd"));
+    test("it says it is not released", () => expect(qualifier(merged(), "release")?.text).toBe("merged, not on main"));
+    test("with a release PR open and ready, it waits on whoever releases; a draft one is still yours", () => {
+        expect(groupOf({ ...merged(), releasePr: { url: "r", draft: false } }, "me", MON)).toBe("waiting");
+        expect(qualifier({ ...merged(), releasePr: { url: "r", draft: false } }, "waiting")?.text).toBe("merged, in the release PR");
+        expect(groupOf({ ...merged(), releasePr: { url: "r", draft: true } }, "me", MON)).toBe("release");
+    });
+    test("it marks its project", () =>
+        expect(projectPrs({ pr: [], title: "DEV-9" }, [{ ...merged(), number: 5, title: "DEV-9 x" }], "me", MON).blocked).toMatchObject({
+            since: Date.parse("2026-09-23T09:00:00Z"), text: "#5 merged 3 working days ago, not on main", tone: "brick",
+        }));
 });

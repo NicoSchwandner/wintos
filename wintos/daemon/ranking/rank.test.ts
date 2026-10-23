@@ -61,15 +61,6 @@ describe("rank", () => {
         expect(r.quiet[0].lastAt).toBe(NOW - DAY);
     });
 
-    test("a PR that needs you lifts a quiet project into needs you", () => {
-        const r = rank(["t"], [s("t", "idle", NOW - 5)], NOW, {}, { t: NOW - 3 * DAY });
-        expect(r.needs.map((x) => [x.tabId, x.waitingSince])).toEqual([["t", NOW - 3 * DAY]]);
-    });
-
-    test("the older of a waiting session and a rotting PR sets the wait", () => {
-        const r = rank(["t"], [s("t", "waiting", NOW - 10)], NOW, {}, { t: NOW - DAY });
-        expect(r.needs[0].waitingSince).toBe(NOW - DAY);
-    });
 
     test("sessions of tabs outside the workspace are ignored", () => {
         const r = rank(["t"], [s("gone", "waiting", NOW)], NOW);
@@ -78,28 +69,47 @@ describe("rank", () => {
 });
 
 describe("parked sessions", () => {
-    test("a session parked on CI runs; it is not waiting on you", () => {
+    test("a parked session is quiet: nothing for you, and Claude isn't working", () => {
         const r = rank(["t1"], [s("t1", "parked", NOW - 1000)], NOW);
+        expect([r.quiet.map((x) => x.tabId), r.running, r.needs]).toEqual([["t1"], [], []]);
+    });
+
+    test("another session there still working keeps the project running", () => {
+        const r = rank(["t1"], [s("t1", "parked", NOW - 1000), { ...s("t1", "working", NOW - 500), id: "w", blockId: "b2" }], NOW);
         expect(r.running.map((x) => x.tabId)).toEqual(["t1"]);
-        expect(r.needs).toEqual([]);
     });
 });
 
 describe("unread", () => {
     const ended = (tabId: string, state: Session["state"], turnEndedAt: number): Session => ({ ...s(tabId, state, turnEndedAt), turnEndedAt });
 
-    test("a reply you haven't seen keeps the project in Needs you, whatever the session's state", () => {
-        const r = rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, {}, { t: NOW - 100 });
-        expect(r.needs).toEqual([expect.objectContaining({ tabId: "t", unread: true, waitingSince: NOW - 50 })]);
+    test("a reply you haven't seen puts the project in To read until you have, a done one included", () => {
+        const r = rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, { t: NOW - 100 });
+        expect([r.needs, r.read]).toEqual([[], [expect.objectContaining({ tabId: "t", unread: true, waitingSince: NOW - 50 })]]);
     });
 
-    test("once seen, it falls to where it belongs: done is quiet, parked is running", () => {
-        expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
-        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, {}, { t: NOW - 10 }).running.map((x) => x.tabId)).toEqual(["t"]);
+    test("a turn waiting on you is your move, read or not, and outranks a reply to read there", () => {
+        const both = [{ ...s("t", "waiting", NOW - 30), turnEndedAt: NOW - 30 }, { ...ended("t", "done", NOW - 50), id: "s2", blockId: "b2" }];
+        expect(rank(["t"], both, NOW, {}, { t: NOW }).needs.map((x) => x.tabId)).toEqual(["t"]);
+        expect(rank(["t"], both, NOW, {}, {}).read).toEqual([]);
+    });
+
+    test("once seen, it falls to where it belongs: done and parked are quiet", () => {
+        expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
+        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
+    });
+
+    test("a parked turn you haven't seen is to read too: it goes quiet once you've read how it ended", () =>
+        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, { t: NOW - 100 }).read[0]?.unread).toBe(true));
+
+    test("seen is per session: reading one pane leaves the other's reply unread", () => {
+        const two = [ended("t", "done", NOW - 50), { ...ended("t", "parked", NOW - 40), id: "s2", blockId: "b2" }];
+        expect(rank(["t"], two, NOW, {}, { [two[0].id]: NOW - 10 }).read[0]?.unread).toBe(true);
+        expect(rank(["t"], two, NOW, {}, { [two[0].id]: NOW - 10, s2: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
     });
 
     test("never seen at all counts as unread; an ended session's last reply does not", () => {
-        expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW).needs[0]?.unread).toBe(true);
-        expect(rank(["t"], [ended("t", "ended", NOW - 50)], NOW).needs).toEqual([]);
+        expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW).read[0]?.unread).toBe(true);
+        expect(rank(["t"], [ended("t", "ended", NOW - 50)], NOW).read).toEqual([]);
     });
 });

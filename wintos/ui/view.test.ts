@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
-import { repoLabel, inboxKind, inboxTabId, isInboxTab, prProjectLists, prProjects, projectSessions, projectTabIds, projectPrList, projectTouched, relTime, sessionHeader, sessionTouched, urgentPr, type WintosState } from "./view";
+import { reopenFor, repoLabel, inboxKind, inboxTabId, isInboxTab, prProjectLists, prProjects, projectSessions, projectTabIds, projectPrList, projectTouched, relTime, sessionHeader, sessionTouched, urgentPr, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -227,4 +227,13 @@ describe("repoLabel", () => {
         expect(repoLabel("x/Other.Thing", {}, repos)).toBe("Other.Thing");
         expect(repoLabel("o/Acme.Api", {}, ["o/Acme.Api"])).toBe("Api");
     });
+});
+
+test("a closed project reopens for a PR on its owner, else a session that touched it, else its newest", () => {
+    const item = (sessionId: string, o = {}) => ({ sessionId, script: `claude --resume '${sessionId}'`, label: "l", at: 0, ...o });
+    const shelf = [item("newest"), item("touched", { touched: ["u"] }), item("owner", { prs: ["u"] })];
+    expect(reopenFor(shelf, "u")?.sessionId).toBe("owner");
+    expect(reopenFor(shelf.slice(0, 2), "u")?.sessionId).toBe("touched");
+    expect(reopenFor(shelf.slice(0, 1), "u")?.sessionId).toBe("newest");
+    expect(reopenFor([], "u")).toBeUndefined();
 });

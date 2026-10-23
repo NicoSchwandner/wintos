@@ -50,6 +50,12 @@ export function prOwners(state: WintosState, tabId: string): Map<string, Owner> 
     return owners;
 }
 
+// Which shelved session a closed project reopens on for a PR: the one that owns it, else one
+// that touched it, else the newest (a review that only read the PR owns nothing yet).
+export function reopenFor(shelf: Shelved[], url: string): Shelved | undefined {
+    return shelf.find((s) => s.prs?.includes(url)) ?? shelf.find((s) => s.touched?.includes(url)) ?? shelf[0];
+}
+
 // The notes' Pull requests section: every PR of the project, snoozed ones included (marked,
 // last), most urgent group first, each with what it waits on.
 export type ProjectPrRow = { pr: PR; group: Group; note?: string; snoozed: boolean };

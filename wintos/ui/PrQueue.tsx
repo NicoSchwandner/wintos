@@ -19,7 +19,7 @@ import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
-import { ghPrs, prOwners, prProjectLists, prProjects, relTime, repoLabel } from "./view";
+import { ghPrs, prOwners, prProjectLists, prProjects, relTime, reopenFor, repoLabel } from "./view";
 
 export const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
     merge: { label: "Merge", note: "approved, green, waiting on the button", color: T.moss },
@@ -98,8 +98,12 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
         const tabId = projectOf.get(r.pr.url);
         if (!tabId) return void (offerPrompt(prLinkPaste(r.pr.url)), createTab());
         const owner = state && prOwners(state, tabId).get(r.pr.url);
-        // A closed project opens again, on the session that owns the PR.
-        if (!tabIds.includes(tabId)) return reopenProject(tabId, owner && "resume" in owner ? [resumePane(owner.resume)] : []);
+        // A closed project opens again on its shelved session for this PR (reopenFor); a session
+        // still listed as live there belongs to a pane that is gone with the tab.
+        if (!tabIds.includes(tabId)) {
+            const on = reopenFor(state?.shelf?.[tabId] ?? [], r.pr.url);
+            return reopenProject(tabId, on ? [resumePane(on.script)] : []);
+        }
         if (!owner) return enterProject(tabId);
         focusSession("resume" in owner ? { tabId, blockId: "", resume: owner.resume } : { tabId, blockId: owner.blockId });
     };

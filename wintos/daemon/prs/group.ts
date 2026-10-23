@@ -33,7 +33,8 @@ export type PR = {
 };
 
 // On another branch than the repo's default: merging it would land on that branch, not ship.
-export const isStacked = (pr: PR) => !!pr.base && !!pr.defaultBranch && pr.base !== pr.defaultBranch;
+// Stacked: based on another PR's branch. A release, the default branch itself into main, is not.
+export const isStacked = (pr: PR) => !!pr.base && !!pr.defaultBranch && pr.base !== pr.defaultBranch && pr.branch !== pr.defaultBranch;
 // team: reviews asked of your team, undone work. waiting: yours, with someone else, fine for now.
 // release: merged, but past the SLA still not on main; nobody else chases a release.
 export type Group = "merge" | "fix" | "review" | "chase" | "release" | "waiting" | "team";

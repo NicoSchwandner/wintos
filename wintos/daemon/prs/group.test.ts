@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { ageLabel, groupOf, isSnoozed, nextWorkingDayStart, PR, projectPrs, prsForProject, qualifier, workingDaysBetween } from "./group";
+import { ageLabel, groupOf, isSnoozed, isStacked, nextWorkingDayStart, PR, projectPrs, prsForProject, qualifier, workingDaysBetween } from "./group";
 
 // Monday 2026-09-28 09:00 UTC
 const MON = Date.parse("2026-09-28T09:00:00Z");
@@ -136,6 +136,11 @@ describe("groupOf a stacked PR", () => {
 
     test("on the default branch it is Merge as before", () => {
         expect(groupOf(pr({ ...ready, base: "development", defaultBranch: "development" }), "me", MON)).toBe("merge");
+    });
+
+    test("a release (the default branch into main) is no stack: approved and green, it is Merge", () => {
+        expect(groupOf(pr({ ...ready, branch: "development", base: "main", defaultBranch: "development" }), "me", MON)).toBe("merge");
+        expect(isStacked(pr({ branch: "development", base: "main", defaultBranch: "development" }))).toBe(false);
     });
 
     test("stacked but needing a fix is still Fix", () => {

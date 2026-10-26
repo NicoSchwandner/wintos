@@ -18,9 +18,9 @@ export function Rich({ text, size, links = true }: { text: string; size: Size; l
 
 // A task box: done filled green with a tick, partial half-filled, todo empty. Clickable only
 // where the file is the developer's (mine.md), as a real button so ⇥ and Space reach it.
-export function Box({ state, size, onToggle }: { state: CheckState; size: Size; onToggle?: () => void }) {
+export function Box({ state, size, onToggle, top }: { state: CheckState; size: Size; onToggle?: () => void; top?: number }) {
     const style: React.CSSProperties = {
-        width: 12, height: 12, padding: 0, flexShrink: 0, marginTop: size === "rail" ? 4 : 6, borderRadius: 3,
+        width: 12, height: 12, padding: 0, flexShrink: 0, marginTop: top ?? (size === "rail" ? 4 : 6), borderRadius: 3,
         border: `1.5px solid ${state === "done" ? T.moss : state === "partial" ? T.apricot : T.muted}`,
         background: state === "done" ? T.moss : state === "partial" ? `linear-gradient(90deg, ${T.apricot} 50%, transparent 50%)` : "transparent",
         display: "inline-flex", alignItems: "center", justifyContent: "center", color: T.ground, fontSize: 9, fontWeight: 700, lineHeight: 1,

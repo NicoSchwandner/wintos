@@ -19,7 +19,7 @@ import { reassignPrs, touchPrs } from "../prs/owners";
 import type { PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn } from "../sessions/reduce";
+import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, WAKE_EVENTS, waitingOn, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
@@ -601,6 +601,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 void checkWakes();
                 return json(res, w);
+            }
+            // The window saw a pane resuming this session (`claude attach` while it runs in the
+            // background service): it shows there.
+            const attach = /^\/sessions\/([^/]+)\/attach$/.exec(url.pathname);
+            if (req.method === "POST" && attach) {
+                const b = (await body(req)) as { tabId?: unknown; blockId?: unknown };
+                if (!isSafe(b?.tabId) || !isSafe(b?.blockId)) return send(res, 400, "need tabId and blockId");
+                sessions = attachSession(sessions, decodeURIComponent(attach[1]), b.tabId as string, b.blockId as string);
+                saveSessions();
+                broadcast();
+                return send(res, 200, "");
             }
             // The window that typed a due wake into its pane: once only, whichever window asks first.
             const delivered = /^\/wakes\/([^/]+)\/delivered$/.exec(url.pathname);

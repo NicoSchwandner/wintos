@@ -11,10 +11,10 @@ import { confirmPaneClose, copiedAtAtom, focusedPageUrl, runKey, shelvePane } fr
 import { openPalette } from "./Palette";
 import { closeArmedAtom, restartArmedAtom } from "./notes/state";
 import { paneOrder, stripPanes } from "./panes";
-import { liveSessions, unreadSessions } from "./sessions";
+import { attachments, liveSessions, unreadSessions } from "./sessions";
 import { SESSION_DOT, T } from "./tokens";
 import { useNow } from "./useNow";
-import { useWintos } from "./useWintos";
+import { daemonFetch, useWintos } from "./useWintos";
 import { isInboxTab, relTime } from "./view";
 
 // A pane's chip is edged in its session's colour when it is not the one shown: what waits on you
@@ -45,6 +45,12 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
         return () => (window.removeEventListener("storage", takeHandoff), document.removeEventListener("visibilitychange", takeHandoff));
     }, []);
 
+    // Panes attached to a session that runs in the background service: tell the daemon where it shows.
+    const attach = state ? attachments(blocks.map((b, i) => ({ blockId: ids[i], script: b?.meta?.["cmd:initscript"] as string | undefined })), state.sessions, tabId) : [];
+    const attachKey = attach.map((a) => `${a.sessionId}@${a.blockId}`).join(" ");
+    useEffect(() => {
+        for (const a of attach) void daemonFetch(`/sessions/${encodeURIComponent(a.sessionId)}/attach`, { method: "POST", body: { tabId, blockId: a.blockId } }).catch(() => {});
+    }, [attachKey]);
     const sessions = state ? liveSessions(state.sessions, { [tabId]: ids }) : [];
     const chips = stripPanes(blocks, sessions);
     // The strip is where every pane's controls live, so it shows whenever there is a pane.

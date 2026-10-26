@@ -925,3 +925,12 @@ describe("wakes", () => {
         expect(await (await post("/blocks/nope/wake", { until: "green", pr: URL7, prompt: "x" })).text()).toContain("no live Claude session");
     });
 });
+
+test("a pane attached to a session moves it there, and the service's later events keep it there", async () => {
+    await event({ ...prompt, hook_event_name: "UserPromptSubmit" });
+    expect((await post(`/sessions/${prompt.session_id}/attach`, { tabId: "tab-2", blockId: "viewer" })).status).toBe(200);
+    await event({ ...prompt, hook_event_name: "Stop" });
+    const s = (await (await fetch(base + "/state")).json()).sessions.find((x: { id: string }) => x.id === prompt.session_id);
+    expect([s.blockId, s.tabId, s.state]).toEqual(["viewer", "tab-2", "waiting"]);
+    expect((await post(`/sessions/${prompt.session_id}/attach`, { tabId: 1 })).status).toBe(400);
+});

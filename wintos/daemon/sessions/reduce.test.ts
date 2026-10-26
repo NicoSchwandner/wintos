@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { acceptSuggestedName, askSession, readTurn, endSessions, finishSession, nameSession, renameSession, titleSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, liveSessionsIn } from "./reduce";
+import { acceptSuggestedName, askSession, attachSession, readTurn, endSessions, finishSession, nameSession, renameSession, titleSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, liveSessionsIn } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -390,5 +390,30 @@ describe("a session that also runs in Claude's background service", () => {
         let s = reduceSession(new Map(), fg("SessionStart", "empty", "left", { source: "startup" }), 1);
         s = reduceSession(s, fg("UserPromptSubmit", "luna", "left", { resume: "claude --resume 'luna'" }), 2);
         expect([...s.keys()]).toEqual(["luna"]);
+    });
+});
+
+describe("a pane attached to a session that runs in the background service", () => {
+    const fg = (name: string, id: string, block: string, extra = {}) => ev({ hook_event_name: name, session_id: id, ...extra }, "tab-1", block);
+    test("pinned to the pane that shows it, the service's events (from an old pane's id) no longer move it", () => {
+        let s = reduceSession(new Map(), fg("UserPromptSubmit", "fork", "old"), 1);
+        s = attachSession(s, "fork", "tab-2", "viewer");
+        s = reduceSession(s, fg("Stop", "fork", "old"), 2);
+        expect([s.get("fork")?.blockId, s.get("fork")?.tabId, s.get("fork")?.state]).toEqual(["viewer", "tab-2", "waiting"]);
+    });
+    test("its state follows the service's events, marked background or not", () => {
+        let s = attachSession(reduceSession(new Map(), fg("UserPromptSubmit", "fork", "old"), 1), "fork", "tab-1", "viewer");
+        s = reduceSession(s, ev({ hook_event_name: "Stop", session_id: "fork", kind: "bg" }, "tab-1", "old"), 2);
+        expect([s.get("fork")?.blockId, s.get("fork")?.state, s.get("fork")?.background]).toEqual(["viewer", "waiting", undefined]);
+    });
+    test("the pin lifts when the session really runs in a pane: its own Claude reports it with a resume command", () => {
+        let s = attachSession(reduceSession(new Map(), fg("UserPromptSubmit", "fork", "old"), 1), "fork", "tab-1", "viewer");
+        s = reduceSession(s, fg("UserPromptSubmit", "fork", "real", { resume: "claude --resume 'fork'" }), 2);
+        expect([s.get("fork")?.blockId, s.get("fork")?.attachedTo]).toEqual(["real", undefined]);
+    });
+    test("an unknown or ended session is not pinned", () => {
+        expect(attachSession(new Map(), "nobody", "t", "b").size).toBe(0);
+        const ended = new Map([["x", { id: "x", tabId: "t", blockId: "b", state: "ended", since: 0, lastAt: 0 } as Session]]);
+        expect(attachSession(ended, "x", "t", "c").get("x")?.blockId).toBe("b");
     });
 });

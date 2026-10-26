@@ -53,3 +53,13 @@ export function nextNeedsYou(sessions: Session[], tabIds: string[], activeTabId:
 export function unreadSessions(sessions: Session[], tabId: string, seen: Record<string, number> | undefined): Session[] {
     return sessions.filter((s) => s.tabId === tabId && isUnread(s, seen ?? {}));
 }
+
+// Panes of this tab that resume a session WintOS places elsewhere: a `claude attach` shows it,
+// while its events come from the background service with an old pane's id.
+export function attachments(panes: { blockId: string; script?: string }[], sessions: Session[], tabId: string): { sessionId: string; blockId: string }[] {
+    return panes.flatMap(({ blockId, script }) => {
+        const id = script && /--resume '([\w-]+)'/.exec(script)?.[1];
+        const s = id ? sessions.find((x) => x.id === id && x.state !== "ended") : undefined;
+        return s && (s.blockId !== blockId || s.tabId !== tabId) ? [{ sessionId: s.id, blockId }] : [];
+    });
+}

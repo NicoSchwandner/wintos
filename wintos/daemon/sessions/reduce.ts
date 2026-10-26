@@ -34,6 +34,7 @@ export type Session = {
     promptAt?: number; // the last prompt: in a pane running two sessions, the one you talk to
     resume?: string; // the pane's resume command for it: only the session the pane runs sends one
     background?: boolean; // runs only in Claude's background service: no pane shows it
+    attachedTo?: string; // a pane showing it (`claude attach`) while it runs in the background service
 };
 
 // A step starting with ? is the developer's call: the session stops there.
@@ -100,7 +101,7 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     // pane): the pane's copy is the one you see, and the background copy's events would move it
     // back to the pane its service was started from.
     const background = ev.payload.kind === "bg";
-    if (background && prev && !prev.background && prev.state !== "ended") return sessions;
+    if (background && prev && !prev.background && !prev.attachedTo && prev.state !== "ended") return sessions;
     // A resumed session starting up is still where it was at quit (a turn waiting on you). Quitting
     // WintOS ends every Claude with reason "other": that ends nothing, so the restart finds the
     // session with its PRs, lane and status. A pane WintOS closes ends its session itself (endSessions).
@@ -112,10 +113,14 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     const parks = name === "Stop" && prev?.parkPending;
     const finishes = name === "Stop" && prev?.donePending;
     const state = parks ? "parked" : finishes ? "done" : (next ?? prev?.state ?? "idle");
+    // A session a pane is attached to reports from the background service, with the id of the
+    // pane that service was started from; the pane showing it wins until a pane runs it itself.
+    const runsHere = typeof ev.payload.resume === "string" && !background;
+    const pinned = prev?.attachedTo && !runsHere ? prev : undefined;
     const session: Session = {
         id,
-        tabId: ev.tabId,
-        blockId: ev.blockId,
+        tabId: pinned ? pinned.tabId : ev.tabId,
+        blockId: pinned ? pinned.blockId : ev.blockId,
         state,
         since: next && next !== prev?.state ? now : (prev?.since ?? now),
         lastAt: now,
@@ -142,7 +147,8 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     if (outcome) session.outcome = outcome;
     const lane = name === "PostToolUse" ? withPrStep(prev?.lane, pr_verb) : prev?.lane;
     if (lane) session.lane = lane;
-    if (background) session.background = true;
+    if (background && !pinned) session.background = true;
+    if (pinned) session.attachedTo = pinned.attachedTo;
     const out = new Map(sessions);
     for (const s of leavingFor(sessions, ev)) out.delete(s.id);
     out.set(id, session);
@@ -160,6 +166,15 @@ export function leavingFor(sessions: Map<string, Session>, ev: HookEvent): Sessi
     return [...sessions.values()].filter(
         (s) => s.blockId === ev.blockId && s.id !== id && !s.background && (s.restored || (switched && s.state !== "ended" && (!!s.resume || !s.promptAt)))
     );
+}
+
+// The window saw a pane whose start command resumes this session: a `claude attach` to it, as it
+// runs in the background service. It shows there from now on.
+export function attachSession(sessions: Map<string, Session>, id: string, tabId: string, blockId: string): Map<string, Session> {
+    const s = sessions.get(id);
+    if (!s || s.state === "ended") return sessions;
+    const { background: _bg, ...rest } = s;
+    return new Map(sessions).set(id, { ...rest, tabId, blockId, attachedTo: blockId });
 }
 
 // ⌘W or ⇧⌘W: the panes are going, and the sessions in them with them.

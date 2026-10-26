@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { closeWarning, liveSessions, nextNeedsYou, paneCloseWarns, unreadSessions } from "./sessions";
+import { attachments, closeWarning, liveSessions, nextNeedsYou, paneCloseWarns, unreadSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
 
@@ -92,4 +92,10 @@ describe("paneCloseWarns", () => {
 test("a session only in the background service is in no pane: never counted as live", () => {
     const s = (id: string, o = {}) => ({ id, tabId: "t", blockId: "b", state: "waiting", since: 0, lastAt: 0, ...o }) as never;
     expect(liveSessions([s("pane"), s("fork", { background: true })], { t: ["b"] }).map((x: { id: string }) => x.id)).toEqual(["pane"]);
+});
+
+test("a pane resuming a session placed elsewhere is reported; one already right, or ended, is not", () => {
+    const s = (id: string, o = {}) => ({ id, tabId: "t", blockId: "old", state: "waiting", since: 0, lastAt: 0, ...o }) as never;
+    const panes = [{ blockId: "v1", script: "cd '/w' && claude --resume 'fork'" }, { blockId: "v2", script: "cd '/w' && claude --resume 'here'" }, { blockId: "v3" }, { blockId: "v4", script: "claude --resume 'gone'" }];
+    expect(attachments(panes, [s("fork"), s("here", { blockId: "v2" }), s("gone", { state: "ended" })], "t")).toEqual([{ sessionId: "fork", blockId: "v1" }]);
 });

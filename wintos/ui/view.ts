@@ -211,6 +211,9 @@ export function projectSessions(state: WintosState, tabId: string, blockIds: str
     ];
 }
 
+// The project's sessions that run only in Claude's background service: listed, never opened.
+export const backgroundSessions = (state: WintosState, tabId: string): Session[] => state.sessions.filter((s) => s.tabId === tabId && s.background && s.state !== "ended");
+
 // When you last interacted with a session (looked at it, or prompted it) and with a project (the
 // latest of its sessions', live or shelved, and when you shelved one). Seen is kept per session.
 export const sessionTouched = (state: WintosState, s: Session): number => Math.max(state.seen?.[s.id] ?? 0, s.promptAt ?? 0) || s.lastAt;

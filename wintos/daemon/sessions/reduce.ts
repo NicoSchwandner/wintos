@@ -1,4 +1,5 @@
-export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string; reason?: string; last_assistant_message?: string; tool_name?: string };
+// kind "bg": sent from Claude's background service, not from the pane's own Claude.
+export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string; reason?: string; last_assistant_message?: string; tool_name?: string; kind?: string };
 export type HookEvent = { tabId: string; blockId: string; payload: HookPayload };
 // parked: the turn ended waiting on something outside (CI, a review), not on the developer.
 // done: the turn ended with the goal met and nothing asked of the developer.
@@ -32,6 +33,7 @@ export type Session = {
     outcome?: { text: string; at: number }; // how the last turn with text ended: its first line of prose
     promptAt?: number; // the last prompt: in a pane running two sessions, the one you talk to
     resume?: string; // the pane's resume command for it: only the session the pane runs sends one
+    background?: boolean; // runs only in Claude's background service: no pane shows it
 };
 
 // A step starting with ? is the developer's call: the session stops there.
@@ -94,6 +96,11 @@ const ASKING_TOOLS: Record<string, AskKind> = { AskUserQuestion: "answer", ExitP
 export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now: number): Map<string, Session> {
     const { session_id: id, hook_event_name: name, cwd, prompt, pr_verb } = ev.payload;
     const prev = sessions.get(id);
+    // One session can run in a pane and in the background service at once (a fork resumed in a
+    // pane): the pane's copy is the one you see, and the background copy's events would move it
+    // back to the pane its service was started from.
+    const background = ev.payload.kind === "bg";
+    if (background && prev && !prev.background && prev.state !== "ended") return sessions;
     // A resumed session starting up is still where it was at quit (a turn waiting on you). Quitting
     // WintOS ends every Claude with reason "other": that ends nothing, so the restart finds the
     // session with its PRs, lane and status. A pane WintOS closes ends its session itself (endSessions).
@@ -135,6 +142,7 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     if (outcome) session.outcome = outcome;
     const lane = name === "PostToolUse" ? withPrStep(prev?.lane, pr_verb) : prev?.lane;
     if (lane) session.lane = lane;
+    if (background) session.background = true;
     const out = new Map(sessions);
     for (const s of leavingFor(sessions, ev)) out.delete(s.id);
     out.set(id, session);
@@ -144,10 +152,14 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
 // The sessions an event puts out of its block. A saved one goes when anything reports from the
 // block. A pane runs one interactive Claude, and switching it to another session (/resume, a
 // fork) ends nothing, so the one it ran goes when the pane's session starts or is prompted.
+// The never-prompted Claude a pane started with goes then too: it has nothing to resume.
 export function leavingFor(sessions: Map<string, Session>, ev: HookEvent): Session[] {
     const { session_id: id, hook_event_name: name, resume } = ev.payload;
+    if (ev.payload.kind === "bg") return [];
     const switched = typeof resume === "string" && (name === "SessionStart" || name === "UserPromptSubmit");
-    return [...sessions.values()].filter((s) => s.blockId === ev.blockId && s.id !== id && (s.restored || (switched && !!s.resume && s.state !== "ended")));
+    return [...sessions.values()].filter(
+        (s) => s.blockId === ev.blockId && s.id !== id && !s.background && (s.restored || (switched && s.state !== "ended" && (!!s.resume || !s.promptAt)))
+    );
 }
 
 // ⌘W or ⇧⌘W: the panes are going, and the sessions in them with them.
@@ -285,10 +297,11 @@ export function readTurn(sessions: Map<string, Session>, sessionId: string, turn
     return new Map(sessions).set(s.id, read === "done" ? { ...s, state: "done" } : { ...s, ask: read });
 }
 
-// The sessions a pane runs, not ended: usually one; a fork Claude Code runs in the background
-// shares its parent's pane. The one you last prompted first: that is the one you talk to there.
+// The sessions a pane runs, not ended: usually one. The one you last prompted first: that is the
+// one you talk to there. A session only in the background service is in no pane, whichever pane
+// its service was started from.
 export const liveSessionsIn = (sessions: Iterable<Session>, blockId: string): Session[] =>
-    [...sessions].filter((s) => s.blockId === blockId && s.state !== "ended").sort((a, b) => (b.promptAt ?? b.lastAt) - (a.promptAt ?? a.lastAt) || b.lastAt - a.lastAt);
+    [...sessions].filter((s) => s.blockId === blockId && s.state !== "ended" && !s.background).sort((a, b) => (b.promptAt ?? b.lastAt) - (a.promptAt ?? a.lastAt) || b.lastAt - a.lastAt);
 export const liveSessionIn = (sessions: Iterable<Session>, blockId: string): Session | undefined => liveSessionsIn(sessions, blockId)[0];
 // The session a `wintos` call comes from: the one it names (CLAUDE_CODE_SESSION_ID), so a pane
 // running several (a fork Claude Code runs in the background shares its pane) never mixes them

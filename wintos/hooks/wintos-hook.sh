@@ -17,12 +17,14 @@ payload="$(cat)"
 # background (CLAUDE_CODE_SESSION_KIND=bg) inherits the pane's id too, and would otherwise make
 # the next launch resume it. CLAUDE_CODE_CHILD_SESSION can't tell them apart: Claude sets it for
 # everything it spawns, the interactive session's own hooks included.
-# A fork made from inside the session runs its first events in the pane's own process, without
-# that variable; its transcript says what it is from its first lines on.
+# Claude's background service runs sessions with CLAUDE_CODE_SESSION_KIND=bg, inheriting the
+# pane's id. Its spares are started ahead of any fork and never get a conversation: until a
+# background session has a transcript, it is one of them, and stays unreported. A fork resumed
+# in a pane runs in the pane's own Claude, without the variable, and owns the pane like any session.
 background="${CLAUDE_CODE_SESSION_KIND:-}"
-if [ "$background" != "bg" ]; then
+if [ "$background" = "bg" ]; then
     transcript="$(printf '%s' "$payload" | jq -r '.transcript_path // empty' 2>/dev/null)"
-    [ -n "$transcript" ] && [ -r "$transcript" ] && head -n 40 "$transcript" | grep -q '"sessionKind":"bg"' && background=bg
+    [ -n "$transcript" ] && [ -s "$transcript" ] || exit 0
 fi
 resume=""
 if [ -n "$WAVETERM_BLOCKID" ] && [ "$background" != "bg" ]; then
@@ -65,6 +67,6 @@ if [ "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.tool_name // 
 fi
 
 # The resume command goes along: it tells the daemon this is the session the pane runs now.
-printf '%s' "$payload" | jq -c --arg t "$WAVETERM_TABID" --arg b "${WAVETERM_BLOCKID:-}" --arg r "$resume" '{tabId: $t, blockId: $b, payload: (. + if $r != "" then {resume: $r} else {} end)}' 2>/dev/null |
+printf '%s' "$payload" | jq -c --arg t "$WAVETERM_TABID" --arg b "${WAVETERM_BLOCKID:-}" --arg r "$resume" --arg k "$background" '{tabId: $t, blockId: $b, payload: (. + (if $r != "" then {resume: $r} else {} end) + (if $k == "bg" then {kind: "bg"} else {} end))}' 2>/dev/null |
     curl -sf -m 0.2 -H "Content-Type: application/json" --data-binary @- "http://127.0.0.1:${WINTOS_PORT:-7730}/events" 2>/dev/null
 exit 0

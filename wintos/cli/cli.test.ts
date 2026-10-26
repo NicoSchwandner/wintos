@@ -88,9 +88,20 @@ describe("wintos-hook.sh tells the daemon which session the pane runs", () => {
         expect(d.seen).toEqual([]);
     });
 
-    test("a background fork's carries none", async () => {
+    test("a background session's events say so; a spare one (no transcript yet) sends nothing", async () => {
+        const t = join(tmp(), "fork.jsonl");
+        writeFileSync(t, JSON.stringify({ type: "user" }));
         const d = await fakeDaemon("");
-        await runHookAsync(env(d.port, { CLAUDE_CODE_SESSION_KIND: "bg" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "fork", cwd: "/x" }));
+        await runHookAsync(env(d.port, { CLAUDE_CODE_SESSION_KIND: "bg" }), JSON.stringify({ hook_event_name: "Stop", session_id: "fork", cwd: "/x", transcript_path: t }));
+        await runHookAsync(env(d.port, { CLAUDE_CODE_SESSION_KIND: "bg" }), JSON.stringify({ hook_event_name: "SessionStart", session_id: "spare", cwd: "/x", transcript_path: join(tmp(), "none.jsonl") }));
+        expect(d.seen.map((x) => [x.body.payload.session_id, x.body.payload.kind])).toEqual([["fork", "bg"]]);
+    });
+
+    test("a background fork's carries none", async () => {
+        const t = join(tmp(), "fork.jsonl");
+        writeFileSync(t, JSON.stringify({ type: "user" }));
+        const d = await fakeDaemon("");
+        await runHookAsync(env(d.port, { CLAUDE_CODE_SESSION_KIND: "bg" }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "fork", cwd: "/x", transcript_path: t }));
         expect(d.seen[0].body.payload).not.toHaveProperty("resume");
     });
 });
@@ -155,12 +166,12 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         expect(w.calls()).toBe("");
     });
 
-    test("nor a fork whose own process doesn't say it is one: its transcript does", () => {
+    test("a fork resumed in a pane runs in the pane's own Claude: it takes the pane, whatever its transcript says", () => {
         const w = fakeWsh();
         const t = join(tmp(), "fork.jsonl");
-        writeFileSync(t, [JSON.stringify({ type: "ai-title", sessionId: "fork" }), JSON.stringify({ type: "attachment", sessionKind: "bg" })].join("\n"));
-        runHook(env(w.dir), JSON.stringify({ hook_event_name: "SessionStart", source: "resume", session_id: "fork", cwd: "/x", transcript_path: t }));
-        expect(w.calls()).toBe("");
+        writeFileSync(t, JSON.stringify({ type: "attachment", sessionKind: "bg" }));
+        runHook(env(w.dir), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "fork", cwd: "/x", transcript_path: t }));
+        expect(w.calls()).toBe(`setmeta -b blk cmd:initscript=cd '/x' && claude --resume 'fork'\n`);
     });
 
     test("a new session's start does not, since Claude saves nothing to resume before the first prompt", () => {

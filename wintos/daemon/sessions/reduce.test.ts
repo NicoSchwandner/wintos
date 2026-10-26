@@ -368,3 +368,27 @@ describe("a pane running two sessions (a fork in the background)", () => {
         expect(liveSessionsIn(m.values(), "blk-1").map((s) => s.id)).toEqual(["fork", prompt.session_id]);
     });
 });
+
+describe("a session that also runs in Claude's background service", () => {
+    const fg = (name: string, id: string, block: string, extra = {}) => ev({ hook_event_name: name, session_id: id, ...extra }, "tab-1", block);
+    const bg = (name: string, id: string, block: string) => ev({ hook_event_name: name, session_id: id, kind: "bg" }, "tab-1", block);
+
+    test("known only from the background, it is a background session; its pane's own session is not touched", () => {
+        let s = reduceSession(new Map(), fg("UserPromptSubmit", "pane", "left", { resume: "claude --resume 'pane'" }), 1);
+        s = reduceSession(s, bg("UserPromptSubmit", "fork", "left"), 2);
+        expect([s.get("fork")?.background, s.get("pane")?.state]).toEqual([true, "working"]);
+    });
+
+    test("resumed in a pane it is that pane's, and its background copy's events no longer move or change it", () => {
+        let s = reduceSession(new Map(), bg("UserPromptSubmit", "fork", "left"), 1);
+        s = reduceSession(s, fg("UserPromptSubmit", "fork", "right", { resume: "claude --resume 'fork'" }), 2);
+        s = reduceSession(s, bg("Stop", "fork", "left"), 3);
+        expect([s.get("fork")?.blockId, s.get("fork")?.background, s.get("fork")?.state]).toEqual(["right", undefined, "working"]);
+    });
+
+    test("a pane switching to its real session clears the never-prompted Claude it started with", () => {
+        let s = reduceSession(new Map(), fg("SessionStart", "empty", "left", { source: "startup" }), 1);
+        s = reduceSession(s, fg("UserPromptSubmit", "luna", "left", { resume: "claude --resume 'luna'" }), 2);
+        expect([...s.keys()]).toEqual(["luna"]);
+    });
+});

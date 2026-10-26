@@ -88,3 +88,8 @@ describe("paneCloseWarns", () => {
         expect(paneCloseWarns([s("a", "t", state)], "b-a", null)).toBe(false));
     test("a pane without a session closes at once", () => expect(paneCloseWarns([], "b-a", null)).toBe(false));
 });
+
+test("a session only in the background service is in no pane: never counted as live", () => {
+    const s = (id: string, o = {}) => ({ id, tabId: "t", blockId: "b", state: "waiting", since: 0, lastAt: 0, ...o }) as never;
+    expect(liveSessions([s("pane"), s("fork", { background: true })], { t: ["b"] }).map((x: { id: string }) => x.id)).toEqual(["pane"]);
+});

@@ -9,8 +9,10 @@ export type Target = { tabId: string; blockId: string; find?: string; resume?: s
 // The daemon only hears about a session ending if Claude says so; a closed block or a killed
 // Claude sends nothing. The UI knows which blocks still exist, so it drops the rest.
 // An interrupted turn (Esc) sends no Stop either and stays "working" until the next prompt.
+// A session only in Claude's background service shows in no pane and asks nothing of the
+// sidebar: you can't act on it from WintOS.
 export function liveSessions(sessions: Session[], blocksByTab: Record<string, string[] | undefined>): Session[] {
-    return sessions.filter((s) => blocksByTab[s.tabId]?.includes(s.blockId));
+    return sessions.filter((s) => !s.background && blocksByTab[s.tabId]?.includes(s.blockId));
 }
 
 // ⇧⌘W asks first only when closing would stop Claude sessions; closing a tab kills its panes.

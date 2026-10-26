@@ -14,7 +14,7 @@ import { notesKeys, PrList } from "./PrList";
 import { useWintos } from "../useWintos";
 import { runKey } from "../menu";
 import { openPalette } from "../Palette";
-import { projectSessions, relTime, type WintosState } from "../view";
+import { backgroundSessions, projectSessions, relTime, sessionName, type WintosState } from "../view";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { SESSION_DOT } from "../tokens";
 import { PrChipButton } from "../SessionHeader";
@@ -97,9 +97,10 @@ NotesRail.displayName = "NotesRail";
 export function Sessions({ tabId, state, size }: { tabId: string; state?: WintosState; size: "rail" | "full" }) {
     const blockIds = useAtomValue(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.blockids ?? [];
     const list = state ? projectSessions(state, tabId, blockIds) : [];
+    const background = state ? backgroundSessions(state, tabId) : [];
     return (
         <div data-wintos="sessions" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {list.length > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>Sessions</span>}
+            {list.length + background.length > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>Sessions</span>}
             {list.slice(0, 9).map((x, i) => {
                 const live = x.kind === "live";
                 const id = live ? x.session.id : x.item.sessionId;
@@ -127,6 +128,13 @@ export function Sessions({ tabId, state, size }: { tabId: string; state?: Wintos
                     </div>
                 );
             })}
+            {background.map((s) => (
+                <div key={s.id} data-wintos="background-session" title="runs in Claude's background service, not in a pane" style={{ display: "flex", alignItems: "center", gap: 9, paddingLeft: 30, fontSize: size === "rail" ? 12 : 12.5, color: T.quietTitle }}>
+                    <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: "50%", background: SESSION_DOT[s.state], opacity: 0.6 }} />
+                    <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessionName(s)}</span>
+                    <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10, color: T.faint }}>background · {s.state}</span>
+                </div>
+            ))}
             {list.length > 9 && <button type="button" tabIndex={-1} onClick={() => openPalette("shelved")} style={{ alignSelf: "flex-start", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontSize: 12, color: T.faint }}><Key k="⇧⌘P" label={`${list.length - 9} more`} /></button>}
             <PrList tabId={tabId} size={size} label="no session" />
         </div>

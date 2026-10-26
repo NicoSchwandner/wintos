@@ -18,15 +18,17 @@ export function Rich({ text, size, links = true }: { text: string; size: Size; l
 
 // A task box: done filled green with a tick, partial half-filled, todo empty. Clickable only
 // where the file is the developer's (mine.md), as a real button so ⇥ and Space reach it.
-export function Box({ state, size, onToggle }: { state: CheckState; size: Size; onToggle?: () => void }) {
+// Centred on the first line of whatever row it leads: the button takes the row's font, so 1lh is
+// that row's line height.
+export function Box({ state, onToggle }: { state: CheckState; onToggle?: () => void }) {
     const style: React.CSSProperties = {
-        width: 12, height: 12, padding: 0, flexShrink: 0, marginTop: size === "rail" ? 4 : 6, borderRadius: 3,
+        width: 12, height: 12, padding: 0, flexShrink: 0, font: "inherit", marginTop: "calc((1lh - 12px) / 2)", borderRadius: 3,
         border: `1.5px solid ${state === "done" ? T.moss : state === "partial" ? T.apricot : T.muted}`,
         background: state === "done" ? T.moss : state === "partial" ? `linear-gradient(90deg, ${T.apricot} 50%, transparent 50%)` : "transparent",
-        display: "inline-flex", alignItems: "center", justifyContent: "center", color: T.ground, fontSize: 9, fontWeight: 700, lineHeight: 1,
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
         cursor: onToggle ? "pointer" : "default",
     };
-    const mark = state === "done" ? "✓" : "";
+    const mark = state === "done" && <span style={{ color: T.ground, fontSize: 9, fontWeight: 700, lineHeight: 1 }}>✓</span>;
     if (!onToggle) return <span style={style}>{mark}</span>;
     return (
         <button type="button" onClick={onToggle} title={state === "done" ? "Untick" : "Tick"} aria-label={state === "done" ? "Untick" : "Tick"} style={style}>
@@ -105,7 +107,7 @@ export function ProjectNotes({ md, size }: { md: string; size: Size }) {
             {n.built.length > 0 && (
                 <Section label="Built" size={size}>
                     {built.map((b, i) => (
-                        <Line key={i} size={size} lead={b.state ? <Box state={b.state} size={size} /> : dot(T.dim)}>
+                        <Line key={i} size={size} lead={b.state ? <Box state={b.state} /> : dot(T.dim)}>
                             <Rich text={b.text} size={size} />
                         </Line>
                     ))}

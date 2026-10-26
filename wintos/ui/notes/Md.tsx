@@ -46,7 +46,7 @@ export function Md({ text, size, inline, links = true, onTick }: { text: string;
                 <li data-item={onTick ? "check" : undefined} data-done={done || undefined} style={{ display: "flex", gap: 8, alignItems: "flex-start", minWidth: 0, overflowWrap: "anywhere", color: done ? T.muted : undefined }}>
                     {/* A tick by mouse is free: reaching a box by key is the long way round, so it is no slip. */}
                     <span data-act data-key={onTick ? "" : undefined} style={{ display: "contents" }}>
-                        <Box state={done ? "done" : "todo"} size={size} onToggle={onTick ? () => onTick(line) : undefined} />
+                        <Box state={done ? "done" : "todo"} onToggle={onTick ? () => onTick(line) : undefined} />
                     </span>
                     {/* Struck through is the text only: across the box it reads as a second tick. */}
                     <span style={{ minWidth: 0, textDecoration: done ? "line-through" : undefined }}>{children}</span>

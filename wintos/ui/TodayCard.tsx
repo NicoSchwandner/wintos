@@ -59,7 +59,7 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
                     {shown.slice(0, SHOWN).map((i) => (
                         <div key={i.line} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: i.done ? T.muted : T.secondary, minWidth: 0, marginLeft: i.depth * INDENT }}>
                             <span data-key="" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()} style={{ display: "contents" }}>
-                                <Box state={i.done ? "done" : "todo"} size="rail" onToggle={() => void tickFocus(day, i.line)} />
+                                <Box state={i.done ? "done" : "todo"} onToggle={() => void tickFocus(day, i.line)} />
                             </span>
                             <span style={{ minWidth: 0, overflowWrap: "anywhere", textDecoration: i.done ? "line-through" : undefined }}><Rich text={i.text} size="rail" /></span>
                         </div>
@@ -104,7 +104,7 @@ function TickList({ day }: { day: Day }) {
                 <div key={i.line} data-item={i.done ? undefined : "check"} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: i.done ? T.muted : T.secondary, textDecoration: i.done ? "line-through" : undefined, minWidth: 0, padding: "1px 4px", margin: "0 -4px", marginLeft: i.depth * INDENT - 4, borderRadius: 4 }}>
                     {/* A tick by mouse is free: reaching a box by key is the long way round, so it is no slip. */}
                     <span data-act data-key="" onMouseDown={(e) => e.preventDefault()} style={{ display: "contents" }}>
-                        <Box state={i.done ? "done" : "todo"} size="rail" onToggle={() => void tickFocus(day, i.line)} />
+                        <Box state={i.done ? "done" : "todo"} onToggle={() => void tickFocus(day, i.line)} />
                     </span>
                     <span style={{ minWidth: 0, overflowWrap: "anywhere" }}><Rich text={i.text} size="rail" /></span>
                 </div>

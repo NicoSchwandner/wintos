@@ -9,7 +9,7 @@ import { T } from "./tokens";
 // the PRs card, ⌃⇥ in the sidebar, the notes view's own) is not repeated here.
 // The full-page views (notes, day) show their own keys. Typed by view, so a new one can't be missed.
 const KEYS: Record<MainView, readonly (readonly [string, string])[]> = {
-    terminal: [["⇧⌘P", "everything"], ["⇧⌘T", "new session"], ["⇧⌘L", "notes"], ["⇧⌘K", "keys"]],
+    terminal: [["⇧⌘P", "everything"], ["⇧⌘T", "new session"], ["⌥⌘L", "notes"], ["⇧⌘K", "keys"]],
     notes: [],
     day: [],
     keyboard: [],

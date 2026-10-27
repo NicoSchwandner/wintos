@@ -40,7 +40,7 @@ export function goToInbox(list: InboxList): void {
     getApi().setActiveTab(inbox);
 }
 
-// ⇧⌘G / ⇧⌘O as a toggle, like ⇧⌘L and ⇧⌘Y: pressed in that list's tab, back where you came from.
+// ⇧⌘G / ⇧⌘O as a toggle, like ⇧⌘Y: pressed in that list's tab, back where you came from.
 // Only the key toggles; a click on a card always opens.
 const BACK = "wintos:before-inbox";
 export function toggleInbox(list: InboxList): void {

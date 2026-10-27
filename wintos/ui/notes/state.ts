@@ -1,7 +1,7 @@
 import { atom } from "jotai";
 
 // Per renderer: what fills the project area, and whether mine.md is being edited.
-export type MainView = "terminal" | "notes" | "day" | "keyboard";
+export type MainView = "terminal" | "day" | "keyboard";
 // A page that is not the tab's own (Today, Keyboard): it covers the tab, which then isn't
 // "where you are" — not marked in the sidebar, not where a walk starts.
 export const isPage = (v: MainView) => v === "day" || v === "keyboard";
@@ -16,4 +16,3 @@ export const tickModeAtom = atom(false);
 // ⌥⌘R pressed once: the terminal it would restart, until a second press or 3 s.
 export const restartArmedAtom = atom(null as string | null);
 export const closeArmedAtom = atom(null as string | null); // the pane a second ⌘W closes
-export const findInNotesAtom = atom(null as string | null);

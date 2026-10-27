@@ -3,7 +3,7 @@ import { atoms, createBlock, getApi } from "@/store/global";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import type { Session } from "../daemon/sessions/reduce";
 import { nextNeedsYou, Target } from "./sessions";
-import { editingMineAtom, findInNotesAtom, isPage, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
+import { editingMineAtom, isPage, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
 import { rememberReturn, returnFocus, wantPane } from "./focusOwner";
 import { currentState, daemonFetch } from "./useWintos";
 import { flog, where } from "./focusLog";
@@ -55,8 +55,8 @@ export function whereYouAre(): string {
 
 // Opening a project: on the session behind what needs you there, when something does
 // (attention's target), else as you left it.
-export function enterProject(tabId: string, find?: string): void {
-    focusSession(find ? { tabId, blockId: "", find } : (latest.targets[tabId] ?? { tabId, blockId: "" }));
+export function enterProject(tabId: string): void {
+    focusSession(latest.targets[tabId] ?? { tabId, blockId: "" });
 }
 
 // A closed project comes back in a new tab: the tab is created here, and its renderer, the
@@ -107,12 +107,7 @@ export function focusSession(t: Target): void {
 
 // Arriving in a project: on the session asked for, else back in an unsaved mine.md edit (its
 // view left as it was, so the draft stays), else on the terminals.
-function landOn({ blockId, find, resume, restore, unmagnify }: Target): void {
-    if (find) {
-        rememberReturn();
-        globalStore.set(findInNotesAtom, find);
-        return globalStore.set(mainViewAtom, "notes");
-    }
+function landOn({ blockId, resume, restore, unmagnify }: Target): void {
     if (!blockId && mineEditor() && !resume && !restore) return focusMineEditor();
     globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
     if (restore) return void createBlock({ meta: restore });

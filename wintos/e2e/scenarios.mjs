@@ -4,6 +4,7 @@
 // usage: node wintos/e2e/scenarios.mjs
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
+import { writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 
 const PORT = process.env.WINTOS_DEBUG_PORT ?? 9224;
@@ -314,7 +315,7 @@ await scenario("11 · ⇧⌘Y in a project and in the Inbox shows the Today page
     }
 });
 
-await scenario("12 · ⌘W on a working session warns first, then shelves it into the notes and the full project view, and ⌥⌘1 resumes it as a new pane", async () => {
+await scenario("12 · ⌘W on a working session warns first, then shelves it into the notes, and ⌥⌘1 resumes it as a new pane", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const shelf = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).shelf?.[tabId] ?? [];
@@ -345,10 +346,6 @@ await scenario("12 · ⌘W on a working session warns first, then shelves it int
     await until("the session on the shelf", async () => (await shelf()).some((s) => s.sessionId === "e2e-shelf"));
     await until("the pane closed", () => panes() !== before);
     await until("its row in the notes", () => evalIn(t, `document.querySelector("[data-wintos=shelf-dock]")?.innerText.includes("e2e shelf")`));
-    await press(t, "l", { mods: ["meta", "shift"] });
-    await until("its row in the full project view", () => evalIn(t, `document.querySelector("[data-wintos=notes-full] [data-wintos=shelf-dock]")?.innerText.includes("e2e shelf")`));
-    await press(t, "Escape", { keyCode: 27 });
-    await until("the full view closed", async () => !(await evalIn(t, `!!document.querySelector("[data-wintos=notes-full]")`)));
     await press(t, "¡", { code: "Digit1", keyCode: 49, mods: ["alt", "meta"] });
     await until("a new pane resuming it", () => sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j, db_block b where t.oid='${tabId}' and b.oid=j.value and b.data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`) === "1");
 });
@@ -654,6 +651,26 @@ await scenario("25 · a turn that asks you to decide sits in Your move saying so
     await post("UserPromptSubmit");
     await until("out of Your move", async () => !(await evalIn(t, row("needs"))), 8000);
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
+});
+
+await scenario("26 · a heads-up from the plugin shows in its project's notes, stays once the plugin clears it, and x closes it", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const blockId = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    await fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-headsup", hook_event_name: "UserPromptSubmit", prompt: "e2e heads-up" } }) });
+    const store = `${homedir()}/.local/share/wintos-dev/claude/plugins/store/cc-plugin-you-should-know_builtin-e2e.json`;
+    const line = "Merging this won't deploy it: the API needs its own release.";
+    const write = (sessions, seen) => writeFileSync(store, JSON.stringify({ known: [], seen, sessions }));
+    write([{ id: "e2e-headsup", view: { kind: "offer", line, explanation: "e2e why", shownAt: Date.now() } }], [line]);
+    const shown = () => evalIn(t, `document.querySelector("[data-wintos=headsups]")?.innerText ?? ""`);
+    await until("the heads-up in the notes", async () => (await shown()).includes("won't deploy it"));
+    write([{ id: "e2e-headsup" }], [line]);
+    await sleep(500);
+    if (!(await shown()).includes("won't deploy it")) throw new Error("the heads-up went when the plugin cleared it");
+    await evalIn(t, `document.querySelector("[data-wintos=notes-rail]").focus()`);
+    await press(t, "j");
+    await press(t, "x");
+    await until("the heads-up closed", async () => !(await shown()));
 });
 
 await scenario("clean-up · the panes this run opened are closed", async () => {

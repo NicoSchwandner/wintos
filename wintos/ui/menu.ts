@@ -68,7 +68,6 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Cmd:e", "edit-mine"],
     ["Shift:Cmd:p", "palette"],
     ["Shift:Cmd:k", "keymap"],
-    ["Shift:Cmd:l", "notes"],
     ["Shift:Cmd:g", "prs"],
     ["Shift:Cmd:o", "panel"],
     ["Shift:Cmd:b", "browser"],
@@ -226,7 +225,7 @@ export function runKey(action: string): boolean {
 // The Inbox holds pages and nothing else: a terminal or a Claude session started there would
 // belong to no project and never show in the sidebar, Needs you or ⌃⇥.
 const PANE_MAKERS = new Set(["session", "terminal", "browser", "files", "sysinfo", "processes", "open-page"]);
-const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "park-session", "name-session"]);
+const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session"]);
 export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
 
@@ -285,7 +284,6 @@ export function runAction(action: string): void {
     // PRs and on call live in the Inbox tab, whichever project you are in.
     if (action === "prs") return toggleInbox("prs");
     if (action === "panel" || action.startsWith("panel:")) return toggleInbox("oncall");
-    if (action === "notes") return toggleView("notes");
     if (action === "day") return toggleView("day");
     if (action === "keyboard") return toggleView("keyboard");
     if (action === "open-external") return openExternal();
@@ -312,7 +310,7 @@ export function wintosClose(): boolean {
     });
     if (action === "project") closeProjectTab(globalStore.get(atoms.staticTabId), false);
     if (action === "overlay") closeOverlay();
-    if (action === "view") closeNotesView();
+    if (action === "view") closeView();
     if (action === "pane") {
         if (!confirmPaneClose(focused?.data?.blockId)) return true;
         shelvePane(focused?.data?.blockId);
@@ -362,7 +360,7 @@ export const shelvable = (meta: MetaType | undefined): string | undefined => {
 export function wintosEscape(): boolean {
     const active = document.activeElement;
     // The notes full width is a view opened on top: Esc closes it, back to where you were.
-    if (!globalStore.get(overlayAtom) && globalStore.get(mainViewAtom) !== "terminal" && zoneOf(active) === "list") return closeNotesView(), true;
+    if (!globalStore.get(overlayAtom) && globalStore.get(mainViewAtom) !== "terminal" && zoneOf(active) === "list") return closeView(), true;
     const action = escapeAction({ overlay: !!globalStore.get(overlayAtom), zone: zoneOf(active), inInbox: inInbox(), onPage: active?.tagName === "WEBVIEW" });
     if (action === "overlay") closeOverlay();
     if (action === "panes") focusArea("terminal"); // focusArea declares the pane wanted
@@ -446,7 +444,6 @@ export function closeProjectTab(tabId: string, confirm: boolean): void {
     daemonFetch(`/projects/${encodeURIComponent(tabId)}/shelve-all`, { method: "POST", body: {} }).then(close, close);
 }
 
-// ⇧⌘L opens the notes full width, and the same key again goes back to the terminals.
 // ⇧⌘U: the focused page in the system browser (a sign-in, a call that wants the camera).
 function openExternal(): void {
     const blockId = globalStore.get(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
@@ -471,7 +468,7 @@ function restartTerminal(): void {
 }
 
 export function toggleView(view: MainView): void {
-    if (globalStore.get(mainViewAtom) === view) return closeNotesView();
+    if (globalStore.get(mainViewAtom) === view) return closeView();
     openView(view);
 }
 
@@ -483,8 +480,9 @@ export function openView(view: MainView): void {
     globalStore.set(mainViewAtom, view);
 }
 
-// Closing the notes full width (⇧⌘L again, Esc, ⌘W): back to where you opened it from.
-function closeNotesView(): void {
+// Closing a page over the terminals (Today, the keyboard; its key again, Esc, ⌘W): back to where
+// you opened it from.
+function closeView(): void {
     globalStore.set(mainViewAtom, "terminal");
     returnFocus(() => focusArea("terminal"));
 }

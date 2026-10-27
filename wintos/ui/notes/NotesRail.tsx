@@ -2,33 +2,30 @@ import { useAtomValue } from "jotai";
 import { memo, useEffect, useRef, useState } from "react";
 import { useZoneKeys } from "../zones";
 import { cursorKeys } from "../itemCursor";
-import { toggleView } from "../menu";
 import { railCollapsedAtom, setRailCollapsed, syncRailCollapsed, useRailWidth } from "./railWidth";
 import { Key } from "../Key";
 import { T } from "../tokens";
 import { Mine } from "./Mine";
-import { ProjectNotes, Rich } from "./ProjectNotes";
+import { Rich } from "./ProjectNotes";
 import { editingMineAtom } from "./state";
 import { useNotes } from "./useNotes";
 import { notesKeys, PrList } from "./PrList";
-import { useWintos } from "../useWintos";
+import { daemonFetch, useWintos } from "../useWintos";
 import { runKey } from "../menu";
 import { openPalette } from "../Palette";
 import { backgroundSessions, projectSessions, relTime, sessionName, type WintosState } from "../view";
+import { shelvedName } from "../../daemon/shelf/shelf";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { SESSION_DOT } from "../tokens";
 import { PrChipButton } from "../SessionHeader";
 
-// The notes rail beside the terminal (MainC): next action, project.md, mine.md.
+// The notes rail beside the terminal (MainC): heads-ups, mine.md, the sessions.
 export const NotesRail = memo(({ tabId }: { tabId: string }) => {
-    const { notes, project, save } = useNotes(tabId);
+    const { notes, save } = useNotes(tabId);
     const editing = useAtomValue(editingMineAtom);
     const { state } = useWintos();
     const ref = useRef<HTMLDivElement>(null);
-    // ⏎ on the rail opens the notes full width (as ⇧⌘L).
-    // ⏎ opens the link under the cursor; with none, the notes full width.
-    const cursor = cursorKeys(() => ref.current);
-    useZoneKeys(ref, { ...notesKeys(tabId, state, !editing && !!notes), ...cursor, Enter: (e) => cursor.Enter(e) !== false || (!editing && (toggleView("notes"), true)) });
+    useZoneKeys(ref, { ...notesKeys(tabId, state, !editing && !!notes), ...cursorKeys(() => ref.current) });
     const [width, setWidth, saveWidth] = useRailWidth();
     const collapsed = useAtomValue(railCollapsedAtom);
     useEffect(() => (window.addEventListener("storage", syncRailCollapsed), () => window.removeEventListener("storage", syncRailCollapsed)), []);
@@ -59,12 +56,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
             ref={ref}
             style={{ width, flexShrink: 0, boxSizing: "border-box", padding: "12px 22px 12px 17px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", overflowX: "hidden", outline: "none", fontFamily: T.ui }}
         >
-            {project?.next && (
-                <div style={{ padding: "10px 12px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 5 }}>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.muted }}>Next action</span>
-                    <span style={{ fontSize: 12.5, lineHeight: 1.55, color: T.secondary }}><Rich text={project.next} size="rail" /></span>
-                </div>
-            )}
+            <HeadsUps tabId={tabId} state={state} />
             <div style={{ padding: "12px 14px", background: "#282828", border: `1px solid ${editing ? T.borderActive : T.keycapBorder}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>mine.md</span>
@@ -73,24 +65,44 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
                 <Mine text={notes?.mine ?? ""} mtime={notes?.mineMtime ?? 0} canEdit={!!notes} save={save} size="rail" />
             </div>
             <Sessions tabId={tabId} state={state} size="rail" />
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.secondary }}>project.md</span>
-                    <span style={{ fontSize: 10, color: T.faint }}>written by the sessions</span>
-                </div>
-                {!notes ? (
-                    <span style={{ fontSize: 12.5, color: T.faint }}>No notes yet. They start once Claude names the project.</span>
-                ) : notes.projectMd === null ? (
-                    <span style={{ fontSize: 12.5, color: T.brick }}>project.md is unreadable. The next prompt asks Claude to repair it.</span>
-                ) : (
-                    <ProjectNotes md={notes.projectMd} size="rail" />
-                )}
-            </div>
         </div>
         </>
     );
 });
 NotesRail.displayName = "NotesRail";
+
+// What the sessions' "You should know" side agent flagged in this project, newest first, until you
+// close it (j/k to one, x). The explanation is its tooltip.
+function HeadsUps({ tabId, state }: { tabId: string; state?: WintosState }) {
+    const list = [...(state?.headsUps?.[tabId] ?? [])].sort((a, b) => b.at - a.at);
+    const problem = state?.headsUpProblem;
+    if (!list.length && !problem) return null;
+    const nameOf = (id: string) => {
+        const live = state?.sessions.find((s) => s.id === id);
+        const shelved = state?.shelf?.[tabId]?.find((i) => i.sessionId === id);
+        return live ? sessionName(live) : shelved ? shelvedName(shelved) : undefined;
+    };
+    return (
+        <div data-wintos="headsups" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.apricot }}>Heads-up</span>
+                {list.length > 0 && <Key k="j k · x" label="close" />}
+            </div>
+            {problem && <span style={{ fontSize: 11, color: T.brick }}>New heads-ups can't be read: {problem}.</span>}
+            {list.map((h) => (
+                <div key={h.id} data-item="headsup" title={h.explanation} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "1px 4px", margin: "0 -4px", borderRadius: 4 }}>
+                    <span style={{ minWidth: 0, flexGrow: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+                        <span style={{ fontSize: 12.5, lineHeight: 1.5, color: T.secondary }}><Rich text={h.text} size="rail" /></span>
+                        <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{[nameOf(h.sessionId), relTime(Date.now() - h.at)].filter(Boolean).join(" · ")}</span>
+                    </span>
+                    <button type="button" data-act data-key="x" tabIndex={-1} aria-label="Close this heads-up" title="Close (x)" onMouseDown={(e) => e.preventDefault()} onClick={() => void daemonFetch(`/headsups/${encodeURIComponent(h.id)}/dismiss`, { method: "POST", body: {} })} style={{ flexShrink: 0, padding: "0 2px", background: "transparent", border: "none", cursor: "pointer", color: T.faint, fontSize: 13, lineHeight: 1.4 }}>
+                        ×
+                    </button>
+                </div>
+            ))}
+        </div>
+    );
+}
 
 // This project's sessions: the live ones, then the shelved ones, each with its PRs, ⌥⌘1–9 back to
 // its pane or resumed; then the project's PRs no session owns.

@@ -32,7 +32,7 @@ const runHook = (env: Record<string, string>, input = '{"hook_event_name":"Stop"
 // Async variant: a synchronous child would block the in-process fake daemon from answering.
 const runHookAsync = (env: Record<string, string>, input = '{"hook_event_name":"Stop","session_id":"s"}') =>
     new Promise<string>((resolve) => {
-        const c = require("child_process").execFile(HOOK, { env: { PATH: process.env.PATH!, ...env } }, (_e: unknown, so: string) => resolve(so));
+        const c = require("child_process").execFile(HOOK, { env: { PATH: process.env.PATH!, HOME: "/home/dev", ...env } }, (_e: unknown, so: string) => resolve(so));
         c.stdin.end(input);
     });
 
@@ -46,7 +46,13 @@ describe("wintos-hook.sh", () => {
         const d = await fakeDaemon("context for claude");
         const out = await runHookAsync({ WAVETERM_TABID: "tab-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) });
         expect(out).toBe("context for claude");
-        expect(d.seen[0]).toEqual({ url: "/events", body: { tabId: "tab-1", blockId: "blk-1", payload: { hook_event_name: "Stop", session_id: "s" } } });
+        expect(d.seen[0]).toEqual({ url: "/events", body: { tabId: "tab-1", blockId: "blk-1", payload: { hook_event_name: "Stop", session_id: "s", config_dir: "/home/dev/.claude" } } });
+    });
+
+    test("the session's Claude config dir goes along: its plugin store holds the account's heads-ups", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "tab-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port), CLAUDE_CONFIG_DIR: "/home/dev/.claude-private" });
+        expect(d.seen[0].body.payload.config_dir).toBe("/home/dev/.claude-private");
     });
 
     test("a daemon error body never reaches Claude's context", async () => {
@@ -69,7 +75,7 @@ describe("wintos-hook.sh and a question mid-turn", () => {
     test.each(["PreToolUse", "PostToolUse"])("%s of AskUserQuestion goes to the daemon without the question itself", async (name) => {
         const d = await fakeDaemon("");
         await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, JSON.stringify({ hook_event_name: name, session_id: "s", cwd: "/x", tool_name: "AskUserQuestion", tool_input: { questions: [{ question: "secret?" }] } }));
-        expect(d.seen[0].body.payload).toEqual({ hook_event_name: name, session_id: "s", cwd: "/x", tool_name: "AskUserQuestion" });
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: name, session_id: "s", cwd: "/x", tool_name: "AskUserQuestion", config_dir: "/home/dev/.claude" });
     });
 });
 
@@ -204,12 +210,12 @@ describe("wintos-hook.sh on PostToolUse", () => {
     test("sends only the PR links of a gh pr command, not the output", async () => {
         const d = await fakeDaemon("");
         await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr create --fill", "https://github.com/o/r/pull/12\n"));
-        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", prs: ["https://github.com/o/r/pull/12"], pr_verb: "create" });
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", prs: ["https://github.com/o/r/pull/12"], pr_verb: "create", config_dir: "/home/dev/.claude" });
     });
     test("gh pr ready is sent even when it names no PR link, so the lane can move", async () => {
         const d = await fakeDaemon("");
         await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr ready 12", "✓ Pull request o/r#12 is marked as \"ready for review\"\n"));
-        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", prs: [], pr_verb: "ready" });
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", prs: [], pr_verb: "ready", config_dir: "/home/dev/.claude" });
     });
     test("a PR named by number and repo counts too", async () => {
         const d = await fakeDaemon("");

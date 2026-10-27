@@ -8,9 +8,10 @@ describe("injection", () => {
         expect(text).toContain("/p/x/project.md is unreadable (no front matter)");
     });
 
-    test("a titled project gets the section formats the notes view renders", () => {
+    test("a titled project gets the section formats its sessions keep, without a Built list", () => {
         const text = injection({ id: "t", title: "X", dir: "/p/x", mtime: 0, pr: [], titleLocked: false, body: "" }, { text: "m" });
-        for (const marker of ["- 19 sep — ", "- [x]", "- [~]", "- [ ]", "(blocking)"]) expect(text).toContain(marker);
+        for (const marker of ["## Goal", "- 19 sep — ", "(blocking)"]) expect(text).toContain(marker);
+        expect(text).not.toContain("## Built");
     });
 
     test("it shows the exact front-matter lines to keep, since it only ever sees the body", () => {

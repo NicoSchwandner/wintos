@@ -38,10 +38,9 @@ Do not rewrite it when nothing changed.
   as they are (the id ties the file to its tab; rename with \`wintos title\`). \`next:\` is
   the single concrete action that moves this forward now. \`pr:\` lists this project's pull
   requests, comma-separated, added the moment you open or learn of one.
-- Body sections, in order, in these exact formats (the WintOS notes view renders them):
+- Body sections, in order, in these exact formats (every session in this project reads them):
   ## Goal: two sentences on what this work is for.
   ## Decisions: dated bullets, newest last, e.g. \`- 19 sep — Confidence is scored per page.\`
-  ## Built: \`- [x]\` done, \`- [~]\` partial, \`- [ ]\` todo.
   ## Open questions: one bullet each; end the one blocking progress with \`(blocking)\`.
   Use \`backticks\` for code. Under ~40 lines; replace, don't append.
 - mine.md is the developer's. Read it, never write it. It outranks your own conclusions.`);

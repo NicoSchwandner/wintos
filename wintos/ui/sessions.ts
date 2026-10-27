@@ -4,7 +4,7 @@ import type { Session } from "../daemon/sessions/reduce";
 // find: open the notes at this text; resume: a shelved session's command; restore: a closed pane (⌘Z)
 // unmagnify: land with magnify off when it shows another pane (⌃⇥: what needs you may sit
 // behind the pane you magnified; both stay in view instead of magnify moving to it).
-export type Target = { tabId: string; blockId: string; find?: string; resume?: string; restore?: MetaType; unmagnify?: boolean };
+export type Target = { tabId: string; blockId: string; resume?: string; restore?: MetaType; unmagnify?: boolean };
 
 // The daemon only hears about a session ending if Claude says so; a closed block or a killed
 // Claude sends nothing. The UI knows which blocks still exist, so it drops the rest.

@@ -192,7 +192,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
             { text: t.mine, weight: 12, label: "mine.md" },
         ];
     };
-    const opens = (id: string) => (hit: Hit) => enterProject(id, hit.snippet && /\.md$/.test(hit.snippet.label) ? hit.snippet.match : undefined);
+    const opens = (id: string) => () => enterProject(id);
 
     const out: PaletteItem[] = tabIds.map((id) => ({
         id: `p:${id}`, kind: "project", title: title(id),
@@ -239,7 +239,6 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     out.push(action("terminal", `New terminal in ${here}`, "⌘T", "terminal"));
     out.push(action("project", "New project", "⌘N", "project"));
     out.push(action("rename", `Rename ${here}`, "⌘R", "rename"));
-    out.push(action("notes", `Notes for ${here}`, "⇧⌘L", "notes"));
     out.push(action("prs", "PRs need attention", "⇧⌘G", "prs"));
     for (const p of pluginPanels(state)) out.push(action(`panel:${p.name}`, p.title, "⇧⌘O", `panel:${p.name}`));
     out.push(action("close", `Close ${here}`, "⇧⌘W", "close-project"));

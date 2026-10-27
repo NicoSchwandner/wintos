@@ -8,7 +8,7 @@ D="$HOME/.local/share/wintos-dev"
 pkill -f "remoteDebuggingPort 9224" || true
 pkill -f "remote-debugging-port=9224" || true
 for _ in $(seq 1 20); do pgrep -f "remote-debugging-port=9224" >/dev/null || break; sleep 0.5; done
-rm -rf "$D/data" "$D/projects" "$D/journal"
+rm -rf "$D/data" "$D/projects" "$D/journal" "$D/claude"
 mkdir -p "$D/journal/templates"
 cp wintos/e2e/fixtures/daily_template.md "$D/journal/templates/"
 # The last workday: the journal never treats a weekend file as yesterday.

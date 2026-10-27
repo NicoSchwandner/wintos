@@ -13,7 +13,6 @@ import { useNewProjectPaste } from "./newproject";
 import { useWintos } from "./useWintos";
 import { rememberUndo } from "./undo";
 import { UndoToast } from "./UndoToast";
-import { NotesFull } from "./notes/NotesFull";
 import { NotesRail } from "./notes/NotesRail";
 import { isPage, mainViewAtom, overlayAtom } from "./notes/state";
 import { Palette } from "./Palette";
@@ -25,8 +24,8 @@ import { T } from "./tokens";
 import { TodayPage } from "./TodayPage";
 import { KeyboardPage } from "./KeyboardPage";
 
-// The project area: session strip over the terminals, the notes rail beside them, and ⇧⌘L
-// swapping the terminals for both notes files. Terminals stay mounted underneath.
+// The project area: session strip over the terminals, the notes rail beside them, and the Today
+// and keyboard pages in the terminals' place. Terminals stay mounted underneath.
 export const WintosTabArea = memo(({ tabId, children }: { tabId: string; children: React.ReactNode }) => {
     const view = useAtomValue(mainViewAtom);
     const overlay = useAtomValue(overlayAtom);
@@ -53,7 +52,6 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
             <>
             <div className="flex flex-row flex-grow min-w-0" style={{ minHeight: 0 }}>
                 <div className="flex flex-col flex-grow min-w-0" style={{ minHeight: 0 }}>
-                    {view === "notes" && <NotesFull tabId={tabId} />}
                     <div
                         className="flex flex-col flex-grow min-w-0"
                         style={{ display: view === "terminal" ? "flex" : "none" }}

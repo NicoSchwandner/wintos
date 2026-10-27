@@ -934,3 +934,60 @@ test("a pane attached to a session moves it there, and the service's later event
     expect([s.blockId, s.tabId, s.state]).toEqual(["viewer", "tab-2", "waiting"]);
     expect((await post(`/sessions/${prompt.session_id}/attach`, { tabId: 1 })).status).toBe(400);
 });
+
+describe("heads-ups", () => {
+    const until = async (ok: () => Promise<boolean>) => {
+        for (let i = 0; i < 100 && !(await ok()); i++) await new Promise((r) => setTimeout(r, 20));
+    };
+    const offer = (sessionId: string, line: string) => ({ seen: [line], sessions: [{ id: sessionId, view: { kind: "offer", line, explanation: "why", shownAt: 7 } }] });
+    test("the plugin's offer shows on its session's project, stays after the plugin clears it, and closes with dismiss", async () => {
+        const claude = mkdtempSync(join(tmpdir(), "wintos-claude-"));
+        const dir = join(claude, "plugins", "store");
+        mkdirSync(dir, { recursive: true });
+        const file = join(dir, "cc-plugin-you-should-know_builtin-abc.json");
+        writeFileSync(file, JSON.stringify({ seen: [], sessions: [] }));
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", claudeDirs: [claude] });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        await event({ ...prompt, session_id: "s-1" });
+        const projectId = (await (await fetch(base + "/state")).json()).projects[0].id;
+        const shown = async () => (await (await fetch(base + "/state")).json()).headsUps?.[projectId];
+        writeFileSync(file, JSON.stringify(offer("s-1", "Merging won't deploy it.")));
+        await until(async () => !!(await shown()));
+        expect(await shown()).toEqual([{ id: "s-1:7", sessionId: "s-1", project: "x", text: "Merging won't deploy it.", explanation: "why", at: 7 }]);
+        writeFileSync(file, JSON.stringify({ seen: ["Merging won't deploy it."], sessions: [{ id: "s-1" }] }));
+        await new Promise((r) => setTimeout(r, 150));
+        expect(await shown()).toHaveLength(1);
+        expect((await post("/headsups/s-1%3A7/dismiss", {})).status).toBe(200);
+        expect(await shown()).toBeUndefined();
+        expect((await post("/headsups/s-1%3A7/dismiss", {})).status).toBe(404);
+        rmSync(claude, { recursive: true });
+    });
+
+    test("a session from another Claude config dir brings that dir's store in", async () => {
+        const claude = mkdtempSync(join(tmpdir(), "wintos-claude-"));
+        mkdirSync(join(claude, "plugins", "store"), { recursive: true });
+        writeFileSync(join(claude, "plugins", "store", "cc-plugin-you-should-know_builtin-abc.json"), JSON.stringify(offer("s-1", "Heads up from the other account.")));
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", claudeDirs: [] });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        await event({ ...prompt, session_id: "s-1" });
+        expect((await (await fetch(base + "/state")).json()).headsUps).toEqual({});
+        await event({ ...stop, session_id: "s-1", config_dir: claude });
+        expect(Object.values((await (await fetch(base + "/state")).json()).headsUps).flat()).toMatchObject([{ text: "Heads up from the other account." }]);
+        rmSync(claude, { recursive: true });
+    });
+
+    test("a store whose shape changed is reported in /state", async () => {
+        const claude = mkdtempSync(join(tmpdir(), "wintos-claude-"));
+        mkdirSync(join(claude, "plugins", "store"), { recursive: true });
+        writeFileSync(join(claude, "plugins", "store", "cc-plugin-you-should-know_builtin-abc.json"), JSON.stringify({ seen: [], entries: [] }));
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", claudeDirs: [claude] });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect((await (await fetch(base + "/state")).json()).headsUpProblem).toBe("the store's shape changed: no sessions list");
+        rmSync(claude, { recursive: true });
+    });
+});

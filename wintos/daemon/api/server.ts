@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "fs";
 import http from "http";
 import type { AddressInfo } from "net";
 import { basename, dirname, join } from "path";
@@ -23,6 +23,7 @@ import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, 
 import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, WAKE_EVENTS, waitingOn, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
+import { capture, dismiss, readStore, STORE_PREFIX, watchHealth, type Health, type HeadsUp } from "../headsups/headsups";
 
 export type WintosServer = { http: http.Server; close: () => void };
 
@@ -42,7 +43,7 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
     const factsOf = (ids: string[], day: string) => {
@@ -181,6 +182,53 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const sockets = new Set<WebSocket>();
     let port = opts.port;
 
+    // Heads-ups from Claude Code's "You should know" plugin: read from each Claude config dir's
+    // plugin store as it changes, kept here until closed, since the plugin clears its own.
+    const headsFile = join(opts.root, ".headsups.json");
+    let headsUps = readJson<HeadsUp[]>(headsFile, []);
+    const health = new Map<string, Health>();
+    const storeWatchers = new Map<string, FSWatcher>();
+    const headsUpProblem = () => [...health.values()].find((h) => h.problem)?.problem;
+    const projectOf = (sessionId: string) => {
+        const s = sessions.get(sessionId);
+        const p = s && store.byTab(s.tabId);
+        return p ? basename(p.dir) : undefined;
+    };
+    const readHeadsUps = (dir: string) => {
+        let file: string | undefined;
+        let raw: unknown;
+        try {
+            file = readdirSync(dir).find((f) => f.startsWith(STORE_PREFIX) && f.endsWith(".json"));
+            if (!file) return;
+            raw = JSON.parse(readFileSync(join(dir, file), "utf8"));
+        } catch {
+            return; // the folder gone, or the file caught mid-write: the next change reads it whole
+        }
+        const read = readStore(raw);
+        const was = health.get(dir) ?? { missed: 0 };
+        const now = watchHealth(was, read);
+        health.set(dir, now);
+        if (now.problem && now.problem !== was.problem) console.error(`[wintosd] heads-ups from ${join(dir, file)}: ${now.problem}`);
+        const next = "offers" in read ? capture(headsUps, read.offers, projectOf) : headsUps;
+        if (next === headsUps && now.problem === was.problem) return;
+        headsUps = next;
+        writeFileSync(headsFile, JSON.stringify(headsUps));
+        broadcast();
+    };
+    const watchStore = (configDir: string) => {
+        const dir = join(configDir, "plugins", "store");
+        if (storeWatchers.has(dir) || !existsSync(dir)) return;
+        let soon: NodeJS.Timeout | undefined;
+        try {
+            const w = watch(dir, () => (clearTimeout(soon), (soon = setTimeout(() => readHeadsUps(dir), 50))));
+            w.on("error", (e) => console.error(`[wintosd] heads-up watcher on ${dir} failed: ${e}`));
+            storeWatchers.set(dir, w);
+            readHeadsUps(dir);
+        } catch (e) {
+            console.error(`[wintosd] cannot watch ${dir}: ${e}`);
+        }
+    };
+
     // Your short names for repos (n in the PR list), in your config: read again whenever it changes,
     // so a hand edit shows without a restart.
     let repoNames: { mtime: number; names: Record<string, string> } = { mtime: -1, names: {} };
@@ -207,6 +255,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
         fixer: fixer.state(),
         ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
         keyboard,
+        headsUps: Object.fromEntries(store.list().flatMap((p) => {
+            const mine = p.id ? headsUps.filter((h) => h.project === basename(p.dir)) : [];
+            return mine.length ? [[p.id, mine]] : [];
+        })),
+        ...(headsUpProblem() ? { headsUpProblem: headsUpProblem() } : {}),
         // By the tab the project's folder belongs to now.
         shelf: Object.fromEntries(store.list().flatMap((p) => (p.id && shelf[basename(p.dir)] ? [[p.id, shelf[basename(p.dir)]]] : []))),
         ...(opts.lunch ? { lunch: opts.lunch } : {}),
@@ -324,6 +377,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 // A gh pr command that acts on a PR touches it; reading one (gh pr view) does not.
                 if (p.hook_event_name === "PostToolUse" && p.pr_verb !== "view") applyTouch(touchPrs(sessions, shelf, p.session_id, prLinks(p.prs)));
                 saveSessions();
+                const configDir = (p as { config_dir?: unknown }).config_dir;
+                if (opts.claudeDirs && typeof configDir === "string" && configDir.startsWith("/")) watchStore(configDir);
                 const tp = (p as { transcript_path?: unknown }).transcript_path;
                 if (p.hook_event_name === "Stop" && typeof tp === "string") nameByModel(p.session_id, tp, store.byTab(ev.tabId)?.title);
                 if (p.hook_event_name === "Stop" && typeof p.last_assistant_message === "string" && p.last_assistant_message.trim()) readEndedTurn(p.session_id, p.last_assistant_message);
@@ -481,6 +536,15 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const b = (await body(req)) as { sessionIds?: unknown };
                 if (!Array.isArray(b?.sessionIds) || !b.sessionIds.every(isSafe)) return send(res, 400, "need sessionIds: [<session id>, …]");
                 saveShelf((b.sessionIds as string[]).reduce((sh, id) => unshelve(sh, id), shelf));
+                broadcast();
+                return send(res, 200, "");
+            }
+            const closeHeadsUp = /^\/headsups\/([^/]+)\/dismiss$/.exec(url.pathname);
+            if (req.method === "POST" && closeHeadsUp) {
+                const next = dismiss(headsUps, decodeURIComponent(closeHeadsUp[1]));
+                if (next === headsUps) return send(res, 404, "no such heads-up");
+                headsUps = next;
+                writeFileSync(headsFile, JSON.stringify(headsUps));
                 broadcast();
                 return send(res, 200, "");
             }
@@ -698,11 +762,13 @@ export async function startServer(opts: { root: string; port: number; host?: str
     await new Promise<void>((resolve) => server.listen(opts.port, opts.host ?? "127.0.0.1", resolve));
     port = (server.address() as AddressInfo).port;
     runner.start();
+    for (const d of opts.claudeDirs ?? []) watchStore(d);
     return {
         http: server,
         close: () => {
             watcher?.close();
             journalWatcher?.close();
+            for (const w of storeWatchers.values()) w.close();
             clearInterval(warmRecap);
             clearInterval(wakeTimer);
             runner.stop();

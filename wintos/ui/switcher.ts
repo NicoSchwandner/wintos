@@ -17,8 +17,9 @@ export const setSwitchOrder = (tabIds: string[]) => (order = tabIds);
 // "wake:<project>" stops: a closed project's due wake, which opening reopens on its session.
 let wakeStops: Record<string, () => void> = {};
 export const setWakeStops = (stops: Record<string, () => void>) => (wakeStops = stops);
-// Where closing a project lands: the uppermost project in the sidebar.
-export const topProject = (closing: string) => order.find((id) => id !== closing);
+// Where closing a project lands: the uppermost project in the sidebar. The walk's other stops
+// (card:…, wake:…) sit above the projects and are no tab.
+export const topProject = (closing: string) => order.find((id) => id !== closing && !id.includes(":"));
 
 export function stepProject(order: string[], current: string, delta: 1 | -1): string | undefined {
     if (!order.length) return undefined;

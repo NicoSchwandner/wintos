@@ -67,6 +67,11 @@ describe("topProject", () => {
         expect([topProject("a"), topProject("b")]).toEqual(["b", "a"]);
     });
 
+    test("the cards and closed projects' wakes above it are no projects to land on", () => {
+        setSwitchOrder(["card:today", "card:prs", "wake:x", "a", "b"]);
+        expect(topProject("a")).toBe("b");
+    });
+
     test("none left: undefined", () => {
         setSwitchOrder(["a"]);
         expect(topProject("a")).toBeUndefined();

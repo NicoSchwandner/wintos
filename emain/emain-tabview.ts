@@ -307,7 +307,7 @@ export function clearTabCache() {
 // returns [tabview, initialized]
 export async function getOrCreateWebViewForTab(waveWindowId: string, tabId: string): Promise<[WaveTabView, boolean]> {
     let tabView = getWaveTabView(tabId);
-    if (tabView) {
+    if (tabView && !tabView.isDestroyed) {
         return [tabView, true];
     }
     const fullConfig = await RpcApi.GetFullConfigCommand(ElectronWshClient);
@@ -392,6 +392,12 @@ export function ensureHotSpareTab(fullConfig: FullConfigType) {
 
 export function getSpareTab(fullConfig: FullConfigType): WaveTabView {
     setTimeout(() => ensureHotSpareTab(fullConfig), 500);
+    // WintOS: the spare can sit unused for hours, and its web contents can be gone by then (a dead
+    // renderer); handing that one out leaves the new tab without a view, blanking the window.
+    if (HotSpareTab?.isDestroyed) {
+        console.log("getSpareTab: the hot spare was destroyed, dropping it");
+        HotSpareTab = null;
+    }
     if (HotSpareTab != null) {
         const rtn = HotSpareTab;
         HotSpareTab = null;

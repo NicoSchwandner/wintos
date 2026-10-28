@@ -164,8 +164,20 @@ describe("⌃⇥: the projects from the top of the sidebar, switching on release
         expect(enterProject).toHaveBeenCalledExactlyOnceWith("a");
     });
 
+    test("in the topmost project already, the first tap skips it to the second (⌃⇧⇥: the bottom one likewise)", () => {
+        setup();
+        here.tab = "wake:x";
+        switchProject(1, true, "top");
+        expect(globalStore.get(switchTargetAtom)).toBe("a");
+        globalStore.set(switchTargetAtom, null);
+        here.tab = "b";
+        switchProject(-1, true, "top");
+        expect(globalStore.get(switchTargetAtom)).toBe("a");
+    });
+
     test("⌃⇧⇥ starts from the bottom, and the cards are no stops", () => {
         setup();
+        here.tab = "a";
         switchProject(-1, true, "top");
         expect(globalStore.get(switchTargetAtom)).toBe("b");
         switchProject(1, true, "top");

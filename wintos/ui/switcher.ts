@@ -36,7 +36,10 @@ let hold: "Meta" | "Control" = "Meta";
 export function switchProject(delta: 1 | -1, held: boolean, from: "here" | "top" = "here"): void {
     if (!walking()) hold = from === "top" ? "Control" : "Meta";
     const stops = from === "top" ? order.filter((id) => !id.startsWith("card:")) : order;
-    const next = stepProject(stops, globalStore.get(switchTargetAtom) ?? (from === "top" ? "" : whereYouAre()), delta);
+    const at = globalStore.get(switchTargetAtom);
+    let next = stepProject(stops, at ?? (from === "top" ? "" : whereYouAre()), delta);
+    // Starting from the top in the topmost project already: the first tap is the one after it.
+    if (from === "top" && at == null && next === whereYouAre() && stops.length > 1) next = stepProject(stops, next, delta);
     if (!next) return;
     globalStore.set(switchTargetAtom, next);
     if (!held) return commit("menu");

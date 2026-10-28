@@ -38,11 +38,18 @@ Do not rewrite it when nothing changed.
   as they are (the id ties the file to its tab; rename with \`wintos title\`). \`next:\` is
   the single concrete action that moves this forward now. \`pr:\` lists this project's pull
   requests, comma-separated, added the moment you open or learn of one.
-- Body sections, in order, in these exact formats (every session in this project reads them):
+- Body sections, in order, in these exact formats (every session in this project reads them).
+  They say what is true now, never how it got there: no dates of when something was decided or
+  learned (a deadline is a fact and stays), no account of runs or attempts (only what they
+  established), no "was", "now", "changed to" or "after X". When a fact changes, rewrite its
+  bullet; when it stops mattering, delete it. The sessions and git keep the history.
   ## Goal: two sentences on what this work is for.
-  ## Decisions: dated bullets, newest last, e.g. \`- 19 sep — Confidence is scored per page.\`
+  ## Known: one bullet per decision in force or fact it rests on, e.g.
+     \`- Confidence is scored per page.\` Merge bullets that say the same thing.
   ## Open questions: one bullet each; end the one blocking progress with \`(blocking)\`.
-  Use \`backticks\` for code. Under ~40 lines; replace, don't append.
+     An answered one goes; its answer moves to Known if it still matters.
+  Use \`backticks\` for code. Under ~40 lines: to add a bullet, merge or drop one. A file in
+  another shape (dated decisions, a Built list) is rewritten into this one when you next touch it.
 - mine.md is the developer's. Read it, never write it. It outranks your own conclusions.`);
     parts.push(WAIT_RULE);
     parts.push(`mine.md:\n${mine.text}`);

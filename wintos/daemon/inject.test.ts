@@ -8,10 +8,10 @@ describe("injection", () => {
         expect(text).toContain("/p/x/project.md is unreadable (no front matter)");
     });
 
-    test("a titled project gets the section formats its sessions keep, without a Built list", () => {
+    test("a titled project gets the sections its sessions keep: what is true now, no log of how it got there", () => {
         const text = injection({ id: "t", title: "X", dir: "/p/x", mtime: 0, pr: [], titleLocked: false, body: "" }, { text: "m" });
-        for (const marker of ["## Goal", "- 19 sep — ", "(blocking)"]) expect(text).toContain(marker);
-        expect(text).not.toContain("## Built");
+        for (const marker of ["## Goal", "## Known", "(blocking)", "no dates of when"]) expect(text).toContain(marker);
+        for (const log of ["## Built", "## Decisions", "dated bullets", "newest last"]) expect(text).not.toContain(log);
     });
 
     test("it shows the exact front-matter lines to keep, since it only ever sees the body", () => {

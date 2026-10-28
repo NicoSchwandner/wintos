@@ -424,7 +424,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, "");
             }
-            if (url.pathname.startsWith("/day/") && !opts.journal) return send(res, 404, "no journal: set WINTOS_JOURNAL_DIR");
+            if ((url.pathname.startsWith("/day/") || url.pathname === "/reflection") && !opts.journal) return send(res, 404, "no journal: set WINTOS_JOURNAL_DIR");
             if (req.method === "POST" && url.pathname === "/day/focus") {
                 const b = (await body(req)) as { text?: unknown; baseMtime?: unknown };
                 if (typeof b?.text !== "string" || b.text.length > 20_000) return send(res, 400, "need the focus text");
@@ -436,6 +436,20 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     keyboard = recordDayDone(keyboard, Date.now());
                     writeFileSync(keyboardFile, JSON.stringify(keyboard));
                 }
+                broadcast();
+                return send(res, 200, "");
+            }
+            if (req.method === "GET" && url.pathname === "/reflection") {
+                const r = opts.journal!.reflection(new Date(), url.searchParams.get("date") ?? undefined);
+                if (!r) return send(res, 404, "no reflection in the journal yet");
+                return json(res, { ...r, days: r.days.map((d) => ({ ...d, readOut: recapper.readOut(d.date) })) });
+            }
+            if (req.method === "POST" && url.pathname === "/reflection") {
+                const b = (await body(req)) as { date?: unknown; body?: unknown; baseMtime?: unknown };
+                if (typeof b?.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(b.date) || typeof b.body !== "string" || b.body.length > 100_000 || typeof b.baseMtime !== "number") return send(res, 400, "need the date, the body and baseMtime");
+                const r = opts.journal!.saveReflection(b.date, b.body, b.baseMtime);
+                if (r === "missing") return send(res, 404, "no reflection on that day");
+                if (r === "conflict") return send(res, 409, "the day's file changed on disk");
                 broadcast();
                 return send(res, 200, "");
             }

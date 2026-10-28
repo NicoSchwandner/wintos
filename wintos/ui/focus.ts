@@ -46,7 +46,7 @@ export function focusBlock(blockId: string): void {
 // walk as card:prs, card:oncall and card:today; a page with no card (Keyboard) is outside it.
 export function whereYouAre(): string {
     const view = globalStore.get(mainViewAtom);
-    if (view === "day") return "card:today";
+    if (view === "day" || view === "reflect") return "card:today";
     if (isPage(view)) return "";
     const tabId = globalStore.get(atoms.staticTabId);
     const kind = inboxKind(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId))));

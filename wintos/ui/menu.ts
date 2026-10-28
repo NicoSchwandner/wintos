@@ -82,6 +82,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:c{KeyG}", "open-pane-pr"],
     ["Shift:Cmd:j", "join-meeting"],
     ["Shift:Cmd:y", "day"],
+    ["Option:Cmd:c{KeyY}", "reflect"],
     ["Shift:Cmd:i", "keyboard"],
     ["Shift:Cmd:u", "open-external"],
     ["Option:Cmd:c{KeyR}", "restart-terminal"],
@@ -285,6 +286,7 @@ export function runAction(action: string): void {
     if (action === "prs") return toggleInbox("prs");
     if (action === "panel" || action.startsWith("panel:")) return toggleInbox("oncall");
     if (action === "day") return toggleView("day");
+    if (action === "reflect") return toggleView("reflect");
     if (action === "keyboard") return toggleView("keyboard");
     if (action === "open-external") return openExternal();
     if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));

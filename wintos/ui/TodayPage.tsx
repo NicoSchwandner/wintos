@@ -103,7 +103,7 @@ export const TodayPage = memo(() => {
 TodayPage.displayName = "TodayPage";
 
 // keys: the panel's own shortcuts, shown on it rather than in a footer.
-function Panel({ label, note, warn, keys, children }: { label: string; note?: string; warn?: boolean; keys?: React.ReactNode; children: React.ReactNode }) {
+export function Panel({ label, note, warn, keys, children }: { label: string; note?: string; warn?: boolean; keys?: React.ReactNode; children: React.ReactNode }) {
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", background: T.card, border: `1px solid ${warn ? T.apricot : T.border}`, borderRadius: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px 14px" }}>

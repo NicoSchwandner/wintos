@@ -28,6 +28,7 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         item("Park Session (nothing for me)", "park-session", "Alt+Cmd+P"),
         item("Join Meeting", "join-meeting", "Shift+Cmd+J"),
         item("Today", "day", "Shift+Cmd+Y"),
+        item("Reflect", "reflect", "Alt+Cmd+Y"),
         item("Keyboard Game", "keyboard", "Shift+Cmd+I"),
         item("Copy Page URL", "copy-url", "Shift+Cmd+C"),
         item("Open Page in Browser", "open-external", "Shift+Cmd+U"),

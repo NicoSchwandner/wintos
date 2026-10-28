@@ -243,6 +243,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     for (const p of pluginPanels(state)) out.push(action(`panel:${p.name}`, p.title, "⇧⌘O", `panel:${p.name}`));
     out.push(action("close", `Close ${here}`, "⇧⌘W", "close-project"));
     out.push(action("day", "Today: plan the day", "⇧⌘Y", "day"));
+    out.push(action("reflect", "Reflect: this week's reflection and what it looks back on", "⌥⌘Y", "reflect"));
     out.push(action("keyboard", "Keyboard: rank, streak, badges", "⇧⌘I", "keyboard"));
     out.push(action("join", "Join the meeting", "⇧⌘J", "join-meeting"));
     out.push(action("mine", `Edit mine.md of ${here}`, "⌘E", "edit-mine"));

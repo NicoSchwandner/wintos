@@ -74,7 +74,7 @@ export function dayRecapper(root: string, cmd?: string, extra?: string, factsOf:
             .sort((a, b) => b.prompts - a.prompts || b.minutes - a.minutes);
         const out = items.length ? await summarize(items, day) : { items: [], final: true };
         try {
-            if (out.final) writeFileSync(recapFile, JSON.stringify({ [key]: out.items }));
+            if (out.final) writeFileSync(recapFile, JSON.stringify(Object.fromEntries([...Object.entries(cached).filter(([k]) => k.startsWith(`${RECAP_VERSION}:`) && Object.keys(activity).includes(k.slice(-10))), [key, out.items]])));
         } catch {}
         return { date: day, items: out.items };
     };
@@ -97,6 +97,13 @@ export function dayRecapper(root: string, cmd?: string, extra?: string, factsOf:
         return { date: p.date, items: shownItems(p.items, curation, p.date) };
     };
 
+    // What you read out about a day: its items as you left them, the dropped ones left out. Kept as
+    // long as the day's activity is, so a weekly reflection can look back on its days.
+    const readOut = (day: string): string[] => {
+        const items = read<Record<string, StandupItem[]>>(recapFile, {})[`${RECAP_VERSION}:${day}`];
+        return items ? shownItems(items, curation, day).filter((i) => !i.dropped).map((i) => i.text) : [];
+    };
+
     // What a session was last about, from its latest recap on any day.
     const gistOf = (sessionId: string): string | undefined => {
         const transcript = Object.values(activity).flatMap((d) => Object.values(d)).map((p) => p.sessions[sessionId]).find(Boolean);
@@ -104,7 +111,7 @@ export function dayRecapper(root: string, cmd?: string, extra?: string, factsOf:
         return last ? gist(last) : undefined;
     };
 
-    return { record, recap, curate, gistOf };
+    return { record, recap, curate, readOut, gistOf };
 }
 
 function safeText(file: string): string {

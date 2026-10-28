@@ -71,6 +71,12 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
                     </span>
                 </>
             )}
+            {day.reflection && (
+                <span data-wintos="reflect-nudge" data-key="⌥⌘Y" onClick={(e) => (e.stopPropagation(), openView("reflect"))} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 11.5, color: T.apricot }}>
+                    <span>Write your {day.reflection.level} reflection{day.reflection.date < day.date ? ` from ${since(day.reflection.date, day.date)}` : ""}</span>
+                    <Key k="⌥⌘Y" label="" />
+                </span>
+            )}
             {active && walk}
         </div>
     );

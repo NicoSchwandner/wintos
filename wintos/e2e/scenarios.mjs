@@ -4,7 +4,7 @@
 // usage: node wintos/e2e/scenarios.mjs
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
-import { writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 
 const PORT = process.env.WINTOS_DEBUG_PORT ?? 9224;
@@ -671,6 +671,33 @@ await scenario("26 · a heads-up from the plugin shows in its project's notes, s
     await press(t, "j");
     await press(t, "x");
     await until("the heads-up closed", async () => !(await shown()));
+});
+
+await scenario("27 · an unwritten reflection nudges on the Today card; ⌥⌘Y opens it beside its week, and writing it ends the nudge", async () => {
+    const t = await toProject();
+    const d = new Date(Date.now() - 2 * 86_400_000);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const dir = `${homedir()}/.local/share/wintos-dev/journal/days/${iso.slice(0, 4)}/${iso.slice(5, 7)}`;
+    mkdirSync(dir, { recursive: true });
+    const file = `${dir}/${iso}.md`;
+    const before = existsSync(file) ? readFileSync(file, "utf8") : `# ${iso}\n\n## Today's focus (1-3 items)\n\n- [x] Ship the e2e export\n\n`;
+    const tpl = readFileSync(new URL("./fixtures/weekly_template.md", import.meta.url), "utf8");
+    writeFileSync(file, `${before.trimEnd()}\n\n${tpl.slice(tpl.indexOf("## Weekly"))}`);
+    const nudge = () => evalIn(t, `!!document.querySelector("[data-wintos=reflect-nudge]")`);
+    await until("the nudge on the Today card", nudge);
+    await press(t, "y", { code: "KeyY", mods: ["alt", "meta"] });
+    await until("the reflection page", () => evalIn(t, `!!document.querySelector("[data-wintos=reflect]")`));
+    await until("its week", async () => (await evalIn(t, `document.querySelector("[data-wintos=reflect-lookback]")?.innerText ?? ""`)).toLowerCase().includes("your week"));
+    await press(t, "e", { mods: ["meta"] });
+    await until("the editor, focused", () => evalIn(t, `document.activeElement?.dataset?.wintos === "mine-editor"`));
+    await evalIn(t, `(() => { const e = document.querySelector("[data-wintos=mine-editor]"); e.setSelectionRange(e.value.indexOf("forward?") + 8, e.value.indexOf("forward?") + 8); })()`);
+    await cdp(t, "Input.insertText", { text: "\n    - The e2e week went well" });
+    await press(t, "Enter", { keyCode: 13, mods: ["meta"] });
+    await until("the answer in the file", () => readFileSync(file, "utf8").includes("    - The e2e week went well"));
+    await until("the nudge gone", async () => !(await nudge()));
+    await cdpFocus(t, "[data-wintos=reflect]");
+    await press(t, "Escape", { keyCode: 27 });
+    await until("the page gone", async () => !(await evalIn(t, `!!document.querySelector("[data-wintos=reflect]")`)));
 });
 
 await scenario("clean-up · the panes this run opened are closed", async () => {

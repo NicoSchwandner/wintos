@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "fs";
 import type { AddressInfo } from "net";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import WebSocket from "ws";
 import prompt from "../fixtures/user-prompt-submit.json";
@@ -277,6 +277,20 @@ describe("the day", () => {
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         expect((await post("/day/focus", { text: "- [ ] Ship it" })).status).toBe(200);
         await synced;
+    });
+
+    test("a reflection is read with its look-back and saved into the day's file", async () => {
+        await withJournal();
+        const file = join(root, "journal", "2026", "10", "2026-10-23.md");
+        mkdirSync(dirname(file), { recursive: true });
+        writeFileSync(file, "# Friday\n\n## Today's focus (1-3 items)\n\n- [x] Ship it\n\n## Weekly reflection - Week 43/2026\n\n- **Goals Review**\n");
+        const r = await (await fetch(base + "/reflection?date=2026-10-23")).json();
+        expect([r.title, r.days]).toEqual(["Weekly reflection - Week 43/2026", [{ date: "2026-10-23", focus: "- [x] Ship it", readOut: [] }]]);
+        expect((await post("/reflection", { date: "2026-10-23", body: "- **Goals Review**\n  - All", baseMtime: r.mtime - 1 })).status).toBe(409);
+        expect((await post("/reflection", { date: "2026-10-23", body: "- **Goals Review**\n  - All", baseMtime: r.mtime })).status).toBe(200);
+        expect(readFileSync(file, "utf8").endsWith("- **Goals Review**\n  - All\n")).toBe(true);
+        expect((await post("/reflection", { date: "2026-10-22", body: "x", baseMtime: 0 })).status).toBe(404);
+        expect((await fetch(base + "/reflection?date=2026-10-22")).status).toBe(404);
     });
 
     test("without a journal the day endpoints say how to get one", async () => expect((await post("/day/focus", { text: "x" })).status).toBe(404));
@@ -680,6 +694,21 @@ describe("the daily recap", () => {
             expect(r.items.map((i: { project: string; text: string; details: string[] }) => [i.project, i.text, i.details])).toEqual([["Intake", "Ready for review: Document intake", ["Register-only intake"]], ["Agent ran", "Merged: Benefit-tax fix", []]]);
             const prompt = readFileSync(join(root, "recap-prompt.txt"), "utf8");
             expect(prompt.indexOf("## Intake (")).toBeLessThan(prompt.indexOf("## Agent ran ("));
+        });
+
+        test("a weekly reflection shows what you read out about each of its days, dropped items left out", async () => {
+            const dir = join(root, "journal");
+            mkdirSync(join(dir, "2026", "10"), { recursive: true });
+            writeFileSync(join(dir, "2026", "10", "2026-10-06.md"), "# Tuesday\n\n## Today's focus (1-3 items)\n\n- [ ] a\n");
+            writeFileSync(join(dir, "2026", "10", "2026-10-09.md"), "# Friday\n\n## Weekly reflection - Week 41/2026\n\n- **Goals Review**\n");
+            const { Journal } = await import("../journal/journal");
+            srv.close();
+            srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: join(root, "model.sh"), journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")) });
+            base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+            await fetch(base + "/day/recap");
+            await post("/day/recap/1", { drop: true });
+            const r = await (await fetch(base + "/reflection?date=2026-10-09")).json();
+            expect(r.days.find((d: { date: string }) => d.date === "2026-10-06").readOut).toEqual(["Ready for review: Document intake"]);
         });
 
         test("drop, lift and rewrite an item; it stays so after a restart, and the rewrite teaches the next prompt", async () => {

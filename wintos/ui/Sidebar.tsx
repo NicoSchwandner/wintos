@@ -179,7 +179,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 data-wintos="sidebar-list"
                 style={{ flexGrow: 1, overflowY: "auto", padding: "4px 12px 12px", display: "flex", flexDirection: "column", gap: 18 }}
             >
-                {state?.day && <TodayCard day={state.day} active={mainView === "day"} cursor={switchTarget === "card:today"} walk={<WalkKeys />} />}
+                {state?.day && <TodayCard day={state.day} active={mainView === "day" || mainView === "reflect"} cursor={switchTarget === "card:today"} walk={<WalkKeys />} />}
                 {state && (
                     <div style={{ display: "flex", gap: 8 }}>
                         {queue ? (

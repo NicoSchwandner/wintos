@@ -266,6 +266,19 @@ describe("the day", () => {
         ws.close();
     });
 
+    test("a change in the journal is handed to the journal's sync", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-journal-"));
+        const { Journal } = await import("../journal/journal");
+        let changed: () => void;
+        const synced = new Promise<void>((r) => (changed = r));
+        writeFileSync(join(root, "tpl.md"), "# $date\n\n## Today's focus (1-3 items)\n\n- [ ] ...\n");
+        srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")), onJournalChange: () => changed() });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect((await post("/day/focus", { text: "- [ ] Ship it" })).status).toBe(200);
+        await synced;
+    });
+
     test("without a journal the day endpoints say how to get one", async () => expect((await post("/day/focus", { text: "x" })).status).toBe(404));
 });
 

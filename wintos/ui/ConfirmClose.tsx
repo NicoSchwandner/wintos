@@ -21,7 +21,7 @@ export const ConfirmClose = memo(() => {
                 data-wintos="confirm-close"
                 data-zone="overlay"
                 onClick={(e) => e.stopPropagation()}
-                style={{ padding: "22px 26px", background: "#1d2021", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none", display: "flex", flexDirection: "column", gap: 14 }}
+                style={{ padding: "22px 26px", background: "#000000", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none", display: "flex", flexDirection: "column", gap: 14 }}
             >
                 <span style={{ fontFamily: T.display, fontSize: 24, color: T.emphasis }}>Close {name}?</span>
                 <span style={{ fontSize: 13, color: T.secondary }}>{closeWarning(latestSessions(), tabId)}.</span>

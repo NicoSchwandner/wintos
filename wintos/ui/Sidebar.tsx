@@ -219,7 +219,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                                     tabIndex={-1}
                                     onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => setShowAll(!showAll)}
-                                    style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", borderTop: `1px solid #32302f`, textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}
+                                    style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", borderTop: `1px solid #181615`, textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}
                                 >
                                     {showAll ? "Show fewer" : `Show all ${model.quiet.length + model.quietMore.length + model.quietStale.length}`}
                                     {!showAll && model.quietStale.length > 0 && (
@@ -249,9 +249,9 @@ function Band({ kind, count, shown, children }: { kind: keyof typeof BAND_STYLE;
     return (
         <div data-band-group={kind} style={{ display: "flex", flexDirection: "column", gap: kind === "quiet" ? 3 : 7 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px" }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: kind === "quiet" ? "#3c3836" : s.color }} />
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: kind === "quiet" ? "#221f1d" : s.color }} />
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: s.color }}>{s.label}</span>
-                <span style={{ flexGrow: 1, height: 1, background: kind === "quiet" ? "#32302f" : T.hairline }} />
+                <span style={{ flexGrow: 1, height: 1, background: kind === "quiet" ? "#181615" : T.hairline }} />
                 <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{shown !== undefined && shown < count ? `${shown} of ${count}` : count}</span>
             </div>
             {children}
@@ -404,7 +404,7 @@ function Drumming() {
 // the numbers can't say (late, updating, loading).
 function SummaryCard({ label, keys, stats, note, noteColor, busy, active, cursor, onClick }: { label: string; keys: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; active?: boolean; cursor?: boolean; onClick: () => void }) {
     return (
-        <div data-key={active ? "" : keys} onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#32302f", border: `1px solid ${cursor ? T.apricot : active ? T.borderActive : "#3c3836"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", ...(active ? ACTIVE : {}) }}>
+        <div data-key={active ? "" : keys} onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: "#181615", border: `1px solid ${cursor ? T.apricot : active ? T.borderActive : "#221f1d"}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", ...(active ? ACTIVE : {}) }}>
             <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, fontWeight: 600, color: T.secondary }}>
                 {label}
                 {busy && <Drumming />}

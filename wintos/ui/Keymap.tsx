@@ -27,7 +27,7 @@ export const Keymap = memo(() => {
                 data-zone="overlay"
                 onClick={(e) => e.stopPropagation()}
                 // A short window gets more columns, then a scroll (↑↓, the card is focused), never a cut-off.
-                style={{ width: "min(1040px, calc(100% - 32px))", maxHeight: "calc(100% - 32px)", overflowY: "auto", boxSizing: "border-box", padding: "22px 26px", background: "#1d2021", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none" }}
+                style={{ width: "min(1040px, calc(100% - 32px))", maxHeight: "calc(100% - 32px)", overflowY: "auto", boxSizing: "border-box", padding: "22px 26px", background: "#000000", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none" }}
             >
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "4px 12px", marginBottom: 18 }}>
                     <span style={{ fontFamily: T.display, fontSize: 26, color: T.emphasis }}>Keys</span>

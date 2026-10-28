@@ -26,7 +26,7 @@ export const UndoToast = memo(() => {
     return (
         <div
             data-wintos="undo-toast"
-            style={{ position: "absolute", bottom: 18, left: "50%", transform: "translateX(-50%)", zIndex: 90, maxWidth: "calc(100% - 32px)", padding: "8px 14px", background: "#1d2021", border: `1px solid ${T.borderActive}`, borderRadius: 10, fontFamily: T.ui, fontSize: 12.5, color: T.secondary, display: "flex", alignItems: "center", gap: 14, pointerEvents: "none" }}
+            style={{ position: "absolute", bottom: 18, left: "50%", transform: "translateX(-50%)", zIndex: 90, maxWidth: "calc(100% - 32px)", padding: "8px 14px", background: "#000000", border: `1px solid ${T.borderActive}`, borderRadius: 10, fontFamily: T.ui, fontSize: 12.5, color: T.secondary, display: "flex", alignItems: "center", gap: 14, pointerEvents: "none" }}
         >
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
             <Key k="⌘Z" label="undo" />

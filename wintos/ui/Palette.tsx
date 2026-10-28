@@ -67,7 +67,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                 data-zone="overlay"
                 ref={ref}
                 onClick={(e) => e.stopPropagation()}
-                style={{ width: 620, maxHeight: "64vh", display: "flex", flexDirection: "column", background: "#32302f", border: `1px solid ${T.borderActive}`, borderRadius: 12, boxShadow: "0 22px 52px rgba(0,0,0,0.72)", overflow: "hidden", fontFamily: T.ui }}
+                style={{ width: 620, maxHeight: "64vh", display: "flex", flexDirection: "column", background: "#181615", border: `1px solid ${T.borderActive}`, borderRadius: 12, boxShadow: "0 22px 52px rgba(0,0,0,0.72)", overflow: "hidden", fontFamily: T.ui }}
             >
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${T.hairline}` }}>
                     <span style={{ fontFamily: T.mono, color: T.apricot }}>&gt;</span>
@@ -95,7 +95,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                                     onMouseEnter={() => setCursor(n)}
                                     data-key="↑ ↓ ⏎"
                                     onClick={() => run(n)}
-                                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: row.type === "hit" ? "8px 10px" : "5px 10px", borderRadius: 8, cursor: "pointer", background: on ? "#3c3836" : "transparent" }}
+                                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: row.type === "hit" ? "8px 10px" : "5px 10px", borderRadius: 8, cursor: "pointer", background: on ? "#221f1d" : "transparent" }}
                                 >
                                     {row.type === "more" ? (
                                         <span style={{ fontSize: 11.5, color: on ? T.emphasis : T.muted }}>

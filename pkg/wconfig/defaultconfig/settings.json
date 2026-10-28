@@ -5,7 +5,7 @@
     "ai:timeoutms": 60000,
     "app:defaultnewblock": "term",
     "app:tabbar": "left",
-    "window:bgcolor": "#1d2021",
+    "window:bgcolor": "#000000",
     "app:confirmquit": true,
     "app:hideaibutton": true,
     "term:showsplitbuttons": false,

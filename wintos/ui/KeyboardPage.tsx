@@ -15,7 +15,7 @@ export const KeyboardPage = memo(() => {
     const ref = useFocusOnMount<HTMLDivElement>();
     const { state } = useWintos();
     const s = state?.keyboard;
-    const frame: React.CSSProperties = { flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 20px", background: "#1d2021", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0, overflowY: "auto" };
+    const frame: React.CSSProperties = { flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 20px", background: "#000000", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0, overflowY: "auto" };
     if (!s) return <div ref={ref} tabIndex={0} data-zone="list" data-wintos="keyboard" style={{ ...frame, color: T.muted }}>Waiting for wintosd.</div>;
     const p = progress(s);
     const days = week(s, Date.now());

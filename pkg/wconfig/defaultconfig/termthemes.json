@@ -21,8 +21,8 @@
         "gray": "#928374",
         "cmdtext": "#ebdbb2",
         "foreground": "#ebdbb2",
-        "selectionBackground": "#504945",
-        "background": "#1d2021",
+        "selectionBackground": "#34302c",
+        "background": "#000000",
         "cursor": "#fe8019"
     },
     "default-dark": {

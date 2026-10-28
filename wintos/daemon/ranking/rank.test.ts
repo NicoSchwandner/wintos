@@ -20,10 +20,10 @@ describe("rank", () => {
         expect(r.running).toEqual([]);
     });
 
-    test("needs you sorts the longest wait first", () => {
-        const r = rank(["new", "old"], [s("new", "waiting", NOW - 10), s("old", "waiting", NOW - 1000)], NOW);
-        expect(r.needs.map((x) => x.tabId)).toEqual(["old", "new"]);
-        expect(r.needs[0].waitingSince).toBe(NOW - 1000);
+    test("needs you sorts the newest wait first", () => {
+        const r = rank(["old", "new"], [s("new", "waiting", NOW - 10), s("old", "waiting", NOW - 1000)], NOW);
+        expect(r.needs.map((x) => x.tabId)).toEqual(["new", "old"]);
+        expect(r.needs[1].waitingSince).toBe(NOW - 1000);
     });
 
     test("running and quiet sort by latest activity", () => {

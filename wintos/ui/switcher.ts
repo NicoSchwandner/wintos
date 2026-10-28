@@ -8,9 +8,9 @@ import type { InboxList } from "./view";
 import { flog } from "./focusLog";
 
 // ⌘J / ⌘K work like ⌘⇥: hold ⌘ and tap to walk the ranked projects in this renderer's
-// sidebar, release ⌘ to switch once. ⌃⇥ walks the same stops the most recent first, like a
-// window switcher: one tap is back to where you were. Walking without switching keeps the cursor
-// in the one renderer that owns it (every Wave tab is its own renderer).
+// sidebar, release ⌘ to switch once. ⌃⇥ walks the projects the same way, always from the top.
+// Walking without switching keeps the cursor in the one renderer that owns it (every Wave tab is
+// its own renderer).
 export const switchTargetAtom = atom(null as string | null);
 
 let order: string[] = [];
@@ -29,31 +29,14 @@ export function stepProject(order: string[], current: string, delta: 1 | -1): st
     return order[(i + delta + order.length) % order.length];
 }
 
-// Where you were, most recent first, shared by every renderer: each is one tab, and only the one
-// showing records its visit.
-const RECENT = "wintos:recent";
-const RECENT_KEPT = 50;
-const recentVisits = (): string[] => {
-    try {
-        return JSON.parse(localStorage.getItem(RECENT) ?? "[]");
-    } catch {
-        return [];
-    }
-};
-export function visited(stop: string): void {
-    if (!stop) return;
-    try {
-        localStorage.setItem(RECENT, JSON.stringify([stop, ...recentVisits().filter((s) => s !== stop)].slice(0, RECENT_KEPT)));
-    } catch {} // no storage: ⌃⇥ walks the sidebar's order
-}
-export const recentFirst = (stops: string[], recent: string[]): string[] => [...recent.filter((s) => stops.includes(s)), ...stops.filter((s) => !recent.includes(s))];
-
 // hold: the key whose release switches, ⌘ for ⌘J/⌘K, ⌃ for ⌃⇥.
 let hold: "Meta" | "Control" = "Meta";
-export function switchProject(delta: 1 | -1, held: boolean, by: "rank" | "recent" = "rank"): void {
-    if (!walking()) hold = by === "recent" ? "Control" : "Meta";
-    const stops = by === "recent" ? recentFirst(order, recentVisits()) : order;
-    const next = stepProject(stops, globalStore.get(switchTargetAtom) ?? whereYouAre(), delta);
+// from: "here" steps from where you are (⌘J/⌘K); "top" starts each walk at the sidebar's first
+// project, or its last for ⌃⇧⇥, and walks the projects only (⌃⇥).
+export function switchProject(delta: 1 | -1, held: boolean, from: "here" | "top" = "here"): void {
+    if (!walking()) hold = from === "top" ? "Control" : "Meta";
+    const stops = from === "top" ? order.filter((id) => !id.startsWith("card:")) : order;
+    const next = stepProject(stops, globalStore.get(switchTargetAtom) ?? (from === "top" ? "" : whereYouAre()), delta);
     if (!next) return;
     globalStore.set(switchTargetAtom, next);
     if (!held) return commit("menu");

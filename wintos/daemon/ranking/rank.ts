@@ -3,7 +3,7 @@ import type { Session } from "../sessions/reduce";
 // needs: your move, a turn waiting on you. read: a reply to read, nothing asked of you.
 export type Band = "needs" | "read" | "running" | "quiet";
 // unread: a turn ended after the developer last saw the project; it needs them until they do.
-// waitingSince: when the oldest need began (the band's order).
+// waitingSince: when the oldest need began; the band shows the newest first.
 export type Row = { tabId: string; band: Band; lastAt: number; sessions: Session[]; waitingSince?: number; unread?: boolean };
 export type Ranking = { needs: Row[]; read: Row[]; running: Row[]; quiet: Row[]; quietMore: Row[]; quietStale: Row[] };
 
@@ -20,7 +20,7 @@ export const STALE_MS = 14 * 86_400_000;
 export function rank(tabIds: string[], sessions: Session[], now: number, touched: Record<string, number> = {}, seen: Record<string, number> = {}): Ranking {
     const rows = tabIds.map((tabId) => rowOf(tabId, sessions.filter((s) => s.tabId === tabId), touched[tabId] ?? 0, seen));
     const byRecent = (a: Row, b: Row) => b.lastAt - a.lastAt;
-    const byWait = (a: Row, b: Row) => a.waitingSince! - b.waitingSince!;
+    const byWait = (a: Row, b: Row) => b.waitingSince! - a.waitingSince!;
     const quietAll = rows.filter((r) => r.band === "quiet").sort(byRecent);
     // lastAt 0 means nothing is known yet (a fresh tab), which is not the same as untouched.
     const isStale = (r: Row) => r.lastAt > 0 && now - r.lastAt > STALE_MS;

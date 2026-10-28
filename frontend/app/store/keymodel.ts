@@ -526,8 +526,8 @@ function countTermBlocks(): number {
 
 function registerGlobalKeys() {
     // WintOS: jump to the next Claude session waiting on you.
-    globalKeyMap.set("Ctrl:Tab", () => (switchProject(1, true, "recent"), true));
-    globalKeyMap.set("Ctrl:Shift:Tab", () => (switchProject(-1, true, "recent"), true));
+    globalKeyMap.set("Ctrl:Tab", () => (switchProject(1, true, "top"), true));
+    globalKeyMap.set("Ctrl:Shift:Tab", () => (switchProject(-1, true, "top"), true));
     globalKeyMap.set("Cmd:]", () => {
         switchTab(1);
         return true;

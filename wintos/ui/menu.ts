@@ -3,11 +3,11 @@ import { atom } from "jotai";
 import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, getBlockComponentModel, isDev } from "@/store/global";
-import { closeOverlay, editMine, enterProject, focusArea, focusSession, reopenProject, takeReopen, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay, whereYouAre } from "./focus";
+import { closeOverlay, editMine, enterProject, focusArea, focusSession, reopenProject, takeReopen, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
 import { closeWarning, paneCloseWarns } from "./sessions";
 import { toggleInbox } from "./inbox";
 import { mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, tickModeAtom, type MainView } from "./notes/state";
-import { stepProject, switchProject, topProject, visited } from "./switcher";
+import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, LayoutTreeActionType, NavigateDirection, type LayoutTreeSwapNodeAction } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
 import { isInboxTab, projectSessions, sessionHeader, sessionName, urgentPr } from "./view";
@@ -497,11 +497,6 @@ export function registerWintosMenu(): void {
     installKeyGame();
     installFocusRing();
     installFocusOwner();
-    // ⌃⇥'s order: what this window shows, each time it comes into view or its page changes.
-    const noteVisit = () => void (document.visibilityState === "visible" && visited(whereYouAre()));
-    document.addEventListener("visibilitychange", noteVisit);
-    globalStore.sub(mainViewAtom, noteVisit);
-    noteVisit();
     // Wave's openLink (a ⌘-click on a url in a terminal) opens web links through here.
     Object.assign(window, { wintosOpenPage: (url: string) => runAction(`open-page:${url}`) });
     getApi().onWintosMenu(runAction);

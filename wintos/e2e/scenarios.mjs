@@ -700,22 +700,24 @@ await scenario("27 · an unwritten reflection nudges on the Today card; ⌥⌘Y 
     await until("the page gone", async () => !(await evalIn(t, `!!document.querySelector("[data-wintos=reflect]")`)));
 });
 
-await scenario("28 · ⌃⇥ held walks back to where you were, and only the ⌃ release switches", async () => {
+await scenario("28 · ⌃⇥ held walks to the sidebar's top project, and only the ⌃ release switches", async () => {
     const active = () => sql(`select data->>'activetabid' from db_workspace limit 1`);
     let t = await toProject();
     const from = active();
     await press(t, "n", { mods: ["meta"] });
     await until("a new project in front", () => active() !== from);
     t = await visible();
-    const to = active();
+    const here = active();
+    const top = await until("the sidebar's top project", () => evalIn(t, `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-tabid]")].map((e) => e.dataset.tabid).filter((id) => !id.includes(":"))[0]`));
+    if (top === here) throw new Error("the new project is the sidebar's top: nothing to walk to");
     await focusOut(t);
     const tab = { key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, modifiers: MODS.ctrl };
     await cdp(t, "Input.dispatchKeyEvent", { type: "rawKeyDown", ...tab });
     await cdp(t, "Input.dispatchKeyEvent", { type: "keyUp", ...tab });
     await sleep(800);
-    if (active() !== to) throw new Error("⌃⇥ switched before ⌃ was released");
+    if (active() !== here) throw new Error("⌃⇥ switched before ⌃ was released");
     await cdp(t, "Input.dispatchKeyEvent", { type: "keyUp", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17 });
-    await until("back in the project before", () => active() === from);
+    await until("on the sidebar's top project", () => active() === top);
 });
 
 await scenario("clean-up · the panes this run opened are closed", async () => {

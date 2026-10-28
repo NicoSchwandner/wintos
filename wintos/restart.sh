@@ -11,7 +11,6 @@ DAEMON_PORT="${WINTOS_PORT:-7730}"
 LOG="${WINTOS_LOG:-/tmp/wintos.log}"
 START=wintos/dev.sh
 if [ "${1:-}" = --dev ]; then DEBUG_PORT=9224 DAEMON_PORT=7731 LOG=/tmp/wintos-dev.log START=wintos/dev-instance.sh; fi
-export LC_ALL=C # ps and date below speak English month and day names
 
 fail() { printf '\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 ok() { printf '  ✓ %s\n' "$*"; }
@@ -42,6 +41,8 @@ curl -s -m 1 "http://127.0.0.1:$DEBUG_PORT/json/list" 2>/dev/null | grep -q '"pa
 # What answers must be the one just started, not one that survived.
 pid="$(pgrep -f "remoteDebuggingPort $DEBUG_PORT" | head -1)"
 [ -n "$pid" ] || fail "WintOS answers, but nothing runs with --remoteDebuggingPort $DEBUG_PORT; see $LOG"
-born="$(date -j -f '%a %b %d %T %Y' "$(ps -o lstart= -p "$pid" | xargs)" +%s)"
+# Only here, not exported: WintOS inherits this environment, and LC_ALL=C in its shells makes
+# pbcopy read UTF-8 as Mac Roman. ps and date must speak English month and day names.
+born="$(LC_ALL=C date -j -f '%a %b %d %T %Y' "$(LC_ALL=C ps -o lstart= -p "$pid" | xargs)" +%s)"
 [ "$born" -ge "$started" ] || fail "an older WintOS (pid $pid) still answers; quit it and run this again"
 ok "running (pid $pid), log in $LOG"

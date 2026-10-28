@@ -85,10 +85,10 @@ const NAME_PROPOSAL_MS = 60_000;
 // GitHub's own PR icons. Green and red are already moss (a machine working) and brick (rotting)
 // here, so open is aqua and closed goes quiet.
 const STATUS_ICON: Record<PrStatus, { Icon: typeof GitPullRequest; color: string }> = {
-    draft: { Icon: GitPullRequestDraft, color: T.muted },
+    draft: { Icon: GitPullRequestDraft, color: T.secondary },
     open: { Icon: GitPullRequest, color: T.aqua },
     merged: { Icon: GitMerge, color: T.purple },
-    closed: { Icon: GitPullRequestClosed, color: T.faint },
+    closed: { Icon: GitPullRequestClosed, color: T.muted },
 };
 
 // One PR as a chip: its status, number and what is next, in its queue group's colour; a click opens the PR.
@@ -106,7 +106,7 @@ export function PrChipButton({ chip: p, keyHint, small }: { chip: PrChip; keyHin
             onClick={() => runAction(`open-page:${p.url}`)}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: small ? "1px 6px" : "2px 7px", borderRadius: 6, border: `1px solid ${loud ? head.color : T.border}`, background: "transparent", cursor: "pointer", fontFamily: T.ui, fontSize: small ? 10.5 : 11.5, whiteSpace: "nowrap", flexShrink: 0 }}
         >
-            {icon && <icon.Icon size={small ? 11 : 12} strokeWidth={2.25} color={icon.color} style={{ flexShrink: 0 }} />}
+            {icon && <icon.Icon size={small ? 13 : 14} strokeWidth={2.5} color={icon.color} style={{ flexShrink: 0 }} />}
             <span style={{ fontFamily: T.mono, color: T.title }}>{p.repo ? `${p.repo} ` : ""}#{p.number}</span>
             {p.text && <span style={{ color: loud ? head.color : T.muted }}>{p.text}</span>}
             {keyHint && <Key k={keyHint} label="" />}

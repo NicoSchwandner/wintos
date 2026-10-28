@@ -63,7 +63,20 @@ export function enterProject(tabId: string): void {
 // only one starting up just then, takes the project's folder over (takeReopen) and opens the
 // panes asked for: the shelved session to resume, or all it had (⌘Z after closing it).
 const REOPEN = "wintos:reopen";
+// Which project was last reopened, and when, across all windows: a key repeated before the new
+// tab's state arrives (⌃⇥ held, a double click) still sees the project closed and would make a
+// second tab for it.
+const REOPENED = "wintos:reopened";
+export function claimReopen(ls: Pick<Storage, "getItem" | "setItem">, projectId: string, now: number): boolean {
+    try {
+        const last = JSON.parse(ls.getItem(REOPENED) ?? "null") as { projectId: string; at: number } | null;
+        if (last?.projectId === projectId && now - last.at < HANDOFF_TTL_MS) return false;
+    } catch {}
+    ls.setItem(REOPENED, JSON.stringify({ projectId, at: now }));
+    return true;
+}
 export function reopenProject(projectId: string, panes: MetaType[] = []): void {
+    if (!claimReopen(localStorage, projectId, Date.now())) return flog(`reopen of ${projectId.slice(0, 6)} again within seconds: ignored`);
     localStorage.setItem(REOPEN, JSON.stringify({ projectId, panes, at: Date.now() }));
     // Opened on a session it had: that pane is the tab's first, so no starter terminal runs a
     // second, empty Claude, and none is swapped out (which raced the layout's orphan cleanup).

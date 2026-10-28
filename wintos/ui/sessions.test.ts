@@ -97,5 +97,12 @@ test("a session only in the background service is in no pane: never counted as l
 test("a pane resuming a session placed elsewhere is reported; one already right, or ended, is not", () => {
     const s = (id: string, o = {}) => ({ id, tabId: "t", blockId: "old", state: "waiting", since: 0, lastAt: 0, ...o }) as never;
     const panes = [{ blockId: "v1", script: "cd '/w' && claude --resume 'fork'" }, { blockId: "v2", script: "cd '/w' && claude --resume 'here'" }, { blockId: "v3" }, { blockId: "v4", script: "claude --resume 'gone'" }];
-    expect(attachments(panes, [s("fork"), s("here", { blockId: "v2" }), s("gone", { state: "ended" })], "t")).toEqual([{ sessionId: "fork", blockId: "v1" }]);
+    expect(attachments(panes, [s("fork"), s("here", { blockId: "v2" }), s("gone", { state: "ended" })], "t", new Set())).toEqual([{ sessionId: "fork", blockId: "v1" }]);
 });
+
+test("a pane attaches its session once: two panes resuming one session never take it back from each other", () => {
+    const s = (o = {}) => ({ id: "fork", tabId: "other", blockId: "w1", state: "waiting", since: 0, lastAt: 0, ...o }) as never;
+    const panes = [{ blockId: "v1", script: "claude --resume 'fork'" }];
+    expect(attachments(panes, [s()], "t", new Set(["fork@v1"]))).toEqual([]);
+});
+

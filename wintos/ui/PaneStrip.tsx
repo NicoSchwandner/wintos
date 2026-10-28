@@ -2,7 +2,7 @@ import { getLayoutModelForStaticTab } from "@/layout/index";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atom, useAtomValue } from "jotai";
 import { getSettingsKeyAtom } from "@/app/store/global";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 const STRIP_GAP = 6; // above the chips, and (with the tile gap) below them
 import { focusSession, takeHandoff } from "./focus";
@@ -46,10 +46,17 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     }, []);
 
     // Panes attached to a session that runs in the background service: tell the daemon where it shows.
-    const attach = state ? attachments(blocks.map((b, i) => ({ blockId: ids[i], script: b?.meta?.["cmd:initscript"] as string | undefined })), state.sessions, tabId) : [];
+    const attached = useRef(new Set<string>());
+    const attach = state ? attachments(blocks.map((b, i) => ({ blockId: ids[i], script: b?.meta?.["cmd:initscript"] as string | undefined })), state.sessions, tabId, attached.current) : [];
     const attachKey = attach.map((a) => `${a.sessionId}@${a.blockId}`).join(" ");
     useEffect(() => {
-        for (const a of attach) void daemonFetch(`/sessions/${encodeURIComponent(a.sessionId)}/attach`, { method: "POST", body: { tabId, blockId: a.blockId } }).catch(() => {});
+        for (const a of attach) {
+            const key = `${a.sessionId}@${a.blockId}`;
+            attached.current.add(key);
+            // Only a refused or lost attach is tried again.
+            void daemonFetch(`/sessions/${encodeURIComponent(a.sessionId)}/attach`, { method: "POST", body: { tabId, blockId: a.blockId } })
+                .then((r) => void (r.ok || attached.current.delete(key)), () => void attached.current.delete(key));
+        }
     }, [attachKey]);
     const sessions = state ? liveSessions(state.sessions, { [tabId]: ids }) : [];
     const chips = stripPanes(blocks, sessions);

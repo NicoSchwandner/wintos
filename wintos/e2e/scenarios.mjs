@@ -720,6 +720,14 @@ await scenario("28 · ⌃⇥ held walks to the sidebar's top project, and only t
     await until("on the sidebar's top project", () => active() === top);
 });
 
+await scenario("29 · the open project's title heads its session strip", async () => {
+    const t = await toProject();
+    const tabId = sql(`select data->>'activetabid' from db_workspace limit 1`);
+    const title = (await (await fetch("http://127.0.0.1:7731/state")).json()).projects.find((p) => p.id === tabId)?.title;
+    if (!title) throw new Error("the open project has no title");
+    await until("the title above the panes", async () => (await evalIn(t, `document.querySelector("[data-wintos=project-title]")?.textContent ?? ""`)) === title);
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

@@ -16,13 +16,14 @@ import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved }
 import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
 import { fixJob, fixPrompt } from "../fixer/plan";
 import { reassignPrs, touchPrs } from "../prs/owners";
-import type { PR } from "../prs/group";
+import type { DonePr, PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, WAKE_EVENTS, waitingOn, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
+import { fetchDone, unlisted } from "../prs/done";
 import { capture, dismiss, readStore, STORE_PREFIX, watchHealth, type Health, type HeadsUp } from "../headsups/headsups";
 
 export type WintosServer = { http: http.Server; close: () => void };
@@ -43,7 +44,7 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]> }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
     const factsOf = (ids: string[], day: string) => {
@@ -248,6 +249,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         sessions: [...sessions.values()],
         projects: store.list().map(({ body: _body, ...p }) => p),
         plugins: runner.results,
+        donePrs,
         pluginNames: runner.names,
         pluginsRunning: runner.running,
         snoozes,
@@ -282,7 +284,28 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const gh = ghData();
         if (gh) fixer.consider(gh.prs, gh.me);
         broadcast();
+        void checkDone();
     });
+    // The sessions' PRs the PR list doesn't hold, once they are merged or closed: their chips say so.
+    const doneFile = join(opts.root, ".done-prs.json");
+    let donePrs = readJson<Record<string, DonePr>>(doneFile, {});
+    let askingDone = false;
+    const checkDone = async () => {
+        const gh = ghData();
+        const urls = [...sessions.values(), ...Object.values(shelf).flat()].flatMap((x) => [...(x.prs ?? []), ...(x.touched ?? [])]);
+        const ask = gh ? unlisted(urls, new Set(gh.prs.map((p) => p.url)), donePrs) : [];
+        if (askingDone || !ask.length) return;
+        askingDone = true;
+        try {
+            const found = await (opts.fetchDone ?? fetchDone)(ask);
+            if (!found.length) return;
+            donePrs = { ...donePrs, ...Object.fromEntries(found.map((d) => [d.url, d])) };
+            writeFileSync(doneFile, JSON.stringify(donePrs));
+            broadcast();
+        } finally {
+            askingDone = false;
+        }
+    };
 
     let watcher: FSWatcher | undefined;
     let pending: NodeJS.Timeout | undefined;

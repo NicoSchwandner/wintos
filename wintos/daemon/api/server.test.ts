@@ -1033,3 +1033,23 @@ describe("heads-ups", () => {
         rmSync(claude, { recursive: true });
     });
 });
+
+describe("done PRs", () => {
+    const OPEN = "https://github.com/o/r/pull/1", MERGED = "https://github.com/o/r/pull/2";
+    test("a session's PR the PR list doesn't hold is looked up once, and its done state is on the state", async () => {
+        const asked: string[][] = [];
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-done-"));
+        writeFileSync(join(dir, "gh"), `#!/bin/sh\necho '${JSON.stringify({ me: "me", prs: [{ url: OPEN }] })}'\n`, { mode: 0o755 });
+        srv = await startServer({ root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fetchDone: async (urls) => (asked.push(urls), [{ url: MERGED, number: 2, repo: "o/r", merged: true }]) });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [OPEN, MERGED] });
+        await post("/plugins/gh-prs/run", {});
+        for (let i = 0; i < 100 && !(await (await fetch(base + "/state")).json()).donePrs?.[MERGED]; i++) await new Promise((r) => setTimeout(r, 20));
+        expect((await (await fetch(base + "/state")).json()).donePrs[MERGED]).toEqual({ url: MERGED, number: 2, repo: "o/r", merged: true });
+        await post("/plugins/gh-prs/run", {});
+        await new Promise((r) => setTimeout(r, 200));
+        expect(asked).toEqual([[MERGED]]);
+    });
+});

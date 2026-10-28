@@ -22,6 +22,8 @@ export const T = {
     brick: "#fb4934",
     moss: "#b8bb26",
     blue: "#83a598",
+    aqua: "#8ec07c",
+    purple: "#d3869b",
     keycapText: "#d5c4a1",
     keycapBg: "#221f1d",
     keycapBorder: "#34302c",

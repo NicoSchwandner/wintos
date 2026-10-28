@@ -32,6 +32,9 @@ export type PR = {
     releasePr?: { url: string; draft: boolean }; // an open PR releasing that branch to main
 };
 
+// A PR that is no longer open: merged, or closed without merging.
+export type DonePr = { url: string; number: number; repo: string; merged: boolean };
+
 // On another branch than the repo's default: merging it would land on that branch, not ship.
 // Stacked: based on another PR's branch. A release, the default branch itself into main, is not.
 export const isStacked = (pr: PR) => !!pr.base && !!pr.defaultBranch && pr.base !== pr.defaultBranch && pr.branch !== pr.defaultBranch;

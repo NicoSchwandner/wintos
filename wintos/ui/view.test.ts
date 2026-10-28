@@ -129,8 +129,8 @@ describe("sessionHeader (the header on a Claude pane)", () => {
     const base = { repo: "acme/api", title: "t", author: "me", isDraft: false, conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, createdAt: "2026-09-21T08:00:00Z" };
     const p = (n: number, extra: object = {}) => ({ ...base, number: n, url: `https://github.com/acme/api/pull/${n}`, branch: `DEV-77-thing`, ...extra });
     const sess = (extra: object = {}) => ({ id: "s", tabId: "t1", blockId: "b", state: "working", since: 0, lastAt: 0, cwd: "/w/DEV-88-other", ...extra });
-    const st = (sessions: object[], prs: object[] = []) =>
-        ({ now: Date.parse("2026-09-28T09:00:00Z"), sessions, projects: [], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs } } } }) as unknown as WintosState;
+    const st = (sessions: object[], prs: object[] = [], done: object[] = []) =>
+        ({ now: Date.parse("2026-09-28T09:00:00Z"), sessions, projects: [], plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs } } }, donePrs: Object.fromEntries(done.map((d) => [(d as { url: string }).url, d])) }) as unknown as WintosState;
 
     test("no Claude session in the pane, no header", () => expect(sessionHeader(st([]), "b")).toBeUndefined());
     test("an ended session has none either", () => expect(sessionHeader(st([sess({ state: "ended" })]), "b")).toBeUndefined());
@@ -147,9 +147,17 @@ describe("sessionHeader (the header on a Claude pane)", () => {
         expect(sessionHeader(st([sess({ prs: [p(1).url] })], [p(1, { createdAt: "2026-09-28T08:00:00Z" })]), "b")!.tone).toBeUndefined();
     });
 
-    test("done PRs drop out: one gone from the PR list has no chip, a merged one only counts", () => {
-        const h = sessionHeader(st([sess({ prs: ["https://github.com/acme/api/pull/9", p(3).url, p(1).url] })], [p(3, { mergedAt: "2026-09-27T08:00:00Z" }), p(1)]), "b")!;
-        expect([h.prs.map((x) => x.number), h.merged]).toEqual([[1], 1]);
+    test("every PR has a chip with its status, the done ones after the open ones; one GitHub never told of has none", () => {
+        const done = [{ url: "https://github.com/acme/api/pull/8", number: 8, repo: "acme/api", merged: false }, { url: "https://github.com/acme/api/pull/6", number: 6, repo: "acme/api", merged: true }];
+        const prs = [p(3, { mergedAt: "2026-09-27T08:00:00Z" }), p(1), p(2, { isDraft: true })];
+        const h = sessionHeader(st([sess({ prs: [p(8).url, "https://github.com/acme/api/pull/9", p(6).url, p(3).url, p(1).url, p(2).url] })], prs, done), "b")!;
+        expect(h.prs.map((x) => [x.number, x.status])).toEqual([[2, "draft"], [1, "open"], [3, "merged"], [8, "closed"], [6, "merged"]]);
+    });
+
+    test("PRs another session owns that are done are not listed as worked on here too", () => {
+        const done = [{ url: p(8).url, number: 8, repo: "acme/api", merged: true }];
+        const [x] = projectSessions(st([sess({ touched: [p(8).url, p(1).url] })], [p(1)], done), "t1", ["b"]);
+        expect(x.alsoIn.map((c) => c.number)).toEqual([1]);
     });
 
     test("most urgent first, each with its repo's short name; a draft says so", () => {

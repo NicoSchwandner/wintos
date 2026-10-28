@@ -1,5 +1,6 @@
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { useAtomValue } from "jotai";
+import { GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft } from "lucide-react";
 import { memo } from "react";
 import { Key } from "./Key";
 import { runAction } from "./menu";
@@ -9,7 +10,7 @@ import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { wakesWhen } from "../daemon/wakes/wakes";
 import type { Lane } from "../daemon/sessions/reduce";
-import { prRef, relTime, sessionHeader, sessionName, urgentPr, type PrChip } from "./view";
+import { prRef, relTime, sessionHeader, sessionName, urgentPr, type PrChip, type PrStatus } from "./view";
 
 
 // Above a Claude pane: its state, what it works on, its own status line and its PRs' verdicts.
@@ -64,7 +65,7 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                     </button>
                 </div>
             )}
-            {/* One line: the most urgent few; the rest, and the merged ones, are in the notes' Sessions. */}
+            {/* One line: the most urgent few; the rest are in the notes' Sessions. */}
             {h.prs.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
                     {h.prs.slice(0, HEADER_CHIPS).map((p) => <PrChipButton key={p.url} chip={p} keyHint={focused && p === urgent ? "⌥⌘G" : undefined} />)}
@@ -81,19 +82,31 @@ const HEADER_CHIPS = 4;
 // The session's own name stands unless you change it within this minute (the session carries on).
 const NAME_PROPOSAL_MS = 60_000;
 
-// One PR as a chip: its number and what is next, in its queue group's colour; a click opens the PR.
+// GitHub's own PR icons. Green and red are already moss (a machine working) and brick (rotting)
+// here, so open is aqua and closed goes quiet.
+const STATUS_ICON: Record<PrStatus, { Icon: typeof GitPullRequest; color: string }> = {
+    draft: { Icon: GitPullRequestDraft, color: T.muted },
+    open: { Icon: GitPullRequest, color: T.aqua },
+    merged: { Icon: GitMerge, color: T.purple },
+    closed: { Icon: GitPullRequestClosed, color: T.faint },
+};
+
+// One PR as a chip: its status, number and what is next, in its queue group's colour; a click opens the PR.
 export function PrChipButton({ chip: p, keyHint, small }: { chip: PrChip; keyHint?: string; small?: boolean }) {
     const head = p.group ? HEADERS[p.group] : undefined;
     const loud = !!head && p.group !== "waiting" && p.group !== "team";
+    const icon = p.status && STATUS_ICON[p.status];
     return (
         <button
             type="button"
             tabIndex={-1}
-            title={p.url}
+            data-status={p.status}
+            title={p.status ? `${p.status} · ${p.url}` : p.url}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => runAction(`open-page:${p.url}`)}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: small ? "1px 6px" : "2px 7px", borderRadius: 6, border: `1px solid ${loud ? head.color : T.border}`, background: "transparent", cursor: "pointer", fontFamily: T.ui, fontSize: small ? 10.5 : 11.5, whiteSpace: "nowrap", flexShrink: 0 }}
         >
+            {icon && <icon.Icon size={small ? 11 : 12} strokeWidth={2.25} color={icon.color} style={{ flexShrink: 0 }} />}
             <span style={{ fontFamily: T.mono, color: T.title }}>{p.repo ? `${p.repo} ` : ""}#{p.number}</span>
             {p.text && <span style={{ color: loud ? head.color : T.muted }}>{p.text}</span>}
             {keyHint && <Key k={keyHint} label="" />}

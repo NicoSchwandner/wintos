@@ -4,7 +4,7 @@ vi.mock("./focusLog", () => ({ flog: vi.fn() }));
 const here = { tab: "a" };
 vi.mock("./focus", () => ({ enterProject: vi.fn(), focusArea: vi.fn(), whereYouAre: () => here.tab }));
 import { enterProject } from "./focus";
-import { setSwitchOrder, stepProject, switchProject, switchTargetAtom, topProject, undoWalkKey, walkKey, walking } from "./switcher";
+import { recentFirst, setSwitchOrder, stepProject, switchProject, switchTargetAtom, topProject, undoWalkKey, visited, walkKey, walking } from "./switcher";
 
 describe("stepProject", () => {
     const order = ["a", "b", "c"];
@@ -137,5 +137,62 @@ describe("a walk from a page ends on the main process's word", () => {
         expect(enterProject).toHaveBeenCalledExactlyOnceWith("b");
         metaUp();
         expect(enterProject).toHaveBeenCalledOnce();
+    });
+});
+
+describe("⌃⇥: the same stops, the most recent first, like a window switcher", () => {
+    const store = new Map<string, string>();
+    const setup = () => {
+        store.clear();
+        vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) });
+        vi.stubGlobal("window", new EventTarget());
+        vi.stubGlobal("document", new EventTarget());
+        globalStore.set(switchTargetAtom, null);
+        vi.mocked(enterProject).mockClear();
+    };
+    const release = (key: string) => window.dispatchEvent(Object.assign(new Event("keyup"), { key }));
+
+    test("the places you were, most recent first, then the ones never visited in the sidebar's order", () =>
+        expect(recentFirst(["card:today", "a", "b", "c", "d"], ["c", "gone", "a"])).toEqual(["c", "a", "card:today", "b", "d"]));
+
+    test("a visit moves the place to the front", () => {
+        setup();
+        ["a", "b", "c", "a"].forEach(visited);
+        expect(recentFirst(["a", "b", "c"], JSON.parse(store.get("wintos:recent")!))).toEqual(["a", "c", "b"]);
+    });
+
+    test("one tap goes back to where you were before; held, the taps go further back; ⌃ released switches", () => {
+        setup();
+        setSwitchOrder(["a", "b", "c", "d"]);
+        ["d", "b", "a"].forEach(visited);
+        here.tab = "a";
+        switchProject(1, true, "recent");
+        expect(globalStore.get(switchTargetAtom)).toBe("b");
+        switchProject(1, true, "recent");
+        expect(globalStore.get(switchTargetAtom)).toBe("d");
+        release("Meta");
+        expect(walking()).toBe(true);
+        release("Control");
+        expect(walking()).toBe(false);
+        expect(enterProject).toHaveBeenCalledExactlyOnceWith("d");
+    });
+
+    test("⌃⇧⇥ starts from the oldest end", () => {
+        setup();
+        setSwitchOrder(["a", "b", "c"]);
+        ["c", "b", "a"].forEach(visited);
+        here.tab = "a";
+        switchProject(-1, true, "recent");
+        expect(globalStore.get(switchTargetAtom)).toBe("c");
+    });
+
+    test("walking with ⌃: ⌃⇥ walks on, another ⌃ key is swallowed, a key without ⌃ switches and goes on", () => {
+        setup();
+        setSwitchOrder(["a", "b"]);
+        here.tab = "a";
+        switchProject(1, true, "recent");
+        expect([walkKey({ key: "Tab", control: true }), walkKey({ key: "j", control: true })]).toEqual([false, true]);
+        expect(walkKey({ key: "x" })).toBe(false);
+        expect(enterProject).toHaveBeenCalledWith("b");
     });
 });

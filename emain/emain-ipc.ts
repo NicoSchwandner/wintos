@@ -297,13 +297,16 @@ export function initIpcHandlers() {
     // system-wide, for that moment only. The timeout lets go of it should the walk never end.
     let walkEscTimer: NodeJS.Timeout | undefined;
     const releaseWalkEsc = () => (clearTimeout(walkEscTimer), electron.globalShortcut.unregister("Command+Escape"));
-    // WintOS: the tab running a walk. A page's ⌘ release, or a key there that comes without ⌘
-    // because the release was missed, ends it; the page's own DOM drops the release now and then.
+    // WintOS: the tab running a walk, and the key held for it (⌘ for ⌘J/⌘K, ⌃ for ⌃⇥). A page's
+    // release of it, or a key there that comes without it because the release was missed, ends
+    // the walk; the page's own DOM drops the release now and then.
     let walkTab: Electron.WebContents | undefined;
-    electron.ipcMain.on("wintos-walking", (event: Electron.IpcMainEvent, on: boolean) => {
+    let walkHold: "Meta" | "Control" = "Meta";
+    electron.ipcMain.on("wintos-walking", (event: Electron.IpcMainEvent, on: boolean, hold?: "Meta" | "Control") => {
         releaseWalkEsc();
         walkTab = on ? event.sender : undefined;
-        if (!on) return;
+        walkHold = hold ?? "Meta";
+        if (!on || walkHold !== "Meta") return;
         const sender = event.sender;
         electron.globalShortcut.register("Command+Escape", () => (releaseWalkEsc(), sender.isDestroyed() || sender.send("wintos-walk-esc")));
         walkEscTimer = setTimeout(releaseWalkEsc, 15_000);
@@ -331,7 +334,7 @@ export function initIpcHandlers() {
             webviewWc.on("before-input-event", (e, input) => {
                 let waveEvent = keyutil.adaptFromElectronKeyEvent(input);
                 handleCtrlShiftState(parentWc, waveEvent);
-                if (walkTab && !walkTab.isDestroyed() && (input.type == "keyUp" ? input.key == "Meta" : !input.meta)) {
+                if (walkTab && !walkTab.isDestroyed() && (input.type == "keyUp" ? input.key == walkHold : !(walkHold == "Meta" ? input.meta : input.control))) {
                     walkTab.send("wintos-walk-meta-up");
                 }
                 if (webviewFocusId != focusedId) {

@@ -106,8 +106,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-tabid="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
 
     useEffect(() => {
-        if (state) setLatestSessions(state.sessions, tabIds, model ? [...model.needs, ...model.read].map((r) => r.tabId) : [], model?.targets ?? {}, wokeClosed);
-    }, [state, tabIds.join(","), wokeClosed.map((w) => w.sessionId).join(",")]);
+        if (state) setLatestSessions(state.sessions, model?.targets ?? {});
+    }, [state, tabIds.join(",")]);
 
     // The project title is the source of truth; the tab name follows it.
     useEffect(() => {
@@ -205,7 +205,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     <>
                         <Band kind="needs" count={model.needs.length + wokeClosed.length}>
                             {wokeClosed.map((w) => (
-                                <CardRow key={`wake:${w.sessionId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌃⇥ or ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
+                                <CardRow key={`wake:${w.sessionId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
                             ))}
                             {model.needs.map(renderRow)}
                         </Band>
@@ -234,7 +234,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             {state?.keyboard && <GameLine stats={state.keyboard} />}
             <div style={{ flexShrink: 0, minHeight: 34, boxSizing: "border-box", padding: "6px 14px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 16px", borderTop: `1px solid ${T.hairline}`, fontSize: 11, color: T.faint }}>
                 {/* ⌘J/⌘K sit on the open project's row. */}
-                <Key k="⌃⇥" label="waiting" />
+                <Key k="⌃⇥" label="recent" />
                 {!isInboxTab(tabs[activeTabId]) && <Key k="⌘R" label="rename" />}
                 {state?.sessions.some((x) => x.tabId === activeTabId && x.state === "waiting") && <Key k="⌥⌘P" label="park" />}
             </div>

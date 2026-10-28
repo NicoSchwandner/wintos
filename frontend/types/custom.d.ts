@@ -112,7 +112,7 @@ declare global {
         writeClipboard: (text: string) => void; // wintos-clipboard
         onWintosOpenPane: (callback: (url: string) => void) => void; // wintos-open-pane
         onWintosWindowFocus: (callback: (focused: boolean) => void) => void; // wintos-window-focus
-        setWintosWalking: (on: boolean) => void; // wintos-walking
+        setWintosWalking: (on: boolean, hold?: "Meta" | "Control") => void; // wintos-walking
         nativeUndo: () => void; // wintos-native-undo
         onWintosWalkEsc: (callback: () => void) => void; // wintos-walk-esc
         onWintosWalkMetaUp: (callback: () => void) => void; // wintos-walk-meta-up

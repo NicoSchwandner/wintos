@@ -3,14 +3,13 @@
 
 import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { FocusManager } from "@/app/store/focusManager";
-import { jumpBack, jumpToNextWaiting } from "@/wintos/ui/focus";
 import { sameChord } from "@/wintos/ui/keys";
 import { runKey, WINTOS_KEYS, wintosClose, wintosEscape } from "@/wintos/ui/menu";
 import { zoneKey } from "@/wintos/ui/zones";
 import { restoreFocus, wantPane } from "@/wintos/ui/focusOwner";
 import { flog, where } from "@/wintos/ui/focusLog";
 import { reportKey } from "@/wintos/ui/keyGame";
-import { undoWalkKey, walkKey } from "@/wintos/ui/switcher";
+import { switchProject, undoWalkKey, walkKey } from "@/wintos/ui/switcher";
 
 // WintOS: a key in the focus trail, never one typed into a terminal or a field.
 function logKey(e: WaveKeyboardEvent, zone: "handled" | "typing" | false): void {
@@ -527,8 +526,8 @@ function countTermBlocks(): number {
 
 function registerGlobalKeys() {
     // WintOS: jump to the next Claude session waiting on you.
-    globalKeyMap.set("Ctrl:Tab", jumpToNextWaiting);
-    globalKeyMap.set("Ctrl:Shift:Tab", jumpBack);
+    globalKeyMap.set("Ctrl:Tab", () => (switchProject(1, true, "recent"), true));
+    globalKeyMap.set("Ctrl:Shift:Tab", () => (switchProject(-1, true, "recent"), true));
     globalKeyMap.set("Cmd:]", () => {
         switchTab(1);
         return true;

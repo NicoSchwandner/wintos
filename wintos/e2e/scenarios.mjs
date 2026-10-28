@@ -700,6 +700,24 @@ await scenario("27 · an unwritten reflection nudges on the Today card; ⌥⌘Y 
     await until("the page gone", async () => !(await evalIn(t, `!!document.querySelector("[data-wintos=reflect]")`)));
 });
 
+await scenario("28 · ⌃⇥ held walks back to where you were, and only the ⌃ release switches", async () => {
+    const active = () => sql(`select data->>'activetabid' from db_workspace limit 1`);
+    let t = await toProject();
+    const from = active();
+    await press(t, "n", { mods: ["meta"] });
+    await until("a new project in front", () => active() !== from);
+    t = await visible();
+    const to = active();
+    await focusOut(t);
+    const tab = { key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, modifiers: MODS.ctrl };
+    await cdp(t, "Input.dispatchKeyEvent", { type: "rawKeyDown", ...tab });
+    await cdp(t, "Input.dispatchKeyEvent", { type: "keyUp", ...tab });
+    await sleep(800);
+    if (active() !== to) throw new Error("⌃⇥ switched before ⌃ was released");
+    await cdp(t, "Input.dispatchKeyEvent", { type: "keyUp", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17 });
+    await until("back in the project before", () => active() === from);
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

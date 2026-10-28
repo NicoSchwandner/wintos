@@ -2,7 +2,7 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { atoms, createBlock, getApi } from "@/store/global";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import type { Session } from "../daemon/sessions/reduce";
-import { nextNeedsYou, Target } from "./sessions";
+import { Target } from "./sessions";
 import { editingMineAtom, isPage, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
 import { rememberReturn, returnFocus, wantPane } from "./focusOwner";
 import { currentState, daemonFetch } from "./useWintos";
@@ -17,11 +17,8 @@ import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 const HANDOFF = "wintos:focus";
 const HANDOFF_TTL_MS = 5000;
 
-// woke: closed projects with a due wake, top of Your move: ⌃⇥ reopens them first.
-type Woke = { projectId: string; script: string };
-let latest: { sessions: Session[]; tabIds: string[]; needs: string[]; targets: Record<string, Target>; woke: Woke[] } = { sessions: [], tabIds: [], needs: [], targets: {}, woke: [] };
-export const setLatestSessions = (sessions: Session[], tabIds: string[], needs: string[], targets: Record<string, Target> = {}, woke: Woke[] = []) =>
-    (latest = { sessions, tabIds, needs, targets, woke });
+let latest: { sessions: Session[]; targets: Record<string, Target> } = { sessions: [], targets: {} };
+export const setLatestSessions = (sessions: Session[], targets: Record<string, Target> = {}) => (latest = { sessions, targets });
 // The daemon's snapshot, not the Sidebar's copy: that one lags a pane opened a moment ago.
 export const latestSessions = () => currentState()?.sessions ?? latest.sessions;
 
@@ -120,7 +117,7 @@ export function focusSession(t: Target): void {
 
 // Arriving in a project: on the session asked for, else back in an unsaved mine.md edit (its
 // view left as it was, so the draft stays), else on the terminals.
-function landOn({ blockId, resume, restore, unmagnify }: Target): void {
+function landOn({ blockId, resume, restore }: Target): void {
     if (!blockId && mineEditor() && !resume && !restore) return focusMineEditor();
     globalStore.set(mainViewAtom, "terminal"); // a session behind a view would stay hidden
     if (restore) return void createBlock({ meta: restore });
@@ -139,8 +136,7 @@ function landOn({ blockId, resume, restore, unmagnify }: Target): void {
     // Inbox tab is always in it (one page at a time).
     const lm = getLayoutModelForStaticTab();
     const magnified = lm && globalStore.get(lm.magnifiedNodeIdAtom);
-    if (magnified && unmagnify && lm.getNodeByBlockId(blockId)?.id !== magnified) lm.magnifyNodeToggle(magnified);
-    else if (magnified) return void magnifyBlock(blockId);
+    if (magnified) return void magnifyBlock(blockId);
     focusBlock(blockId);
 }
 
@@ -208,27 +204,3 @@ export function closeOverlay(): void {
     returnFocus(() => focusArea("terminal"), true);
 }
 
-const BEFORE_JUMP = "wintos:before-jump";
-
-// ⌃⇧⇥: back to where the last ⌃⇥ jumped from.
-export function jumpBack(): boolean {
-    try {
-        const t = JSON.parse(localStorage.getItem(BEFORE_JUMP) ?? "null") as Target | null;
-        if (!t || !latest.tabIds.includes(t.tabId)) return true;
-        localStorage.removeItem(BEFORE_JUMP);
-        focusSession(t);
-    } catch {}
-    return true;
-}
-
-export function jumpToNextWaiting(): boolean {
-    if (latest.woke[0]) return reopenProject(latest.woke[0].projectId, [resumePane(latest.woke[0].script)]), true;
-    const lm = getLayoutModelForStaticTab();
-    const current = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
-    const t = nextNeedsYou(latest.sessions, latest.tabIds, whereYouAre(), current, latest.needs, latest.targets);
-    // Where this jump started, for ⌃⇧⇥ to go back to.
-    if (t) localStorage.setItem(BEFORE_JUMP, JSON.stringify({ tabId: globalStore.get(atoms.staticTabId), blockId: current ?? "" }));
-    // A project in Needs you for a PR nobody here owns has no session to land on: its terminals.
-    if (t) focusSession({ ...("blockId" in t ? t : { tabId: t.tabId, blockId: "" }), unmagnify: true });
-    return true;
-}

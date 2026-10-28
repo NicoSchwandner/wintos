@@ -8,8 +8,9 @@ import type { InboxList } from "./view";
 import { flog } from "./focusLog";
 
 // ⌘J / ⌘K work like ⌘⇥: hold ⌘ and tap to walk the ranked projects in this renderer's
-// sidebar, release ⌘ to switch once. Walking without switching keeps the cursor in the one
-// renderer that owns it (every Wave tab is its own renderer).
+// sidebar, release ⌘ to switch once. ⌃⇥ walks the same stops the most recent first, like a
+// window switcher: one tap is back to where you were. Walking without switching keeps the cursor
+// in the one renderer that owns it (every Wave tab is its own renderer).
 export const switchTargetAtom = atom(null as string | null);
 
 let order: string[] = [];
@@ -28,11 +29,34 @@ export function stepProject(order: string[], current: string, delta: 1 | -1): st
     return order[(i + delta + order.length) % order.length];
 }
 
-export function switchProject(delta: 1 | -1, cmdHeld: boolean): void {
-    const next = stepProject(order, globalStore.get(switchTargetAtom) ?? whereYouAre(), delta);
+// Where you were, most recent first, shared by every renderer: each is one tab, and only the one
+// showing records its visit.
+const RECENT = "wintos:recent";
+const RECENT_KEPT = 50;
+const recentVisits = (): string[] => {
+    try {
+        return JSON.parse(localStorage.getItem(RECENT) ?? "[]");
+    } catch {
+        return [];
+    }
+};
+export function visited(stop: string): void {
+    if (!stop) return;
+    try {
+        localStorage.setItem(RECENT, JSON.stringify([stop, ...recentVisits().filter((s) => s !== stop)].slice(0, RECENT_KEPT)));
+    } catch {} // no storage: ⌃⇥ walks the sidebar's order
+}
+export const recentFirst = (stops: string[], recent: string[]): string[] => [...recent.filter((s) => stops.includes(s)), ...stops.filter((s) => !recent.includes(s))];
+
+// hold: the key whose release switches, ⌘ for ⌘J/⌘K, ⌃ for ⌃⇥.
+let hold: "Meta" | "Control" = "Meta";
+export function switchProject(delta: 1 | -1, held: boolean, by: "rank" | "recent" = "rank"): void {
+    if (!walking()) hold = by === "recent" ? "Control" : "Meta";
+    const stops = by === "recent" ? recentFirst(order, recentVisits()) : order;
+    const next = stepProject(stops, globalStore.get(switchTargetAtom) ?? whereYouAre(), delta);
     if (!next) return;
     globalStore.set(switchTargetAtom, next);
-    if (!cmdHeld) return commit("menu");
+    if (!held) return commit("menu");
     flog(`walk → ${next.slice(0, 6)}`);
     listen(true);
 }
@@ -47,7 +71,7 @@ function go(target: string | null): void {
     else focusArea("terminal");
 }
 
-function commit(why = "⌘ released"): void {
+function commit(why = `${hold === "Meta" ? "⌘" : "⌃"} released`): void {
     const target = globalStore.get(switchTargetAtom);
     const from = whereYouAre();
     end(why);
@@ -82,20 +106,21 @@ function end(why: string): void {
 
 export const walking = () => globalStore.get(switchTargetAtom) != null;
 
-// While walking only ⌘J/⌘K, Esc and the ⌘ release count: the walk chooses a project, so any
-// other ⌘ key (⌘H/⌘L moving focus in the project you are leaving) is swallowed. A key without
-// ⌘ means its release never reached us: the walk switches, and the key goes on.
-export function walkKey(e: { cmd?: boolean; key: string }): boolean {
+// While walking only its own keys (⌘J/⌘K, or ⌃⇥), Esc and the held key's release count: the walk
+// chooses a project, so any other key with it held (⌘H/⌘L moving focus in the project you are
+// leaving) is swallowed. A key without it means its release never reached us: the walk
+// switches, and the key goes on.
+export function walkKey(e: { cmd?: boolean; control?: boolean; key: string }): boolean {
     if (!walking()) return false;
     if (e.key === "Escape") return end("esc"), true;
-    if (!e.cmd) return commit("⌘ was already up"), false;
-    return !["j", "k"].includes(e.key.toLowerCase());
+    if (!(hold === "Meta" ? e.cmd : e.control)) return commit(`${hold === "Meta" ? "⌘" : "⌃"} was already up`), false;
+    return !(hold === "Meta" ? ["j", "k"] : ["tab"]).includes(e.key.toLowerCase());
 }
 
-const onKeyUp = (e: KeyboardEvent) => e.key === "Meta" && commit();
+const onKeyUp = (e: KeyboardEvent) => e.key === hold && commit();
 const onKeyDown = (e: KeyboardEvent) => {
     // Every key the walk sees, so an Esc that never arrives shows as missing from the trail.
-    if (e.key !== "Meta") flog(`walk saw ${e.metaKey ? "⌘" : ""}${e.key}`);
+    if (e.key !== hold) flog(`walk saw ${e.metaKey ? "⌘" : ""}${e.ctrlKey ? "⌃" : ""}${e.key}`);
     if (e.key !== "Escape") return;
     e.preventDefault();
     e.stopPropagation(); // the Esc cancels the switch; it must not also interrupt Claude
@@ -111,9 +136,9 @@ function listen(on: boolean): void {
     if (on && !hooked) {
         hooked = true;
         getApi()?.onWintosWalkEsc?.(() => end("⌘esc"));
-        getApi()?.onWintosWalkMetaUp?.(() => walking() && commit("⌘ released in the page"));
+        getApi()?.onWintosWalkMetaUp?.(() => walking() && commit(`${hold === "Meta" ? "⌘" : "⌃"} released in the page`));
     }
-    getApi()?.setWintosWalking?.(on);
+    getApi()?.setWintosWalking?.(on, hold);
     const f = (on ? window.addEventListener : window.removeEventListener).bind(window);
     f("keyup", onKeyUp, true);
     f("keydown", onKeyDown, true);

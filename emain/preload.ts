@@ -48,7 +48,7 @@ contextBridge.exposeInMainWorld("api", {
     writeClipboard: (text) => ipcRenderer.send("wintos-clipboard", text),
     onWintosOpenPane: (callback) => ipcRenderer.on("wintos-open-pane", (_e, url) => callback(url)),
     onWintosWindowFocus: (callback) => ipcRenderer.on("wintos-window-focus", (_e, focused) => callback(focused)),
-    setWintosWalking: (on) => ipcRenderer.send("wintos-walking", on),
+    setWintosWalking: (on, hold) => ipcRenderer.send("wintos-walking", on, hold),
     nativeUndo: () => ipcRenderer.send("wintos-native-undo"),
     onWintosWalkEsc: (callback) => ipcRenderer.on("wintos-walk-esc", () => callback()),
     onWintosWalkMetaUp: (callback) => ipcRenderer.on("wintos-walk-meta-up", () => callback()),

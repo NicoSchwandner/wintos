@@ -728,6 +728,23 @@ await scenario("29 · the open project's title heads its session strip", async (
     await until("the title above the panes", async () => (await evalIn(t, `document.querySelector("[data-wintos=project-title]")?.textContent ?? ""`)) === title);
 });
 
+await scenario("30 · in the PRs tab, f names each row's next step: a review row's (yours or the team's) is a review", async () => {
+    let inbox = await toInbox();
+    const onPrs = (t) => evalIn(t, `!!document.querySelector("[data-wintos=inbox-list]")?.innerText.startsWith("PRs need attention")`);
+    if (!(await onPrs(inbox))) {
+        await press(inbox, "g", { mods: ["meta", "shift"] });
+        inbox = await until("the PRs tab", async () => { const t = await visible(); return (await onPrs(t)) && t; });
+    }
+    await cdpFocus(inbox, "[data-wintos=inbox-list]");
+    const groupOfCursor = () => evalIn(inbox, `document.querySelector("[data-wintos=inbox-list] [data-selected]")?.closest("[data-group]")?.dataset.group ?? ""`);
+    const reviewRow = async () => ["review", "team"].includes(await groupOfCursor());
+    await until("the PR rows", () => evalIn(inbox, `!!document.querySelector("[data-wintos=inbox-list] [data-pr]")`), 20000);
+    if (!(await evalIn(inbox, `!!document.querySelector("[data-group=review] [data-pr], [data-group=team] [data-pr]")`))) return console.log("      (skipped: no review is asked of you or your team right now)");
+    for (let i = 0; i < 80 && !(await reviewRow()); i++) await press(inbox, "j", { keyCode: 74 });
+    if (!(await reviewRow())) throw new Error("j never reached a review row");
+    await until("f offers the review", async () => /\bf\s*(re-)?review\b/.test(await evalIn(inbox, `document.querySelector("[data-wintos=pr-next]")?.innerText ?? ""`)));
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

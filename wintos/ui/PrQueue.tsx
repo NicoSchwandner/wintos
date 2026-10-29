@@ -15,7 +15,8 @@ import { Key, KeyOr } from "./Key";
 import { fixNote, initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns, type QueueRow, type RowColumns } from "./prs";
 import { typeIntoPane } from "./typeIntoPane";
 import type { FixRun } from "../daemon/fixer/runner";
-import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
+import { groupOf, lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
+import { nextAction, type NextKind } from "../daemon/fixer/plan";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
@@ -51,6 +52,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const gh = state && ghPrs(state);
     // f: narrows the list to the PRs matching what you type; Esc clears it, ⏎ goes back to the rows.
     const [filter, setFilter] = useState<string | null>(null);
+    const [mergeArmed, setMergeArmed] = useState<string | null>(null);
     const filterRef = useRef<HTMLInputElement>(null);
     // n: the short name of the selected PR's repo, typed here; ⏎ saves it to your names file.
     const [naming, setNaming] = useState<{ repo: string; text: string } | null>(null);
@@ -117,6 +119,15 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const fixer = state?.fixer;
     const fixOf = (url: string) => fixer?.runs.find((x) => x.url === url);
     const canFixCi = !!r && r.mine && (r.pr.checks === "FAILURE" || r.pr.checks === "ERROR");
+    const next = r && gh ? nextAction(r.pr, gh.me, groupOf(r.pr, gh.me, now)) : undefined;
+    // f: the row's next step. Merging can't be taken back, so it takes f twice.
+    const doNext = () => {
+        if (!r || !next) return;
+        if (next === "merge" && mergeArmed !== r.pr.url) return setMergeArmed(r.pr.url);
+        setMergeArmed(null);
+        void dispatchNext(r.pr.url);
+    };
+    const openFilter = () => (filter === null ? setFilter("") : filterRef.current?.focus());
     useZoneKeys(focusRef, {
         // a: the conflicts babysitter on or off. c: this PR's red CI to the session that wrote it.
         a: (e) => void (e.repeat || daemonFetch("/fixer/settings", { method: "POST", body: { conflicts: !fixer?.conflicts } }).catch(() => {})),
@@ -124,7 +135,10 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
         ...motionKeys(step, (end) => setSelected(urls[end === "first" ? 0 : urls.length - 1])),
         j: () => step(1),
         k: () => step(-1),
-        f: () => void (filter === null ? setFilter("") : filterRef.current?.focus()),
+        // Some layouts type / with shift (Swedish ⇧7), which Wave's matcher tells apart.
+        "/": () => void openFilter(),
+        "Shift:/": () => void openFilter(),
+        f: (e) => void (e.repeat || doNext()),
         Escape: () => (filter === null ? false : (setFilter(null), focusRef.current?.focus(), true)),
         // ⏎ reads the PR: focus goes with it. A click opens it beside the list and stays there.
         Enter: () => (r ? (wantPane("⏎ opens the PR"), openPr(r)) : false),
@@ -196,7 +210,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
             )}
             <div ref={rowsRef} style={{ flexGrow: 1, overflowY: "auto", padding: "0 26px", display: "flex", flexDirection: "column", gap: 14 }}>
                 {model?.groups.map(({ group, rows }) => (
-                    <div key={group} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <div key={group} data-group={group} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         <GroupHeader {...HEADERS[group]} count={rows.length} />
                         {rows.flatMap((row) => withStack(row)).map(({ r, depth }) => (
                             <PrRow key={r.pr.url} r={r} depth={depth} project={projectLabel(r.pr.url)} repo={labelOf(r.pr.repo)} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
@@ -219,7 +233,11 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                 <Key k="o" label={flat[cursor] && !projectOf.has(flat[cursor].pr.url) ? "open as new project" : "go to project"} off={!flat[cursor]} />
                 <Key k="z" label="snooze" />
                 <Key k="n" label="name its repo" off={!flat[cursor]} />
+                <span data-wintos="pr-next" style={{ display: "contents" }}>
+                    <Key k="f" label={next ? (next === "merge" && mergeArmed === r?.pr.url ? `again: merge #${r.pr.number}` : NEXT_LABEL[next]) : "next step"} off={!next} />
+                </span>
                 <Key k="c" label="fix red CI" off={!canFixCi} />
+                <Key k="/" label="filter" />
                 <Key k="a" label={fixer?.conflicts ? "conflicts: stop fixing them" : "conflicts: fix them"} />
                 {pageOpen && <KeyOr keys={["esc", "⌘L"]} label="to the page" />}
             </div>
@@ -227,6 +245,18 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     );
 });
 PrQueue.displayName = "PrQueue";
+
+const NEXT_LABEL: Record<NextKind, string> = { conflict: "fix the conflict", ci: "fix red CI", comments: "work the review comments", rereview: "re-review", review: "review", merge: "merge" };
+
+// A review needs you in it: a new project whose Claude starts on the link. The rest goes the
+// fixer's way, typed into the owning session's pane when it is live.
+async function dispatchNext(url: string): Promise<void> {
+    const res = await daemonFetch("/fixer/next", { method: "POST", body: { url } }).catch(() => undefined);
+    if (!res?.ok) return;
+    const r = (await res.json()) as { review?: boolean; blockId?: string; prompt?: string };
+    if (r.review) return void (offerPrompt(`\x1b[200~${url} review\x1b[201~\r`), createTab());
+    if (r.blockId && r.prompt) await typeIntoPane(r.blockId, r.prompt);
+}
 
 // The same route an automatic run takes: a live owning session gets the prompt typed into its
 // pane; the daemon runs the rest.

@@ -99,14 +99,23 @@ export function matchesPr(pr: Pick<PR, "repo" | "number" | "title" | "author" | 
 }
 
 // What the fixer is doing about a PR, on its row: only about the commit the PR is at now.
+const fixing = (what: string) => ({ what, doing: `fixing ${what}`, tried: `tried to fix ${what}` });
+const RUN_WORDS: Record<FixRun["kind"], { what: string; doing: string; tried: string }> = {
+    conflict: fixing("the conflict"),
+    ci: fixing("red CI"),
+    comments: { what: "the review comments", doing: "working the review comments", tried: "worked the review comments" },
+    rereview: { what: "the re-review", doing: "re-reviewing", tried: "re-reviewed" },
+    merge: { what: "the merge", doing: "merging", tried: "tried to merge" },
+};
+
 export function fixNote(run: FixRun | undefined, pr: PR, queued: string[]): { text: string; brick?: boolean } | undefined {
     if (!run || run.head !== pr.head) return undefined;
-    const what = run.kind === "conflict" ? "the conflict" : "red CI";
+    const { what, doing, tried } = RUN_WORDS[run.kind];
     if (run.route === "pane") return { text: `${what} sent to its session` };
-    if (queued.includes(run.id)) return { text: `fixing ${what} next` };
-    if (!run.endedAt) return { text: run.startedAt ? `fixing ${what}…` : `fixing ${what} next` };
-    if (run.exit === 0) return { text: `tried to fix ${what}${run.result ? `: ${run.result}` : ""}` };
-    return { text: `fixing ${what} failed${run.result ? `: ${run.result}` : ""}`, brick: true };
+    if (queued.includes(run.id)) return { text: `${doing} next` };
+    if (!run.endedAt) return { text: run.startedAt ? `${doing}…` : `${doing} next` };
+    if (run.exit === 0) return { text: `${tried}${run.result ? `: ${run.result}` : ""}` };
+    return { text: `${doing} failed${run.result ? `: ${run.result}` : ""}`, brick: true };
 }
 
 // For the standup: your PRs that have waited a working day or more for someone's review. A few by

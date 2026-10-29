@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { PR } from "../prs/group";
 import type { Session } from "../sessions/reduce";
 import type { Shelf } from "../shelf/shelf";
-import { fixJob, conflictJobs, fixKey } from "./plan";
+import { fixJob, conflictJobs, fixKey, nextAction } from "./plan";
 
 const pr = (n: number, o: Partial<PR> = {}): PR =>
     ({ repo: "o/r", number: n, url: `https://github.com/o/r/pull/${n}`, title: `PR ${n}`, author: "me", isDraft: false, createdAt: "", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: `b${n}`, head: `sha${n}`, ...o }) as PR;
@@ -38,5 +38,38 @@ describe("fixJob (red CI, dispatched)", () => {
         const shelf: Shelf = { proj: [{ sessionId: "s", script: RESUME("s"), label: "x", prs: [red.url], at: 1 }] };
         expect(fixJob(red, [session("a", "idle", [red.url])], shelf).route.kind).toBe("pane");
         expect(fixJob(red, [], {}).route).toEqual({ kind: "fresh" });
+    });
+});
+
+describe("nextAction (f on a PR row)", () => {
+    test("my PR: a conflict first, then red CI, merge when it can, else the review feedback", () => {
+        expect(nextAction(pr(1, { conflict: true, checks: "FAILURE" }), "me", "fix")).toBe("conflict");
+        expect(nextAction(pr(1, { checks: "ERROR" }), "me", "fix")).toBe("ci");
+        expect(nextAction(pr(1), "me", "merge")).toBe("merge");
+        expect(nextAction(pr(1, { reviewDecision: "CHANGES_REQUESTED" }), "me", "fix")).toBe("comments");
+        expect(nextAction(pr(1, { openThreads: 2 }), "me", "waiting")).toBe("comments");
+    });
+
+    test("nothing while it waits on others, once you asked again, or after the merge", () => {
+        expect(nextAction(pr(1), "me", "waiting")).toBeUndefined();
+        expect(nextAction(pr(1, { reviewDecision: "CHANGES_REQUESTED", changesRerequested: true }), "me", "waiting")).toBeUndefined();
+        expect(nextAction(pr(1, { mergedAt: "x", conflict: true }), "me", "release")).toBeUndefined();
+    });
+
+    test("someone else's PR: a review, or a re-review once you reviewed it; nothing outside the review groups", () => {
+        expect(nextAction(pr(1, { author: "ana" }), "me", "review")).toBe("review");
+        expect(nextAction(pr(1, { author: "ana", reviewedByMe: true }), "me", "team")).toBe("rereview");
+        expect(nextAction(pr(1, { author: "ana" }), "me", "waiting")).toBeUndefined();
+    });
+});
+
+describe("fixJob for a re-review", () => {
+    test("goes to the session that reviewed it, which holds it as also-in; other kinds ignore also-in", () => {
+        const p = pr(9, { author: "ana" });
+        const reviewer: Session = { ...session("r", "idle", []), touched: [p.url] };
+        expect(fixJob(p, [reviewer], {}, "rereview").route).toMatchObject({ kind: "pane", sessionId: "r" });
+        expect(fixJob(p, [reviewer], {}, "comments").route).toEqual({ kind: "fresh" });
+        const shelf: Shelf = { proj: [{ sessionId: "s", script: RESUME("s"), label: "x", touched: [p.url], at: 1 }] };
+        expect(fixJob(p, [], shelf, "rereview")).toMatchObject({ kind: "rereview", route: { kind: "resume", sessionId: "s" } });
     });
 });

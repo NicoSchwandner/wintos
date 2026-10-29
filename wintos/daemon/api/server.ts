@@ -14,9 +14,9 @@ import { prFact } from "../recap/recap";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
-import { fixJob, fixPrompt } from "../fixer/plan";
+import { fixJob, fixPrompt, nextAction, type FixJob } from "../fixer/plan";
 import { reassignPrs, touchPrs } from "../prs/owners";
-import type { DonePr, PR } from "../prs/group";
+import { groupOf, type DonePr, type PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
@@ -624,6 +624,21 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!pr) return send(res, 404, "no such PR in the PR list");
                 if (pr.checks !== "FAILURE" && pr.checks !== "ERROR") return send(res, 409, "its CI is not red");
                 const job = fixJob(pr, [...sessions.values()], shelf);
+                const run = fixer.start(job);
+                return json(res, { run, ...(job.route.kind === "pane" ? { blockId: job.route.blockId, tabId: job.route.tabId, prompt: fixPrompt(job) } : {}) });
+            }
+            // f in the PRs tab: the row's next step. A first review needs you in it, so the window opens
+            // it as a session of its own; so does a re-review no session holds.
+            if (req.method === "POST" && url.pathname === "/fixer/next") {
+                const b = (await body(req)) as { url?: unknown };
+                const gh = ghData();
+                const pr = gh?.prs.find((p) => p.url === b?.url);
+                if (!gh || !pr) return send(res, 404, "no such PR in the PR list");
+                const kind = nextAction(pr, gh.me, groupOf(pr, gh.me, Date.now()));
+                if (!kind) return send(res, 409, "nothing to do for it but wait");
+                if (kind === "review") return json(res, { review: true });
+                const job: FixJob = kind === "conflict" ? { kind, pr, route: { kind: "fresh" } } : fixJob(pr, [...sessions.values()], shelf, kind);
+                if (kind === "rereview" && job.route.kind === "fresh") return json(res, { review: true });
                 const run = fixer.start(job);
                 return json(res, { run, ...(job.route.kind === "pane" ? { blockId: job.route.blockId, tabId: job.route.tabId, prompt: fixPrompt(job) } : {}) });
             }

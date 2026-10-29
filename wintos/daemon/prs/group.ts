@@ -49,7 +49,7 @@ export const SLA_WORKING_DAYS = 2;
 export const DRAFT_SLA_WORKING_DAYS = 5;
 
 const DAY = 86_400_000;
-const redChecks = (pr: PR) => pr.checks === "FAILURE" || pr.checks === "ERROR";
+export const redChecks = (pr: PR) => pr.checks === "FAILURE" || pr.checks === "ERROR";
 const sla = (pr: PR) => (pr.isDraft ? DRAFT_SLA_WORKING_DAYS : SLA_WORKING_DAYS);
 export const lastMovement = (pr: PR) => pr.mergedAt ?? pr.movedAt ?? pr.lastReviewAt ?? pr.createdAt;
 // The one urgency order, wherever PRs are ranked: the queue's groups top to bottom, then the

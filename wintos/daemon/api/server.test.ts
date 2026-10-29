@@ -429,6 +429,10 @@ describe("the PR fixer", () => {
         { repo: "o/r", number: 5, url: CONFLICTED, title: "t", author: "me", isDraft: false, createdAt: "", conflict: true, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b5", base: "main", head: "h5" },
         { repo: "o/r", number: 9, url: "https://github.com/o/r/pull/9", title: "t", author: "me", isDraft: false, createdAt: "", conflict: true, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b9", base: "main", head: "h9" },
         { repo: "o/r", number: 6, url: RED, title: "t", author: "me", isDraft: false, createdAt: "", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b6", head: "h6", checks: "FAILURE" },
+        { repo: "o/r", number: 4, url: `${RED.slice(0, -1)}4`, title: "t", author: "me", isDraft: false, createdAt: "", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b4", head: "h4", checks: "SUCCESS", reviewDecision: "APPROVED" },
+        { repo: "o/r", number: 3, url: `${RED.slice(0, -1)}3`, title: "t", author: "ana", isDraft: false, createdAt: "", conflict: false, requestedMe: true, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b3", head: "h3" },
+        { repo: "o/r", number: 2, url: `${RED.slice(0, -1)}2`, title: "t", author: "ana", isDraft: false, createdAt: "", conflict: false, requestedMe: true, requestedTeam: false, reviewedByMe: true, reviewers: [], additions: 1, deletions: 1, branch: "b2", head: "h2" },
+        { repo: "o/r", number: 1, url: `${RED.slice(0, -1)}1`, title: "t", author: "me", isDraft: false, createdAt: "", conflict: true, mergedAt: "2026-10-28T10:00:00Z", requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b1", head: "h1" },
     ];
     const until = async <T>(f: () => Promise<T>) => {
         for (let i = 0; i < 100; i++) {
@@ -481,6 +485,22 @@ describe("the PR fixer", () => {
         await post("/fixer/settings", { conflicts: true });
         await post("/plugins/gh-prs/run", {});
         await until(async () => (await fixerOf()).runs.length === 2);
+    });
+
+    test("f: each row's next step, a review opened by the window, nothing for a merged PR", async () => {
+        const dir = await start(true);
+        await until(async () => (await (await fetch(base + "/state")).json()).plugins["gh-prs"]);
+        const next = (n: number) => post("/fixer/next", { url: `${RED.slice(0, -1)}${n}` });
+        expect((await (await next(4)).json()).run).toMatchObject({ kind: "merge", route: "fresh" });
+        await until(async () => (await fixerOf()).runs.some((r: { kind: string; exit?: number }) => r.kind === "merge" && r.exit === 0));
+        expect(readFileSync(join(dir, "args"), "utf8")).toContain("asked to merge");
+        expect(await (await next(3)).json()).toEqual({ review: true });
+        expect(await (await next(2)).json()).toEqual({ review: true });
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [`${RED.slice(0, -1)}2`] });
+        expect(await (await next(2)).json()).toMatchObject({ blockId: "blk-1", run: { kind: "rereview", route: "pane" } });
+        expect((await next(1)).status).toBe(409);
+        expect((await post("/fixer/next", { url: "https://github.com/o/r/pull/77" })).status).toBe(404);
     });
 
     test("red CI, dispatched: typed into the live owning session's pane; not red is refused", async () => {

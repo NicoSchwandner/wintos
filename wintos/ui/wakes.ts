@@ -3,7 +3,7 @@ import { ObjectService } from "@/app/store/services";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { getLayoutModelForStaticTab, LayoutTreeActionType, newLayoutNode, type LayoutTreeInsertNodeAction } from "@/layout/index";
 import { useEffect } from "react";
-import { wakePrompt, type Wakes } from "../daemon/wakes/wakes";
+import { wakeId, wakePrompt, type Wakes } from "../daemon/wakes/wakes";
 import type { Session } from "../daemon/sessions/reduce";
 import type { Shelved } from "../daemon/shelf/shelf";
 import { resumePane } from "./focus";
@@ -14,12 +14,13 @@ import { daemonFetch } from "./useWintos";
 // What this window does about the due wakes of its own tab: type one into its session's pane
 // between turns (a prompt typed mid-turn would queue behind work the session is still doing), or
 // resume a shelved session in a new pane, which is typed into once it runs.
-export type Delivery = { kind: "type"; sessionId: string; blockId: string; text: string } | { kind: "resume"; sessionId: string; script: string };
+// A session with two due wakes gets one at a time: typing the first starts a turn.
+export type Delivery = { kind: "type"; id: string; sessionId: string; blockId: string; text: string } | { kind: "resume"; sessionId: string; script: string };
 export function deliverable(wakes: Wakes, sessions: Session[], shelf: Shelved[], tabId: string): Delivery[] {
     return Object.values(wakes).flatMap((w): Delivery[] => {
         if (!w.due) return [];
         const s = sessions.find((x) => x.id === w.sessionId && x.state !== "ended");
-        if (s) return s.tabId === tabId && s.blockId && s.state !== "working" ? [{ kind: "type", sessionId: s.id, blockId: s.blockId, text: wakePrompt(w) }] : [];
+        if (s) return s.tabId === tabId && s.blockId && s.state !== "working" ? [{ kind: "type", id: wakeId(w), sessionId: s.id, blockId: s.blockId, text: wakePrompt(w) }] : [];
         const shelved = shelf.find((x) => x.sessionId === w.sessionId);
         return shelved ? [{ kind: "resume", sessionId: w.sessionId, script: shelved.script }] : [];
     });
@@ -29,8 +30,9 @@ export function deliverable(wakes: Wakes, sessions: Session[], shelf: Shelved[],
 // one reopens its project on the waking session, which is then typed into as usual.
 export type ClosedWake = { projectId: string; title: string; sessionId: string; script: string; due: number; line: string };
 export function closedWakes(wakes: Wakes, shelf: Record<string, Shelved[]>, projects: { id?: string; title?: string }[], tabIds: string[], ref: (url: string) => string): ClosedWake[] {
-    return Object.values(wakes).flatMap((w) => {
-        if (!w.due) return [];
+    const due = Object.values(wakes).filter((w) => w.due);
+    // One row per session, for its first due wake: opening it delivers the rest in turn.
+    return due.filter((w, i) => due.findIndex((x) => x.sessionId === w.sessionId) === i).flatMap((w) => {
         const projectId = Object.keys(shelf).find((id) => !tabIds.includes(id) && shelf[id].some((x) => x.sessionId === w.sessionId));
         const item = projectId && shelf[projectId].find((x) => x.sessionId === w.sessionId);
         if (!projectId || !item) return [];
@@ -70,7 +72,7 @@ export function useWakeDelivery(wakes: Wakes | undefined, sessions: Session[] | 
                 continue;
             }
             busy.add(d.sessionId);
-            void daemonFetch(`/wakes/${encodeURIComponent(d.sessionId)}/delivered`, { method: "POST", body: {} })
+            void daemonFetch(`/wakes/${encodeURIComponent(d.id)}/delivered`, { method: "POST", body: {} })
                 .then((r) => (r.ok ? typeIntoPane(d.blockId, d.text) : undefined))
                 .catch(() => {})
                 .finally(() => busy.delete(d.sessionId));

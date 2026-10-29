@@ -10,8 +10,14 @@ export const isWakeEvent = (e: unknown): e is WakeEvent => (WAKE_EVENTS as reado
 // due: when the event was seen; it is typed once the session's pane is live and between turns.
 // lines: for a re-review, the lines of logic changed since your review.
 export type Wake = { sessionId: string; pr: string; until: WakeEvent; prompt: string; at: number; expires: number; due?: number; lines?: number };
-// One per session: a session that sets a second one has changed its mind.
+// By wakeId: a session holds one wake per PR and event, so it can wait for review feedback and for
+// the merge at once; setting the same one again has changed its mind about the prompt.
 export type Wakes = Record<string, Wake>;
+export const wakeId = (w: Pick<Wake, "sessionId" | "pr" | "until">) => `${w.sessionId} ${w.until} ${w.pr}`;
+// A session's wakes, the due ones first, then the latest set.
+export const wakesOf = (wakes: Wakes, sessionId: string): Wake[] => Object.values(wakes).filter((w) => w.sessionId === sessionId).sort((a, b) => (b.due ?? 0) - (a.due ?? 0) || b.at - a.at);
+// A .wakes.json keyed any other way (by session id) loads with each wake under its wakeId.
+export const rekeyed = (wakes: Wakes): Wakes => Object.fromEntries(Object.values(wakes).map((w) => [wakeId(w), w]));
 
 // What a PR's state is now, as far as the events go. checks: its last commit's CI.
 // requestedAgain: you or your team are requested and you reviewed it before; logicLines: what

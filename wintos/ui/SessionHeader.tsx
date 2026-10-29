@@ -52,11 +52,12 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                 <div data-wintos="session-wake" style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, color: T.blue, whiteSpace: "nowrap" }} title={h.wake.prompt}>
                     <span style={{ flexShrink: 0 }}>{h.wake.due ? "wakes now" : wakesWhen(h.wake, state && prRef(state, h.wake.pr))}:</span>
                     <span style={{ color: T.secondary, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.wake.prompt}</span>
+                    {h.moreWakes && <span style={{ flexShrink: 0, color: T.muted }}>· {h.moreWakes} more</span>}
                     <button
                         type="button"
                         data-wintos="wake-cancel"
                         tabIndex={-1}
-                        title="cancel the wake"
+                        title={h.moreWakes ? "cancel its wakes" : "cancel the wake"}
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => void daemonFetch(`/blocks/${encodeURIComponent(blockId)}/wake/cancel?session=${encodeURIComponent(s.id)}`, { method: "POST", body: {} }).catch(() => {})}
                         style={{ flexShrink: 0, padding: "0 4px", background: "transparent", border: "none", cursor: "pointer", color: T.muted, fontSize: 13, lineHeight: 1 }}

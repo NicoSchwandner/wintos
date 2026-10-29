@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { afterCheck, expiresAt, isLogic, logicLinesOf, reached, rollup, wakePrompt, waitingOn, wakesWhen, type PrNow, type Wake } from "./wakes";
+import { afterCheck, expiresAt, isLogic, logicLinesOf, reached, rekeyed, rollup, wakeId, wakePrompt, wakesOf, waitingOn, wakesWhen, type PrNow, type Wake } from "./wakes";
 
 const pr = (o: Partial<PrNow> = {}): PrNow => ({ state: "OPEN", checks: "pending", released: false, ...o });
 const URL = "https://github.com/o/r/pull/7";
@@ -90,4 +90,13 @@ describe("logicLinesOf", () => {
         expect(logicLinesOf([{ f: "src/A.cs", n: 10 }, { f: "src/ATests.cs", n: 30 }, { f: "src/FromBase.cs", n: 99 }, { f: "README.md", n: 5 }], ["src/A.cs", "src/ATests.cs", "README.md"])).toBe(10));
     test("a PR of Markdown only (a rules repo): its Markdown is its logic, tooling folders still not", () =>
         expect(logicLinesOf([{ f: "content/rules/x.md", n: 40 }, { f: ".claude/notes.md", n: 7 }], ["content/rules/x.md", ".claude/notes.md"])).toBe(40));
+});
+
+describe("several wakes per session", () => {
+    test("wakesOf: one session's, the due first, then the latest set; rekeyed: the old one-per-session file", () => {
+        const a = wake({ until: "comments", at: 1 }), b = wake({ until: "merged", at: 2 }), c = wake({ until: "green", at: 3, due: 9 });
+        const wakes = rekeyed({ s: a, t: b, u: c, x: wake({ sessionId: "other" }) });
+        expect(Object.keys(wakes)).toContain(wakeId(a));
+        expect(wakesOf(wakes, a.sessionId).map((w) => w.until)).toEqual(["green", "merged", "comments"]);
+    });
 });

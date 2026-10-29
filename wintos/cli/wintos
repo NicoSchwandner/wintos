@@ -3,7 +3,7 @@
 #   wintos title <words…>              name this tab's project (used by Claude)
 #   wintos wait <what…>                end this turn parked on something outside (used by Claude)
 #   wintos wake <event> <pr> <prompt…> park until a PR is green, merged, released, re-requested or commented on, then get the prompt (used by Claude)
-#   wintos wake cancel                 drop this session's wake
+#   wintos wake cancel                 drop this session's wakes
 #   wintos ask <kind> [<what…>]       end this turn waiting on the developer: answer, decide, approve or unblock
 #   wintos done                        end this turn done: nothing waits on the developer (used by Claude)
 #   wintos status <line…>              what this session is doing now, shown on its pane (used by Claude)
@@ -68,8 +68,9 @@ wake)
 e.g.  wintos wake green acme/api#123 "CI is green: submit the approval on #123"
       wintos wake released https://github.com/o/r/pull/285 "check the re-embed progress in prod and report"
       wintos wake rereview o/r#90 "re-review the fixes against your earlier comments"
-      wintos wake cancel     (drops it)
-One wake per session; a new one replaces it. It expires after 5 working days.'
+      wintos wake cancel     (drops them all)
+One wake per PR and event: a session can wait for feedback and the merge at once; setting the
+same PR and event again replaces it. A wake expires after 5 working days.'
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID): a wake types into this pane, so run it from the session that should continue"
     if [ "${1:-}" = cancel ]; then
         curl -sf -m 2 -X POST "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/wake/cancel$SESSION_Q" || die "wintosd not reachable on port $PORT"

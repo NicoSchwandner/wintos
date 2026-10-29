@@ -955,25 +955,41 @@ describe("wakes", () => {
     const until = async (f: () => Promise<boolean>) => {
         for (let i = 0; i < 100 && !(await f()); i++) await new Promise((r) => setTimeout(r, 10));
     };
+    const id = (until: string) => `${prompt.session_id} ${until} ${URL7}`;
+    const delivered = (until: string) => post(`/wakes/${encodeURIComponent(id(until))}/delivered`, {});
 
     test("set: the session parks on it; it turns due when the event comes, once delivered it is gone", async () => {
         expect((await post("/blocks/blk-1/wake", { until: "released", pr: "o/r#7", prompt: "check the re-embed in prod" })).status).toBe(200);
         const s = await st();
         // Mid-turn, as a session runs it: the turn ends parked.
-        expect([s.wakes[prompt.session_id].pr, s.sessions[0].parkPending, s.sessions[0].parkedOn]).toEqual([URL7, true, "o/r#7 to be released"]);
+        expect([s.wakes[id("released")].pr, s.sessions[0].parkPending, s.sessions[0].parkedOn]).toEqual([URL7, true, "o/r#7 to be released"]);
         pr = { state: "MERGED", checks: "green", released: true };
-        await until(async () => !!(await st()).wakes[prompt.session_id]?.due);
-        expect((await st()).wakes[prompt.session_id].due).toBeGreaterThan(0);
-        expect((await post(`/wakes/${prompt.session_id}/delivered`, {})).status).toBe(200);
-        expect((await post(`/wakes/${prompt.session_id}/delivered`, {})).status).toBe(409);
+        await until(async () => !!(await st()).wakes[id("released")]?.due);
+        expect((await st()).wakes[id("released")].due).toBeGreaterThan(0);
+        expect((await delivered("released")).status).toBe(200);
+        expect((await delivered("released")).status).toBe(409);
         expect((await st()).wakes).toEqual({});
     });
 
     test("not due before its event, and dropped when it can't happen any more", async () => {
         await post("/blocks/blk-1/wake", { until: "merged", pr: URL7, prompt: "update the docs" });
-        expect((await post(`/wakes/${prompt.session_id}/delivered`, {})).status).toBe(409);
+        expect((await delivered("merged")).status).toBe(409);
         pr = { state: "CLOSED", checks: "none", released: false };
-        await until(async () => !(await st()).wakes[prompt.session_id]);
+        await until(async () => !(await st()).wakes[id("merged")]);
+        expect((await st()).wakes).toEqual({});
+    });
+
+    test("a session waits for feedback and the merge at once; the same PR and event again replaces it", async () => {
+        await post("/blocks/blk-1/wake", { until: "comments", pr: URL7, prompt: "work the comments" });
+        await post("/blocks/blk-1/wake", { until: "merged", pr: URL7, prompt: "run /pr-merged" });
+        await post("/blocks/blk-1/wake", { until: "merged", pr: URL7, prompt: "run /pr-merged now" });
+        expect(Object.keys((await st()).wakes).sort()).toEqual([id("comments"), id("merged")]);
+        expect((await st()).wakes[id("merged")].prompt).toBe("run /pr-merged now");
+        pr = { state: "MERGED", checks: "green", released: false };
+        await until(async () => !!(await st()).wakes[id("merged")]?.due);
+        // A merged PR gets no more feedback: that wake goes, the merge's waits to be typed.
+        expect(Object.keys((await st()).wakes)).toEqual([id("merged")]);
+        expect(await (await post("/blocks/blk-1/wake/cancel", {})).text()).toBe("cancelled");
         expect((await st()).wakes).toEqual({});
     });
 

@@ -21,7 +21,7 @@ import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
-import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, WAKE_EVENTS, waitingOn, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
+import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
 import { fetchDone, unlisted } from "../prs/done";
 import { DEFAULT_PORT } from "../../instance";
@@ -62,7 +62,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
     warmRecap.unref();
     // Each wake's PR is asked about on its own: a PR merged into main has left the PR list.
     const wakesFile = join(opts.root, ".wakes.json");
-    let wakes = readJson<Wakes>(wakesFile, {});
+    let wakes = rekeyed(readJson<Wakes>(wakesFile, {}));
     const saveWakes = () => writeFileSync(wakesFile, JSON.stringify(wakes));
     let checking = false;
     const checkWakes = async () => {
@@ -720,8 +720,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const live = liveIn(sessions, decodeURIComponent(wake[1]), sid);
                 if (!live) return send(res, 400, "no live Claude session in this pane: run wintos wake from the session that should continue");
                 if (wake[2]) {
-                    const had = !!wakes[live.id];
-                    delete wakes[live.id];
+                    const had = Object.values(wakes).some((w) => w.sessionId === live.id);
+                    wakes = Object.fromEntries(Object.entries(wakes).filter(([, w]) => w.sessionId !== live.id));
                     saveWakes();
                     broadcast();
                     return send(res, 200, had ? "cancelled" : "no wake was set");
@@ -734,7 +734,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!prompt || prompt.length > MAX_PROMPT) return send(res, 400, `need the prompt to continue with, up to ${MAX_PROMPT} characters: what you will do once it happens, written as an instruction to yourself`);
                 const now = Date.now();
                 const w = { sessionId: live.id, pr: link, until: b.until, prompt, at: now, expires: expiresAt(now) };
-                wakes = { ...wakes, [live.id]: w };
+                wakes = { ...wakes, [wakeId(w)]: w };
                 saveWakes();
                 sessions = parkSession(sessions, live.blockId, waitingOn(w), now, live.id);
                 saveSessions();
@@ -757,7 +757,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             const delivered = /^\/wakes\/([^/]+)\/delivered$/.exec(url.pathname);
             if (req.method === "POST" && delivered) {
                 const id = decodeURIComponent(delivered[1]);
-                if (!wakes[id]?.due) return send(res, 409, "no wake due for that session");
+                if (!wakes[id]?.due) return send(res, 409, "no such wake due");
                 delete wakes[id];
                 saveWakes();
                 broadcast();

@@ -26,11 +26,12 @@ export function updateWatch(dir: string, onChange: () => void, everyMs = 60_000)
     return { behind: () => behind, stop: () => clearInterval(timer), repo };
 }
 
-// restart.sh rebuilds and restarts this WintOS, the daemon included, so it runs on its own:
-// detached, its output in a log. ELECTRON_RUN_AS_NODE is the daemon's own and would turn the
-// new Electron into a plain Node.
+// restart.sh rebuilds and restarts this WintOS, the daemon included, so it runs on its own, its
+// output in a log. It must not descend from WintOS: macOS pkill skips the caller's ancestors and
+// would leave the old one running, so a shell that exits at once hands it to launchd.
+// ELECTRON_RUN_AS_NODE is the daemon's own and would turn the new Electron into a plain Node.
 export function restart(repo: string, dev: boolean, log = "/tmp/wintos-update.log"): void {
     const { ELECTRON_RUN_AS_NODE: _node, ...env } = process.env;
     const out = openSync(log, "w");
-    spawn("/bin/bash", [join(repo, "wintos", "restart.sh"), ...(dev ? ["--dev"] : [])], { cwd: repo, env, detached: true, stdio: ["ignore", out, out] }).unref();
+    spawn("/bin/sh", ["-c", '"$0" "$@" </dev/null & exit 0', join(repo, "wintos", "restart.sh"), ...(dev ? ["--dev"] : [])], { cwd: repo, env, detached: true, stdio: ["ignore", out, out] }).unref();
 }

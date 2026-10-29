@@ -34,6 +34,7 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         item("Open Page in Browser", "open-external", "Shift+Cmd+U"),
         item("Show Snoozed Projects", "show-snoozed", "Alt+Cmd+S"),
         item("Restart Terminal", "restart-terminal", "Alt+Cmd+R"),
+        item("Update WintOS", "update", "Alt+Cmd+U"),
         item("Tick Off Today", "tick", "Alt+Cmd+X"),
         { type: "separator" },
         item("Focus Left", "focus-left", "Cmd+H"),

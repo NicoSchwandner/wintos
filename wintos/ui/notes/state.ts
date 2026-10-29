@@ -15,4 +15,5 @@ export const renamingAtom = atom(null as string | null); // the tab whose title 
 export const tickModeAtom = atom(false);
 // ⌥⌘R pressed once: the terminal it would restart, until a second press or 3 s.
 export const restartArmedAtom = atom(null as string | null);
+export const updateArmedAtom = atom(false);
 export const closeArmedAtom = atom(null as string | null); // the pane a second ⌘W closes

@@ -2,7 +2,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync
 import type { AddressInfo } from "net";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { execFileSync } from "child_process";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import WebSocket from "ws";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
@@ -1051,5 +1052,24 @@ describe("done PRs", () => {
         await post("/plugins/gh-prs/run", {});
         await new Promise((r) => setTimeout(r, 200));
         expect(asked).toEqual([[MERGED]]);
+    });
+});
+
+describe("update", () => {
+    test("the state counts the checkout's new commits, and /update restarts from it only then", async () => {
+        const repo = mkdtempSync(join(tmpdir(), "wintos-checkout-"));
+        const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, encoding: "utf8" });
+        git("init", "-q");
+        for (const [k, v] of [["user.name", "t"], ["user.email", "t@example.com"], ["commit.gpgsign", "false"]]) git("config", k, v);
+        git("commit", "-q", "--allow-empty", "-m", "running");
+        const restart = vi.fn();
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", checkout: repo, updateEveryMs: 50, restart });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect((await post("/update", {})).status).toBe(409);
+        git("commit", "-q", "--allow-empty", "-m", "new");
+        await vi.waitFor(async () => expect((await (await fetch(`${base}/state`)).json()).update).toEqual({ behind: 1 }), { timeout: 5_000, interval: 100 });
+        expect((await post("/update", {})).status).toBe(202);
+        expect(restart).toHaveBeenCalledWith(execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: repo, encoding: "utf8" }).trim());
     });
 });

@@ -251,6 +251,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     out.push(action("copy-url", "Copy the focused page's url", "⇧⌘C", "copy-url"));
     out.push(action("external", "Open the focused page in your browser", "⇧⌘U", "open-external"));
     out.push(action("restart", "Restart the focused terminal", "⌥⌘R", "restart-terminal"));
+    out.push(action("update", "Update WintOS: rebuild and restart it", "⌥⌘U", "update"));
     out.push(action("keys", "Keyboard shortcuts", "⇧⌘K", "keymap"));
     return out;
 }

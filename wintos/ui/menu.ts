@@ -6,7 +6,7 @@ import { atoms, createBlock, createTab, getApi, getBlockComponentModel, isDev } 
 import { closeOverlay, editMine, enterProject, focusArea, focusSession, reopenProject, takeReopen, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
 import { closeWarning, paneCloseWarns } from "./sessions";
 import { toggleInbox } from "./inbox";
-import { mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, tickModeAtom, type MainView } from "./notes/state";
+import { mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, tickModeAtom, updateArmedAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, LayoutTreeActionType, NavigateDirection, type LayoutTreeSwapNodeAction } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
@@ -86,6 +86,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:i", "keyboard"],
     ["Shift:Cmd:u", "open-external"],
     ["Option:Cmd:c{KeyR}", "restart-terminal"],
+    ["Option:Cmd:c{KeyU}", "update"],
     ["Option:Cmd:c{KeyX}", "tick"],
     ["Option:Cmd:c{KeyL}", "rail"],
     ["Ctrl:Cmd:c{KeyH}", "carry-left"],
@@ -291,6 +292,7 @@ export function runAction(action: string): void {
     if (action === "open-external") return openExternal();
     if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));
     if (action === "restart-terminal") return restartTerminal();
+    if (action === "update") return updateWintos();
     if (action.startsWith("session-")) return toSession(Number(action.slice("session-".length)));
     if (action === "rail") return toggleRail();
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);
@@ -451,6 +453,20 @@ function openExternal(): void {
     const blockId = globalStore.get(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
     const url = blockId && focusedPageUrl(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId))));
     if (url) getApi().openExternal(url);
+}
+
+// ⌥⌘U: WintOS rebuilt and restarted from its checkout, once that has commits the running one
+// lacks. A restart ends every turn in flight, so while Claude works the first press only asks.
+function updateWintos(): void {
+    if (!currentState()?.update?.behind) return void flog("update: already up to date");
+    if (latestSessions().some((s) => s.state === "working") && !globalStore.get(updateArmedAtom)) {
+        globalStore.set(updateArmedAtom, true);
+        setTimeout(() => globalStore.set(updateArmedAtom, false), 3000);
+        return;
+    }
+    globalStore.set(updateArmedAtom, false);
+    flog("update: restarting");
+    void daemonFetch("/update", { method: "POST", body: {} });
 }
 
 // ⌥⌘R: the focused terminal's shell started again, for one that hangs (Wave's Force Restart).

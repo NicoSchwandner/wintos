@@ -24,6 +24,8 @@ import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, WAKE_EVENTS, waitingOn, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
 import { fetchDone, unlisted } from "../prs/done";
+import { DEFAULT_PORT } from "../../instance";
+import { restart as restartWintos, updateWatch } from "../update/update";
 import { capture, dismiss, readStore, STORE_PREFIX, watchHealth, type Health, type HeadsUp } from "../headsups/headsups";
 
 export type WintosServer = { http: http.Server; close: () => void };
@@ -44,7 +46,7 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]> }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
     const factsOf = (ids: string[], day: string) => {
@@ -255,6 +257,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         snoozes,
         seen,
         fixer: fixer.state(),
+        update: { behind: update?.behind() ?? 0 },
         ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
         keyboard,
         headsUps: Object.fromEntries(store.list().flatMap((p) => {
@@ -271,6 +274,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const frame = JSON.stringify(state());
         for (const s of sockets) s.send(frame);
     };
+    const update = opts.checkout ? updateWatch(opts.checkout, broadcast, opts.updateEveryMs) : undefined;
     // Sessions shelved before titles existed get theirs now.
     for (const list of Object.values(shelf)) for (const item of list) titleShelved(item);
 
@@ -602,6 +606,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, "");
             }
+            if (req.method === "POST" && url.pathname === "/update") {
+                if (!update?.repo || !update.behind()) return send(res, 409, "nothing to update: the checkout has no commits the running WintOS lacks");
+                (opts.restart ?? ((repo) => restartWintos(repo, port !== DEFAULT_PORT)))(update.repo);
+                return send(res, 202, "");
+            }
             if (req.method === "POST" && url.pathname === "/fixer/settings") {
                 const b = (await body(req)) as { conflicts?: unknown };
                 if (typeof b?.conflicts !== "boolean") return send(res, 400, "need conflicts: true or false");
@@ -809,6 +818,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             for (const w of storeWatchers.values()) w.close();
             clearInterval(warmRecap);
             clearInterval(wakeTimer);
+            update?.stop();
             runner.stop();
             clearTimeout(pending);
             for (const s of sockets) s.terminate();

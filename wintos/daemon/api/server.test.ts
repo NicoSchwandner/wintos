@@ -1093,3 +1093,18 @@ describe("update", () => {
         expect(restart).toHaveBeenCalledWith(execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: repo, encoding: "utf8" }).trim());
     });
 });
+
+test("⌥⌘A: a project's auto-close off and on again, kept across a restart", async () => {
+    const off = async () => (await (await fetch(`${base}/state`)).json()).autoCloseOff;
+    expect(await off()).toEqual([]);
+    expect((await post("/projects/tab-1/autoclose", { on: "no" })).status).toBe(400);
+    await post("/projects/tab-1/autoclose", { on: false });
+    await post("/projects/tab-1/autoclose", { on: false });
+    expect(await off()).toEqual(["tab-1"]);
+    srv.close();
+    srv = await startServer({ root, port: 0, token: "t0ken" });
+    base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+    expect(await off()).toEqual(["tab-1"]);
+    await post("/projects/tab-1/autoclose", { on: true });
+    expect(await off()).toEqual([]);
+});

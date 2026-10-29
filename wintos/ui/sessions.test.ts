@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { attachments, closeWarning, liveSessions, paneCloseWarns, unreadSessions } from "./sessions";
+import { attachments, autoClosable, closeWarning, liveSessions, paneCloseWarns, unreadSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
 
@@ -54,3 +54,12 @@ test("a pane attaches its session once: two panes resuming one session never tak
     expect(attachments(panes, [s()], "t", new Set(["fork@v1"]))).toEqual([]);
 });
 
+describe("autoClosable", () => {
+    const s = (id: string, o: Partial<Session> = {}): Session => ({ id, tabId: "t", blockId: `b-${id}`, state: "done", since: 1, lastAt: 5, turnEndedAt: 5, ...o });
+    const seen = { a: 9, b: 9, c: 1, d: 9, e: 9 };
+    test("done, read, and every PR merged or closed; this tab only", () => {
+        const sessions = [s("a"), s("b", { prs: ["pr/1"] }), s("c"), s("d", { state: "waiting" }), s("e", { tabId: "other" })];
+        expect(autoClosable(sessions, "t", seen, new Set()).map((x) => x.id)).toEqual(["a", "b"]);
+        expect(autoClosable(sessions, "t", seen, new Set(["pr/1"])).map((x) => x.id)).toEqual(["a"]);
+    });
+});

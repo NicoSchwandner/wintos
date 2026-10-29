@@ -745,6 +745,39 @@ await scenario("30 · in the PRs tab, f names each row's next step: a review row
     await until("f offers the review", async () => /\bf\s*(re-)?review\b/.test(await evalIn(inbox, `document.querySelector("[data-wintos=pr-next]")?.innerText ?? ""`)));
 });
 
+await scenario("31 · a session that is done, read and has no open PR goes to the shelf once its project is out of sight; ⌥⌘A turns that off", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const st = async () => await (await fetch("http://127.0.0.1:7731/state")).json();
+    await api("/plugins/gh-prs/run", {});
+    await until("the PR list, which tells open PRs", async () => !!(await st()).plugins?.["gh-prs"]?.data, 60000);
+    // A project closed with its last session has no row left.
+    const blockIds = () => JSON.parse(sql(`select coalesce(data->'blockids', '[]') from db_tab where oid='${tabId}'`) || "[]") ?? [];
+    const pane = blockIds()[0];
+    const ev = (hook_event_name, extra = {}) => api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-ac", hook_event_name, ...extra } });
+    const finish = async () => {
+        await ev("UserPromptSubmit", { prompt: "e2e auto-close" });
+        await api(`/blocks/${pane}/done`, {});
+        await ev("Stop", { last_assistant_message: "Done." });
+        await api("/sessions/e2e-ac/seen", {});
+        await until("the session done", async () => (await st()).sessions.some((x) => x.id === "e2e-ac" && x.state === "done"));
+    };
+    // Off first: out of sight, the pane stays.
+    await press(t, "a", { mods: ["meta", "alt"], code: "KeyA" });
+    await until("auto-close off", async () => (await st()).autoCloseOff?.includes(tabId));
+    await finish();
+    await toInbox();
+    await sleep(1500);
+    if (!blockIds().includes(pane)) throw new Error("auto-close off, and the pane closed anyway");
+    await api(`/projects/${tabId}/autoclose`, { on: true });
+    await until("its pane closed", () => !blockIds().includes(pane), 10000);
+    // The e2e pane resumes no real Claude, so nothing is shelved; ⌘Z can bring it back all the same.
+    const inbox = await visible();
+    const undo = await evalIn(inbox, `localStorage.getItem("wintos:undo") ?? ""`);
+    if (!undo.includes(tabId)) throw new Error("the auto-close left nothing for ⌘Z");
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

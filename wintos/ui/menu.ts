@@ -87,6 +87,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:u", "open-external"],
     ["Option:Cmd:c{KeyR}", "restart-terminal"],
     ["Option:Cmd:c{KeyU}", "update"],
+    ["Option:Cmd:c{KeyA}", "autoclose"],
     ["Option:Cmd:c{KeyX}", "tick"],
     ["Option:Cmd:c{KeyL}", "rail"],
     ["Ctrl:Cmd:c{KeyH}", "carry-left"],
@@ -293,6 +294,7 @@ export function runAction(action: string): void {
     if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));
     if (action === "restart-terminal") return restartTerminal();
     if (action === "update") return updateWintos();
+    if (action === "autoclose") return toggleAutoClose();
     if (action.startsWith("session-")) return toSession(Number(action.slice("session-".length)));
     if (action === "rail") return toggleRail();
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);
@@ -437,8 +439,9 @@ function closeProject(): void {
 }
 
 // Closing the open project lands on the uppermost one in the sidebar, not on Wave's neighbour tab.
-export function closeProjectTab(tabId: string, confirm: boolean): void {
-    const top = tabId === globalStore.get(atoms.staticTabId) ? topProject(tabId) : undefined;
+// land: false for a project closed while you are elsewhere (auto-close), which leaves you there.
+export function closeProjectTab(tabId: string, confirm: boolean, land = true): void {
+    const top = land && tabId === globalStore.get(atoms.staticTabId) ? topProject(tabId) : undefined;
     if (top) enterProject(top);
     const tab = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)));
     const metas = (tab?.blockids ?? []).map((id) => globalStore.get(getWaveObjectAtom<Block>(makeORef("block", id)))?.meta).filter((m): m is MetaType => !!m);
@@ -453,6 +456,14 @@ function openExternal(): void {
     const blockId = globalStore.get(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
     const url = blockId && focusedPageUrl(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId))));
     if (url) getApi().openExternal(url);
+}
+
+// ⌥⌘A: whether the open project's finished sessions, and then the project, close by themselves.
+function toggleAutoClose(): void {
+    const tabId = globalStore.get(atoms.staticTabId);
+    if (isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId))))) return;
+    const off = currentState()?.autoCloseOff?.includes(tabId) ?? false;
+    void daemonFetch(`/projects/${encodeURIComponent(tabId)}/autoclose`, { method: "POST", body: { on: off } });
 }
 
 // ⌥⌘U: WintOS rebuilt and restarted from its checkout, once that has commits the running one

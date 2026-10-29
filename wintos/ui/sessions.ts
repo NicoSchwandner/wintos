@@ -24,6 +24,12 @@ export function paneCloseWarns(sessions: Session[], blockId: string, armed: stri
     return armed !== blockId && sessions.some((s) => s.blockId === blockId && s.state === "working");
 }
 
+// Auto-close: the sessions of a tab that said they're done, that you have read, and whose PRs
+// are all merged or closed. open: the urls of PRs still open.
+export function autoClosable(sessions: Session[], tabId: string, seen: Record<string, number> | undefined, open: ReadonlySet<string>): Session[] {
+    return sessions.filter((s) => s.tabId === tabId && s.state === "done" && !isUnread(s, seen ?? {}) && !(s.prs ?? []).some((u) => open.has(u)));
+}
+
 // A reply you haven't seen: the session's last turn ended after you last looked at it.
 export function unreadSessions(sessions: Session[], tabId: string, seen: Record<string, number> | undefined): Session[] {
     return sessions.filter((s) => s.tabId === tabId && isUnread(s, seen ?? {}));

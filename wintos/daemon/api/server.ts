@@ -258,6 +258,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         seen,
         fixer: fixer.state(),
         update: { behind: update?.behind() ?? 0 },
+        autoCloseOff,
         ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
         keyboard,
         headsUps: Object.fromEntries(store.list().flatMap((p) => {
@@ -279,6 +280,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
     for (const list of Object.values(shelf)) for (const item of list) titleShelved(item);
 
     // Kept next to the projects: a file there is not a project (those are folders).
+    // The projects whose finished sessions stay open (⌥⌘A): auto-close is on everywhere else.
+    const autoCloseOffFile = join(opts.root, ".autoclose-off.json");
+    let autoCloseOff = readJson<string[]>(autoCloseOffFile, []);
     const snoozeFile = join(opts.root, ".snoozes.json");
     let snoozes = readJson<Snoozes>(snoozeFile, {});
     const fixer = new Fixer(opts.root, () => broadcast(), opts.fixCmd, opts.fixCwd);
@@ -530,6 +534,16 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const r = store.saveMine(decodeURIComponent(mine[1]), await formatMarkdown(b.text), typeof b.baseMtime === "number" ? b.baseMtime : undefined);
                 if (r === "no project") return send(res, 404, "no project for this tab");
                 if (r === "conflict") return send(res, 409, "mine.md changed on disk since you started editing");
+                return send(res, 200, "");
+            }
+            const autoClose = /^\/projects\/([^/]+)\/autoclose$/.exec(url.pathname);
+            if (req.method === "POST" && autoClose) {
+                const b = (await body(req)) as { on?: unknown };
+                if (typeof b?.on !== "boolean") return send(res, 400, "need on: true or false");
+                const tabId = decodeURIComponent(autoClose[1]);
+                autoCloseOff = b.on ? autoCloseOff.filter((t) => t !== tabId) : [...new Set([...autoCloseOff, tabId])];
+                writeFileSync(autoCloseOffFile, JSON.stringify(autoCloseOff));
+                broadcast();
                 return send(res, 200, "");
             }
             if (req.method === "POST" && url.pathname === "/prs/snooze") {

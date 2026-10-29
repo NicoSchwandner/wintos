@@ -1,17 +1,14 @@
 // The daily as items you curate: the summarizer proposes, you drop, lift to the top or rewrite.
-// What you did to a project's items on earlier days decides how its items start.
+// Each day starts fresh: what you dropped on earlier days doesn't carry over.
 
-// project: the project the item came from, which is what earlier choices are remembered by.
 export type StandupItem = { id: string; project: string; text: string; details: string[] };
 // top: when it was lifted, so the last one lifted leads.
-export type Choice = { project: string; drop?: boolean; top?: number; text?: string; details?: string[] };
+export type Choice = { drop?: boolean; top?: number; text?: string; details?: string[] };
 // examples: your rewrites, draft beside yours, for the summarizer to write like you next time.
 export type Curation = { days: Record<string, Record<string, Choice>>; examples: { draft: string; mine: string }[] };
 export type ShownItem = StandupItem & { dropped: boolean; top: boolean; edited: boolean };
 
 const EXAMPLES_KEPT = 3;
-// Dropped on this many days since it was last lifted: its items start dropped.
-const DROPS_TO_HIDE = 2;
 
 // "- [Project] Status: name" with "  - detail" lines under it. A bullet that names no project
 // it was given keeps the text and belongs to no project.
@@ -38,33 +35,20 @@ export function splitText(text: string): { text: string; details: string[] } {
     return { text: head.replace(/^[-*•]\s+/, "").trim(), details: rest.map((l) => l.replace(/^\s*[-*•]\s+/, "").trim()).filter(Boolean) };
 }
 
-// Whether a project's items start dropped on day: dropped on DROPS_TO_HIDE earlier days since the
-// last day you lifted one of its items.
-export function startsDropped(c: Curation, project: string, day: string): boolean {
-    if (!project) return false;
-    let drops = 0;
-    for (const d of Object.keys(c.days).filter((d) => d < day).sort()) {
-        const mine = Object.values(c.days[d]).filter((x) => x.project === project);
-        if (mine.some((x) => x.top)) drops = 0;
-        else if (mine.some((x) => x.drop)) drops++;
-    }
-    return drops >= DROPS_TO_HIDE;
-}
-
 // The day's items as you left them: your rewrites, lifted ones first (the last lifted leading),
-// dropped ones marked. An item you never touched starts as its project's history says.
+// dropped ones marked.
 export function shownItems(items: StandupItem[], c: Curation, day: string): ShownItem[] {
     const chosen = c.days[day] ?? {};
     const shown = items.map((i): ShownItem => {
         const x = chosen[i.id];
-        return { ...i, text: x?.text ?? i.text, details: x?.details ?? i.details, dropped: x?.drop ?? (!x?.top && startsDropped(c, i.project, day)), top: !!x?.top, edited: x?.text !== undefined };
+        return { ...i, text: x?.text ?? i.text, details: x?.details ?? i.details, dropped: !!x?.drop, top: !!x?.top, edited: x?.text !== undefined };
     });
     const at = (i: ShownItem) => chosen[i.id]?.top ?? 0;
     return [...shown.filter((i) => i.top).sort((a, b) => at(b) - at(a)), ...shown.filter((i) => !i.top)];
 }
 
 export function choose(c: Curation, day: string, item: StandupItem, change: { drop?: boolean; top?: boolean; text?: string }, now: number): Curation {
-    const was = c.days[day]?.[item.id] ?? { project: item.project };
+    const was = c.days[day]?.[item.id] ?? {};
     const next: Choice = { ...was };
     if (change.drop !== undefined) next.drop = change.drop;
     if (change.top !== undefined) next.top = change.top ? now : undefined;

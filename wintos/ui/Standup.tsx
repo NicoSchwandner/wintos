@@ -15,7 +15,7 @@ type Recap = { date: string; items: ShownItem[] };
 // For the daily: the last worked day as items the daemon proposes from where the time went, what
 // the PRs did and the sessions' recaps; then what you need from the team and today's plan, both
 // read now. Folded; m opens it. e curates: x drops an item (greyed here, gone when you read it
-// out), p lifts it to the top, ⏎ rewrites it. What you drop or lift is remembered per project.
+// out), p lifts it to the top, ⏎ rewrites it.
 export function Standup({ today, focus, panel }: { today: string; focus: string; panel: (p: { label: string; note?: string; keys?: React.ReactNode; children: React.ReactNode }) => React.ReactNode }) {
     const { state } = useWintos();
     const gh = state ? ghPrs(state) : undefined;

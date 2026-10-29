@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { choose, parseItems, shownItems, splitText, startsDropped, type Curation } from "./standup";
+import { choose, parseItems, shownItems, splitText, type Curation } from "./standup";
 
 const empty: Curation = { days: {}, examples: [] };
 const items = parseItems(
@@ -39,21 +39,8 @@ describe("choices", () => {
     });
 });
 
-describe("startsDropped", () => {
-    const drop = (c: Curation, day: string) => choose(c, day, items[0], { drop: true }, 0);
-    test("a project dropped on two earlier days starts dropped; one day is not enough", () => {
-        expect(startsDropped(drop(empty, "d1"), "Intake", "d3")).toBe(false);
-        const twice = drop(drop(empty, "d1"), "d2");
-        expect(startsDropped(twice, "Intake", "d3")).toBe(true);
-        expect(shownItems(items, twice, "d3")[0].dropped).toBe(true);
-        // Today's own choice wins, and a day isn't judged by itself or later days.
-        expect(shownItems(items, choose(twice, "d3", items[0], { drop: false }, 0), "d3")[0].dropped).toBe(false);
-        expect(startsDropped(twice, "Intake", "d2")).toBe(false);
-    });
-    test("lifting it on a later day starts the count again; items with no project never start dropped", () => {
-        const lifted = choose(drop(drop(empty, "d1"), "d2"), "d3", items[0], { top: true }, 1);
-        expect(startsDropped(lifted, "Intake", "d4")).toBe(false);
-        expect(startsDropped(drop(lifted, "d4"), "Intake", "d5")).toBe(false);
-        expect(startsDropped(empty, "", "d5")).toBe(false);
-    });
+test("a drop holds for its day only", () => {
+    const c = choose(choose(empty, "d1", items[0], { drop: true }, 0), "d2", items[0], { drop: true }, 0);
+    expect(shownItems(items, c, "d2")[0].dropped).toBe(true);
+    expect(shownItems(items, c, "d3")[0].dropped).toBe(false);
 });

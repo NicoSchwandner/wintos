@@ -1,4 +1,4 @@
-import type { Session } from "../sessions/reduce";
+import { liveSubagents, type Session } from "../sessions/reduce";
 
 // needs: your move, a turn waiting on you. read: a reply to read, nothing asked of you.
 export type Band = "needs" | "read" | "running" | "quiet";
@@ -18,7 +18,7 @@ export const STALE_MS = 14 * 86_400_000;
 // Only sessions put a project in Your move (a turn waiting on you) or To read (a reply you haven't
 // read). A PR that needs you is the PRs tab's to show.
 export function rank(tabIds: string[], sessions: Session[], now: number, touched: Record<string, number> = {}, seen: Record<string, number> = {}): Ranking {
-    const rows = tabIds.map((tabId) => rowOf(tabId, sessions.filter((s) => s.tabId === tabId), touched[tabId] ?? 0, seen));
+    const rows = tabIds.map((tabId) => rowOf(tabId, sessions.filter((s) => s.tabId === tabId), touched[tabId] ?? 0, seen, now));
     const byRecent = (a: Row, b: Row) => b.lastAt - a.lastAt;
     const byWait = (a: Row, b: Row) => b.waitingSince! - a.waitingSince!;
     const quietAll = rows.filter((r) => r.band === "quiet").sort(byRecent);
@@ -35,15 +35,18 @@ export function rank(tabIds: string[], sessions: Session[], now: number, touched
     };
 }
 
-function rowOf(tabId: string, sessions: Session[], touchedAt: number, seen: Record<string, number>): Row {
+function rowOf(tabId: string, sessions: Session[], touchedAt: number, seen: Record<string, number>, now: number): Row {
     const lastAt = Math.max(touchedAt, ...sessions.map((s) => s.lastAt), 0);
-    const unreadAt = sessions.filter((s) => isUnread(s, seen)).map((s) => s.turnEndedAt!);
-    const waiting = sessions.filter((s) => s.state === "waiting").map((s) => s.since);
+    // A turn that ended while its subagents still run comes back by itself when they report: it
+    // is Claude at work, not yet yours to answer or read.
+    const behind = (s: Session) => liveSubagents(s, now) > 0;
+    const unreadAt = sessions.filter((s) => !behind(s) && isUnread(s, seen)).map((s) => s.turnEndedAt!);
+    const waiting = sessions.filter((s) => !behind(s) && s.state === "waiting").map((s) => s.since);
     const unread = unreadAt.length ? { unread: true } : {};
     if (waiting.length) return { tabId, band: "needs", lastAt, sessions, waitingSince: Math.min(...waiting, ...unreadAt), ...unread };
     if (unreadAt.length) return { tabId, band: "read", lastAt, sessions, waitingSince: Math.min(...unreadAt), ...unread };
     // Running is Claude at work. Parked waits on something outside (a review, CI): nothing for you
     // and nothing running, so it is quiet, its row saying what it waits on.
-    if (sessions.some((s) => s.state === "working")) return { tabId, band: "running", lastAt, sessions };
+    if (sessions.some((s) => s.state === "working" || behind(s))) return { tabId, band: "running", lastAt, sessions };
     return { tabId, band: "quiet", lastAt, sessions };
 }

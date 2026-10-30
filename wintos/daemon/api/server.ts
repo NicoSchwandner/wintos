@@ -20,7 +20,7 @@ import { reassignPrs, touchPrs } from "../prs/owners";
 import { groupOf, type DonePr, type PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
-import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
+import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { trail } from "../sessions/trail";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
@@ -154,7 +154,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
     let reading = Promise.resolve();
     const readEndedTurn = (sessionId: string, message: string) => {
         const s = sessions.get(sessionId);
-        if (!s || s.state !== "waiting" || s.ask || !s.turnEndedAt) return;
+        // A turn that ended while its subagents run is not over: it is read when it really ends.
+        if (!s || s.state !== "waiting" || s.ask || !s.turnEndedAt || liveSubagents(s, Date.now())) return;
         const turnAt = s.turnEndedAt;
         const cmd = opts.recapCmd;
         reading = reading.then(async () => {

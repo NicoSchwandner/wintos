@@ -9,6 +9,17 @@ const s = (tabId: string, state: Session["state"], at: number, id = `${tabId}-${
 });
 
 describe("rank", () => {
+    test("a turn that ended while its subagents still run comes back by itself: running, not your move or to read", () => {
+        const behind = { ...s("t", "waiting", NOW - 60_000), turnEndedAt: NOW - 60_000, subagents: { a: NOW - 120_000 } };
+        const r = rank(["t"], [behind], NOW);
+        expect([r.needs, r.read, r.running.map((x) => x.tabId)]).toEqual([[], [], ["t"]]);
+    });
+
+    test("a subagent whose stop never came stops counting after a while, and the turn is yours again", () => {
+        const stale = { ...s("t", "waiting", NOW - 60_000), subagents: { a: NOW - 4 * 3_600_000 } };
+        expect(rank(["t"], [stale], NOW).needs.map((x) => x.tabId)).toEqual(["t"]);
+    });
+
     test("a session that said it is done is quiet, not needs-you", () => {
         const r = rank(["t"], [s("t", "done", NOW - 5)], NOW);
         expect([r.needs, r.running, r.quiet.map((x) => x.tabId)]).toEqual([[], [], ["t"]]);

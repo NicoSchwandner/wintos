@@ -8,6 +8,11 @@ const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
 
 describe("rowView", () => {
+    test("running behind an ended turn says what it waits for", () => {
+        const behind = { id: "a", tabId: "t", blockId: "b", state: "waiting", since: NOW, lastAt: NOW, subagents: { x: NOW - 1000, y: NOW - 500 } } as Session;
+        expect(rowView(row("running", { sessions: [behind] }), undefined, "T1", NOW).next).toBe("Waiting for 2 subagents; comes back by itself");
+    });
+
     test("needs: apricot next action, age since the wait began", () => {
         const v = rowView(row("needs", { waitingSince: NOW - 3 * 60_000 }), { dir: "/p", mtime: 0, title: "Invoice OCR", next: "Approve the plan", pr: ["Core#1"] }, "T1", NOW);
         expect(v).toMatchObject({ title: "Invoice OCR", next: "Approve the plan", tone: "apricot", meta: "Core#1", age: "3m" });

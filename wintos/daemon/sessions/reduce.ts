@@ -38,6 +38,11 @@ export type Session = {
     subagents?: Record<string, number>; // the subagents it started that have not stopped, by id: when each started
 };
 
+// The subagents a session still runs. One whose stop never came (its Claude was killed) would
+// count for good: past SUBAGENT_MAX_MS it no longer does.
+export const SUBAGENT_MAX_MS = 3 * 3_600_000;
+export const liveSubagents = (s: Session, now: number) => (s.state === "ended" ? 0 : Object.values(s.subagents ?? {}).filter((at) => now - at < SUBAGENT_MAX_MS).length);
+
 // A step starting with ? is the developer's call: the session stops there.
 // todos: what is in flight in the step now (`wintos todo`); the next step starts without them.
 export type Todo = { text: string; done: boolean };

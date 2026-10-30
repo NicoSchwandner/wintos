@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { atWork, attachments, autoClosable, closeWarning, liveSessions, paneCloseWarns, unreadSessions } from "./sessions";
+import { atWork, shownState, attachments, autoClosable, closeWarning, liveSessions, paneCloseWarns, unreadSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
 
@@ -78,4 +78,11 @@ describe("atWork: what a restart of WintOS would stop", () => {
             ], now),
         ).toEqual({ working: 1, subagents: 2 }));
     test("nothing at work", () => expect(atWork([s("x", "t", "waiting")], now)).toEqual({ working: 0, subagents: 0 }));
+});
+
+test("shownState: a turn that ended with its subagents still running shows as working", () => {
+    const now = 10 * 3_600_000;
+    expect(shownState({ ...s("a", "t", "waiting"), subagents: { x: now - 1000 } }, now)).toBe("working");
+    expect(shownState({ ...s("a", "t", "waiting"), subagents: { x: now - 4 * 3_600_000 } }, now)).toBe("waiting");
+    expect(shownState(s("a", "t", "parked"), now)).toBe("parked");
 });

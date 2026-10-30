@@ -778,6 +778,33 @@ await scenario("31 · a session that is done, read and has no open PR goes to th
     if (!undo.includes(tabId)) throw new Error("the auto-close left nothing for ⌘Z");
 });
 
+await scenario("32 · a turn that ends with its subagent still running sits in Running, saying it comes back by itself; its stop makes it your move", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    await press(t, "d", { mods: ["meta"] });
+    const blockId = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
+    await evalIn(t, `window.wintosLayout().focusNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(first)}).id)`);
+    const post = (hook_event_name, extra = {}) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-agent", hook_event_name, prompt: "e2e agent", ...extra } }) });
+    await post("UserPromptSubmit");
+    await post("SubagentStart", { agent_id: "e2e-a1" });
+    await post("Stop", { last_assistant_message: "Waiting for the review agent." });
+    const row = (band) => `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-band-group=${band}] [data-tabid='${tabId}']")].map((e) => e.innerText).join(" ")`;
+    const others = [];
+    for (const r of await renderers()) if ((await evalIn(r, "window.wintosTabId?.()")) !== tabId) others.push(r);
+    const elsewhere = (band, line) => until(`"${line}" in ${band} in another sidebar`, async () => { for (const r of others) if ((await evalIn(r, row(band))).includes(line)) return true; return false; });
+    await elsewhere("running", "comes back by itself");
+    await post("SubagentStop", { agent_id: "e2e-a1" });
+    try {
+        await until("the project in Your move", async () => { for (const r of others) if (await evalIn(r, row("needs"))) return true; return false; });
+    } catch (e) {
+        const st = (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((x) => x.id === "e2e-agent");
+        const bands = await Promise.all(others.map((r) => evalIn(r, `[...document.querySelectorAll("[data-band-group]")].map((g) => g.dataset.bandGroup + ":" + g.querySelectorAll("[data-tabid='${tabId}']").length).join(" ")`)));
+        throw new Error(`${e.message}; session ${JSON.stringify(st && { state: st.state, subagents: st.subagents, turnEndedAt: st.turnEndedAt })}; sidebars ${JSON.stringify(bands)}`);
+    }
+    await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

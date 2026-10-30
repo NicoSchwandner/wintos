@@ -9,7 +9,8 @@ import { SESSION_DOT, T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { wakesWhen } from "../daemon/wakes/wakes";
-import type { Lane } from "../daemon/sessions/reduce";
+import { liveSubagents, type Lane } from "../daemon/sessions/reduce";
+import { shownState } from "./sessions";
 import { prRef, relTime, sessionHeader, sessionName, urgentPr, type PrChip, type PrStatus } from "./view";
 
 
@@ -21,15 +22,17 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     const h = state ? sessionHeader(state, blockId) : undefined;
     if (!h) return null;
     const s = h.session;
+    const shown = shownState(s, now);
+    const agents = liveSubagents(s, now);
     const urgent = urgentPr(h);
     return (
         <div data-wintos="session-header" style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", gap: 5, padding: "7px 10px 8px 12px", borderBottom: `1px solid ${T.border}`, fontFamily: T.ui, fontSize: 12, minWidth: 0 }}>
             {h.tone && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: h.tone === "brick" ? T.brick : T.apricot }} />}
             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, whiteSpace: "nowrap" }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: SESSION_DOT[s.state] }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: SESSION_DOT[s.state] }} />
-                    {s.state}
-                    {s.state !== "working" && ` ${relTime(now - s.since)}`}
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: SESSION_DOT[shown] }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: SESSION_DOT[shown] }} />
+                    {shown}
+                    {shown !== s.state ? ` · ${agents} subagent${agents === 1 ? "" : "s"}` : s.state !== "working" && ` ${relTime(now - s.since)}`}
                 </span>
                 <span data-wintos="session-name" style={{ color: T.emphasis, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>{sessionName(s)}</span>
                 {s.name?.by === "session" && now - s.name.at < NAME_PROPOSAL_MS && <Key k="⌥⌘N" label={`change the name · ${Math.min(60, Math.ceil((NAME_PROPOSAL_MS - (now - s.name.at)) / 1000))}s`} />}

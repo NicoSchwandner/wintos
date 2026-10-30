@@ -12,7 +12,7 @@ import { closeProjectTab, confirmPaneClose, copiedAtAtom, focusedPageUrl, runKey
 import { openPalette } from "./Palette";
 import { closeArmedAtom, restartArmedAtom } from "./notes/state";
 import { paneOrder, stripPanes } from "./panes";
-import { attachments, autoClosable, liveSessions, unreadSessions } from "./sessions";
+import { attachments, autoClosable, liveSessions, shownState, unreadSessions } from "./sessions";
 import { SESSION_DOT, T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
@@ -102,16 +102,16 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                         tabIndex={-1}
                         data-key="⌘H / ⌘L"
                         onClick={() => focusSession({ tabId, blockId: c.blockId })}
-                        style={{ WebkitAppRegion: "no-drag", display: "inline-flex", alignItems: "center", gap: 7, maxWidth: 240, padding: "5px 10px", borderRadius: 8, border: `1px solid ${isOn ? T.borderActive : (STATE_BORDER[s?.state ?? ""] ?? T.border)}`, background: isOn ? T.cardActive : "transparent", color: isOn ? T.emphasis : T.secondary, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}
+                        style={{ WebkitAppRegion: "no-drag", display: "inline-flex", alignItems: "center", gap: 7, maxWidth: 240, padding: "5px 10px", borderRadius: 8, border: `1px solid ${isOn ? T.borderActive : (STATE_BORDER[s ? shownState(s, now) : ""] ?? T.border)}`, background: isOn ? T.cardActive : "transparent", color: isOn ? T.emphasis : T.secondary, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}
                     >
                         {s ? (
                             // Unread: a ring in the to-read colour until you have looked.
-                            <span style={{ width: 6, height: 6, flexShrink: 0, borderRadius: "50%", background: SESSION_DOT[s.state], boxShadow: unread.has(s.id) && s.state !== "waiting" ? `0 0 0 2px ${T.blue}` : undefined }} />
+                            <span style={{ width: 6, height: 6, flexShrink: 0, borderRadius: "50%", background: SESSION_DOT[shownState(s, now)], boxShadow: unread.has(s.id) && shownState(s, now) !== "waiting" ? `0 0 0 2px ${T.blue}` : undefined }} />
                         ) : (
                             <span style={{ color: T.muted }}>{GLYPH[c.kind as keyof typeof GLYPH]}</span>
                         )}
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
-                        {s?.state === "waiting" && <span style={{ color: T.apricot }}>{relTime(now - s.since)}</span>}
+                        {s && shownState(s, now) === "waiting" && <span style={{ color: T.apricot }}>{relTime(now - s.since)}</span>}
                     </button>
                 );
             })}

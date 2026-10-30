@@ -1,5 +1,5 @@
 import { isUnread, rank, type Ranking, type Row } from "../daemon/ranking/rank";
-import type { Session } from "../daemon/sessions/reduce";
+import { liveSubagents, type Session } from "../daemon/sessions/reduce";
 import type { Project } from "../daemon/projects/store";
 import { isSnoozed, projectPrs, type ProjectPrs } from "../daemon/prs/group";
 import type { Target } from "./sessions";
@@ -51,7 +51,9 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     if (row.band === "running") {
         // Parked beats the next action: it is the live reason nobody needs to act.
         const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
-        return { title, next: parkedOn ? `Waiting on ${parkedOn}` : (project?.next ?? "Claude is working"), tone: "secondary", age, meta };
+        const agents = row.sessions.some((s) => s.state === "working") ? 0 : row.sessions.reduce((n, s) => n + liveSubagents(s, now), 0);
+        const behind = agents && `Waiting for ${agents} subagent${agents === 1 ? "" : "s"}; comes back by itself`;
+        return { title, next: behind || (parkedOn ? `Waiting on ${parkedOn}` : (project?.next ?? "Claude is working")), tone: "secondary", age, meta };
     }
     const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
     // A PR that needs you no longer lifts the project: its line says so, quietly.

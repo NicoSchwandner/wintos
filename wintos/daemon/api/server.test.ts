@@ -149,6 +149,21 @@ describe("wintosd API", () => {
         expect(await settled((s) => s.state === "done")).toMatchObject({ state: "done" });
     });
 
+    test("a turn that ends with its subagents still running is not read: it is not over, and the stop leaves it yours", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "exit 1" });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        await event(prompt);
+        await event({ ...stop, hook_event_name: "SubagentStart", agent_id: "a1" });
+        await event({ ...stop, last_assistant_message: "Merged." });
+        await new Promise((r) => setTimeout(r, 300));
+        await event({ ...stop, hook_event_name: "SubagentStop", agent_id: "a1" });
+        await new Promise((r) => setTimeout(r, 300));
+        const s = (await (await fetch(base + "/state")).json()).sessions[0];
+        expect(s).toMatchObject({ state: "waiting" });
+        expect(s.ask).toBeUndefined();
+    });
+
     test("the prompt injection asks for a title only while there is none", async () => {
         const first = await (await event(prompt)).text();
         expect(first).toContain('wintos title "');

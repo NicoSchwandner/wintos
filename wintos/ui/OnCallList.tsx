@@ -38,11 +38,11 @@ export const OnCallList = memo(({ pageOpen }: { pageOpen: boolean }) => {
             data-zone="list"
             style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
         >
-            <div style={{ flexGrow: 1, overflowY: "auto", padding: "18px 26px", display: "flex", flexDirection: "column", gap: 18 }}>
+            <div style={{ flexGrow: 1, overflowY: "auto", padding: pageOpen ? "18px 14px" : "18px 26px", display: "flex", flexDirection: "column", gap: 18 }}>
                 {panels.length === 0 && <span style={{ color: T.muted, fontSize: 13 }}>{state?.pluginNames?.length ? "Loading… the first run is still going." : "No on-call plugin is installed."}</span>}
                 {panels.map((p) => (
                     <div key={p.name} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "2px 12px" }}>
                             <span style={{ fontFamily: T.display, fontSize: 22, color: T.emphasis }}>{p.title}</span>
                             {p.subtitle && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>{p.subtitle}</span>}
                             <span style={{ marginLeft: "auto", fontSize: 11, color: p.error ? T.brick : T.faint }}>{p.error ? `last run failed: ${p.error}` : `${relTime(now - p.at)} ago`}</span>

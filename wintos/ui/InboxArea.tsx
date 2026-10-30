@@ -34,8 +34,9 @@ export const InboxArea = memo(({ tabId, list, empty, children }: { tabId: string
     }, [list]);
     return (
         <div className="flex flex-row flex-grow min-w-0" style={{ minHeight: 0 }}>
-            {/* With no page open the list has the whole width; a page takes the right side. */}
-            <div data-wintos="inbox" style={{ ...(empty ? { flexGrow: 1, minWidth: 0 } : { width: "44%", minWidth: 440, flexShrink: 0 }), display: "flex", flexDirection: "column", minHeight: 0, borderRight: empty ? "none" : `1px solid ${T.border}`, background: T.ground }}>
+            {/* With no page open the list has the whole width; a page takes the right side. On call is
+                a few counts, so its page gets all but a narrow column. */}
+            <div data-wintos="inbox" style={{ ...(empty ? { flexGrow: 1, minWidth: 0 } : list === "oncall" ? { width: 340, flexShrink: 0 } : { width: "44%", minWidth: 440, flexShrink: 0 }), display: "flex", flexDirection: "column", minHeight: 0, borderRight: empty ? "none" : `1px solid ${T.border}`, background: T.ground }}>
                 {/* The window drags here, as it did by the old header. */}
                 <div style={{ height: 12, flexShrink: 0, WebkitAppRegion: "drag" } as React.CSSProperties} />
                 {list === "prs" ? <PrQueue pageOpen={!empty} /> : <OnCallList pageOpen={!empty} />}

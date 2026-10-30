@@ -38,7 +38,7 @@ export function runWintosd(): void {
 // counts as a break whatever window had focus. Only the main process can read it.
 let idleTimer: NodeJS.Timeout | undefined;
 function reportIdle(): void {
-    if (idleTimer) return;
+    if (idleTimer || process.env.WINTOS_NO_IDLE === "1") return;
     const { port } = wintosInstance(process.env);
     idleTimer = setInterval(() => {
         const idleMs = powerMonitor.getSystemIdleTime() * 1000;

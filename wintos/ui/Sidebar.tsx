@@ -20,7 +20,7 @@ import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, reopenProject, resumePane, setLatestSessions } from "./focus";
 import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
-import { closeProjectTab, registerWintosMenu } from "./menu";
+import { closeProjectTab, registerWintosMenu, runKey } from "./menu";
 import { isPage, mainViewAtom, renamingAtom, yourMoveAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
@@ -83,7 +83,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
-    const model = state ? attention(tabIds, state, names, now) : null;
+    const model = state ? attention(tabIds, state, names, now, activeTabId) : null;
+    const focus = state?.rhythm?.focus && now < state.rhythm.focus.until ? state.rhythm.focus : undefined;
     const gh = state ? ghPrs(state) : undefined;
     const queue = gh ? queueModel(gh.prs, gh.me, now, state?.snoozes) : null;
     const panels = state ? pluginPanels(state) : [];
@@ -156,7 +157,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 if (title?.trim()) fireAndForget(() => setProjectTitle(row.tabId, title.trim(), true));
             },
         };
-        return row.band === "quiet" ? <QuietRow {...props} /> : <CardRow {...props} />;
+        const el = row.band === "quiet" ? <QuietRow {...props} /> : <CardRow {...props} />;
+        // A focus block dims the other projects: they wait for it to end.
+        return focus && row.tabId !== focus.tabId ? <div key={row.tabId} style={{ opacity: 0.45 }}>{el}</div> : el;
     };
 
     return (
@@ -206,7 +209,21 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     </div>
                 ) : (
                     <>
-                        <Band kind="needs" count={model.needs.length + wokeClosed.length}>
+                        {focus && (
+                            <button type="button" data-wintos="focus-block" data-key="⌥⌘F" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("focus")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 12px", background: T.card, border: `1px solid ${T.moss}`, borderRadius: 10, cursor: "pointer", fontFamily: T.ui, textAlign: "left" }}>
+                                <span style={{ fontSize: 12.5, color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Focus · {state?.projects.find((p) => p.id === focus.tabId)?.title ?? names[focus.tabId] ?? "this project"}</span>
+                                <span style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                                    <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.moss }}>{Math.ceil((focus.until - now) / 60_000)} min left{model.held ? ` · ${model.held.count} held` : ""}</span>
+                                    <Key k="⌥⌘F" label="" />
+                                </span>
+                            </button>
+                        )}
+                        <Band kind="needs" count={model.needs.length + wokeClosed.length} note={model.held && (
+                            <button type="button" data-wintos="held" data-key="⌥⌘O" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("release")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "0 4px", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 11.5, color: T.muted, textAlign: "left" }}>
+                                <span>{model.held.count} held · {model.held.until === Infinity ? "until you are back" : `opens ${new Date(model.held.until).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`}</span>
+                                <Key k="⌥⌘O" label="now" />
+                            </button>
+                        )}>
                             {wokeClosed.map((w) => (
                                 <CardRow key={`wake:${w.sessionId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌃⇥ or ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
                             ))}
@@ -246,8 +263,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
 });
 WintOSSidebar.displayName = "WintOSSidebar";
 
-function Band({ kind, count, shown, children }: { kind: keyof typeof BAND_STYLE; count: number; shown?: number; children: React.ReactNode }) {
-    if (!count) return null;
+// note: a line under the header, shown even when the band has no rows (Your move's held items).
+function Band({ kind, count, shown, note, children }: { kind: keyof typeof BAND_STYLE; count: number; shown?: number; note?: React.ReactNode; children: React.ReactNode }) {
+    if (!count && !note) return null;
     const s = BAND_STYLE[kind];
     return (
         <div data-band-group={kind} style={{ display: "flex", flexDirection: "column", gap: kind === "quiet" ? 3 : 7 }}>
@@ -257,6 +275,7 @@ function Band({ kind, count, shown, children }: { kind: keyof typeof BAND_STYLE;
                 <span style={{ flexGrow: 1, height: 1, background: kind === "quiet" ? "#181615" : T.hairline }} />
                 <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{shown !== undefined && shown < count ? `${shown} of ${count}` : count}</span>
             </div>
+            {note}
             {children}
         </div>
     );

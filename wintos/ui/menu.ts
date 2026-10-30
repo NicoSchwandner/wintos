@@ -90,6 +90,8 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:c{KeyA}", "autoclose"],
     ["Option:Cmd:c{KeyB}", "break"],
     ["Shift:Option:Cmd:c{KeyB}", "break-later"],
+    ["Option:Cmd:c{KeyO}", "release"],
+    ["Option:Cmd:c{KeyF}", "focus"],
     ["Option:Cmd:c{KeyX}", "tick"],
     ["Option:Cmd:c{KeyL}", "rail"],
     ["Ctrl:Cmd:c{KeyH}", "carry-left"],
@@ -298,6 +300,8 @@ export function runAction(action: string): void {
     if (action === "update") return updateWintos();
     if (action === "autoclose") return toggleAutoClose();
     if (action === "break") return void (flog("break: started"), daemonFetch("/rhythm/break", { method: "POST", body: {} }));
+    if (action === "release") return void (flog("batch: opened now"), daemonFetch("/rhythm/release", { method: "POST", body: {} }));
+    if (action === "focus") return void (flog("focus block: toggled"), daemonFetch("/rhythm/focus", { method: "POST", body: { tabId: globalStore.get(atoms.staticTabId) } }));
     if (action === "break-later") return void (flog("break: in 10 min"), daemonFetch("/rhythm/snooze", { method: "POST", body: { minutes: 10 } }));
     if (action.startsWith("session-")) return toSession(Number(action.slice("session-".length)));
     if (action === "rail") return toggleRail();

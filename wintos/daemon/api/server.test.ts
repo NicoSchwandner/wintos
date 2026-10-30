@@ -166,7 +166,14 @@ describe("wintosd API", () => {
 
     test("the rhythm: idle time makes a break, ⌥⌘B starts one, a snooze holds the nudge, a prompt leaves its length", async () => {
         const rhythm = async () => (await (await fetch(base + "/state")).json()).rhythm;
-        expect(await rhythm()).toMatchObject({ breaks: [], everyMs: 30 * 60_000 });
+        expect(await rhythm()).toMatchObject({ breaks: [], everyMs: 30 * 60_000, batchEveryMs: 20 * 60_000 });
+        await post("/rhythm/release", {});
+        expect((await rhythm()).releasedAt).toEqual(expect.any(Number));
+        await post("/rhythm/focus", { tabId: "tab-1" });
+        expect((await rhythm()).focus).toMatchObject({ tabId: "tab-1" });
+        await post("/rhythm/focus", { tabId: "tab-1" });
+        expect((await rhythm()).focus).toBeUndefined();
+        expect((await post("/rhythm/focus", {})).status).toBe(400);
         await post("/rhythm/idle", { idleMs: 5 * 60_000 });
         expect((await rhythm()).awayFrom).toEqual(expect.any(Number));
         await post("/rhythm/idle", { idleMs: 0 });

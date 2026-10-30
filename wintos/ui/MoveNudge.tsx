@@ -11,7 +11,7 @@ import { useNow } from "./useNow";
 import { useWintos } from "./useWintos";
 
 const WORDS: Record<Nudge["kind"], (minutes: number, working: number) => [string, string]> = {
-    move: (m, w) => ["A good moment to move", `${m} minute${m === 1 ? "" : "s"} at it, nothing needs you${w ? `, ${w} session${w === 1 ? " is" : "s are"} working` : ""}. A 3-minute walk now.`],
+    move: (m, w) => ["A good moment to move", `${m} minute${m === 1 ? "" : "s"} at it, nothing needs you${w ? `, ${w} session${w === 1 ? " is" : "s are"} working` : ""}. A 3-minute walk now; what comes in waits for you.`],
     dispatch: (_m, w) => ["The next minutes are yours", `You sent a long task and ${w === 1 ? "the session is" : `all ${w} sessions are`} working. Step away while they run.`],
     lunch: () => ["No lunch break yet", "Nothing of 20 minutes or more since lunch began. Eat something; everything stays as it is."],
 };

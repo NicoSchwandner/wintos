@@ -23,7 +23,7 @@ import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { trail } from "../sessions/trail";
-import { prompted, snooze, startBreak, tick, type Rhythm } from "../rhythm/rhythm";
+import { prompted, release, snooze, startBreak, tick, toggleFocus, type Rhythm } from "../rhythm/rhythm";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
 import { fetchDone, unlisted } from "../prs/done";
@@ -49,7 +49,7 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; batchEveryMs?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
     const factsOf = (ids: string[], day: string) => {
@@ -280,7 +280,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         fixer: fixer.state(),
         update: { behind: update?.behind() ?? 0 },
         autoCloseOff,
-        rhythm: { ...rhythm, everyMs: opts.moveEveryMs ?? 30 * 60_000 },
+        rhythm: { ...rhythm, everyMs: opts.moveEveryMs ?? 30 * 60_000, batchEveryMs: opts.batchEveryMs ?? 20 * 60_000 },
         ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
         keyboard,
         headsUps: Object.fromEntries(store.list().flatMap((p) => {
@@ -653,6 +653,13 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 return send(res, 200, "");
             }
             if (req.method === "POST" && url.pathname === "/rhythm/break") return setRhythm(startBreak(rhythm, Date.now())), send(res, 200, "");
+            if (req.method === "POST" && url.pathname === "/rhythm/release") return setRhythm(release(rhythm, Date.now())), send(res, 200, "");
+            if (req.method === "POST" && url.pathname === "/rhythm/focus") {
+                const b = (await body(req)) as { tabId?: unknown };
+                if (!isSafe(b?.tabId)) return send(res, 400, "need the tabId of the project to focus on");
+                setRhythm(toggleFocus(rhythm, b.tabId as string, Date.now()));
+                return send(res, 200, "");
+            }
             if (req.method === "POST" && url.pathname === "/rhythm/snooze") {
                 const b = (await body(req)) as { minutes?: unknown };
                 if (typeof b?.minutes !== "number" || !(b.minutes > 0 && b.minutes <= 240)) return send(res, 400, "need minutes, 1 to 240");

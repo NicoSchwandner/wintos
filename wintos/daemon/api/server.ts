@@ -23,7 +23,7 @@ import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { trail } from "../sessions/trail";
-import { prompted, release, snooze, startBreak, tick, toggleFocus, type Rhythm } from "../rhythm/rhythm";
+import { closeDay, prompted, release, snooze, startBreak, tick, toggleFocus, type Rhythm } from "../rhythm/rhythm";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
 import { fetchDone, unlisted } from "../prs/done";
@@ -508,6 +508,13 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, "");
             }
+            if (req.method === "POST" && url.pathname === "/day/tomorrow") {
+                const b = (await body(req)) as { items?: unknown };
+                if (!Array.isArray(b?.items) || b.items.length > 30 || !b.items.every((i) => typeof i === "string" && i.length <= 300 && !i.includes("\n"))) return send(res, 400, "need items: up to 30 one-line strings");
+                opts.journal!.addTomorrow(new Date(), b.items as string[]);
+                broadcast();
+                return send(res, 200, "");
+            }
             if (req.method === "POST" && url.pathname === "/day/planned") {
                 opts.journal!.markPlanned(new Date());
                 broadcast();
@@ -653,6 +660,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 return send(res, 200, "");
             }
             if (req.method === "POST" && url.pathname === "/rhythm/break") return setRhythm(startBreak(rhythm, Date.now())), send(res, 200, "");
+            if (req.method === "POST" && url.pathname === "/rhythm/close") {
+                const start = /^(\d{1,2}):(\d{2})-/.exec(opts.workday ?? "");
+                return setRhythm(closeDay(rhythm, new Date(), start ? Number(start[1]) * 60 + Number(start[2]) : 8 * 60)), send(res, 200, "");
+            }
             if (req.method === "POST" && url.pathname === "/rhythm/release") return setRhythm(release(rhythm, Date.now())), send(res, 200, "");
             if (req.method === "POST" && url.pathname === "/rhythm/focus") {
                 const b = (await body(req)) as { tabId?: unknown };

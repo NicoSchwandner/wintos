@@ -35,4 +35,7 @@ describe("heldUntil", () => {
         expect(heldUntil(row(T + 5 * MIN, "other"), { now: T + 46 * MIN, batchEveryMs: 0, focus })).toBeUndefined();
         expect(heldUntil(row(T + 5 * MIN, "other"), { now: T + 6 * MIN, batchEveryMs: P, focus })).toBe(T + 45 * MIN);
     });
+
+    test("a closed day holds everything until the workday starts", () =>
+        expect(heldUntil(row(T - 60 * MIN), { now: T, batchEveryMs: 0, quietUntil: T + 600 * MIN })).toBe(T + 600 * MIN));
 });

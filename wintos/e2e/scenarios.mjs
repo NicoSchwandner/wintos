@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 
 const PORT = process.env.WINTOS_DEBUG_PORT ?? 9224;
 if (String(PORT) === "9223") throw new Error("9223 is the everyday instance; scenarios only run against the dev instance");
@@ -811,6 +812,29 @@ await scenario("33 · ⌥⌘B starts a break: the status bar counts it, the Toda
     await until("the break in the daemon", async () => !!(await (await fetch("http://127.0.0.1:7731/state")).json()).rhythm?.onBreak);
     await until("the status bar counting it", () => evalIn(t, `document.querySelector("[data-wintos=on-break]")?.innerText?.startsWith("on a break")`));
     await until("the Today card saying it", () => evalIn(t, `document.querySelector("[data-wintos=break-marks]")?.innerText === "on a break"`));
+});
+
+await scenario("34 · ⇧⌘E closes the day: t puts a waiting turn in tomorrow's plan and parks it, ⌘⏎ writes the plan and goes quiet", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const blockId = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const post = (hook_event_name, extra = {}) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-wrap", hook_event_name, prompt: "e2e wrap", ...extra } }) });
+    await post("UserPromptSubmit");
+    await fetch(`http://127.0.0.1:7731/blocks/${blockId}/ask?session=e2e-wrap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "decide", text: "merge now or later" }) });
+    await post("Stop", { last_assistant_message: "Merge now or later?" });
+    await press(t, "e", { mods: ["meta", "shift"] });
+    await until("the wrap-up page", () => evalIn(t, `!!document.querySelector("[data-wintos=wrapup]")`));
+    await until("the turn on it", () => evalIn(t, `document.querySelector("[data-wintos=wrapup]")?.innerText.includes("merge now or later")`));
+    await evalIn(t, `[...document.querySelectorAll("[data-wintos=wrapup] [data-item=loose]")].find((e) => e.innerText.includes("merge now or later"))?.querySelector("[data-tomorrow]")?.click()`);
+    const st = async () => await (await fetch("http://127.0.0.1:7731/state")).json();
+    await until("the session parked", async () => (await st()).sessions.find((x) => x.id === "e2e-wrap")?.state === "parked");
+    await evalIn(t, `document.querySelector("[data-wintos=close-day]").click()`);
+    await until("the day closed", async () => !!(await st()).rhythm?.closed);
+    await until("the page gone", async () => !(await evalIn(t, `!!document.querySelector("[data-wintos=wrapup]")`)));
+    const d = new Date();
+    const ymd = [String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")];
+    const file = readFileSync(join(process.env.HOME, ".local/share/wintos-dev/journal/days", ymd[0], ymd[1], `${ymd.join("-")}.md`), "utf8");
+    if (!file.includes("merge now or later")) throw new Error(`tomorrow's plan not in today's file:\n${file}`);
 });
 
 await scenario("clean-up · the panes this run opened are closed", async () => {

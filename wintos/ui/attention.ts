@@ -109,7 +109,7 @@ export function attention(tabIds: string[], state: WintosState, names: Record<st
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const label = repoLabeler(state);
     const views = Object.fromEntries(rows.map((r) => [r.tabId, lines[r.tabId] ? { ...rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label), next: lines[r.tabId], tone: "apricot" as const } : rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label)]));
-    for (const [tabId, until] of held.rows) views[tabId] = { ...views[tabId], reason: [`held ${until === Infinity ? "until you are back" : `for the ${clock(until)} batch`}`, askLine(rows.find((r) => r.tabId === tabId)!.sessions)].filter(Boolean).join(" · ") };
+    for (const [tabId, until] of held.rows) views[tabId] = { ...views[tabId], reason: [`held ${until === Infinity ? "until you are back" : until === state.rhythm?.closed?.until ? `until ${clock(until)}: the day is closed` : `for the ${clock(until)} batch`}`, askLine(rows.find((r) => r.tabId === tabId)!.sessions)].filter(Boolean).join(" · ") };
     const targets: Record<string, Target> = {};
     for (const r of [...split.needs, ...split.read]) {
         const waiting = r.sessions.filter((s) => s.state === "waiting").sort((a, b) => a.since - b.since)[0];
@@ -128,7 +128,7 @@ const QUICK = new Set(["approve"]);
 function holding(split: Ranking, state: WintosState, now: number, here: string | undefined, waking: Record<string, string>): { split: Ranking; held: { rows: Map<string, number> } } {
     const r = state.rhythm;
     const rows = new Map<string, number>();
-    const ctx = r && { now, batchEveryMs: r.batchEveryMs ?? 0, releasedAt: r.releasedAt, breakFrom: r.onBreak ?? r.awayFrom, focus: r.focus, here };
+    const ctx = r && { now, batchEveryMs: r.batchEveryMs ?? 0, releasedAt: r.releasedAt, breakFrom: r.onBreak ?? r.awayFrom, focus: r.focus, here, quietUntil: r.closed?.until };
     for (const row of split.needs) {
         const until = ctx && row.waitingSince !== undefined && !waking[row.tabId] ? heldUntil({ tabId: row.tabId, waitingSince: row.waitingSince }, ctx) : undefined;
         if (until !== undefined) rows.set(row.tabId, until);

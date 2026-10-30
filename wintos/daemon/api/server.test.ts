@@ -174,6 +174,8 @@ describe("wintosd API", () => {
         await post("/rhythm/focus", { tabId: "tab-1" });
         expect((await rhythm()).focus).toBeUndefined();
         expect((await post("/rhythm/focus", {})).status).toBe(400);
+        await post("/rhythm/close", {});
+        expect((await rhythm()).closed).toMatchObject({ until: expect.any(Number) });
         await post("/rhythm/idle", { idleMs: 5 * 60_000 });
         expect((await rhythm()).awayFrom).toEqual(expect.any(Number));
         await post("/rhythm/idle", { idleMs: 0 });
@@ -298,6 +300,16 @@ describe("the day", () => {
         expect((await post("/day/focus", { text: "- [ ] Pair on the flaky test" })).status).toBe(200);
         expect((await post("/day/planned", {})).status).toBe(200);
         expect([(await day()).day.focus, (await day()).day.planned]).toEqual(["- [ ] Pair on the flaky test", true]);
+    });
+
+    test("the wrap-up's items go under today's goals for tomorrow; bad ones are a 400", async () => {
+        await withJournal();
+        expect((await post("/day/tomorrow", { items: ["Decide the docs routing"] })).status).toBe(200);
+        const d = new Date();
+        const ymd = [String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")];
+        const file = readFileSync(join(root, "journal", ymd[0], ymd[1], `${ymd.join("-")}.md`), "utf8");
+        expect(file).toContain("- **Goals and Tasks for tomorrow**\n  - [ ] Decide the docs routing");
+        expect((await post("/day/tomorrow", { items: ["a\nb"] })).status).toBe(400);
     });
 
     test("today's focus is saved tidied, its nesting kept", async () => {

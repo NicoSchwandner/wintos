@@ -1,10 +1,10 @@
 import { useAtomValue } from "jotai";
 import { memo } from "react";
 import { nudge, type Nudge } from "../daemon/rhythm/rhythm";
-import { parseSpan } from "./dayplan";
+import { DEFAULT_WORKDAY, parseSpan } from "./dayplan";
 import { Key } from "./Key";
 import { runKey } from "./menu";
-import { overlayAtom, yourMoveAtom } from "./notes/state";
+import { mainViewAtom, overlayAtom, yourMoveAtom } from "./notes/state";
 import { shownState } from "./sessions";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
@@ -14,6 +14,7 @@ const WORDS: Record<Nudge["kind"], (minutes: number, working: number) => [string
     move: (m, w) => ["A good moment to move", `${m} minute${m === 1 ? "" : "s"} at it, nothing needs you${w ? `, ${w} session${w === 1 ? " is" : "s are"} working` : ""}. A 3-minute walk now; what comes in waits for you.`],
     dispatch: (_m, w) => ["The next minutes are yours", `You sent a long task and ${w === 1 ? "the session is" : `all ${w} sessions are`} working. Step away while they run.`],
     lunch: () => ["No lunch break yet", "Nothing of 20 minutes or more since lunch began. Eat something; everything stays as it is."],
+    wrap: () => ["The workday is over", "Give each loose end a place, and WintOS stays quiet until tomorrow's workday starts."],
 };
 
 // The nudge to move, at a natural pause: nothing in Your move, and the stretch since your last
@@ -24,9 +25,10 @@ export const MoveNudge = memo(() => {
     const yourMove = useAtomValue(yourMoveAtom);
     const overlay = useAtomValue(overlayAtom);
     const r = state?.rhythm;
-    if (!r || overlay) return null;
+    const view = useAtomValue(mainViewAtom);
+    if (!r || overlay || view === "wrapup") return null;
     const working = (state?.sessions ?? []).filter((s) => !s.background && !s.restored && shownState(s, now) === "working").length;
-    const n = nudge(r, { now, everyMs: r.everyMs, needs: yourMove, working, live: working, lunch: parseSpan(state?.lunch), today: new Date(now) });
+    const n = nudge(r, { now, everyMs: r.everyMs, needs: yourMove, working, live: working, lunch: parseSpan(state?.lunch), workday: parseSpan(state?.workday) ?? DEFAULT_WORKDAY, today: new Date(now) });
     if (!n) return null;
     const [title, line] = WORDS[n.kind](n.minutes, working);
     return (
@@ -42,9 +44,15 @@ export const MoveNudge = memo(() => {
                 <span style={{ fontSize: 12.5, lineHeight: 1.45, color: T.secondary }}>{line}</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end", flexShrink: 0 }}>
-                <button type="button" data-key="⌥⌘B" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("break")} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
-                    <Key k="⌥⌘B" label="break, 3 min" />
-                </button>
+                {n.kind === "wrap" ? (
+                    <button type="button" data-key="⇧⌘E" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("wrapup")} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                        <Key k="⇧⌘E" label="close the day" />
+                    </button>
+                ) : (
+                    <button type="button" data-key="⌥⌘B" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("break")} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                        <Key k="⌥⌘B" label="break, 3 min" />
+                    </button>
+                )}
                 <button type="button" data-key="⇧⌥⌘B" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("break-later")} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                     <Key k="⇧⌥⌘B" label="in 10 min" />
                 </button>

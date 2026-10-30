@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { answersOf, goalsAhead, reflectionOf, withReflection } from "./reflection";
+import { answersOf, goalsAhead, reflectionOf, withReflection, withTomorrow } from "./reflection";
 
 // The shapes work-journal's templates give a Friday: questions as bold bullets (weekly) or ###
 // headings (monthly and up), with "- [ ] ..." where the goals go.
@@ -58,4 +58,17 @@ describe("withReflection", () => {
         expect(out.startsWith("# Friday\n\n## Today's focus (1-3 items)\n\n- [ ] a\n\n## Weekly reflection - Week $week/$year\n\n")).toBe(true);
         expect(out.endsWith("\n## Notes\n\n- later\n")).toBe(true);
     });
+});
+
+describe("withTomorrow", () => {
+    const day = "# Day\n\n## Daily reflection\n\n- **Goals and Tasks for tomorrow**\n  - [ ] ...\n\n## Notes\n";
+    test("the items go under the question, the placeholder gives way, and goalsAhead reads them back", () => {
+        const md = withTomorrow(day, ["Decide the docs routing", "Ship the export"]);
+        expect(md).toBe("# Day\n\n## Daily reflection\n\n- **Goals and Tasks for tomorrow**\n  - [ ] Decide the docs routing\n  - [ ] Ship the export\n\n## Notes\n");
+        expect(goalsAhead(md)).toEqual(["- [ ] Decide the docs routing", "- [ ] Ship the export"]);
+    });
+    test("added after what is there, none twice", () =>
+        expect(goalsAhead(withTomorrow(withTomorrow(day, ["A"]), ["A", "B"]))).toEqual(["- [ ] A", "- [ ] B"]));
+    test("a day without the question gets it", () =>
+        expect(goalsAhead(withTomorrow("# Day\n\n## Today's focus (1-3 items)\n\n- [ ] x\n", ["A"]))).toEqual(["- [ ] A"]));
 });

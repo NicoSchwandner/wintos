@@ -3,7 +3,8 @@
 // answer in batches rather than as each one comes in. The project you are in is never held.
 // batchEveryMs: WINTOS_BATCH_EVERY; boundaries are on the clock (:00, :20, :40 for 20 minutes).
 // releasedAt: ⌥⌘O opened the batch then. breakFrom: the break going on now began then.
-export type HoldContext = { now: number; batchEveryMs: number; releasedAt?: number; breakFrom?: number; focus?: { tabId: string; from: number; until: number }; here?: string };
+// quietUntil: the day was closed; everything waits for the next workday.
+export type HoldContext = { now: number; batchEveryMs: number; releasedAt?: number; breakFrom?: number; focus?: { tabId: string; from: number; until: number }; here?: string; quietUntil?: number };
 
 // When the row shows in Your move; undefined: now. Infinity: when the break ends.
 export function heldUntil(row: { tabId: string; waitingSince: number }, c: HoldContext): number | undefined {
@@ -14,5 +15,6 @@ export function heldUntil(row: { tabId: string; waitingSince: number }, c: HoldC
     if (c.breakFrom !== undefined && t >= c.breakFrom) until = Infinity;
     const f = c.focus;
     if (f && c.now < f.until && row.tabId !== f.tabId && t >= f.from) until = Math.max(until, f.until);
+    if (c.quietUntil !== undefined && c.now < c.quietUntil) until = Math.max(until, c.quietUntil);
     return until > c.now ? until : undefined;
 }

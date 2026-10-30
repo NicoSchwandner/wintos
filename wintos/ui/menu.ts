@@ -91,6 +91,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:c{KeyB}", "break"],
     ["Shift:Option:Cmd:c{KeyB}", "break-later"],
     ["Option:Cmd:c{KeyO}", "release"],
+    ["Shift:Cmd:e", "wrapup"],
     ["Option:Cmd:c{KeyF}", "focus"],
     ["Option:Cmd:c{KeyX}", "tick"],
     ["Option:Cmd:c{KeyL}", "rail"],
@@ -294,6 +295,7 @@ export function runAction(action: string): void {
     if (action === "day") return toggleView("day");
     if (action === "reflect") return toggleView("reflect");
     if (action === "keyboard") return toggleView("keyboard");
+    if (action === "wrapup") return toggleView("wrapup");
     if (action === "open-external") return openExternal();
     if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));
     if (action === "restart-terminal") return restartTerminal();

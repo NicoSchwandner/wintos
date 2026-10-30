@@ -39,6 +39,7 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         item("Move Nudge Later", "break-later", "Shift+Alt+Cmd+B"),
         item("Open the Batch Now", "release", "Alt+Cmd+O"),
         item("Focus Block", "focus", "Alt+Cmd+F"),
+        item("Close the Day", "wrapup", "Shift+Cmd+E"),
         item("Auto-Close Finished Sessions", "autoclose", "Alt+Cmd+A"),
         item("Tick Off Today", "tick", "Alt+Cmd+X"),
         { type: "separator" },

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { AWAY_MS, FOCUS_MS, nudge, prompted, startBreak, snooze, tick, toggleFocus, type Rhythm } from "./rhythm";
+import { AWAY_MS, closeDay, FOCUS_MS, nudge, prompted, startBreak, snooze, tick, toggleFocus, type Rhythm } from "./rhythm";
 
 const MIN = 60_000;
 const T0 = 1_000 * MIN;
@@ -82,4 +82,22 @@ test("⌥⌘F starts a 45-minute focus block on the project, again ends it, else
     expect(toggleFocus(r, "a", T0 + MIN).focus).toBeUndefined();
     expect(toggleFocus(r, "b", T0 + MIN).focus).toMatchObject({ tabId: "b", from: T0 + MIN });
     expect(toggleFocus(r, "a", T0 + FOCUS_MS + MIN).focus).toMatchObject({ tabId: "a", from: T0 + FOCUS_MS + MIN });
+});
+
+describe("closing the day", () => {
+    const at = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m).getTime();
+    test("past the workday's end, closing it is asked, Your move or not", () => {
+        const r: Rhythm = { day: "d", stretchFrom: at(30, 16), breaks: [] };
+        const c = { ...calm, needs: 2, workday: [8 * 60, 17 * 60] as [number, number], today: new Date(2026, 9, 30) };
+        expect(nudge(r, { ...c, now: at(30, 16, 59) })).toBeUndefined();
+        expect(nudge(r, { ...c, now: at(30, 17, 5) })).toMatchObject({ kind: "wrap" });
+    });
+    test("closed: quiet until the next workday starts, a Friday's until Monday, and no nudges meanwhile", () => {
+        const fri = closeDay({ day: "d", stretchFrom: 0, breaks: [] }, new Date(2026, 9, 30, 17, 10), 8 * 60);
+        expect(fri.closed).toEqual({ day: "d", until: at(33, 8) });
+        expect(closeDay({ day: "d", stretchFrom: 0, breaks: [] }, new Date(2026, 9, 28, 17, 10), 8 * 60).closed?.until).toBe(at(29, 8));
+        expect(nudge(fri, { ...calm, now: at(30, 18), workday: [480, 1020], today: new Date(2026, 9, 30) })).toBeUndefined();
+        expect(tick(fri, 0, at(31, 9), "d2").closed).toEqual(fri.closed);
+        expect(tick(fri, 0, at(33, 9), "d3").closed).toBeUndefined();
+    });
 });

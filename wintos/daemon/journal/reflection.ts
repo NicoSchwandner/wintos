@@ -64,3 +64,19 @@ export function goalsAhead(md: string): string[] {
     }
     return out;
 }
+
+// The day's file with these items added as open boxes under its "Goals and Tasks for tomorrow"
+// (the next day reads them as left from yesterday), after what is there and none twice; a day
+// without that question gets it in a Daily reflection section.
+export function withTomorrow(md: string, items: string[]): string {
+    const have = new Set(goalsAhead(md).map((l) => l.replace(/^-\s+\[[ xX~]\]\s+/, "")));
+    const add = [...new Set(items.map((i) => i.trim()).filter((i) => i && !have.has(i)))].map((i) => `  - [ ] ${i}`);
+    if (!add.length) return md;
+    const lines = md.split("\n");
+    const at = lines.findIndex((l) => GOALS.test(l) && /^-\s+\*\*/.test(l));
+    if (at < 0) return `${md.trimEnd()}\n\n## Daily reflection\n\n- **Goals and Tasks for tomorrow**\n${add.join("\n")}\n`;
+    let end = at + 1;
+    while (end < lines.length && /^\s+\S/.test(lines[end])) end++;
+    const kept = lines.slice(at + 1, end).filter((l) => !PLACEHOLDER.test(l));
+    return [...lines.slice(0, at + 1), ...kept, ...add, ...lines.slice(end)].join("\n");
+}

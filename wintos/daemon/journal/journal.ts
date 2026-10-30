@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
-import { answersOf, goalsAhead, rank, reflectionOf, withReflection, type Level } from "./reflection";
+import { answersOf, goalsAhead, rank, reflectionOf, withReflection, withTomorrow, type Level } from "./reflection";
 
 // A daily journal: one markdown file a day under <dir>/YYYY/MM/YYYY-MM-DD.md, made from the
 // daily template. WintOS reads and writes only the "Today's focus" section; the rest of the file
@@ -185,6 +185,19 @@ export class Journal {
         mkdirSync(dirname(file), { recursive: true });
         writeFileSync(file, withFocus(base, text));
         return "ok";
+    }
+
+    // The day's wrap-up: these go under its goals for tomorrow, which the next day starts from.
+    addTomorrow(d: Date, items: string[]): void {
+        const file = this.file(d);
+        if (!existsSync(file) && this.create) {
+            try {
+                this.create();
+            } catch {}
+        }
+        const base = existsSync(file) ? readFileSync(file, "utf8") : readFileSync(this.template, "utf8").replace(/\$date/g, longDate(d)).replace(/\$week/g, String(isoWeek(d)));
+        mkdirSync(dirname(file), { recursive: true });
+        writeFileSync(file, withTomorrow(base, items));
     }
 
     markPlanned(d: Date): void {

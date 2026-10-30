@@ -190,6 +190,17 @@ describe("wintosd API", () => {
         expect((await rhythm()).lastPrompt).toEqual({ at: expect.any(Number), chars: prompt.prompt.length });
     });
 
+    test("coming back to a session: what you asked last, what it did, what it needs", async () => {
+        const tp = join(root, "t.jsonl");
+        writeFileSync(tp, [JSON.stringify({ type: "user", message: { content: "review #7" } }), JSON.stringify({ type: "user", message: { content: "approve if good" } })].join("\n"));
+        await event({ ...prompt, transcript_path: tp });
+        await post("/blocks/blk-1/ask", { kind: "approve", text: "approve with 1 comment?" });
+        await event({ ...stop, transcript_path: tp, last_assistant_message: "Looks good." });
+        const r = await (await fetch(base + `/sessions/${prompt.session_id}/reentry`)).json();
+        expect(r).toMatchObject({ asked: "approve if good", needs: "Approve · approve with 1 comment?" });
+        expect((await fetch(base + "/sessions/nope/reentry")).status).toBe(404);
+    });
+
     test("the prompt injection asks for a title only while there is none", async () => {
         const first = await (await event(prompt)).text();
         expect(first).toContain('wintos title "');

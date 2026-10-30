@@ -23,6 +23,7 @@ import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { trail } from "../sessions/trail";
+import { reentry } from "../sessions/reentry";
 import { closeDay, prompted, release, snooze, startBreak, tick, toggleFocus, type Rhythm } from "../rhythm/rhythm";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
@@ -713,6 +714,18 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (kind === "rereview" && job.route.kind === "fresh") return json(res, { review: true });
                 const run = fixer.start(job);
                 return json(res, { run, ...(job.route.kind === "pane" ? { blockId: job.route.blockId, tabId: job.route.tabId, prompt: fixPrompt(job) } : {}) });
+            }
+            // Coming back to a session after a while: what you asked, what it did, what it needs.
+            const back = /^\/sessions\/([^/]+)\/reentry$/.exec(url.pathname);
+            if (req.method === "GET" && back) {
+                const s = sessions.get(decodeURIComponent(back[1]));
+                if (!s) return send(res, 404, "no such session");
+                const tp = recapper.transcriptOf(s.id);
+                let text = "";
+                try {
+                    if (tp) text = readFileSync(tp, "utf8");
+                } catch {}
+                return json(res, reentry(s, userPrompts(text), recapper.gistOf(s.id)));
             }
             const unpark = /^\/sessions\/([^/]+)\/unpark$/.exec(url.pathname);
             if (req.method === "POST" && unpark) {

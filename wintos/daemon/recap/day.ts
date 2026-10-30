@@ -103,14 +103,17 @@ export function dayRecapper(root: string, cmd?: string, extra?: string, factsOf:
         return items ? shownItems(items, curation, day).filter((i) => !i.dropped).map((i) => i.text) : [];
     };
 
+    // The transcript file a session's hook events named, from any day.
+    const transcriptOf = (sessionId: string): string | undefined => Object.values(activity).flatMap((d) => Object.values(d)).map((p) => p.sessions[sessionId]).find(Boolean);
+
     // What a session was last about, from its latest recap on any day.
     const gistOf = (sessionId: string): string | undefined => {
-        const transcript = Object.values(activity).flatMap((d) => Object.values(d)).map((p) => p.sessions[sessionId]).find(Boolean);
+        const transcript = transcriptOf(sessionId);
         const last = transcript && lastRecaps(safeText(transcript), "");
         return last ? gist(last) : undefined;
     };
 
-    return { record, recap, editList, readOut, gistOf };
+    return { record, recap, editList, readOut, gistOf, transcriptOf };
 }
 
 function safeText(file: string): string {

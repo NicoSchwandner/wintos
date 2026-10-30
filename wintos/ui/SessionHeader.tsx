@@ -11,6 +11,7 @@ import { daemonFetch, useWintos } from "./useWintos";
 import { wakesWhen } from "../daemon/wakes/wakes";
 import { liveSubagents, type Lane } from "../daemon/sessions/reduce";
 import { shownState } from "./sessions";
+import { WhereWasI } from "./WhereWasI";
 import { prRef, relTime, sessionHeader, sessionName, urgentPr, type PrChip, type PrStatus } from "./view";
 
 
@@ -40,6 +41,7 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                 {h.task && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>{h.task}</span>}
                 {h.branch && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.branch}</span>}
             </div>
+            <WhereWasI sessionId={s.id} focused={focused} />
             {s.lane && (
                 <div className="wintos-steps-row">
                     <StepTrack lane={s.lane} />

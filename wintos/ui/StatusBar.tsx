@@ -23,16 +23,20 @@ const KEYS: Record<MainView, readonly (readonly [string, string])[]> = {
 export const atWorkText = ({ working, subagents }: { working: number; subagents: number }) =>
     [working && `${working} turn${working === 1 ? "" : "s"} in flight`, subagents && `${subagents} subagent${subagents === 1 ? "" : "s"}`].filter(Boolean).join(" and ");
 
-export const StatusBar = memo(() => {
+// On every view, so ⌥⌘U is seen wherever you are; inbox: the Inbox tabs have their own key
+// footer, so here only the update shows, and an empty bar is not drawn.
+export const StatusBar = memo(({ inbox }: { inbox?: boolean }) => {
     const view = useAtomValue(mainViewAtom);
     const { state } = useWintos();
     const behind = state?.update?.behind ?? 0;
     const armed = useAtomValue(updateArmedAtom);
     const now = useNow(60_000);
     const work = atWorkText(atWork(state?.sessions ?? [], now));
+    const keys = inbox ? [] : KEYS[view];
+    if (!keys.length && !behind) return null;
     return (
         <div style={{ flexShrink: 0, minHeight: 30, boxSizing: "border-box", padding: "5px 16px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 14px", borderTop: `1px solid ${T.hairline}`, background: T.sidebar, fontFamily: T.ui }}>
-            {KEYS[view].map(([k, label]) => (
+            {keys.map(([k, label]) => (
                 <Key key={k} k={k} label={label} />
             ))}
             {behind > 0 && (

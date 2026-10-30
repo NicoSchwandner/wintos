@@ -64,10 +64,10 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
                 </div>
                 {view === "terminal" && <NotesRail tabId={tabId} />}
             </div>
-            <StatusBar />
             </>
             )}
             </div>
+            <StatusBar inbox={inbox && !isPage(view)} />
             {overlay === "palette" && <Palette names={names} />}
             {overlay === "keymap" && <Keymap />}
             {overlay === "confirm-close" && <ConfirmClose />}

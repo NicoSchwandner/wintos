@@ -112,7 +112,7 @@ export function PrChipButton({ chip: p, keyHint, small }: { chip: PrChip; keyHin
             onClick={() => runAction(`open-page:${p.url}`)}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: small ? "1px 6px" : "2px 7px", borderRadius: 6, border: `1px solid ${loud ? head.color : T.border}`, background: "transparent", cursor: "pointer", fontFamily: T.ui, fontSize: small ? 10.5 : 11.5, whiteSpace: "nowrap", flexShrink: 0 }}
         >
-            {icon && <icon.Icon size={small ? 13 : 14} strokeWidth={2.5} color={icon.color} style={{ flexShrink: 0 }} />}
+            {icon && <icon.Icon size={small ? 13 : 14} strokeWidth={2.5} style={{ flexShrink: 0, color: icon.color }} />}
             <span style={{ fontFamily: T.mono, color: T.title }}>{p.repo ? `${p.repo} ` : ""}#{p.number}</span>
             {p.text && <span style={{ color: loud ? head.color : T.muted }}>{p.text}</span>}
             {keyHint && <Key k={keyHint} label="" />}

@@ -69,7 +69,8 @@ let confirmQuit = true;
 const waveDataDir = getWaveDataDir();
 const waveConfigDir = getWaveConfigDir();
 
-electron.nativeTheme.themeSource = "dark";
+// WintOS: light by day, dark by night, as System Settings switches the appearance.
+electron.nativeTheme.themeSource = "system";
 
 console.log = log;
 console.log(

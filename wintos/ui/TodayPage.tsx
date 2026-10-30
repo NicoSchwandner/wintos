@@ -62,7 +62,7 @@ export const TodayPage = memo(() => {
     const save = (text: string, base: number) => saveFocus(text, base).then((r) => (r === "ok" && !day.planned && text.trim() && void markPlanned(), r));
     const date = new Date(`${day.date}T12:00:00`);
     return (
-        <div ref={ref} tabIndex={0} data-zone="list" data-wintos="today" style={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 0", background: "#000000", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}>
+        <div ref={ref} tabIndex={0} data-zone="list" data-wintos="today" style={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 0", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 30, fontWeight: 400, lineHeight: 1, color: T.emphasis }}>{date.toLocaleDateString("en-GB", { weekday: "long" })}</h1>
@@ -165,6 +165,6 @@ function TimeBlock({ b, top, height }: { b: Block; top: string; height: string }
     const across: React.CSSProperties = cols > 1 ? { left: `calc(6px + (100% - 10px) * ${b.col ?? 0} / ${cols})`, width: `calc((100% - 10px) / ${cols} - 2px)` } : { left: 6, right: 4 };
     const base: React.CSSProperties = { position: "absolute", ...across, top, height, borderRadius: 5, padding: "1px 7px", overflow: "hidden", fontSize: 11, lineHeight: 1.35, boxSizing: "border-box" };
     if (b.kind === "meeting") return <div style={{ ...base, background: T.cardActive, border: `1px solid ${T.borderActive}`, color: T.secondary }}><span style={{ fontFamily: T.mono, fontSize: 9.5, color: T.muted }}>{hm(b.start)} </span>{b.title}</div>;
-    if (b.kind === "lunch") return <div style={{ ...base, background: "repeating-linear-gradient(135deg, #181615 0 6px, #131211 6px 12px)", color: T.faint }}>Lunch</div>;
+    if (b.kind === "lunch") return <div style={{ ...base, background: `repeating-linear-gradient(135deg, ${T.card} 0 6px, ${T.sidebar} 6px 12px)`, color: T.faint }}>Lunch</div>;
     return <div style={{ ...base, border: `1px dashed ${T.borderActive}`, color: T.moss, fontFamily: T.mono, fontSize: 9.5 }}>{span(b.end - b.start)} free</div>;
 }

@@ -31,7 +31,7 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
                 border: `1px solid ${n.soon ? T.apricot : T.border}`, animation: n.soon ? "wintos-breathe 2.4s ease-in-out infinite" : undefined,
             }}
         >
-            <style>{`@keyframes wintos-breathe { 0%,100% { box-shadow: 0 0 0 0 #fe801900 } 50% { box-shadow: 0 0 0 3px #fe801955 } } @media (prefers-reduced-motion: reduce) { [data-wintos=meeting-card] { animation: none !important } }`}</style>
+            <style>{`@keyframes wintos-breathe { 0%,100% { box-shadow: 0 0 0 0 color-mix(in srgb, ${T.apricot} 0%, transparent) } 50% { box-shadow: 0 0 0 3px color-mix(in srgb, ${T.apricot} 33%, transparent) } } @media (prefers-reduced-motion: reduce) { [data-wintos=meeting-card] { animation: none !important } }`}</style>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontFamily: T.mono, fontSize: 10.5, color: T.muted, fontVariantNumeric: "tabular-nums" }}>
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {clock(shown.start)} – {clock(shown.end)}
@@ -63,7 +63,7 @@ export const MeetingEdge = memo(({ meetings }: { meetings: Meeting[] }) => {
     if (!n.soon) return null;
     const done = 1 - n.msLeft! / WARN_MS;
     return (
-        <div aria-hidden style={{ position: "fixed", top: 0, left: 0, right: 0, height: 3, zIndex: 1000, pointerEvents: "none", background: "#fe801933" }}>
+        <div aria-hidden style={{ position: "fixed", top: 0, left: 0, right: 0, height: 3, zIndex: 1000, pointerEvents: "none", background: `color-mix(in srgb, ${T.apricot} 20%, transparent)` }}>
             <div style={{ height: "100%", width: `${Math.round(done * 1000) / 10}%`, background: T.apricot, transition: "width 1s linear" }} />
         </div>
     );

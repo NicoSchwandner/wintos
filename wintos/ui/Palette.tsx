@@ -75,13 +75,13 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
         }, "Shift:Cmd:p": closeOverlay });
     let lastKind = "";
     return (
-        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(15,16,17,0.6)", display: "flex", justifyContent: "center", paddingTop: "12vh" }} onClick={closeOverlay}>
+        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: `color-mix(in srgb, ${T.ground} 70%, transparent)`, display: "flex", justifyContent: "center", paddingTop: "12vh" }} onClick={closeOverlay}>
             <div
                 data-wintos="palette"
                 data-zone="overlay"
                 ref={ref}
                 onClick={(e) => e.stopPropagation()}
-                style={{ width: 620, maxHeight: "64vh", display: "flex", flexDirection: "column", background: "#181615", border: `1px solid ${T.borderActive}`, borderRadius: 12, boxShadow: "0 22px 52px rgba(0,0,0,0.72)", overflow: "hidden", fontFamily: T.ui }}
+                style={{ width: 620, maxHeight: "64vh", display: "flex", flexDirection: "column", background: T.card, border: `1px solid ${T.borderActive}`, borderRadius: 12, boxShadow: "0 22px 52px rgba(0,0,0,0.72)", overflow: "hidden", fontFamily: T.ui }}
             >
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${T.hairline}` }}>
                     <span style={{ fontFamily: T.mono, color: T.apricot }}>&gt;</span>
@@ -109,7 +109,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                                     onMouseEnter={() => setCursor(n)}
                                     data-key="↑ ↓ ⏎"
                                     onClick={() => run(n)}
-                                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: row.type === "hit" ? "8px 10px" : "5px 10px", borderRadius: 8, cursor: "pointer", background: on ? "#221f1d" : "transparent" }}
+                                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: row.type === "hit" ? "8px 10px" : "5px 10px", borderRadius: 8, cursor: "pointer", background: on ? T.border : "transparent" }}
                                 >
                                     {row.type === "less" ? (
                                         <span data-wintos="palette-fold" style={{ display: "flex", width: "100%", justifyContent: "space-between", fontSize: 11.5, color: on ? T.emphasis : T.muted }}>

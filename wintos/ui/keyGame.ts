@@ -85,7 +85,7 @@ export function installKeyGame(): void {
             // a way to use WintOS, not a slip to flash at every time.
             if (streak <= 0) return;
             showNotice({ kind: "slip", key, streak, at: Date.now() });
-            el.animate([{ boxShadow: "0 0 0 2px #fb4934aa" }, { boxShadow: "0 0 0 2px #fb493400" }], { duration: 3000 });
+            el.animate([{ boxShadow: "0 0 0 2px color-mix(in srgb, var(--w-brick) 67%, transparent)" }, { boxShadow: "0 0 0 2px color-mix(in srgb, var(--w-brick) 0%, transparent)" }], { duration: 3000 });
         },
         true
     );

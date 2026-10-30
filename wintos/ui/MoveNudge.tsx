@@ -33,7 +33,7 @@ export const MoveNudge = memo(() => {
     const [title, line] = WORDS[n.kind](n.minutes, working);
     return (
         <div data-wintos="move-nudge" data-kind={n.kind} style={{ position: "absolute", left: 24, right: 24, bottom: 46, zIndex: 80, maxWidth: 820, margin: "0 auto", display: "flex", alignItems: "center", gap: 18, padding: "14px 18px", background: T.card, border: `1px solid ${T.moss}`, borderRadius: 14, boxShadow: "0 18px 40px rgba(0,0,0,0.6)", fontFamily: T.ui }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={T.moss} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, color: T.moss }}>
                 <circle cx="13" cy="4" r="2" />
                 <path d="M9 21l2-6 3 3v3" />
                 <path d="M7 12l3-4 4 1 3 3" />

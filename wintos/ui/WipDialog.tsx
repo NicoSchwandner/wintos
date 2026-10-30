@@ -22,7 +22,7 @@ export const WipDialog = memo(() => {
     useZoneKeys(ref, { "1": () => void go(), "2": () => void park() });
     const limit = currentState()?.wip ?? 0;
     return (
-        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(15,16,17,0.6)", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "16vh" }} onClick={closeOverlay}>
+        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: `color-mix(in srgb, ${T.ground} 70%, transparent)`, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "16vh" }} onClick={closeOverlay}>
             <div ref={ref} tabIndex={0} data-wintos="wip" data-zone="overlay" onClick={(e) => e.stopPropagation()} style={{ width: 540, padding: "22px 26px", background: T.card, border: `1px solid ${T.borderActive}`, borderRadius: 14, fontFamily: T.ui, outline: "none", display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 22px 52px rgba(0,0,0,0.72)" }}>
                 <span style={{ fontFamily: T.display, fontSize: 26, color: T.emphasis }}>One more in flight?</span>
                 <span style={{ fontSize: 13.5, lineHeight: 1.5, color: T.secondary }}>

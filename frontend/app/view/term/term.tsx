@@ -24,6 +24,7 @@ import * as React from "react";
 import { TermLinkTooltip } from "./term-tooltip";
 import { TermStickers } from "./termsticker";
 import { TermThemeUpdater } from "./termtheme";
+import { useWintos } from "@/wintos/ui/useWintos";
 import { computeTheme, normalizeCursorStyle } from "./termutil";
 import { TermWrap } from "./termwrap";
 import "./xterm.css";
@@ -178,6 +179,12 @@ const TermToolbarVDomNode = ({ blockId, model }: TerminalViewProps) => {
     );
 };
 
+// WintOS: a terminal wider than WINTOS_TERM_COLS columns keeps its tile but centres its text at
+// that width, so the eye doesn't travel a whole wide screen per line. A monospace cell is about
+// 0.6em wide; the extra is the element's own margin.
+const readingWidth = (cols: number, fontSize: number): React.CSSProperties | undefined =>
+    cols > 0 ? { width: "100%", maxWidth: Math.round(cols * fontSize * 0.6) + 8, alignSelf: "center", boxSizing: "border-box" } : undefined;
+
 const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => {
     const viewRef = React.useRef<HTMLDivElement>(null);
     const connectElemRef = React.useRef<HTMLDivElement>(null);
@@ -193,6 +200,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
 
     const tabModel = useTabModel();
     const termFontSize = jotai.useAtomValue(model.fontSizeAtom);
+    const termCols = useWintos().state?.termCols ?? 0;
     const fullConfig = globalStore.get(atoms.fullConfigAtom);
     const connFontFamily = fullConfig.connections?.[blockData?.meta?.connection]?.["term:fontfamily"];
     const isFocused = jotai.useAtomValue(model.nodeModel.isFocused);
@@ -392,7 +400,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
             <TermStickers config={stickerConfig} />
             <TermToolbarVDomNode key="vdom-toolbar" blockId={blockId} model={model} />
             <TermVDomNode key="vdom" blockId={blockId} model={model} />
-            <div key="connect-elem" className="term-connectelem" ref={connectElemRef} />
+            <div key="connect-elem" className="term-connectelem" ref={connectElemRef} style={readingWidth(termCols, termFontSize)} />
             <NullErrorBoundary debugName="TermLinkTooltip">
                 <TermLinkTooltip termWrap={termWrapInst} />
             </NullErrorBoundary>

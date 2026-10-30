@@ -46,7 +46,7 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
                 border: `1px solid ${cursor || !day.planned ? T.apricot : T.border}`, animation: day.planned ? undefined : "wintos-breathe 2.4s ease-in-out infinite",
             }}
         >
-            <style>{`@keyframes wintos-breathe { 0%,100% { box-shadow: 0 0 0 0 #fe801900 } 50% { box-shadow: 0 0 0 3px #fe801955 } } @media (prefers-reduced-motion: reduce) { [data-wintos=today-card] { animation: none !important } }`}</style>
+            <style>{`@keyframes wintos-breathe { 0%,100% { box-shadow: 0 0 0 0 color-mix(in srgb, ${T.apricot} 0%, transparent) } 50% { box-shadow: 0 0 0 3px color-mix(in srgb, ${T.apricot} 33%, transparent) } } @media (prefers-reduced-motion: reduce) { [data-wintos=today-card] { animation: none !important } }`}</style>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>Today</span>
                 <span style={{ display: "flex", gap: 8 }}>

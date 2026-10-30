@@ -1,27 +1,96 @@
-/* WintOS paints Wave's own chrome (window, pane frames, gaps, panels) in the same gruvbox
-   palette as tokens.ts. Doubled :root outranks Wave's theme.scss whatever the load order. */
+/* WintOS's palette, dark and light, following the system's appearance (System Settings sets
+   when it switches). Off-black and off-white keep body text at about 13:1: enough to read
+   crisply, short of the glow near-white on pure black gives. The smallest labels stay above
+   4.5:1. Wave's own chrome (window, pane frames, gaps, panels) takes the same values; the
+   doubled :root outranks Wave's theme.scss whatever the load order. */
 :root:root {
-    --main-bg-color: #000000;
-    --block-bg-color: #000000;
-    --block-bg-solid-color: #000000;
-    --panel-bg-color: #0f0e0d;
-    --border-color: #221f1d;
-    --main-text-color: #ebdbb2;
-    --secondary-text-color: #d5c4a1;
-    --grey-text-color: #7c6f64;
-    --accent-color: #b8bb26;
-    --hover-bg-color: rgba(235, 219, 178, 0.08);
-    --highlight-bg-color: rgba(235, 219, 178, 0.14);
-    --error-color: #fb4934;
-    --warning-color: #fabd2f;
-    --success-color: #b8bb26;
-    --keybinding-color: #d5c4a1;
-    --keybinding-bg-color: #221f1d;
-    --keybinding-border-color: #34302c;
-    --scrollbar-thumb-color: rgba(235, 219, 178, 0.15);
+    --w-ground: #171614;
+    --w-terminal: #141311;
+    --w-sidebar: #1b1a17;
+    --w-card: #1f1d1a;
+    --w-card-active: #262320;
+    --w-border: #2a2723;
+    --w-border-active: #3a352f;
+    --w-hairline: #22201d;
+    --w-text: #e2d7c4;
+    --w-emphasis: #f3ead9;
+    --w-title: #e2d7c4;
+    --w-secondary: #d2c6b2;
+    --w-muted: #a99f8f;
+    --w-faint: #8f8576;
+    --w-quiet-title: #c2b6a1;
+    --w-dim: #6f675b;
+    --w-apricot: #f0a05a;
+    --w-brick: #e06c5c;
+    --w-moss: #a7b86a;
+    --w-blue: #8fb0a3;
+    --w-aqua: #94c08a;
+    --w-purple: #d091a2;
+    --w-keycap-text: #d2c6b2;
+    --w-keycap-bg: #262320;
+    --w-keycap-border: #3a352f;
+    --w-hover: rgba(226, 215, 196, 0.07);
+    --w-highlight: rgba(226, 215, 196, 0.12);
+    --w-scrollbar: rgba(226, 215, 196, 0.15);
+    --w-warning: #e8b04b;
+}
+@media (prefers-color-scheme: light) {
+    :root:root {
+        --w-ground: #f3f0e9;
+        --w-terminal: #fbfaf6;
+        --w-sidebar: #ece8df;
+        --w-card: #ffffff;
+        --w-card-active: #f6f1e8;
+        --w-border: #e2ddd2;
+        --w-border-active: #cfc8bb;
+        --w-hairline: #ebe6dc;
+        --w-text: #26231f;
+        --w-emphasis: #141210;
+        --w-title: #26231f;
+        --w-secondary: #3f3a34;
+        --w-muted: #5f584f;
+        --w-faint: #6b645a;
+        --w-quiet-title: #3f3a34;
+        --w-dim: #9a9286;
+        --w-apricot: #b4400f;
+        --w-brick: #b42318;
+        --w-moss: #476f12;
+        --w-blue: #2f6f8f;
+        --w-aqua: #2f7d4a;
+        --w-purple: #8e3f6a;
+        --w-keycap-text: #3f3a34;
+        --w-keycap-bg: #f2efe8;
+        --w-keycap-border: #d9d3c7;
+        --w-hover: rgba(38, 35, 31, 0.05);
+        --w-highlight: rgba(38, 35, 31, 0.09);
+        --w-scrollbar: rgba(38, 35, 31, 0.2);
+        --w-warning: #9a6700;
+    }
+}
+:root:root {
+    --main-bg-color: var(--w-ground);
+    --block-bg-color: var(--w-terminal);
+    --block-bg-solid-color: var(--w-terminal);
+    --panel-bg-color: var(--w-sidebar);
+    --border-color: var(--w-border);
+    --main-text-color: var(--w-text);
+    --secondary-text-color: var(--w-secondary);
+    --grey-text-color: var(--w-faint);
+    --accent-color: var(--w-moss);
+    --hover-bg-color: var(--w-hover);
+    --highlight-bg-color: var(--w-highlight);
+    --error-color: var(--w-brick);
+    --warning-color: var(--w-warning);
+    --success-color: var(--w-moss);
+    --keybinding-color: var(--w-keycap-text);
+    --keybinding-bg-color: var(--w-keycap-bg);
+    --keybinding-border-color: var(--w-keycap-border);
+    --scrollbar-thumb-color: var(--w-scrollbar);
 }
 body {
-    background: #000000;
+    background: var(--w-ground);
+    /* Wave's window:bgcolor sets this on body inline (black by default); the theme decides it. */
+    --main-bg-color: var(--w-ground) !important;
 }
 
 /* A Claude pane shows its lane beside the terminal when wide, as a header row when narrow. */

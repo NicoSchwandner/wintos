@@ -158,7 +158,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
             tabIndex={0}
             ref={focusRef}
             data-zone="list"
-            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#000000", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
+            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
         >
             <div style={{ padding: "18px 26px 16px", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
@@ -299,7 +299,7 @@ function GroupHeader({ label, note, color, count }: { label: string; note: strin
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "0 12px 4px" }}>
             <span style={{ fontFamily: T.display, fontSize: 18, color }}>{label}</span>
             <span style={{ fontSize: 11, color: T.faint }}>{note}</span>
-            <span style={{ flexGrow: 1, height: 1, background: "#181615" }} />
+            <span style={{ flexGrow: 1, height: 1, background: T.card }} />
             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{count}</span>
         </div>
     );
@@ -322,7 +322,7 @@ function PrRow({ r, depth, project, repo, cursor, cols, fix, onOpen }: { r: Queu
             {depth > 0 && <span style={{ marginRight: -8, fontFamily: T.mono, color: T.faint }}>└</span>}
             <span style={{ width: 54, flexShrink: 0, fontFamily: T.mono, fontSize: 12.5, color: r.age.late ? T.brick : T.quietTitle }}>{r.age.text}</span>
             <span style={{ width: compact ? 22 : 118, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: 22, height: 22, borderRadius: "50%", background: r.mine ? "#34302c" : "#221f1d", color: r.mine ? "#fbf1c7" : "#d5c4a1", fontFamily: T.mono, fontSize: 8.5, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ width: 22, height: 22, borderRadius: "50%", background: r.mine ? T.borderActive : T.border, color: r.mine ? T.emphasis : T.secondary, fontFamily: T.mono, fontSize: 8.5, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {initials(pr.author)}
                 </span>
                 {!compact && <span style={{ fontSize: 12, color: r.mine ? T.title : T.quietTitle, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.mine ? "you" : pr.author}</span>}

@@ -19,7 +19,7 @@ export const Keymap = memo(() => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
     useZoneKeys(focusRef, { "Shift:?": closeOverlay });
     return (
-        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(15,16,17,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={closeOverlay}>
+        <div style={{ position: "absolute", inset: 0, zIndex: 100, background: `color-mix(in srgb, ${T.ground} 70%, transparent)`, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={closeOverlay}>
             <div
                 data-wintos="keymap"
                 tabIndex={0}
@@ -27,7 +27,7 @@ export const Keymap = memo(() => {
                 data-zone="overlay"
                 onClick={(e) => e.stopPropagation()}
                 // A short window gets more columns, then a scroll (↑↓, the card is focused), never a cut-off.
-                style={{ width: "min(1040px, calc(100% - 32px))", maxHeight: "calc(100% - 32px)", overflowY: "auto", boxSizing: "border-box", padding: "22px 26px", background: "#000000", border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none" }}
+                style={{ width: "min(1040px, calc(100% - 32px))", maxHeight: "calc(100% - 32px)", overflowY: "auto", boxSizing: "border-box", padding: "22px 26px", background: T.ground, border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, outline: "none" }}
             >
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "4px 12px", marginBottom: 18 }}>
                     <span style={{ fontFamily: T.display, fontSize: 26, color: T.emphasis }}>Keys</span>

@@ -54,7 +54,7 @@ export const WrapupPage = memo(() => {
     useZoneKeys(ref, { ...cursorKeys(() => ref.current), t: act("data-tomorrow"), d: act("data-drop"), "Cmd:Enter": () => void close() });
     const looseLeft = waiting.filter((s) => !handled[s.id]).length;
     return (
-        <div ref={ref} tabIndex={0} data-zone="list" data-wintos="wrapup" style={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px", background: "#000000", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0, overflowY: "auto" }}>
+        <div ref={ref} tabIndex={0} data-zone="list" data-wintos="wrapup" style={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0, overflowY: "auto" }}>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 30, fontWeight: 400, lineHeight: 1, color: T.emphasis }}>Close the day</h1>

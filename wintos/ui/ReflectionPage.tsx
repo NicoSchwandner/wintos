@@ -57,7 +57,7 @@ export const ReflectionPage = memo(() => {
     // The level just below leads (a quarterly's monthlies), the ones under it follow.
     const earlier = [...view.earlier].sort((a, b) => rank(b.level) - rank(a.level) || b.date.localeCompare(a.date));
     return (
-        <div ref={ref} tabIndex={0} data-zone="list" data-wintos="reflect" style={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 0", background: "#000000", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}>
+        <div ref={ref} tabIndex={0} data-zone="list" data-wintos="reflect" style={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 0", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 30, fontWeight: 400, lineHeight: 1, color: T.emphasis }}>{LABEL[view.level]} reflection</h1>

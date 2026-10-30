@@ -3,8 +3,9 @@
 // and task ids, where an exact hit beats everything; label names a long text in a hit's snippet.
 export type Field = { text: string; weight: number; fuzzy?: boolean; ids?: boolean; label?: string };
 export type Kind = "project" | "pr" | "session" | "action";
-// touchedAt: when you last interacted with it (looked at the project, prompted the session, shelved it).
-export type PaletteItem = { id: string; kind: Kind; title: string; subtitle?: string; hint?: string; fields?: Field[]; recency?: number; touchedAt?: number; run?: (hit: Hit) => void };
+// touchedAt: when you last interacted with it (looked at the project, prompted the session, shelved
+// it), what orders a group; recency stands in where it is unknown. first: ahead of its group (a due wake).
+export type PaletteItem = { id: string; kind: Kind; title: string; subtitle?: string; hint?: string; fields?: Field[]; recency?: number; touchedAt?: number; first?: boolean; run?: (hit: Hit) => void };
 export type Snippet = { label: string; before: string; match: string; after: string };
 export type Hit = { item: PaletteItem; score: number; snippet?: Snippet; titleMarks?: [number, number][] };
 
@@ -82,22 +83,26 @@ function scoreItem(item: PaletteItem, words: string[]): Hit | null {
 export function searchPalette(items: PaletteItem[], query: string): Hit[] {
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const byKind = (a: PaletteItem, b: PaletteItem) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind];
-    if (!words.length) return [...items].sort(byKind).map((item) => ({ item, score: 0 }));
+    const latest = (i: PaletteItem) => (i.first ? Infinity : (i.touchedAt ?? i.recency ?? -Infinity));
+    const byTouch = (a: PaletteItem, b: PaletteItem) => (latest(b) === latest(a) ? 0 : latest(b) > latest(a) ? 1 : -1);
+    if (!words.length) return [...items].sort((a, b) => byKind(a, b) || byTouch(a, b)).map((item) => ({ item, score: 0 }));
     return items
         .map((item) => scoreItem(item, words))
         .filter((h): h is Hit => h !== null)
-        .sort((a, b) => b.score - a.score || (b.item.recency ?? 0) - (a.item.recency ?? 0) || byKind(a.item, b.item));
+        .sort((a, b) => b.score - a.score || byTouch(a.item, b.item) || byKind(a.item, b.item));
 }
 
 // The rows the palette shows: groups ordered by their best hit, so the first row is the best
-// result, each cut at `cap` with a row for the rest unless expanded.
-export type Row = { type: "hit"; hit: Hit } | { type: "more"; kind: Kind; count: number };
+// result, each cut at `cap` with a row for the rest unless expanded; an expanded one starts with a
+// row that folds it again, so it is never a scroll away.
+export type Row = { type: "hit"; hit: Hit } | { type: "more"; kind: Kind; count: number } | { type: "less"; kind: Kind };
 export function groupHits(hits: Hit[], expanded: Set<Kind>, cap = 6): Row[] {
     const groups = new Map<Kind, Hit[]>();
     for (const h of hits) groups.set(h.item.kind, [...(groups.get(h.item.kind) ?? []), h]);
     const rows: Row[] = [];
     for (const [kind, group] of groups) {
         const shown = expanded.has(kind) ? group : group.slice(0, cap);
+        if (group.length > cap && expanded.has(kind)) rows.push({ type: "less", kind });
         rows.push(...shown.map((hit): Row => ({ type: "hit", hit })));
         if (shown.length < group.length) rows.push({ type: "more", kind, count: group.length - shown.length });
     }

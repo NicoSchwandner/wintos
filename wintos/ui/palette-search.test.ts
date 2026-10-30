@@ -13,6 +13,21 @@ const ids = (q: string, list = items) => searchPalette(list, q).map((h) => h.ite
 describe("searchPalette", () => {
     test("an empty query lists everything, grouped projects → PRs → sessions → actions", () => expect(ids("")).toEqual(["p1", "p2", "s1", "a1", "a2"]));
 
+    test("an empty query lists each group by when you last touched it; first ones (a due wake) lead", () => {
+        const list: PaletteItem[] = [
+            { id: "old", kind: "project", title: "Old", touchedAt: 1, recency: 50 },
+            { id: "new", kind: "project", title: "New", touchedAt: 30 },
+            { id: "never", kind: "project", title: "Never" },
+            { id: "woke", kind: "project", title: "Woke", first: true, touchedAt: 2 },
+            { id: "a", kind: "action", title: "A" },
+            { id: "b", kind: "action", title: "B" },
+        ];
+        expect(ids("", list)).toEqual(["woke", "new", "old", "never", "a", "b"]);
+    });
+
+    test("equal matches go by when you last touched them", () =>
+        expect(ids("ocr", [{ id: "x", kind: "project", title: "OCR a", touchedAt: 1, recency: 99 }, { id: "y", kind: "project", title: "OCR b", touchedAt: 5 }])).toEqual(["y", "x"]));
+
     test("a prefix beats a word match beats a scattered match", () => expect(ids("ocr")).toEqual(["p2", "s1", "p1", "a1"]));
 
     test("scattered letters still find a title (fuzzy)", () => expect(ids("prsna")).toEqual(["a2"]));
@@ -70,7 +85,12 @@ describe("groupHits", () => {
         expect(rows.find((r) => r.type === "more")).toEqual({ type: "more", kind: "project", count: 3 });
     });
 
-    test("an expanded group shows them all", () => expect(groupHits(hits, new Set(["project"])).filter((r) => r.type === "more")).toEqual([]));
+    test("an expanded group shows them all, a row to fold it again first", () => {
+        const rows = groupHits(hits, new Set(["project"]));
+        expect(rows.filter((r) => r.type === "more")).toEqual([]);
+        expect(rows[0]).toEqual({ type: "less", kind: "project" });
+        expect(rows.filter((r) => r.type === "hit" && r.hit.item.kind === "project").length).toBe(9);
+    });
 
     test("groups follow their best hit, so the top row is the best result", () => {
         const rows = groupHits(searchPalette([{ id: "x", kind: "project", title: "Other" }, { id: "y", kind: "action", title: "Rename" }], "rename"), new Set());

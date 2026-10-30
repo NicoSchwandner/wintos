@@ -49,16 +49,30 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
     const items = useMemo(() => (state ? paletteItems(state, texts, names, now) : []), [state, texts, names]);
     const hits = searchPalette(items, q);
     const rows = groupHits(hits, expanded);
+    // Folding puts the cursor on the group's "more" row, where the fold left it.
+    const fold = (kind: Kind) => {
+        const left = new Set([...expanded].filter((k) => k !== kind));
+        setExpanded(left);
+        setCursor(Math.max(0, groupHits(hits, left).findIndex((r) => r.type === "more" && r.kind === kind)));
+    };
+    const kindAt = (n: number): Kind | undefined => {
+        const row = rows[n];
+        return row ? (row.type === "hit" ? row.hit.item.kind : row.kind) : undefined;
+    };
     const run = (n: number) => {
         const row = rows[n];
         if (!row) return;
         if (row.type === "more") return setExpanded(new Set([...expanded, row.kind]));
+        if (row.type === "less") return fold(row.kind);
         closeOverlay();
         row.hit.item.run?.(row.hit);
     };
     const down = () => setCursor((c) => Math.min(c + 1, rows.length - 1));
     const up = () => setCursor((c) => Math.max(c - 1, 0));
-    useZoneKeys(ref, { ArrowDown: down, "Ctrl:n": down, ArrowUp: up, "Ctrl:p": up, Enter: () => run(cursor), "Shift:Cmd:p": closeOverlay });
+    useZoneKeys(ref, { ArrowDown: down, "Ctrl:n": down, ArrowUp: up, "Ctrl:p": up, Enter: () => run(cursor), "Cmd:ArrowUp": () => {
+            const kind = kindAt(cursor);
+            if (kind && expanded.has(kind)) fold(kind);
+        }, "Shift:Cmd:p": closeOverlay });
     let lastKind = "";
     return (
         <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "rgba(15,16,17,0.6)", display: "flex", justifyContent: "center", paddingTop: "12vh" }} onClick={closeOverlay}>
@@ -88,7 +102,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                         lastKind = kind;
                         const on = n === cursor;
                         return (
-                            <div key={row.type === "hit" ? row.hit.item.id : `more:${row.kind}`}>
+                            <div key={row.type === "hit" ? row.hit.item.id : `${row.type}:${row.kind}`}>
                                 {header && <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint, padding: "10px 10px 4px" }}>{header}</div>}
                                 <div
                                     ref={on ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
@@ -97,7 +111,12 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                                     onClick={() => run(n)}
                                     style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: row.type === "hit" ? "8px 10px" : "5px 10px", borderRadius: 8, cursor: "pointer", background: on ? "#221f1d" : "transparent" }}
                                 >
-                                    {row.type === "more" ? (
+                                    {row.type === "less" ? (
+                                        <span data-wintos="palette-fold" style={{ display: "flex", width: "100%", justifyContent: "space-between", fontSize: 11.5, color: on ? T.emphasis : T.muted }}>
+                                            Show fewer {row.kind === "pr" ? "PRs" : KIND_LABEL[row.kind].toLowerCase()}
+                                            <Key k="⌘↑" label="" />
+                                        </span>
+                                    ) : row.type === "more" ? (
                                         <span style={{ fontSize: 11.5, color: on ? T.emphasis : T.muted }}>
                                             {row.count} more {row.kind === "pr" ? "PRs" : KIND_LABEL[row.kind].toLowerCase()}
                                         </span>
@@ -209,7 +228,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
         const woke = wokeClosed.find((w) => w.projectId === p.id);
         const script = woke?.script ?? shelf[0]?.script;
         const status = woke ? `${woke.line}; ⏎` : shelf.length ? `shelved · ${shelf.length} session${shelf.length === 1 ? "" : "s"} · ⏎ reopens it on the newest` : "closed · ⏎ reopens it";
-        out.push({ id: `c:${p.id}`, kind: "project", title: p.title, subtitle: [status, p.next].filter(Boolean).join(" · "), fields: fields(p.id), recency: woke ? woke.due : (p.mtime ?? 0) / 2, touchedAt: projectTouched(state, p.id!) ?? p.mtime, run: () => reopenProject(p.id!, script ? [resumePane(script)] : []) });
+        out.push({ id: `c:${p.id}`, kind: "project", title: p.title, subtitle: [status, p.next].filter(Boolean).join(" · "), fields: fields(p.id), recency: (p.mtime ?? 0) / 2, first: !!woke, touchedAt: projectTouched(state, p.id!) ?? p.mtime, run: () => reopenProject(p.id!, script ? [resumePane(script)] : []) });
     }
     for (const pr of gh?.prs ?? []) {
         const tabs = prOf.get(pr.url) ?? [];

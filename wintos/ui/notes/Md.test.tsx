@@ -17,6 +17,8 @@ describe("Md", () => {
         ["a markdown link keeps its text", "[the PR](https://github.com/acme/api/pull/7)", ['href="https://github.com/acme/api/pull/7"', ">the PR</a>"], []],
         ["a bare url reads short, without the full stop", "see https://www.example.com/runs/42.", [">example.com/runs/42</a>."], []],
         ["task lists show boxes, not brackets", "- [ ] todo\n- [x] done", ["✓", "line-through"], ["[ ]", "[x]"]],
+        ["a bullet among boxes keeps its dot", "- [ ] todo\n- note", ['>•</span><span style="min-width:0">note'], []],
+        ["a bullet beside a nested box keeps its dot", "- [ ] todo\n  - [ ] sub\n  - note", ['>•</span><span style="min-width:0">note'], []],
     ])("%s", (_, text, has, hasNot) => {
         const h = html(text);
         for (const x of has) expect(h).toContain(x);

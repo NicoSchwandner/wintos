@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { choose, parseItems, shownItems, splitText, type Curation } from "./standup";
+import { choose, detailsMarkdown, parseItems, shownItems, splitText, type Curation } from "./standup";
 
 const empty: Curation = { days: {}, examples: [] };
 const items = parseItems(
@@ -15,6 +15,14 @@ describe("parseItems", () => {
             { id: "2", project: "", text: "Asks nothing", details: [] },
         ]));
 });
+
+test("splitText keeps how deep each detail sits under the item", () =>
+    expect(splitText("- Merged: PDFs\n  - fallback\n    - asked twice\n      - by QA\n  - shipped")).toEqual({ text: "Merged: PDFs", details: ["fallback", "  asked twice", "    by QA", "shipped"] }));
+
+test("parseItems keeps how deep each detail sits under the item", () =>
+    expect(parseItems("- [Intake] Merged\n  - a\n    - b", ["Intake"])[0].details).toEqual(["a", "  b"]));
+
+test("detailsMarkdown nests the details as a list", () => expect(detailsMarkdown(["a", "  b", "c"])).toBe("- a\n  - b\n- c"));
 
 test("splitText: the first line is the item, the bulleted rest its details", () =>
     expect(splitText("- Merged: PDFs\n  - fallback asked\n\n")).toEqual({ text: "Merged: PDFs", details: ["fallback asked"] }));

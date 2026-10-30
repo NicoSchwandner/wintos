@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { createContext, Fragment, useContext } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { runAction } from "../menu";
@@ -10,6 +10,10 @@ const shortUrl = (url: string) => {
     const s = url.replace(/^https?:\/\/(www\.)?/, "");
     return s.length > 47 ? `${s.slice(0, 47)}…` : s;
 };
+
+// Whether the list an item sits in draws boxes: a plain bullet among them then draws its own dot
+// where the box goes, as the list's own markers are off.
+const InTaskList = createContext(false);
 
 // The notes' markdown (GitHub flavour: tables, task lists, autolinks), styled for the rail and the
 // full view. inline: one line inside a row (Next action, a decision) without block margins.
@@ -28,18 +32,25 @@ export function Md({ text, size, inline, links = true, onTick }: { text: string;
         h6: ({ children }) => <Heading size={size}>{children}</Heading>,
         // A checkbox list draws its own boxes, so the outermost one sits flush; one nested under
         // an item (it starts further right in the source) keeps its indent.
-        ul: ({ children, className, node }) => (
-            <ul style={{ ...block, paddingLeft: !className?.includes("contains-task-list") ? 16 : (node?.position?.start.column ?? 1) > 1 ? 20 : 0, listStyle: className?.includes("contains-task-list") ? "none" : "disc", display: "flex", flexDirection: "column", gap: 2 }}>{children}</ul>
-        ),
+        ul: ({ children, className, node }) => {
+            const tasks = !!className?.includes("contains-task-list");
+            return (
+                <InTaskList.Provider value={tasks}>
+                    <ul style={{ ...block, paddingLeft: !tasks ? 16 : (node?.position?.start.column ?? 1) > 1 ? 20 : 0, listStyle: tasks ? "none" : "disc", display: "flex", flexDirection: "column", gap: 2 }}>{children}</ul>
+                </InTaskList.Provider>
+            );
+        },
         ol: ({ children, start }) => (
-            <ol start={start} style={{ ...block, paddingLeft: 20, listStyle: "decimal", display: "flex", flexDirection: "column", gap: 2 }}>
-                {children}
-            </ol>
+            <InTaskList.Provider value={false}>
+                <ol start={start} style={{ ...block, paddingLeft: 20, listStyle: "decimal", display: "flex", flexDirection: "column", gap: 2 }}>
+                    {children}
+                </ol>
+            </InTaskList.Provider>
         ),
         // A task item draws its own box: the checkbox element markdown generates has no source
         // position, the item does, and the line is what a tick flips.
         li: ({ children, className, node }) => {
-            if (!className?.includes("task-list-item")) return <li style={{ overflowWrap: "anywhere" }}>{children}</li>;
+            if (!className?.includes("task-list-item")) return <Item>{children}</Item>;
             const done = !!(node?.children[0] as { properties?: { checked?: boolean } } | undefined)?.properties?.checked;
             const line = (node?.position?.start.line ?? 1) - 1;
             return (
@@ -104,4 +115,14 @@ export function Md({ text, size, inline, links = true, onTick }: { text: string;
 function Heading({ size, children }: { size: Size; children: React.ReactNode }) {
     const z = SIZES[size];
     return <span style={{ fontSize: z.label, fontWeight: 700, letterSpacing: "0.08em", color: T.faint, marginTop: 4 }}>{children}</span>;
+}
+
+function Item({ children }: { children: React.ReactNode }) {
+    if (!useContext(InTaskList)) return <li style={{ overflowWrap: "anywhere" }}>{children}</li>;
+    return (
+        <li style={{ display: "flex", gap: 8, alignItems: "flex-start", minWidth: 0, overflowWrap: "anywhere" }}>
+            <span data-bullet="" style={{ width: 12, flexShrink: 0, textAlign: "center", color: T.muted }}>•</span>
+            <span style={{ minWidth: 0 }}>{children}</span>
+        </li>
+    );
 }

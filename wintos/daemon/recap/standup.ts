@@ -15,9 +15,9 @@ const EXAMPLES_KEPT = 3;
 export function parseItems(out: string, projects: string[]): StandupItem[] {
     const items: StandupItem[] = [];
     for (const line of out.split("\n")) {
-        const detail = /^\s{2,}[-*•]\s+(.*\S)/.exec(line);
+        const detail = /^(\s{2,})[-*•]\s+(.*\S)/.exec(line);
         if (detail && items.length) {
-            items[items.length - 1].details.push(detail[1]);
+            items[items.length - 1].details.push(" ".repeat(detail[1].length - 2) + detail[2]);
             continue;
         }
         const head = /^[-*•]\s+(?:\[([^\]]+)\]\s*)?(.*\S)/.exec(line);
@@ -28,11 +28,16 @@ export function parseItems(out: string, projects: string[]): StandupItem[] {
     return items;
 }
 
-const asText = (text: string, details: string[]) => [text, ...details.map((d) => `- ${d}`)].join("\n");
+// A detail is its text after the indent it has beyond the first level under the item, so a
+// nested list keeps its shape through a rewrite.
+export const detailsMarkdown = (details: string[]) => details.map((d) => `${/^\s*/.exec(d)![0]}- ${d.trimStart()}`).join("\n");
+export const asText = (text: string, details: string[]) => [text, detailsMarkdown(details)].filter(Boolean).join("\n");
 
 export function splitText(text: string): { text: string; details: string[] } {
     const [head = "", ...rest] = text.trim().split("\n");
-    return { text: head.replace(/^[-*•]\s+/, "").trim(), details: rest.map((l) => l.replace(/^\s*[-*•]\s+/, "").trim()).filter(Boolean) };
+    const lines = rest.filter((l) => l.trim()).map((l) => ({ indent: /^\s*/.exec(l.replace(/\t/g, "  "))![0].length, text: l.replace(/^\s*[-*•]\s+/, "").trim() }));
+    const base = Math.min(...lines.map((l) => l.indent));
+    return { text: head.replace(/^[-*•]\s+/, "").trim(), details: lines.map((l) => " ".repeat(l.indent - base) + l.text) };
 }
 
 // The day's items as you left them: your rewrites, lifted ones first (the last lifted leading),

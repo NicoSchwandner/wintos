@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import type { ShownItem } from "../daemon/recap/standup";
+import { asText, detailsMarkdown, type ShownItem } from "../daemon/recap/standup";
 import { lastDayName } from "./day";
 import { focusList } from "./dayplan";
 import { startCursor } from "./itemCursor";
 import { Key } from "./Key";
+import { Md } from "./notes/Md";
 import { More, Rich } from "./notes/ProjectNotes";
 import { standupAsks } from "./prs";
 import { T } from "./tokens";
@@ -112,18 +113,12 @@ function StandupRow({ item, curating, rewriting, onRewrite, change }: { item: Sh
         <li data-item={curating ? "standup" : undefined} data-standup={item.id} data-wintos="standup-item" data-dropped={item.dropped || undefined} style={{ opacity: curating && item.dropped ? 0.4 : 1, borderRadius: 6 }}>
             <Rich text={item.text} size="full" />
             {curating && item.top && <span style={{ marginLeft: 8, fontFamily: T.mono, fontSize: 10.5, color: T.moss }}>top</span>}
-            {item.details.length > 0 && (
-                <ul style={{ margin: 0, paddingLeft: 18, listStyle: "circle" }}>
-                    {item.details.map((d) => (
-                        <li key={d}><Rich text={d} size="full" /></li>
-                    ))}
-                </ul>
-            )}
+            {item.details.length > 0 && <Md text={detailsMarkdown(item.details)} size="full" />}
             {curating && (
                 <>
                     <button type="button" data-drop tabIndex={-1} style={ACT} onClick={() => change({ drop: !item.dropped })} />
                     <button type="button" data-top tabIndex={-1} style={ACT} onClick={() => change({ top: !item.top })} />
-                    <button type="button" data-rewrite tabIndex={-1} style={ACT} onClick={() => (setText([item.text, ...item.details.map((d) => `- ${d}`)].join("\n")), onRewrite(true))} />
+                    <button type="button" data-rewrite tabIndex={-1} style={ACT} onClick={() => (setText(asText(item.text, item.details)), onRewrite(true))} />
                 </>
             )}
         </li>

@@ -499,7 +499,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             if (req.method === "GET" && url.pathname === "/reflection") {
                 const r = opts.journal!.reflection(new Date(), url.searchParams.get("date") ?? undefined);
                 if (!r) return send(res, 404, "no reflection in the journal yet");
-                return json(res, { ...r, days: r.days.map((d) => ({ ...d, readOut: recapper.readOut(d.date) })) });
+                return json(res, { ...r, days: r.days.map((d) => ({ ...d, readOut: recapper.readOut(d.date), numbers: recapper.numbersOf(d.date) })) });
             }
             if (req.method === "POST" && url.pathname === "/reflection") {
                 const b = (await body(req)) as { date?: unknown; body?: unknown; baseMtime?: unknown };

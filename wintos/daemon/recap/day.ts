@@ -4,6 +4,7 @@ import { join } from "path";
 import { activeMinutes, cutItems, gist, lastRecaps, lastWorkday, localDay, MAX_ITEMS, mergeByTitle, MIN_MINUTES, noTickets, recapPrompt, recordActivity, type Activity, type RecapItem } from "./recap";
 import { edit, parseItems, shownItems, type Curation, type ShownItem, type StandupItem } from "./standup";
 import { userPrompts } from "../sessions/naming";
+import { dayNumbers, promptTimes, type DayNumbers } from "./numbers";
 
 const KEEP_DAYS = 14;
 const RECAP_VERSION = "v4";
@@ -103,6 +104,17 @@ export function dayRecapper(root: string, cmd?: string, extra?: string, factsOf:
         return items ? shownItems(items, curation, day).filter((i) => !i.dropped).map((i) => i.text) : [];
     };
 
+    // The day in numbers (numbers.ts), from the prompts in the transcripts of its sessions. A past
+    // day doesn't change, so it is read once.
+    const numbersSeen = new Map<string, DayNumbers | undefined>();
+    const numbersOf = (day: string): DayNumbers | undefined => {
+        if (numbersSeen.has(day)) return numbersSeen.get(day);
+        const prompts = Object.values(activity[day] ?? {}).flatMap((p) => Object.entries(p.sessions).flatMap(([sessionId, file]) => promptTimes(safeText(file), day, isoDay).map((at) => ({ at, sessionId }))));
+        const n = dayNumbers(prompts);
+        if (day < isoDay(Date.now())) numbersSeen.set(day, n);
+        return n;
+    };
+
     // The transcript file a session's hook events named, from any day.
     const transcriptOf = (sessionId: string): string | undefined => Object.values(activity).flatMap((d) => Object.values(d)).map((p) => p.sessions[sessionId]).find(Boolean);
 
@@ -113,7 +125,7 @@ export function dayRecapper(root: string, cmd?: string, extra?: string, factsOf:
         return last ? gist(last) : undefined;
     };
 
-    return { record, recap, editList, readOut, gistOf, transcriptOf };
+    return { record, recap, editList, readOut, gistOf, transcriptOf, numbersOf };
 }
 
 function safeText(file: string): string {

@@ -2,6 +2,7 @@ import { useAtomValue } from "jotai";
 import { memo, useEffect, useState } from "react";
 import { rank, type Level } from "../daemon/journal/reflection";
 import type { ReflectionView } from "../daemon/journal/journal";
+import type { DayNumbers } from "../daemon/recap/numbers";
 import { editMine } from "./focus";
 import { Key } from "./Key";
 import { Md } from "./notes/Md";
@@ -14,7 +15,7 @@ import { useFocusOnMount } from "./useFocusOnMount";
 import { daemonFetch, useWintos } from "./useWintos";
 import { useZoneKeys } from "./zones";
 
-type View = Omit<ReflectionView, "days"> & { days: { date: string; focus: string; readOut: string[] }[] };
+type View = Omit<ReflectionView, "days"> & { days: { date: string; focus: string; readOut: string[]; numbers?: DayNumbers }[] };
 
 const dayName = (iso: string, opts: Intl.DateTimeFormatOptions) => new Date(`${iso}T12:00:00`).toLocaleDateString("en-GB", opts);
 const LABEL: Record<Level, string> = { weekly: "Weekly", monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly" };
@@ -66,6 +67,7 @@ export const ReflectionPage = memo(() => {
             </div>
             <div style={{ flexGrow: 1, minHeight: 0, display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 20, paddingBottom: 18 }}>
                 <div data-wintos="reflect-lookback" style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflowY: "auto" }}>
+                    <WeekNumbers days={view.days} />
                     {view.goals && (
                         <Panel label={`The goals you set ${dayName(view.goals.date, { day: "numeric", month: "long" })}`}>
                             <Md text={view.goals.items.join("\n")} size="full" />
@@ -99,3 +101,51 @@ export const ReflectionPage = memo(() => {
     );
 });
 ReflectionPage.displayName = "ReflectionPage";
+
+const LATE_HOUR = 20;
+const hm = (t: number) => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+const span = (ms: number) => (ms >= 3_600_000 ? `${Math.floor(ms / 3_600_000)} h ${String(Math.round((ms % 3_600_000) / 60_000)).padStart(2, "0")}` : `${Math.round(ms / 60_000)} min`);
+
+// The week as it went, from your prompts: plain numbers, no score. The longest stretch without a
+// break per day is the one to watch: over an hour shows in apricot.
+function WeekNumbers({ days }: { days: View["days"] }) {
+    const worked = days.filter((d) => d.numbers);
+    if (!worked.length) return null;
+    const n = (d: View["days"][number]) => d.numbers!;
+    const longest = worked.reduce((a, b) => (n(b).longestMs > n(a).longestMs ? b : a));
+    const late = worked.filter((d) => new Date(n(d).lastAt).getHours() >= LATE_HOUR);
+    const switchPct = Math.round(worked.reduce((k, d) => k + n(d).switchPct, 0) / worked.length);
+    const max = Math.max(...worked.map((d) => n(d).longestMs), 3_600_000);
+    const tile = (label: string, value: string, note: string, tone?: string) => (
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+            <span style={{ fontSize: 11, color: T.muted }}>{label}</span>
+            <span style={{ fontFamily: T.display, fontSize: 28, lineHeight: 1.1, color: tone ?? T.emphasis }}>{value}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{note}</span>
+        </div>
+    );
+    return (
+        <Panel label="The week in numbers">
+            <div data-wintos="week-numbers" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
+                {tile("Longest without a break", span(n(longest).longestMs), dayName(longest.date, { weekday: "long" }), n(longest).longestMs > 3_600_000 ? T.apricot : undefined)}
+                {tile("Next prompt elsewhere", `${switchPct}%`, "of prompts, on average")}
+                {tile(`Evenings past ${LATE_HOUR}:00`, `${late.length} of ${worked.length}`, late.map((d) => `${dayName(d.date, { weekday: "short" })} ${hm(n(d).lastAt)}`).join(" · ") || "none")}
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 110, paddingTop: 8 }}>
+                {days.map((d) => (
+                    <div key={d.date} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }}>
+                        <span style={{ fontFamily: T.mono, fontSize: 10, color: T.secondary }}>{d.numbers ? span(d.numbers.longestMs) : ""}</span>
+                        <span style={{ width: "100%", height: d.numbers ? Math.max(3, (70 * d.numbers.longestMs) / max) : 0, borderRadius: "4px 4px 0 0", background: (d.numbers?.longestMs ?? 0) > 3_600_000 ? T.apricot : T.moss }} />
+                    </div>
+                ))}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+                {days.map((d) => (
+                    <span key={d.date} style={{ flex: 1, textAlign: "center", fontSize: 11, color: T.muted, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {dayName(d.date, { weekday: "short" })}{d.numbers ? ` · ${d.numbers.sessions}` : ""}
+                    </span>
+                ))}
+            </div>
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>longest stretch without a 10-minute gap, per day · sessions you prompted · breaks of 20 min: {worked.reduce((k, d) => k + n(d).breaks, 0)}</span>
+        </Panel>
+    );
+}

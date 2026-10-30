@@ -43,10 +43,9 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
             style={{
                 display: "flex", flexDirection: "column", gap: 5, padding: "9px 11px", borderRadius: 10, cursor: "pointer",
                 background: active ? T.borderActive : T.card, boxShadow: active ? `inset 3px 0 0 ${T.emphasis}` : undefined,
-                border: `1px solid ${cursor || !day.planned ? T.apricot : T.border}`, animation: day.planned ? undefined : "wintos-breathe 2.4s ease-in-out infinite",
+                border: `1px solid ${cursor || !day.planned ? T.apricot : T.border}`,
             }}
         >
-            <style>{`@keyframes wintos-breathe { 0%,100% { box-shadow: 0 0 0 0 color-mix(in srgb, ${T.apricot} 0%, transparent) } 50% { box-shadow: 0 0 0 3px color-mix(in srgb, ${T.apricot} 33%, transparent) } } @media (prefers-reduced-motion: reduce) { [data-wintos=today-card] { animation: none !important } }`}</style>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>Today</span>
                 <span style={{ display: "flex", gap: 8 }}>
@@ -57,7 +56,7 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
             {!day.planned ? (
                 <span style={{ fontSize: 11.5, color: T.apricot }}>Plan your day{left && day.yesterday ? ` · ${left} left from ${since(day.yesterday.date, day.date)}` : ""}</span>
             ) : open.length === 0 ? (
-                <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>{items.length ? `all ${items.length} done` : "nothing planned"}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{items.length ? `all ${items.length} done` : "nothing planned"}</span>
             ) : (
                 <>
                     {shown.slice(0, SHOWN).map((i) => (
@@ -70,7 +69,7 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
                             <span style={{ minWidth: 0, overflowWrap: "anywhere", textDecoration: i.done ? "line-through" : undefined }}><Rich text={i.text} size="rail" /></span>
                         </div>
                     ))}
-                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>
+                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>
                         {[shown.length > SHOWN ? `+${shown.length - SHOWN} more` : "", done ? `${done} done` : ""].filter(Boolean).join(" · ")}
                     </span>
                 </>
@@ -97,7 +96,7 @@ function BreakMarks() {
     const since = Math.round((now - r.stretchFrom) / 60_000);
     const n = r.breaks.length;
     return (
-        <span data-wintos="break-marks" style={{ display: "flex", alignItems: "center", gap: 3, fontFamily: T.mono, fontSize: 10, color: T.faint }}>
+        <span data-wintos="break-marks" style={{ display: "flex", alignItems: "center", gap: 3, fontFamily: T.mono, fontSize: 11, color: T.faint }}>
             {r.breaks.slice(-8).map((b) => <span key={b.start} style={{ width: 14, height: 5, borderRadius: 2, background: T.moss }} />)}
             <span style={{ marginLeft: n ? 5 : 0 }}>{r.onBreak ? "on a break" : n ? `${n} break${n === 1 ? "" : "s"} · ${since} min since the last` : `no break yet · ${since} min at it`}</span>
         </span>
@@ -140,7 +139,7 @@ function TickList({ day }: { day: Day }) {
                     <span style={{ minWidth: 0, overflowWrap: "anywhere" }}><Rich text={i.text} size="rail" /></span>
                 </div>
             ))}
-            {shown.length > SHOWN_TICKING && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>+{shown.length - SHOWN_TICKING} more on the Today page</span>}
+            {shown.length > SHOWN_TICKING && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>+{shown.length - SHOWN_TICKING} more on the Today page</span>}
         </div>
     );
 }

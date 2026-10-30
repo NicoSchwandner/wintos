@@ -152,6 +152,9 @@ if (projects() === 0) {
     await until("a project", async () => projects() > 0);
 }
 
+// The scenarios read the notes and the quiet projects, which are folded by default: open both.
+for (const r of await renderers()) await evalIn(r, `localStorage.setItem("wintos:notes-folded", "0"); localStorage.setItem("wintos:quiet-unfolded", "1"); window.dispatchEvent(new StorageEvent("storage"))`);
+
 // Panes in the Inbox before the run; the run closes every other one at the end.
 const inboxPanesAtStart = sql(`select j.value from db_tab t, json_each(t.data->'blockids') j where t.${PRS_TAB}`).split("\n").filter(Boolean);
 

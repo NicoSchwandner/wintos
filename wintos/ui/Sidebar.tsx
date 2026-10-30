@@ -79,7 +79,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const now = useNow();
     const fullScreen = useAtomValue(atoms.isFullScreen);
     const mainView = useAtomValue(mainViewAtom);
-    const [showAll, setShowAll] = useStoredFlag("wintos:show-all-quiet");
+    const [showAll, setShowAll] = useStoredFlag("wintos:quiet-unfolded");
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
@@ -94,8 +94,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     // The open tab is always visible even when it is stale; walking with ⌘J/⌘K or renaming
     // (the row must exist to hold the input) shows them all.
     const expanded = showAll || switchTarget != null || renaming != null;
-    const activeStale = model?.quietStale.filter((r) => r.tabId === activeTabId && !expanded) ?? [];
-    const quiet = model ? (expanded ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [...model.quiet, ...activeStale]) : [];
+    // Quiet folds to one line, the open project kept: what is not for you now steps back.
+    const allQuiet = model ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [];
+    const quiet = expanded ? allQuiet : allQuiet.filter((r) => r.tabId === activeTabId);
     // The cards above the projects are walked too, in the order they show: PRs, On call, Today.
     const cards = [...(state?.day ? ["card:today"] : []), ...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : [])];
     const switchOrder = model ? [...cards, ...wokeClosed.map((w) => `wake:${w.projectId}`), ...[...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId)] : [];
@@ -165,7 +166,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     return (
         <div style={{ height: "100%", display: "flex", flexDirection: "column", background: T.sidebar, borderRight: `1px solid ${T.border}`, fontFamily: T.ui, color: T.text }}>
             {instance().label && (
-                <div style={{ padding: `${fullScreen ? 6 : 30}px 12px 6px`, background: T.brick, color: T.ground, fontFamily: T.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", textAlign: "center", WebkitAppRegion: "drag" } as React.CSSProperties}>
+                <div style={{ padding: `${fullScreen ? 6 : 30}px 12px 6px`, background: T.brick, color: T.ground, fontFamily: T.mono, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.06em", textAlign: "center", WebkitAppRegion: "drag" } as React.CSSProperties}>
                     {instance().label.toUpperCase()} INSTANCE · NOT YOUR WINTOS
                 </div>
             )}
@@ -178,7 +179,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 </div>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
                     <Today />
-                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{tabIds.length} {tabIds.length === 1 ? "project" : "projects"}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>{tabIds.length} {tabIds.length === 1 ? "project" : "projects"}</span>
                 </div>
                 {state && model && <LooseEnds state={state} yourMove={model.needs.length + wokeClosed.length + (model.held?.count ?? 0)} />}
             </div>
@@ -215,7 +216,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                             <button type="button" data-wintos="focus-block" data-key="⌥⌘F" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("focus")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 12px", background: T.card, border: `1px solid ${T.moss}`, borderRadius: 10, cursor: "pointer", fontFamily: T.ui, textAlign: "left" }}>
                                 <span style={{ fontSize: 12.5, color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Focus · {state?.projects.find((p) => p.id === focus.tabId)?.title ?? names[focus.tabId] ?? "this project"}</span>
                                 <span style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                                    <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.moss }}>{Math.ceil((focus.until - now) / 60_000)} min left{model.held ? ` · ${model.held.count} held` : ""}</span>
+                                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.moss }}>{Math.ceil((focus.until - now) / 60_000)} min left{model.held ? ` · ${model.held.count} held` : ""}</span>
                                     <Key k="⌥⌘F" label="" />
                                 </span>
                             </button>
@@ -235,20 +236,20 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         <Band kind="running" count={model.running.length}>{model.running.map(renderRow)}</Band>
                         <Band kind="quiet" count={model.quiet.length + model.quietMore.length} shown={quiet.length}>
                             {quiet.map(renderRow)}
-                            {(model.quietMore.length > 0 || model.quietStale.length > 0) && (
+                            {allQuiet.length > quiet.length || showAll ? (
                                 <button
                                     type="button"
+                                    data-wintos="quiet-fold"
+                                    data-key="⌥⌘S"
                                     tabIndex={-1}
                                     onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => setShowAll(!showAll)}
-                                    style={{ margin: "4px 13px 0", padding: "7px 0", background: "transparent", border: "none", borderTop: `1px solid ${T.hairline}`, textAlign: "left", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}
+                                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "2px 4px 0", padding: "5px 0", background: "transparent", border: "none", textAlign: "left", fontFamily: T.ui, fontSize: 12.5, color: T.faint, cursor: "pointer" }}
                                 >
-                                    {showAll ? "Show fewer" : `Show all ${model.quiet.length + model.quietMore.length + model.quietStale.length}`}
-                                    {!showAll && model.quietStale.length > 0 && (
-                                        <span style={{ color: T.faint }}> · includes {model.quietStale.length} untouched over two weeks</span>
-                                    )}
+                                    <span>{showAll ? "Fold the quiet ones" : `${allQuiet.length - quiet.length} quiet${model.held ? ` · ${model.held.count} held for the batch` : ""}`}</span>
+                                    <Key k="⌥⌘S" label="" />
                                 </button>
-                            )}
+                            ) : null}
                         </Band>
                     </>
                 )}
@@ -282,7 +283,7 @@ function InFlight({ state }: { state: WintosState }) {
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${marks.length}, minmax(0, 1fr))`, gap: 3 }}>
                 {marks.map((c, i) => <span key={i} style={{ height: 6, borderRadius: 2, background: c }} />)}
             </div>
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{n.working} working · {n.waiting} your move</span>
+            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>{n.working} working · {n.waiting} your move</span>
         </div>
     );
 }
@@ -298,7 +299,7 @@ function LooseEnds({ state, yourMove }: { state: WintosState; yourMove: number }
     return (
         <button type="button" data-wintos="loose-ends" data-key="⇧⌘E" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("wrapup")} title={parts} style={{ display: "flex", flexDirection: "column", gap: 1, padding: 0, marginTop: 4, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui }}>
             <span style={{ fontSize: 11.5, color: T.secondary }}>{total} loose end{total === 1 ? "" : "s"}, all in place</span>
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{parts}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{parts}</span>
         </button>
     );
 }
@@ -313,7 +314,7 @@ function Band({ kind, count, shown, note, children }: { kind: keyof typeof BAND_
                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: kind === "quiet" ? T.border : s.color }} />
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: s.color }}>{s.label}</span>
                 <span style={{ flexGrow: 1, height: 1, background: kind === "quiet" ? T.card : T.hairline }} />
-                <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{shown !== undefined && shown < count ? `${shown} of ${count}` : count}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>{shown !== undefined && shown < count ? `${shown} of ${count}` : count}</span>
             </div>
             {note}
             {children}
@@ -384,11 +385,11 @@ function CardRow(p: RowProps) {
                 <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.005em", color: p.active ? T.emphasis : T.title, fontFamily: T.ui }} />
                 <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                     {p.active && <WalkKeys />}
-                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{v.age}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>{v.age}</span>
                 </span>
             </div>
             {v.next && <div style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty" } as React.CSSProperties}><Rich text={v.next} size="rail" links={false} /></div>}
-            {v.meta && <div title={v.meta} style={{ fontFamily: T.mono, fontSize: 9.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.meta}</div>}
+            {v.meta && <div title={v.meta} style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.meta}</div>}
         </div>
     );
 }
@@ -417,7 +418,7 @@ function QuietRow(p: RowProps) {
         >
             {/* The title gets the room; the note is capped and cut, so neither wraps. */}
             <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} />
-            {p.active ? <WalkKeys /> : <span title={v.reason} style={{ maxWidth: "48%", fontSize: 10.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>}
+            {p.active ? <WalkKeys /> : <span title={v.reason} style={{ maxWidth: "48%", fontSize: 11.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>}
         </div>
     );
 }
@@ -478,11 +479,11 @@ function SummaryCard({ label, keys, stats, note, noteColor, busy, active, cursor
                 {stats.map((s) => (
                     <span key={s.label} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                         <span style={{ fontFamily: T.display, fontSize: 24, lineHeight: 1, color: T.text }}>{s.value}</span>
-                        <span style={{ fontFamily: T.mono, fontSize: 9.5, color: T.muted }}>{s.label}</span>
+                        <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>{s.label}</span>
                     </span>
                 ))}
             </span>
-            {note && <span style={{ fontFamily: T.mono, fontSize: 9.5, color: noteColor }}>{note}</span>}
+            {note && <span style={{ fontFamily: T.mono, fontSize: 10.5, color: noteColor }}>{note}</span>}
             {/* In PRs or On call no project row is open: the walk keys sit on this card instead. */}
             {active && (
                 <span style={{ alignSelf: "flex-start" }}>

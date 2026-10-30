@@ -58,7 +58,7 @@ export const WrapupPage = memo(() => {
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 30, fontWeight: 400, lineHeight: 1, color: T.emphasis }}>Close the day</h1>
-                    <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>every loose end gets a place, then the day is done</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>every loose end gets a place, then the day is done</span>
                 </div>
                 <span style={{ display: "flex", gap: 12 }}>
                     <Key k="j k" label="move" />
@@ -74,7 +74,7 @@ export const WrapupPage = memo(() => {
                         <div key={s.id} data-item={handled[s.id] ? undefined : "loose"} style={{ display: "flex", flexDirection: "column", gap: 3, padding: "6px 8px", margin: "0 -8px", borderRadius: 8, opacity: handled[s.id] ? 0.5 : 1 }}>
                             <span style={{ fontSize: 13, color: T.text, overflowWrap: "anywhere" }}>{line(s)}</span>
                             {handled[s.id] ? (
-                                <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.moss }}>{handled[s.id] === "tomorrow" ? "→ tomorrow's plan" : "let go"}</span>
+                                <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.moss }}>{handled[s.id] === "tomorrow" ? "→ tomorrow's plan" : "let go"}</span>
                             ) : (
                                 <span style={{ display: "flex", gap: 10 }}>
                                     <button type="button" data-tomorrow data-key="t" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => toTomorrow(s)} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}><Key k="t" label="tomorrow" /></button>
@@ -90,14 +90,14 @@ export const WrapupPage = memo(() => {
                         {running.map((s) => (
                             <span key={s.id} style={{ fontSize: 12.5, color: T.secondary }}>{title(s.tabId)} · {sessionName(s)}</span>
                         ))}
-                        {running.length > 0 && <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>they finish on their own; their replies wait for tomorrow</span>}
+                        {running.length > 0 && <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>they finish on their own; their replies wait for tomorrow</span>}
                     </Panel>
                     <Panel label={`Wakes set · ${wakes.length}`}>
                         {wakes.length === 0 && <span style={{ fontSize: 12, color: T.faint }}>None.</span>}
                         {state && wakes.map((w) => (
                             <span key={`${w.sessionId}${w.pr}${w.until}`} style={{ fontSize: 12.5, color: T.secondary }}>{prRef(state, w.pr)} {WOKE[w.until]}</span>
                         ))}
-                        {wakes.length > 0 && <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>they type themselves in; nothing to keep in your head</span>}
+                        {wakes.length > 0 && <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>they type themselves in; nothing to keep in your head</span>}
                     </Panel>
                 </div>
                 <Panel label="Tomorrow's plan">
@@ -109,7 +109,7 @@ export const WrapupPage = memo(() => {
                             <button type="button" tabIndex={-1} aria-label="Leave out of tomorrow's plan" onMouseDown={(e) => e.preventDefault()} onClick={() => setDraft(plan.filter((_, j) => j !== k))} style={{ padding: 0, background: "transparent", border: "none", color: T.faint, cursor: "pointer", fontSize: 12 }}>✕</button>
                         </div>
                     ))}
-                    <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>goes under today's goals for tomorrow; tomorrow starts from it</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>goes under today's goals for tomorrow; tomorrow starts from it</span>
                 </Panel>
             </div>
             <button type="button" data-wintos="close-day" data-key="⌘⏎" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => void close()} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "14px 18px", background: T.card, border: `1px solid ${T.moss}`, borderRadius: 12, cursor: "pointer", fontFamily: T.ui, textAlign: "left" }}>

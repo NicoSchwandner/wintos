@@ -105,6 +105,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Option:Cmd:c{KeyB}", "break-later"],
     ["Option:Cmd:c{KeyO}", "release"],
     ["Shift:Cmd:e", "wrapup"],
+    ["Option:Cmd:c{KeyS}", "quiet"],
     ["Option:Cmd:c{KeyF}", "focus"],
     ["Option:Cmd:c{KeyX}", "tick"],
     ["Option:Cmd:c{KeyL}", "rail"],
@@ -310,6 +311,7 @@ export function runAction(action: string): void {
     if (action === "reflect") return toggleView("reflect");
     if (action === "keyboard") return toggleView("keyboard");
     if (action === "wrapup") return toggleView("wrapup");
+    if (action === "quiet") return void document.querySelector<HTMLElement>("[data-wintos=quiet-fold]")?.click();
     if (action === "open-external") return openExternal();
     if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));
     if (action === "restart-terminal") return restartTerminal();

@@ -36,12 +36,13 @@ export function useRailWidth(): [number, (px: number) => void, () => void] {
 }
 
 // Collapsed to a thin strip (mouse), one setting for every project like the width; ⌘L opens it.
-const COLLAPSED = "wintos:rail-collapsed";
+// The notes are a drawer: folded unless you opened them, so the terminals have the width.
+const COLLAPSED = "wintos:notes-folded";
 const storedCollapsed = () => {
     try {
-        return localStorage.getItem(COLLAPSED) === "1";
+        return localStorage.getItem(COLLAPSED) !== "0";
     } catch {
-        return false;
+        return true;
     }
 };
 export const railCollapsedAtom = atom(storedCollapsed());

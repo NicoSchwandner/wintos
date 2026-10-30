@@ -268,9 +268,9 @@ async function dispatchCiFix(url: string): Promise<void> {
 }
 
 // Inline in a clipped one-line title: its own line box, or the border is cut off.
-const TAG: React.CSSProperties = { display: "inline-block", fontSize: 10, lineHeight: "13px", verticalAlign: "1px", border: `1px solid ${T.keycapBorder}`, borderRadius: 5, padding: "0 5px", marginRight: 8, color: T.muted };
+const TAG: React.CSSProperties = { display: "inline-block", fontSize: 11, lineHeight: "13px", verticalAlign: "1px", border: `1px solid ${T.keycapBorder}`, borderRadius: 5, padding: "0 5px", marginRight: 8, color: T.muted };
 
-const CHIP: React.CSSProperties = { flexShrink: 0, maxWidth: 96, padding: "2px 7px", borderRadius: 10, border: `1px solid ${T.keycapBorder}`, fontSize: 10.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const CHIP: React.CSSProperties = { flexShrink: 0, maxWidth: 96, padding: "2px 7px", borderRadius: 10, border: `1px solid ${T.keycapBorder}`, fontSize: 11.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
 function Reviewers({ r, names }: { r: QueueRow; names: boolean }) {
     const compact = !names;
@@ -300,7 +300,7 @@ function GroupHeader({ label, note, color, count }: { label: string; note: strin
             <span style={{ fontFamily: T.display, fontSize: 18, color }}>{label}</span>
             <span style={{ fontSize: 11, color: T.faint }}>{note}</span>
             <span style={{ flexGrow: 1, height: 1, background: T.card }} />
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{count}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>{count}</span>
         </div>
     );
 }
@@ -332,7 +332,7 @@ function PrRow({ r, depth, project, repo, cursor, cols, fix, onOpen }: { r: Queu
                     <span style={{ height: 5, borderRadius: 3, background: T.moss, flexGrow: Math.max(pr.additions, 0.5) }} />
                     <span style={{ height: 5, borderRadius: 3, background: T.brick, flexGrow: Math.max(pr.deletions, 0.5) }} />
                 </span>
-                <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>{r.total}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{r.total}</span>
             </span>}
             <span style={{ flexGrow: 1, minWidth: 0, fontSize: 13.5, color: T.title, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {r.sla && <span data-wintos="pr-sla" title={r.sla === "team" ? "counted in the team's past SLA" : "counted in yours past SLA"} style={{ ...TAG, borderColor: T.brick, color: T.brick }}>past SLA</span>}
@@ -344,7 +344,7 @@ function PrRow({ r, depth, project, repo, cursor, cols, fix, onOpen }: { r: Queu
             <Reviewers r={r} names={cols.names} />
             <span title={project ? `Project: ${project} (o)` : "No project"} style={{ width: 12, flexShrink: 0, textAlign: "center", fontSize: 11, color: project ? T.moss : "transparent" }}>◆</span>
             {/* The repo gives way; the number never does. */}
-            <span style={{ width: compact ? 120 : 150, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: "0.6em", fontFamily: T.mono, fontSize: 10.5, color: T.faint, whiteSpace: "nowrap" }}>
+            <span style={{ width: compact ? 120 : 150, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: "0.6em", fontFamily: T.mono, fontSize: 11.5, color: T.faint, whiteSpace: "nowrap" }}>
                 <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{repo}</span>
                 <span style={{ flexShrink: 0 }}>#{pr.number}</span>
             </span>

@@ -92,7 +92,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                         onChange={(e) => (setQ(e.target.value), setCursor(0), setExpanded(new Set()))}
                         style={{ flexGrow: 1, background: "transparent", border: "none", outline: "none", fontSize: 15, color: T.text, fontFamily: T.ui }}
                     />
-                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{hits.length} of {items.length}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>{hits.length} of {items.length}</span>
                 </div>
                 <div style={{ overflowY: "auto", padding: "6px 8px 10px" }}>
                     {!rows.length && <div style={{ padding: "14px 10px", fontSize: 12.5, color: T.faint }}>Nothing matches “{q.trim()}”.</div>}
@@ -103,7 +103,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                         const on = n === cursor;
                         return (
                             <div key={row.type === "hit" ? row.hit.item.id : `${row.type}:${row.kind}`}>
-                                {header && <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint, padding: "10px 10px 4px" }}>{header}</div>}
+                                {header && <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint, padding: "10px 10px 4px" }}>{header}</div>}
                                 <div
                                     ref={on ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
                                     onMouseEnter={() => setCursor(n)}
@@ -123,7 +123,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                                     ) : (
                                         <HitRow hit={row.hit} on={on} />
                                     )}
-                                    {row.type === "hit" && row.hit.item.touchedAt != null && <span data-wintos="palette-touched" style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>{relTime(now - row.hit.item.touchedAt)} ago</span>}
+                                    {row.type === "hit" && row.hit.item.touchedAt != null && <span data-wintos="palette-touched" style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{relTime(now - row.hit.item.touchedAt)} ago</span>}
                                     {row.type === "hit" && row.hit.item.hint && <Key k={row.hit.item.hint} label="" />}
                                 </div>
                             </div>

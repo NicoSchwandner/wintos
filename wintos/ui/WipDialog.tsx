@@ -34,7 +34,7 @@ export const WipDialog = memo(() => {
                             <button type="button" data-key="1" tabIndex={-1} onClick={go} style={ROW}>
                                 <Key k="1" label="" />
                                 <span style={{ flexGrow: 1 }}>Go to {sessionName(oldest)} in {title(oldest.tabId)}</span>
-                                <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>waiting {relTime(now - oldest.since)}</span>
+                                <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>waiting {relTime(now - oldest.since)}</span>
                             </button>
                             <button type="button" data-key="2" tabIndex={-1} onClick={park} style={ROW}>
                                 <Key k="2" label="" />

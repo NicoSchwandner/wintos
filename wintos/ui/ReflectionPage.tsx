@@ -61,7 +61,7 @@ export const ReflectionPage = memo(() => {
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 30, fontWeight: 400, lineHeight: 1, color: T.emphasis }}>{LABEL[view.level]} reflection</h1>
-                    <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>{view.title} · {dayName(view.date, { weekday: "long", day: "numeric", month: "long" })} · in your journal</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{view.title} · {dayName(view.date, { weekday: "long", day: "numeric", month: "long" })} · in your journal</span>
                 </div>
                 <Key k="esc" label="back" />
             </div>
@@ -77,7 +77,7 @@ export const ReflectionPage = memo(() => {
                         <Panel label="Your week">
                             {view.days.map((d) => (
                                 <div key={d.date} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                    <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>{dayName(d.date, { weekday: "long", day: "numeric", month: "short" })}</span>
+                                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{dayName(d.date, { weekday: "long", day: "numeric", month: "short" })}</span>
                                     {d.focus ? <Md text={d.focus} size="full" /> : <span style={{ fontSize: 12, color: T.faint }}>Nothing planned.</span>}
                                     {d.readOut.length > 0 && <Md text={d.readOut.map((t) => `- ${t}`).join("\n")} size="full" />}
                                 </div>
@@ -120,7 +120,7 @@ function WeekNumbers({ days }: { days: View["days"] }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
             <span style={{ fontSize: 11, color: T.muted }}>{label}</span>
             <span style={{ fontFamily: T.display, fontSize: 28, lineHeight: 1.1, color: tone ?? T.emphasis }}>{value}</span>
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{note}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>{note}</span>
         </div>
     );
     return (
@@ -133,7 +133,7 @@ function WeekNumbers({ days }: { days: View["days"] }) {
             <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 110, paddingTop: 8 }}>
                 {days.map((d) => (
                     <div key={d.date} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }}>
-                        <span style={{ fontFamily: T.mono, fontSize: 10, color: T.secondary }}>{d.numbers ? span(d.numbers.longestMs) : ""}</span>
+                        <span style={{ fontFamily: T.mono, fontSize: 11, color: T.secondary }}>{d.numbers ? span(d.numbers.longestMs) : ""}</span>
                         <span style={{ width: "100%", height: d.numbers ? Math.max(3, (70 * d.numbers.longestMs) / max) : 0, borderRadius: "4px 4px 0 0", background: (d.numbers?.longestMs ?? 0) > 3_600_000 ? T.apricot : T.moss }} />
                     </div>
                 ))}
@@ -145,7 +145,7 @@ function WeekNumbers({ days }: { days: View["days"] }) {
                     </span>
                 ))}
             </div>
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>longest stretch without a 10-minute gap, per day · sessions you prompted · breaks of 20 min: {worked.reduce((k, d) => k + n(d).breaks, 0)}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>longest stretch without a 10-minute gap, per day · sessions you prompted · breaks of 20 min: {worked.reduce((k, d) => k + n(d).breaks, 0)}</span>
         </Panel>
     );
 }

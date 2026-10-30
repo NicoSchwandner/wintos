@@ -39,9 +39,9 @@ export const PrList = memo(({ tabId, size, label = "other pull requests" }: { ta
                     style={{ display: "flex", alignItems: "baseline", gap: 8, cursor: "pointer", opacity: r.snoozed ? 0.55 : 1, fontSize: size === "rail" ? 12 : 13, lineHeight: 1.4 }}
                 >
                     {i < PR_KEYS && <Key k={String(i + 1)} label="" />}
-                    <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>#{r.pr.number}</span>
+                    <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>#{r.pr.number}</span>
                     <span style={{ minWidth: 0, flexGrow: 1, color: T.title, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.pr.title}</span>
-                    <span style={{ flexShrink: 0, maxWidth: size === "rail" ? "45%" : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10.5, color: HEADERS[r.group].color }}>
+                    <span style={{ flexShrink: 0, maxWidth: size === "rail" ? "45%" : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11.5, color: HEADERS[r.group].color }}>
                         {r.snoozed ? "snoozed" : HEADERS[r.group].label}
                         {r.note && <span style={{ color: T.faint }}> · {r.note}</span>}
                     </span>

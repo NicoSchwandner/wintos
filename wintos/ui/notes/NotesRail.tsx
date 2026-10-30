@@ -36,13 +36,21 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
         handle.onpointermove = (m) => setWidth(right - m.clientX);
         handle.onpointerup = () => ((handle.onpointermove = handle.onpointerup = null), saveWidth());
     };
-    // Folded, the rail takes no room: a button floats over the terminals' right edge.
-    if (collapsed)
+    // Folded, the notes are a slim drawer handle saying what is inside; heads-ups in apricot.
+    if (collapsed) {
+        const open = (notes?.mine ?? "").split("\n").filter((l) => /^\s*[-*] \[ \]/.test(l)).length;
+        const sessions = (state?.sessions ?? []).filter((s) => s.tabId === tabId && s.state !== "ended" && !s.background).length;
+        const heads = state?.headsUps?.[tabId]?.length ?? 0;
+        const label: React.CSSProperties = { writingMode: "vertical-rl", fontSize: 12, letterSpacing: "0.04em", whiteSpace: "nowrap" };
         return (
-            <div style={{ position: "relative", width: 0, flexShrink: 0 }}>
-                <RailToggle open={false} />
-            </div>
+            <button type="button" data-wintos="notes-drawer" data-key="⌥⌘L" tabIndex={-1} aria-label="Show the notes" onMouseDown={(e) => e.preventDefault()} onClick={() => setRailCollapsed(false)} style={{ width: 40, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: "18px 0 14px", background: T.sidebar, border: "none", borderLeft: `1px solid ${T.hairline}`, cursor: "pointer", fontFamily: T.ui }}>
+                {heads > 0 && <span style={{ ...label, color: T.apricot }}>{heads} heads-up{heads === 1 ? "" : "s"}</span>}
+                <span style={{ ...label, color: T.muted }}>mine.md{open ? ` · ${open} open` : ""}</span>
+                <span style={{ ...label, color: T.faint }}>sessions · {sessions}</span>
+                <span style={{ ...label, marginTop: "auto", fontFamily: T.mono, fontSize: 11, color: T.faint }}>⌥⌘L</span>
+            </button>
         );
+    }
     return (
         <>
         {/* The rail's left edge: drag to resize, as the sidebar's right edge; the button on it folds the rail away. */}
@@ -85,7 +93,7 @@ function HeadsUps({ tabId, state }: { tabId: string; state?: WintosState }) {
     return (
         <div data-wintos="headsups" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.apricot }}>Heads-up</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.apricot }}>Heads-up</span>
                 {list.length > 0 && <Key k="j k · x" label="close" />}
             </div>
             {problem && <span style={{ fontSize: 11, color: T.brick }}>New heads-ups can't be read: {problem}.</span>}
@@ -93,7 +101,7 @@ function HeadsUps({ tabId, state }: { tabId: string; state?: WintosState }) {
                 <div key={h.id} data-item="headsup" title={h.explanation} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "1px 4px", margin: "0 -4px", borderRadius: 4 }}>
                     <span style={{ minWidth: 0, flexGrow: 1, display: "flex", flexDirection: "column", gap: 2 }}>
                         <span style={{ fontSize: 12.5, lineHeight: 1.5, color: T.secondary }}><Rich text={h.text} size="rail" /></span>
-                        <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{[nameOf(h.sessionId), relTime(Date.now() - h.at)].filter(Boolean).join(" · ")}</span>
+                        <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>{[nameOf(h.sessionId), relTime(Date.now() - h.at)].filter(Boolean).join(" · ")}</span>
                     </span>
                     <button type="button" data-act data-key="x" tabIndex={-1} aria-label="Close this heads-up" title="Close (x)" onMouseDown={(e) => e.preventDefault()} onClick={() => void daemonFetch(`/headsups/${encodeURIComponent(h.id)}/dismiss`, { method: "POST", body: {} })} style={{ flexShrink: 0, padding: "0 2px", background: "transparent", border: "none", cursor: "pointer", color: T.faint, fontSize: 13, lineHeight: 1.4 }}>
                         ×
@@ -112,7 +120,7 @@ export function Sessions({ tabId, state, size }: { tabId: string; state?: Wintos
     const background = state ? backgroundSessions(state, tabId) : [];
     return (
         <div data-wintos="sessions" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {list.length + background.length > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>Sessions</span>}
+            {list.length + background.length > 0 && <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>Sessions</span>}
             {list.slice(0, 9).map((x, i) => {
                 const live = x.kind === "live";
                 const id = live ? x.session.id : x.item.sessionId;
@@ -122,7 +130,7 @@ export function Sessions({ tabId, state, size }: { tabId: string; state?: Wintos
                             <Key k={`⌥⌘${i + 1}`} label="" />
                             <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: "50%", boxSizing: "border-box", background: live ? SESSION_DOT[x.session.state] : "transparent", border: live ? "none" : `1.5px solid ${T.faint}` }} />
                             <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</span>
-                            <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10, color: T.faint }}>{live ? x.session.state : `shelved ${relTime(Date.now() - x.item.at)}`}</span>
+                            <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: T.faint }}>{live ? x.session.state : `shelved ${relTime(Date.now() - x.item.at)}`}</span>
                         </button>
                         {x.kind === "live" && x.session.status && <span style={{ paddingLeft: 54, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.session.status.text}</span>}
                         {(x.prs.length > 0 || x.alsoIn.length > 0) && (
@@ -143,7 +151,7 @@ export function Sessions({ tabId, state, size }: { tabId: string; state?: Wintos
                 <div key={s.id} data-wintos="background-session" title="runs in Claude's background service, not in a pane" style={{ display: "flex", alignItems: "center", gap: 9, paddingLeft: 30, fontSize: size === "rail" ? 12 : 12.5, color: T.quietTitle }}>
                     <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: "50%", background: SESSION_DOT[s.state], opacity: 0.6 }} />
                     <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessionName(s)}</span>
-                    <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10, color: T.faint }}>background · {s.state}</span>
+                    <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: T.faint }}>background · {s.state}</span>
                 </div>
             ))}
             {list.length > 9 && <button type="button" tabIndex={-1} onClick={() => openPalette("shelved")} style={{ alignSelf: "flex-start", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontSize: 12, color: T.faint }}><Key k="⇧⌘P" label={`${list.length - 9} more`} /></button>}
@@ -172,7 +180,7 @@ function RailToggle({ open }: { open: boolean }) {
             // no-drag: folded it floats over the pane strip, a window-drag region that would take the click.
             style={{ WebkitAppRegion: "no-drag", position: "absolute", top: 10, left: open ? -12 : -34, zIndex: 20, width: 24, height: 24, borderRadius: 12, border: `1px solid ${hover ? T.borderActive : T.border}`, background: T.ground, color: hover ? T.title : T.muted, opacity: open || hover ? 1 : 0.55, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, boxShadow: open ? "none" : "0 2px 8px rgba(0,0,0,0.4)" } as React.CSSProperties}
         >
-            <i className={`fa-solid ${open ? "fa-chevron-right" : "fa-chevron-left"}`} style={{ fontSize: 10 }} />
+            <i className={`fa-solid ${open ? "fa-chevron-right" : "fa-chevron-left"}`} style={{ fontSize: 11 }} />
             {/* The key beside the button, on the terminals' side, as every WintOS button shows its key. */}
             <span style={{ position: "absolute", right: 30, pointerEvents: "none", opacity: open || hover ? 1 : 0.8 }}>
                 <Key k="⌥⌘L" label="" />

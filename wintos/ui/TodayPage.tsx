@@ -66,7 +66,7 @@ export const TodayPage = memo(() => {
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 30, fontWeight: 400, lineHeight: 1, color: T.emphasis }}>{date.toLocaleDateString("en-GB", { weekday: "long" })}</h1>
-                    <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>{date.toLocaleDateString("en-GB", { day: "numeric", month: "long" })} · {day.exists ? "in your journal" : "the journal file is made when you write the plan"}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{date.toLocaleDateString("en-GB", { day: "numeric", month: "long" })} · {day.exists ? "in your journal" : "the journal file is made when you write the plan"}</span>
                 </div>
                 <Key k="esc" label="back" />
             </div>
@@ -108,8 +108,8 @@ export function Panel({ label, note, warn, keys, children }: { label: string; no
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", background: T.card, border: `1px solid ${warn ? T.apricot : T.border}`, borderRadius: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px 14px" }}>
                 <span style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint, textTransform: "uppercase" }}>{label}</span>
-                    {note && <span style={{ fontFamily: T.mono, fontSize: 10.5, color: warn ? T.apricot : T.muted }}>{note}</span>}
+                    <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint, textTransform: "uppercase" }}>{label}</span>
+                    {note && <span style={{ fontFamily: T.mono, fontSize: 11.5, color: warn ? T.apricot : T.muted }}>{note}</span>}
                 </span>
                 {keys && <span style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>{keys}</span>}
             </div>
@@ -123,7 +123,7 @@ function Item({ text, depth, done, note, carried, carry }: { text: string; depth
         <div data-item={carry ? "carry" : undefined} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "3px 6px", margin: "0 -6px", marginLeft: depth * 20 - 6, borderRadius: 6, fontSize: 13, lineHeight: 1.5, color: done ? T.muted : T.secondary, textDecoration: done ? "line-through" : undefined }}>
             {note ? <Dot /> : <Box state={done ? "done" : "todo"} size="full" top={4} />}
             <span style={{ flexGrow: 1, minWidth: 0, overflowWrap: "anywhere" }}><Rich text={text} size="full" /></span>
-            {carried && <span style={{ display: "inline-block", flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.moss, textDecoration: "none" }}>carried</span>}
+            {carried && <span style={{ display: "inline-block", flexShrink: 0, fontFamily: T.mono, fontSize: 11.5, color: T.moss, textDecoration: "none" }}>carried</span>}
             {carry && (
                 <button type="button" data-key="c" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={carry} title="Carry into today" style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                     <Key k="c" label="today" />
@@ -143,12 +143,12 @@ function Timeline({ now }: { now: number }) {
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, minHeight: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint, textTransform: "uppercase" }}>Your day</span>
-                <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.moss }}>{span(freeMs)} free</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint, textTransform: "uppercase" }}>Your day</span>
+                <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.moss }}>{span(freeMs)} free</span>
             </div>
             <div style={{ position: "relative", flexGrow: 1, minHeight: 260, marginLeft: 34, borderLeft: `1px solid ${T.border}` }}>
                 {hours.map((h, i) => (
-                    <span key={h} style={{ position: "absolute", left: -34, top: pct(h), transform: "translateY(-50%)", fontFamily: T.mono, fontSize: 9.5, color: T.faint }}>{i % 2 === 0 ? hm(h).slice(0, 2) : ""}</span>
+                    <span key={h} style={{ position: "absolute", left: -34, top: pct(h), transform: "translateY(-50%)", fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>{i % 2 === 0 ? hm(h).slice(0, 2) : ""}</span>
                 ))}
                 {blocks.map((b) => (
                     <TimeBlock key={`${b.kind}${b.start}${b.col ?? ""}`} b={b} top={pct(b.start)} height={`${((b.end - b.start) / (to - from)) * 100}%`} />
@@ -164,7 +164,7 @@ function TimeBlock({ b, top, height }: { b: Block; top: string; height: string }
     const cols = b.cols ?? 1;
     const across: React.CSSProperties = cols > 1 ? { left: `calc(6px + (100% - 10px) * ${b.col ?? 0} / ${cols})`, width: `calc((100% - 10px) / ${cols} - 2px)` } : { left: 6, right: 4 };
     const base: React.CSSProperties = { position: "absolute", ...across, top, height, borderRadius: 5, padding: "1px 7px", overflow: "hidden", fontSize: 11, lineHeight: 1.35, boxSizing: "border-box" };
-    if (b.kind === "meeting") return <div style={{ ...base, background: T.cardActive, border: `1px solid ${T.borderActive}`, color: T.secondary }}><span style={{ fontFamily: T.mono, fontSize: 9.5, color: T.muted }}>{hm(b.start)} </span>{b.title}</div>;
+    if (b.kind === "meeting") return <div style={{ ...base, background: T.cardActive, border: `1px solid ${T.borderActive}`, color: T.secondary }}><span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>{hm(b.start)} </span>{b.title}</div>;
     if (b.kind === "lunch") return <div style={{ ...base, background: `repeating-linear-gradient(135deg, ${T.card} 0 6px, ${T.sidebar} 6px 12px)`, color: T.faint }}>Lunch</div>;
-    return <div style={{ ...base, border: `1px dashed ${T.borderActive}`, color: T.moss, fontFamily: T.mono, fontSize: 9.5 }}>{span(b.end - b.start)} free</div>;
+    return <div style={{ ...base, border: `1px dashed ${T.borderActive}`, color: T.moss, fontFamily: T.mono, fontSize: 10.5 }}>{span(b.end - b.start)} free</div>;
 }

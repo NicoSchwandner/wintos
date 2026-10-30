@@ -43,7 +43,7 @@ export const WhereWasI = memo(({ sessionId, focused }: { sessionId: string; focu
     const line = (label: string, text: string | undefined, tone?: string) =>
         text && (
             <span style={{ display: "flex", gap: 10, minWidth: 0 }}>
-                <span style={{ width: 62, flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.faint, paddingTop: 1 }}>{label}</span>
+                <span style={{ width: 62, flexShrink: 0, fontFamily: T.mono, fontSize: 11.5, color: T.faint, paddingTop: 1 }}>{label}</span>
                 <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: tone ?? T.secondary }}>{text}</span>
             </span>
         );

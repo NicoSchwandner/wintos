@@ -47,7 +47,7 @@ export const GameLine = memo(({ stats }: { stats: KeyStats }) => {
         return () => document.removeEventListener("visibilitychange", announce);
     }, [stats.badge?.at, stats.levelUp?.at, stats.dayDone?.at]);
 
-    const box: React.CSSProperties = { flexShrink: 0, padding: "7px 14px 8px", borderTop: `1px solid ${T.hairline}`, fontFamily: T.mono, fontSize: 10.5, display: "flex", flexDirection: "column", gap: 5 };
+    const box: React.CSSProperties = { flexShrink: 0, padding: "7px 14px 8px", borderTop: `1px solid ${T.hairline}`, fontFamily: T.mono, fontSize: 11.5, display: "flex", flexDirection: "column", gap: 5 };
     if (notice?.kind === "badge" || notice?.kind === "rank" || notice?.kind === "done")
         return (
             <div data-wintos="game-line" style={{ ...box, background: `color-mix(in srgb, ${T.moss} 12%, transparent)`, borderTop: `1px solid ${T.moss}`, color: T.emphasis, animation: "wintos-badge 1.6s ease-in-out infinite" }}>
@@ -79,7 +79,7 @@ export const GameLine = memo(({ stats }: { stats: KeyStats }) => {
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => openView("keyboard")}
                     title="Your keyboard rank, streak and badges"
-                    style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10.5, color: T.faint }}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 11.5, color: T.faint }}
                 >
                     <span style={{ color: T.moss }}>{p.rank}</span>
                     <span>streak {stats.streak}</span>

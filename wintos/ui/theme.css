@@ -76,7 +76,8 @@
     --main-text-color: var(--w-text);
     --secondary-text-color: var(--w-secondary);
     --grey-text-color: var(--w-faint);
-    --accent-color: var(--w-moss);
+    /* The focused pane's frame: neutral, as moss means a machine at work. */
+    --accent-color: var(--w-muted);
     --hover-bg-color: var(--w-hover);
     --highlight-bg-color: var(--w-highlight);
     --error-color: var(--w-brick);

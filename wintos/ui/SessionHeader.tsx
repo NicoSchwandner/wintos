@@ -50,7 +50,7 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
             {s.status && (
                 <div style={{ color: T.secondary, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.status.text}>
                     {s.status.text}
-                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}> · {relTime(now - s.status.at)}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}> · {relTime(now - s.status.at)}</span>
                 </div>
             )}
             {h.wake && (
@@ -151,7 +151,7 @@ function StepTrack({ lane }: { lane: Lane }) {
     };
     return (
         <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 11 }}>
-            <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, border: `1px solid ${T.border}`, borderRadius: 4, padding: "0 5px", flexShrink: 0 }}>{lane.name}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted, border: `1px solid ${T.border}`, borderRadius: 4, padding: "0 5px", flexShrink: 0 }}>{lane.name}</span>
             {lane.at > 0 && <span style={{ color: T.faint, flexShrink: 0 }}>{lane.at}/{lane.steps.length}</span>}
             {step(lane.at, [lane.note, lane.todos && `${lane.todos.filter((t) => t.done).length}/${lane.todos.length}`].filter(Boolean).join(" · ") || undefined)}
             {next >= 0 && <span style={{ color: T.faint, flexShrink: 0 }}>→</span>}
@@ -167,7 +167,7 @@ export const SessionSteps = memo(({ blockId }: { blockId: string }) => {
     if (!lane) return null;
     return (
         <div className="wintos-steps-side" data-wintos="session-steps" style={{ width: 210, flexShrink: 0, borderLeft: `1px solid ${T.border}`, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", fontFamily: T.ui }}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>{lane.name}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>{lane.name}</span>
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                 {lane.steps.map((step, i) => {
                     const c = stepColor(lane, i);

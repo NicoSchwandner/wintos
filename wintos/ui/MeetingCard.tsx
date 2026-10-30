@@ -32,7 +32,7 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
             }}
         >
             <style>{`@keyframes wintos-breathe { 0%,100% { box-shadow: 0 0 0 0 color-mix(in srgb, ${T.apricot} 0%, transparent) } 50% { box-shadow: 0 0 0 3px color-mix(in srgb, ${T.apricot} 33%, transparent) } } @media (prefers-reduced-motion: reduce) { [data-wintos=meeting-card] { animation: none !important } }`}</style>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontFamily: T.mono, fontSize: 10.5, color: T.muted, fontVariantNumeric: "tabular-nums" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontFamily: T.mono, fontSize: 11.5, color: T.muted, fontVariantNumeric: "tabular-nums" }}>
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {clock(shown.start)} – {clock(shown.end)}
                     {shown.room && <span style={{ color: T.secondary }}> · {shown.room}</span>}

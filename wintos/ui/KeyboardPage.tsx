@@ -31,7 +31,7 @@ export const KeyboardPage = memo(() => {
         <div ref={ref} tabIndex={0} data-zone="list" data-wintos="keyboard" style={frame}>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>your rank</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>your rank</span>
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 34, fontWeight: 400, lineHeight: 1, color: T.emphasis }}>{p.rank}</h1>
                 </div>
                 <Key k="esc" label="back" />
@@ -39,7 +39,7 @@ export const KeyboardPage = memo(() => {
             <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 760 }}>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {RANKS.map(([name], i) => (
-                        <span key={name} style={{ fontFamily: T.mono, fontSize: 10.5, padding: "2px 7px", borderRadius: 6, border: `1px solid ${i <= s.rank ? T.moss : i === s.rank + 1 ? "#fabd2f" : T.borderActive}`, background: i <= s.rank ? T.moss : "transparent", color: i <= s.rank ? T.ground : i === s.rank + 1 ? "#fabd2f" : T.muted }}>
+                        <span key={name} style={{ fontFamily: T.mono, fontSize: 11.5, padding: "2px 7px", borderRadius: 6, border: `1px solid ${i <= s.rank ? T.moss : i === s.rank + 1 ? "#fabd2f" : T.borderActive}`, background: i <= s.rank ? T.moss : "transparent", color: i <= s.rank ? T.ground : i === s.rank + 1 ? "#fabd2f" : T.muted }}>
                             {name}
                         </span>
                     ))}
@@ -68,7 +68,7 @@ export const KeyboardPage = memo(() => {
                             </div>
                         ))}
                     </div>
-                    <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>
+                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>
                         {weekKeys} keys · {weekClicks} clicks
                     </span>
                 </Panel>
@@ -81,7 +81,7 @@ export const KeyboardPage = memo(() => {
                             <div key={b.key} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 12.5, color: T.secondary }}>
                                 <span style={{ width: 12, height: 12, borderRadius: "50%", background: MEDAL[b.tier], flexShrink: 0 }} />
                                 <Key k={b.key} label={b.tier} />
-                                <span style={{ marginLeft: "auto", fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>{b.next ? `${b.count} / ${b.next}` : `${b.count}`}</span>
+                                <span style={{ marginLeft: "auto", fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{b.next ? `${b.count} / ${b.next}` : `${b.count}`}</span>
                             </div>
                         ))
                     ) : (
@@ -98,8 +98,8 @@ function Panel({ label, note, children }: { label: string; note?: string; childr
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 9, padding: "12px 14px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, minWidth: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint, textTransform: "uppercase" }}>{label}</span>
-                {note && <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>{note}</span>}
+                <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint, textTransform: "uppercase" }}>{label}</span>
+                {note && <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{note}</span>}
             </div>
             {children}
         </div>
@@ -110,7 +110,7 @@ const Row = ({ k, text, count }: { k: string; text: string; count?: number }) =>
     <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, color: T.secondary, minWidth: 0 }}>
         <Key k={k} label="" />
         <span style={{ minWidth: 0, flexGrow: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>
-        {count !== undefined && <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.brick }}>{count}×</span>}
+        {count !== undefined && <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11.5, color: T.brick }}>{count}×</span>}
     </div>
 );
 const Quiet = ({ children }: { children: React.ReactNode }) => <span style={{ fontSize: 12, color: T.faint }}>{children}</span>;

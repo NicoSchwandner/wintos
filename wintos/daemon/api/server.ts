@@ -438,14 +438,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 return send(res, 200, "");
             }
             if (req.method === "GET" && url.pathname === "/day/recap") return json(res, await recapper.recap(Date.now()));
-            const standupItem = /^\/day\/recap\/([^/]+)$/.exec(url.pathname);
-            if (req.method === "POST" && standupItem) {
-                const b = (await body(req)) as { drop?: unknown; top?: unknown; text?: unknown };
-                const change = { drop: b?.drop, top: b?.top, text: b?.text };
-                const ok = (["drop", "top"] as const).every((k) => change[k] === undefined || typeof change[k] === "boolean") && (change.text === undefined || (typeof change.text === "string" && change.text.length <= 2000));
-                if (!ok || Object.values(change).every((v) => v === undefined)) return send(res, 400, "need drop or top (true/false), or text up to 2000 characters");
-                const shown = await recapper.curate(decodeURIComponent(standupItem[1]), change as { drop?: boolean; top?: boolean; text?: string }, Date.now());
-                return shown ? json(res, shown) : send(res, 404, "no such item on the day shown");
+            if (req.method === "PUT" && url.pathname === "/day/recap") {
+                const b = (await body(req)) as { text?: unknown };
+                if (typeof b?.text !== "string" || b.text.length > 8000) return send(res, 400, "need text, the list as markdown, up to 8000 characters");
+                const shown = await recapper.editList(b.text, Date.now());
+                return shown ? json(res, shown) : send(res, 404, "no day to edit");
             }
             if (req.method === "POST" && url.pathname === "/keyboard") {
                 const b = (await body(req)) as { kind?: unknown; key?: unknown };

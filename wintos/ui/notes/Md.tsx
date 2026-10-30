@@ -3,7 +3,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { runAction } from "../menu";
 import { T } from "../tokens";
-import { Box, SIZES, type Size } from "./ProjectNotes";
+import { Box, Dot, SIZES, type Size } from "./ProjectNotes";
 
 // A bare url reads as host and path; the scheme and www. say nothing.
 const shortUrl = (url: string) => {
@@ -121,7 +121,7 @@ function Item({ children }: { children: React.ReactNode }) {
     if (!useContext(InTaskList)) return <li style={{ overflowWrap: "anywhere" }}>{children}</li>;
     return (
         <li style={{ display: "flex", gap: 8, alignItems: "flex-start", minWidth: 0, overflowWrap: "anywhere" }}>
-            <span data-bullet="" style={{ width: 12, flexShrink: 0, textAlign: "center", color: T.muted }}>•</span>
+            <Dot />
             <span style={{ minWidth: 0 }}>{children}</span>
         </li>
     );

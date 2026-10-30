@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { dayTimeline, focusList, openFocus, parseSpan } from "./dayplan";
+import { dayTimeline, focusLines, focusList, openFocus, openWithNotes, parseSpan } from "./dayplan";
 
 const DAY = new Date(2026, 9, 2);
 const t = (h: number, m = 0) => new Date(2026, 9, 2, h, m).getTime();
@@ -59,4 +59,12 @@ describe("openFocus", () => {
     test("the open items, and a ticked one only while something under it is open", () =>
         expect(openFocus(focusList(text)).map((i) => `${i.text}${i.done ? " (done)" : ""}`)).toEqual(["Ship it (done)", "tell the team", "Open"]));
 
+});
+
+describe("the plain bullets among the boxes", () => {
+    const text = "- [x] Ship it\n  - asked QA\n- [ ] Open\n  - why it waits\n    - deeper\n- [x] Gone\n  - its note\n- a loose note";
+    test("focusLines has them as notes, at their depth", () =>
+        expect(focusLines(text).filter((l) => l.note).map((l) => [l.line, l.text, l.depth])).toEqual([[1, "asked QA", 1], [3, "why it waits", 1], [4, "deeper", 2], [6, "its note", 1], [7, "a loose note", 0]]));
+    test("a note shows while the item it sits under does, and one under no item always", () =>
+        expect(openWithNotes(focusLines(text)).map((l) => l.text)).toEqual(["Open", "why it waits", "deeper", "a loose note"]));
 });

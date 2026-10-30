@@ -32,6 +32,9 @@ export function Box({ state, size, onToggle, top }: { state: CheckState; size: S
     );
 }
 
+// A plain bullet among task boxes: a dot where a box would be.
+export const Dot = () => <span data-bullet="" style={{ width: 12, flexShrink: 0, textAlign: "center", color: T.muted }}>•</span>;
+
 export function More({ open, label, onClick }: { open: boolean; label: string; onClick: () => void }) {
     return (
         <button type="button" data-more={open ? "open" : "closed"} data-key="m" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 8, padding: 0, background: "transparent", border: "none", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}>

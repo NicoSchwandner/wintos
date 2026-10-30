@@ -88,3 +88,24 @@ export function focusList(text: string): { line: number; text: string; done: boo
         return m ? [{ line, text: m[3], done: m[2] === "x" || m[2] === "X", depth: Math.floor(m[1].replace(/\t/g, "  ").length / 2) }] : [];
     });
 }
+
+// The focus section as shown: its boxes and the plain bullets among them, the notes.
+export function focusLines(text: string): (FocusItem & { note?: true })[] {
+    return text.split("\n").flatMap((l, line) => {
+        const box = /^(\s*)[-*] \[([ xX~])\]\s+(.*)$/.exec(l);
+        const note = !box && /^(\s*)[-*]\s+(.*\S)/.exec(l);
+        const depth = (indent: string) => Math.floor(indent.replace(/\t/g, "  ").length / 2);
+        if (box) return [{ line, text: box[3], done: box[2] === "x" || box[2] === "X", depth: depth(box[1]) }];
+        return note ? [{ line, text: note[2], done: false, depth: depth(note[1]), note: true as const }] : [];
+    });
+}
+
+// openFocus with the notes: one shows while the item it sits under does, one under no item always.
+export function openWithNotes(lines: ReturnType<typeof focusLines>): ReturnType<typeof focusLines> {
+    const kept = new Set(openFocus(lines.filter((l) => !l.note)).map((i) => i.line));
+    return lines.filter((l, k) => {
+        if (!l.note) return kept.has(l.line);
+        const owner = lines.slice(0, k).reverse().find((o) => !o.note && o.depth < l.depth);
+        return !owner || kept.has(owner.line);
+    });
+}

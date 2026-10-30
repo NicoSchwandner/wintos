@@ -2,7 +2,7 @@ import { toggleCheckbox } from "./notes/checkbox";
 import type { SaveResult } from "./notes/useNotes";
 import { daemonFetch } from "./useWintos";
 import type { Day } from "../daemon/journal/journal";
-import { focusList } from "./dayplan";
+import { focusLines, focusList } from "./dayplan";
 
 // Today's focus lives in the day's journal file; wintosd writes it, refusing a save based on
 // an older file. Planning a day (⌘⏎ on the Today page) stops the card's orange pulse.
@@ -62,6 +62,17 @@ export function yesterdayItems(day: Day): { text: string; done: boolean; carried
     return [...chains(focusList(y.focus)), ...chains(focusList(y.tomorrow.join("\n")))]
         .filter((i) => !seen.has(i.text) && seen.add(i.text))
         .map((i) => ({ text: i.text, done: i.done, carried: today.has(i.text), depth: i.depth, chain: i.chain }));
+}
+
+// yesterdayItems with the notes from its focus under the items they sit under, to show it as written.
+export function yesterdayRows(day: Day): (ReturnType<typeof yesterdayItems>[number] & { note?: true })[] {
+    const lines = day.yesterday ? focusLines(day.yesterday.focus) : [];
+    const ownerOf = (k: number) => lines.slice(0, k).reverse().find((o) => !o.note && o.depth < lines[k].depth);
+    const items = yesterdayItems(day);
+    const at = (text: string, k: number) => lines.find((l) => !l.note && l.text === text)?.line ?? lines.length + k;
+    const shownLines = new Set(items.map((i) => at(i.text, 0)));
+    const notes = lines.filter((l, k) => l.note && shownLines.has(ownerOf(k)?.line ?? -1)).map((n) => ({ line: n.line, row: { text: n.text, done: false, carried: false, depth: n.depth, chain: [], note: true as const } }));
+    return [...items.map((i, k) => ({ line: at(i.text, k), row: i })), ...notes].sort((a, b) => a.line - b.line).map((r) => r.row);
 }
 
 // What it left open and today doesn't have yet.

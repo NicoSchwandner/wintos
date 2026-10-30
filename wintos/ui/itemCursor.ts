@@ -2,8 +2,8 @@ import type { KeyTable } from "./zones";
 import { motionKeys } from "./listMotion";
 
 // A keyboard cursor over what can be acted on in the notes and on the Today page: task boxes
-// (x ticks), heads-ups (x closes), links (⏎ opens), yesterday's open items (c carries into today) and the daily's
-// items while you curate them (x drops, p lifts to the top, ⏎ rewrites). Items are found
+// (x ticks), heads-ups (x closes), links (⏎ opens) and yesterday's open items (c carries into
+// today). Items are found
 // by data-item in the zone, in reading order; the cursor is marked with data-cursor. The action
 // is the item's own click, so the key does exactly what the mouse would.
 const marked = new WeakMap<HTMLElement, number>();
@@ -47,12 +47,12 @@ export function startCursor(root: HTMLElement, match: (el: HTMLElement) => boole
 }
 
 // The item under the cursor, if it is of this kind; its clickable part is itself or the first
-// [data-act] inside it (a task's box, a row's carry button), or the one named by part.
-function act(root: HTMLElement, kind: string, part_?: string): boolean {
+// [data-act] inside it (a task's box, a row's carry button).
+function act(root: HTMLElement, kind: string): boolean {
     const at = marked.get(root);
     const el = at === undefined ? undefined : items(root)[at];
     if (!el || el.dataset.item !== kind) return false;
-    const part = el.querySelector<HTMLElement>(part_ ?? "[data-act]") ?? el;
+    const part = el.querySelector<HTMLElement>("[data-act]") ?? el;
     (part.matches("button, a") ? part : (part.querySelector<HTMLElement>("button, a") ?? part)).click();
     return true;
 }
@@ -69,10 +69,9 @@ export const cursorKeys = (root: () => HTMLElement | null): KeyTable => {
         ),
         j: on((r) => move(r, 1)),
         k: on((r) => move(r, -1)),
-        x: on((r) => act(r, "check") || act(r, "headsup") || act(r, "standup", "[data-drop]")),
+        x: on((r) => act(r, "check") || act(r, "headsup")),
         c: on((r) => act(r, "carry")),
-        p: on((r) => act(r, "standup", "[data-top]")),
-        Enter: on((r) => act(r, "link") || act(r, "standup", "[data-rewrite]")),
+        Enter: on((r) => act(r, "link")),
         // m unfolds every folded list in view (yesterday's items, the daily), or folds
         // them all back when none is folded.
         m: on((r) => {

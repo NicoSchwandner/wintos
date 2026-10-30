@@ -2,7 +2,7 @@ import { execFile } from "child_process";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { activeMinutes, cutItems, gist, lastRecaps, lastWorkday, localDay, MAX_ITEMS, mergeByTitle, MIN_MINUTES, noTickets, recapPrompt, recordActivity, type Activity, type RecapItem } from "./recap";
-import { choose, parseItems, shownItems, type Curation, type ShownItem, type StandupItem } from "./standup";
+import { edit, parseItems, shownItems, type Curation, type ShownItem, type StandupItem } from "./standup";
 import { userPrompts } from "../sessions/naming";
 
 const KEEP_DAYS = 14;
@@ -85,12 +85,11 @@ export function dayRecapper(root: string, cmd?: string, extra?: string, factsOf:
         return p && { date: p.date, items: shownItems(p.items, curation, p.date) };
     };
 
-    // undefined: no such item on the day being shown.
-    const curate = async (id: string, change: { drop?: boolean; top?: boolean; text?: string }, now: number): Promise<{ date: string; items: ShownItem[] } | undefined> => {
+    // Your edit of the day's list as markdown; undefined: no day is being shown.
+    const editList = async (text: string, now: number): Promise<{ date: string; items: ShownItem[] } | undefined> => {
         const p = await proposal(now);
-        const item = p?.items.find((i) => i.id === id);
-        if (!p || !item) return undefined;
-        curation = choose(curation, p.date, item, change, now);
+        if (!p) return undefined;
+        curation = edit(curation, p.date, p.items, text);
         try {
             writeFileSync(curationFile, JSON.stringify(curation));
         } catch {}
@@ -111,7 +110,7 @@ export function dayRecapper(root: string, cmd?: string, extra?: string, factsOf:
         return last ? gist(last) : undefined;
     };
 
-    return { record, recap, curate, readOut, gistOf };
+    return { record, recap, editList, readOut, gistOf };
 }
 
 function safeText(file: string): string {

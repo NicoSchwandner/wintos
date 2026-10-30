@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { lastDayName, leftFromYesterday, withCarried, yesterdayItems } from "./day";
+import { lastDayName, leftFromYesterday, withCarried, yesterdayItems, yesterdayRows } from "./day";
 
 const day = (focus: string, yesterday?: { focus: string; tomorrow: string[] }) => ({ date: "2026-10-02", exists: true, mtime: 1, focus, planned: false, ...(yesterday ? { yesterday: { date: "2026-10-01", ...yesterday } } : {}) });
 
@@ -30,4 +30,10 @@ describe("carrying an item keeps its depth", () => {
     test("a sub-item whose parent today has goes under it, not at the end", () =>
         expect(withCarried("- [ ] Ship the export\n  - [ ] docs\n- [ ] Pair", chainOf("the fallback"))).toBe("- [ ] Ship the export\n  - [ ] docs\n  - [ ] the fallback\n- [ ] Pair"));
     test("into an empty day", () => expect(withCarried("", chainOf("Review"))).toBe("- [ ] Review"));
+});
+
+test("yesterday's rows have the notes under its items; a note is never left to carry", () => {
+    const d = day("", { focus: "- [ ] Ship it\n  - [ ] sub\n  - asked QA\n    - twice\n- [ ] Review", tomorrow: [] });
+    expect(yesterdayRows(d).map((r) => [r.text, r.depth, !!r.note])).toEqual([["Ship it", 0, false], ["sub", 1, false], ["asked QA", 1, true], ["twice", 2, true], ["Review", 0, false]]);
+    expect(leftFromYesterday(d)).toEqual(["Ship it", "sub", "Review"]);
 });

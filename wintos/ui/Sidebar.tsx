@@ -22,10 +22,10 @@ import { editMine, enterProject, focusArea, reopenProject, resumePane, setLatest
 import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
 import { closeProjectTab, registerWintosMenu, runKey } from "./menu";
 import { isPage, mainViewAtom, renamingAtom, yourMoveAtom } from "./notes/state";
-import { liveSessions } from "./sessions";
+import { inFlight, liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { attention } from "./attention";
-import { ghPrs, inboxKind, isInboxTab, type InboxList, prRef, projectTabIds, relTime, RowView } from "./view";
+import { ghPrs, inboxKind, isInboxTab, type InboxList, prRef, projectTabIds, relTime, RowView, type WintosState } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
@@ -180,6 +180,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     <Today />
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{tabIds.length} {tabIds.length === 1 ? "project" : "projects"}</span>
                 </div>
+                {state && model && <LooseEnds state={state} yourMove={model.needs.length + wokeClosed.length + (model.held?.count ?? 0)} />}
             </div>
             <div
                 data-wintos="sidebar-list"
@@ -201,6 +202,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         {loading.map((p) => <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
+                {state && <InFlight state={state} />}
                 {meetings.length > 0 && <MeetingCard meetings={meetings} />}
                 <MeetingEdge meetings={meetings} />
                 {offline || !model ? (
@@ -262,6 +264,44 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     );
 });
 WintOSSidebar.displayName = "WintOSSidebar";
+
+// The sessions in flight against your limit (WINTOS_WIP): one mark each, green at work, apricot
+// waiting on you; past the limit ⇧⌘T asks first.
+function InFlight({ state }: { state: WintosState }) {
+    const limit = state.wip ?? 0;
+    const n = inFlight(state.sessions, Date.now());
+    const total = n.working + n.waiting;
+    if (!limit || !total) return null;
+    const marks = Array.from({ length: Math.min(12, Math.max(limit, total)) }, (_, i) => (i < n.working ? T.moss : i < total ? T.apricot : T.borderActive));
+    return (
+        <div data-wintos="in-flight" style={{ display: "flex", flexDirection: "column", gap: 6, padding: "9px 11px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>In flight</span>
+                <span style={{ fontFamily: T.mono, fontSize: 11, color: total >= limit ? T.apricot : T.muted }}>{total} of {limit}</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${marks.length}, minmax(0, 1fr))`, gap: 3 }}>
+                {marks.map((c, i) => <span key={i} style={{ height: 6, borderRadius: 2, background: c }} />)}
+            </div>
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{n.working} working · {n.waiting} your move</span>
+        </div>
+    );
+}
+
+// One calm line under the clock: every loose end, and that each has a place. ⇧⌘E lists them.
+function LooseEnds({ state, yourMove }: { state: WintosState; yourMove: number }) {
+    const running = inFlight(state.sessions, Date.now()).working;
+    const wakes = Object.keys(state.wakes ?? {}).length;
+    const shelved = Object.values(state.shelf ?? {}).reduce((k, list) => k + list.length, 0);
+    const total = yourMove + running + wakes + shelved;
+    if (!total) return null;
+    const parts = [yourMove && `${yourMove} your move`, running && `${running} running`, wakes && `${wakes} wake${wakes === 1 ? "" : "s"}`, shelved && `${shelved} on shelves`].filter(Boolean).join(" · ");
+    return (
+        <button type="button" data-wintos="loose-ends" data-key="⇧⌘E" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("wrapup")} title={parts} style={{ display: "flex", flexDirection: "column", gap: 1, padding: 0, marginTop: 4, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui }}>
+            <span style={{ fontSize: 11.5, color: T.secondary }}>{total} loose end{total === 1 ? "" : "s"}, all in place</span>
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{parts}</span>
+        </button>
+    );
+}
 
 // note: a line under the header, shown even when the band has no rows (Your move's held items).
 function Band({ kind, count, shown, note, children }: { kind: keyof typeof BAND_STYLE; count: number; shown?: number; note?: React.ReactNode; children: React.ReactNode }) {

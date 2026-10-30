@@ -26,6 +26,7 @@ import { ReflectionPage } from "./ReflectionPage";
 import { TodayPage } from "./TodayPage";
 import { KeyboardPage } from "./KeyboardPage";
 import { WrapupPage } from "./WrapupPage";
+import { WipDialog } from "./WipDialog";
 
 // The project area: session strip over the terminals, the notes rail beside them, and the Today
 // and keyboard pages in the terminals' place. Terminals stay mounted underneath.
@@ -75,6 +76,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
             {overlay === "keymap" && <Keymap />}
             {overlay === "confirm-close" && <ConfirmClose />}
             {overlay === "name-session" && <NameSession />}
+            {overlay === "wip" && <WipDialog />}
             <MoveNudge />
             <UndoToast />
         </div>

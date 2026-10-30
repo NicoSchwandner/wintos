@@ -4,7 +4,7 @@ import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, getBlockComponentModel, isDev } from "@/store/global";
 import { closeOverlay, editMine, enterProject, focusArea, focusSession, reopenProject, takeReopen, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
-import { atWork, closeWarning, paneCloseWarns } from "./sessions";
+import { atWork, closeWarning, inFlight, paneCloseWarns } from "./sessions";
 import { toggleInbox } from "./inbox";
 import { mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, tickModeAtom, updateArmedAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject, topProject } from "./switcher";
@@ -47,6 +47,19 @@ const shQuote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
 
 export function newSessionScript(cwd: string | undefined): string {
     return cwd ? `cd ${shQuote(cwd)} && claude` : "claude";
+}
+
+// ⇧⌘T or ⌘N with as many sessions in flight as WINTOS_WIP allows: the first press asks (the
+// wip overlay), the same key again starts it anyway.
+let wipAsked: string | undefined;
+function overLimit(action: string): boolean {
+    const limit = currentState()?.wip ?? 0;
+    const n = inFlight(latestSessions(), Date.now());
+    if (!limit || n.working + n.waiting < limit) return false;
+    if (globalStore.get(overlayAtom) === "wip" && wipAsked === action) return (closeOverlay(), false);
+    wipAsked = action;
+    toggleOverlay("wip");
+    return true;
 }
 
 // ⇧⌘T: another Claude session in this project, next to the focused one and in its directory.
@@ -244,6 +257,7 @@ export function runAction(action: string): void {
     // A pane you create is where you want to be (from the notes too); in an Inbox tab a page
     // opened from the list leaves you in the list.
     if (!inInbox() && PANE_MAKERS.has(action.split(":")[0])) wantPane("new pane");
+    if ((action === "session" || action === "project") && overLimit(action)) return;
     if (action === "session") return newSession();
     if (action === "switch-next" || action === "switch-prev") return switchProject(action === "switch-next" ? 1 : -1, false);
     if (action === "project") return void createTab();

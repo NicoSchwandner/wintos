@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { atWork, shownState, attachments, autoClosable, closeWarning, liveSessions, paneCloseWarns, unreadSessions } from "./sessions";
+import { atWork, inFlight, shownState, attachments, autoClosable, closeWarning, liveSessions, paneCloseWarns, unreadSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
 
@@ -86,3 +86,6 @@ test("shownState: a turn that ended with its subagents still running shows as wo
     expect(shownState({ ...s("a", "t", "waiting"), subagents: { x: now - 4 * 3_600_000 } }, now)).toBe("waiting");
     expect(shownState(s("a", "t", "parked"), now)).toBe("parked");
 });
+
+test("inFlight: at work and waiting on you count; parked, done, idle, background and not-started ones don't", () =>
+    expect(inFlight([s("a", "t", "working"), s("b", "t", "waiting"), s("c", "t", "parked"), s("d", "t", "done"), s("e", "t", "idle"), { ...s("f", "t", "working"), background: true }, { ...s("g", "t", "waiting"), restored: true }, { ...s("h", "t", "waiting"), subagents: { x: 1000 } }], 2000)).toEqual({ working: 2, waiting: 1 }));

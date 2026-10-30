@@ -809,12 +809,12 @@ await scenario("32 · a turn that ends with its subagent still running sits in R
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
 });
 
-await scenario("33 · ⌥⌘B starts a break: the status bar counts it, the Today card says so, and the menu key path reaches the daemon", async () => {
+await scenario("33 · ⌥⌘B starts a break: the status bar counts it, the sidebar's meter says so, and the menu key path reaches the daemon", async () => {
     const t = await toProject();
     await press(t, "∫", { code: "KeyB", keyCode: 66, mods: ["alt", "meta"] }); // what macOS sends for ⌥B
     await until("the break in the daemon", async () => !!(await (await fetch("http://127.0.0.1:7731/state")).json()).rhythm?.onBreak);
     await until("the status bar counting it", () => evalIn(t, `document.querySelector("[data-wintos=on-break]")?.innerText?.startsWith("on a break")`));
-    await until("the Today card saying it", () => evalIn(t, `document.querySelector("[data-wintos=break-marks]")?.innerText === "on a break"`));
+    await until("the sidebar's meter saying it", () => evalIn(t, `document.querySelector("[data-wintos=rhythm-meter]")?.innerText.includes("on a break")`));
 });
 
 await scenario("34 · ⇧⌘E closes the day: t puts a waiting turn in tomorrow's plan and parks it, ⌘⏎ writes the plan and goes quiet", async () => {

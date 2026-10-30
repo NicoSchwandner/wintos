@@ -14,6 +14,7 @@ import { isInboxTab, projectSessions, sessionHeader, sessionName, urgentPr } fro
 import { rememberUndo, takeUndo } from "./undo";
 import { closeAction, escapeAction, isTextField, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
+import { installKeyHold } from "./keyHold";
 import { installFocusRing } from "./focusRing";
 import { currentState, daemonFetch, parkBlock } from "./useWintos";
 import { flog } from "./focusLog";
@@ -551,6 +552,7 @@ export function registerWintosMenu(): void {
     takeReopen();
     installKeyGame();
     installFocusRing();
+    installKeyHold();
     installFocusOwner();
     // Wave's openLink (a ⌘-click on a url in a terminal) opens web links through here.
     Object.assign(window, { wintosOpenPage: (url: string) => runAction(`open-page:${url}`) });

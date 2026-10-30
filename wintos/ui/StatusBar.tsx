@@ -37,12 +37,13 @@ export const StatusBar = memo(({ inbox }: { inbox?: boolean }) => {
     const work = atWorkText(atWork(state?.sessions ?? [], now));
     const keys = inbox ? [] : KEYS[view];
     const onBreak = state?.rhythm?.onBreak;
-    if (!keys.length && !behind && !onBreak) return null;
+    if (inbox && !behind && !onBreak) return null;
     return (
         <div style={{ flexShrink: 0, minHeight: 30, boxSizing: "border-box", padding: "5px 16px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 14px", borderTop: `1px solid ${T.hairline}`, background: T.sidebar, fontFamily: T.ui }}>
             {keys.map(([k, label]) => (
-                <Key key={k} k={k} label={label} />
+                <Key key={k} k={k} label={label} always />
             ))}
+            <span data-wintos="key-tip" style={{ fontSize: 11.5, color: T.faint }}>hold ⌘ for every shortcut</span>
             {onBreak && (
                 <span data-wintos="on-break" style={{ fontFamily: T.mono, fontSize: 11, color: T.moss }}>
                     on a break · {clock(now - onBreak)}
@@ -50,7 +51,7 @@ export const StatusBar = memo(({ inbox }: { inbox?: boolean }) => {
             )}
             {behind > 0 && (
                 <button type="button" data-wintos="update" data-key="⌥⌘U" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("update")} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 7, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 11, color: armed ? T.brick : T.aqua }}>
-                    <Key k="⌥⌘U" label="" />
+                    <Key k="⌥⌘U" label="" always />
                     {armed ? `again: restarting stops ${work}` : `update · ${behind} new commit${behind === 1 ? "" : "s"}`}
                     {!armed && work && <span data-wintos="update-busy" style={{ color: T.apricot }}>· {work} would stop</span>}
                 </button>

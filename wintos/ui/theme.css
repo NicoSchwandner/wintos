@@ -117,3 +117,10 @@ body {
         display: none !important;
     }
 }
+
+/* On the chrome that is always on screen, keycaps stay out of sight until ⌘ is held
+   (keyHold.ts); their labels stay. Pages, footers and the nudge keep theirs: there a key is
+   the instruction. */
+body:not(.w-show-keys) :is([data-wintos="sidebar"], [data-wintos="pane-strip"], [data-wintos="session-header"], [data-wintos="notes-rail"]) .w-keycap:not(.w-always) {
+    display: none !important;
+}

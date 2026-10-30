@@ -14,14 +14,15 @@ import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
 import { closedWakes, useWakeDelivery, type ClosedWake } from "./wakes";
 import { TodayCard } from "./TodayCard";
-import { GameLine } from "./GameIndicator";
 import { meetingsFrom } from "./meetings";
 import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, reopenProject, resumePane, setLatestSessions } from "./focus";
 import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
-import { closeProjectTab, registerWintosMenu, runKey } from "./menu";
-import { isPage, mainViewAtom, renamingAtom, yourMoveAtom } from "./notes/state";
+import { closeProjectTab, openView, registerWintosMenu, runKey } from "./menu";
+import { focusList } from "./dayplan";
+import type { Day } from "../daemon/journal/journal";
+import { isPage, mainViewAtom, renamingAtom, tickModeAtom, yourMoveAtom } from "./notes/state";
 import { inFlight, liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { attention } from "./attention";
@@ -80,6 +81,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const fullScreen = useAtomValue(atoms.isFullScreen);
     const mainView = useAtomValue(mainViewAtom);
     const [showAll, setShowAll] = useStoredFlag("wintos:quiet-unfolded");
+    const ticking = useAtomValue(tickModeAtom);
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
@@ -158,13 +160,13 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 if (title?.trim()) fireAndForget(() => setProjectTitle(row.tabId, title.trim(), true));
             },
         };
-        const el = row.band === "quiet" ? <QuietRow {...props} /> : <CardRow {...props} />;
+        const el = row.band === "quiet" ? <QuietRow {...props} /> : row.band === "running" ? <QuietRow {...props} v={{ ...v, reason: v.next }} dot={T.moss} /> : <CardRow {...props} />;
         // A focus block dims the other projects: they wait for it to end.
         return focus && row.tabId !== focus.tabId ? <div key={row.tabId} style={{ opacity: 0.45 }}>{el}</div> : el;
     };
 
     return (
-        <div style={{ height: "100%", display: "flex", flexDirection: "column", background: T.sidebar, borderRight: `1px solid ${T.border}`, fontFamily: T.ui, color: T.text }}>
+        <div data-wintos="sidebar" style={{ height: "100%", display: "flex", flexDirection: "column", background: T.sidebar, borderRight: `1px solid ${T.border}`, fontFamily: T.ui, color: T.text }}>
             {instance().label && (
                 <div style={{ padding: `${fullScreen ? 6 : 30}px 12px 6px`, background: T.brick, color: T.ground, fontFamily: T.mono, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.06em", textAlign: "center", WebkitAppRegion: "drag" } as React.CSSProperties}>
                     {instance().label.toUpperCase()} INSTANCE · NOT YOUR WINTOS
@@ -177,33 +179,30 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     <span style={{ fontFamily: T.display, fontSize: 27, lineHeight: 1 }}>WintOS</span>
                     <Clock />
                 </div>
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-                    <Today />
-                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>{tabIds.length} {tabIds.length === 1 ? "project" : "projects"}</span>
-                </div>
-                {state && model && <LooseEnds state={state} yourMove={model.needs.length + wokeClosed.length + (model.held?.count ?? 0)} />}
             </div>
             <div
                 data-wintos="sidebar-list"
                 style={{ flexGrow: 1, overflowY: "auto", padding: "4px 12px 12px", display: "flex", flexDirection: "column", gap: 18 }}
             >
-                {state?.day && <TodayCard day={state.day} active={mainView === "day" || mainView === "reflect"} cursor={switchTarget === "card:today"} walk={<WalkKeys />} />}
-                {state && (
-                    <div style={{ display: "flex", gap: 8 }}>
-                        {queue ? (
-                            <SummaryCard label="PRs" keys="⇧⌘G" busy={running.has("gh-prs")} stats={[{ value: String(queue.yours), label: "yours" }, { value: String(queue.team), label: "team" }]} note={[queue.teamPastSla && `${queue.teamPastSla} team past SLA`, queue.pastSla && `${queue.pastSla} yours past SLA`].filter(Boolean).join(" · ") || undefined} noteColor={T.brick} active={shows("prs")} cursor={switchTarget === "card:prs"} onClick={() => goToInbox("prs")} />
-                        ) : (
-                            <SummaryCard label="PRs" keys="⇧⌘G" stats={[]} note="loading from GitHub" noteColor={T.faint} active={shows("prs")} cursor={switchTarget === "card:prs"} onClick={() => goToInbox("prs")} />
-                        )}
-                        {panels.map((p) => {
-                            const c = cardValue(p.counts);
-                            const failed = p.error || p.counts.some((x) => x.count == null);
-                            return <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" busy={running.has(p.name)} stats={c} note={failed ? "couldn't fetch everything" : undefined} noteColor={T.brick} active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />;
-                        })}
-                        {loading.map((p) => <SummaryCard key={p.name} label={p.title} keys="⇧⌘O" stats={[]} note="loading" noteColor={T.faint} active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
-                    </div>
+                {/* ⌥⌘X unfolds the Today card to tick items off; otherwise the day, the PRs and on call are three tiles. */}
+                {state?.day && ticking ? (
+                    <TodayCard day={state.day} active={mainView === "day" || mainView === "reflect"} cursor={switchTarget === "card:today"} walk={<WalkKeys />} />
+                ) : (
+                    state && (
+                        <div style={{ display: "grid", gridTemplateColumns: `repeat(${1 + (state.day ? 1 : 0) + Math.max(1, panels.length + loading.length)}, minmax(0, 1fr))`, gap: 6 }}>
+                            {state.day && <Tile label="Today" keys="⇧⌘Y" value={dayValue(state.day)} hot={!state.day.planned} active={mainView === "day" || mainView === "reflect"} cursor={switchTarget === "card:today"} onClick={() => openView("day")} />}
+                            <Tile label="PRs" keys="⇧⌘G" value={queue ? String(queue.yours) : "…"} note={queue && queue.pastSla ? `${queue.pastSla} late` : undefined} busy={running.has("gh-prs")} active={shows("prs")} cursor={switchTarget === "card:prs"} onClick={() => goToInbox("prs")} />
+                            {panels.map((p) => <Tile key={p.name} label={p.title} keys="⇧⌘O" value={cardValue(p.counts).map((c) => c.value).join(" · ")} broken={!!p.error || p.counts.some((x) => x.count == null)} busy={running.has(p.name)} active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
+                            {loading.map((p) => <Tile key={p.name} label={p.title} keys="⇧⌘O" value="…" active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
+                        </div>
+                    )
                 )}
-                {state && <InFlight state={state} />}
+                {state?.day?.reflection && (
+                    <button type="button" data-wintos="reflect-nudge" data-key="⌥⌘Y" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openView("reflect")} style={{ display: "flex", justifyContent: "space-between", gap: 8, margin: "-8px 2px 0", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12.5, color: T.apricot, textAlign: "left" }}>
+                        Write your {state.day.reflection.level} reflection
+                        <Key k="⌥⌘Y" label="" />
+                    </button>
+                )}
                 {meetings.length > 0 && <MeetingCard meetings={meetings} />}
                 <MeetingEdge meetings={meetings} />
                 {offline || !model ? (
@@ -254,53 +253,57 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     </>
                 )}
             </div>
-            {state?.keyboard && <GameLine stats={state.keyboard} />}
-            <div style={{ flexShrink: 0, minHeight: 34, boxSizing: "border-box", padding: "6px 14px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 16px", borderTop: `1px solid ${T.hairline}`, fontSize: 11, color: T.faint }}>
-                {/* ⌘J/⌘K sit on the open project's row. */}
-                <Key k="⌃⇥" label="from the top" />
-                {!isInboxTab(tabs[activeTabId]) && <Key k="⌘R" label="rename" />}
-                {state?.sessions.some((x) => x.tabId === activeTabId && x.state === "waiting") && <Key k="⌥⌘P" label="park" />}
-            </div>
+            {state && <RhythmMeter state={state} />}
         </div>
     );
 });
 WintOSSidebar.displayName = "WintOSSidebar";
 
-// The sessions in flight against your limit (WINTOS_WIP): one mark each, green at work, apricot
-// waiting on you; past the limit ⇧⌘T asks first.
-function InFlight({ state }: { state: WintosState }) {
+// The sidebar's foot: the sessions in flight against your limit (WINTOS_WIP), green at work,
+// apricot waiting on you, and how long since your last break.
+function RhythmMeter({ state }: { state: WintosState }) {
+    const now = useNow(60_000);
     const limit = state.wip ?? 0;
-    const n = inFlight(state.sessions, Date.now());
+    const n = inFlight(state.sessions, now);
     const total = n.working + n.waiting;
-    if (!limit || !total) return null;
+    const r = state.rhythm;
     const marks = Array.from({ length: Math.min(12, Math.max(limit, total)) }, (_, i) => (i < n.working ? T.moss : i < total ? T.apricot : T.borderActive));
+    const since = r ? Math.round((now - r.stretchFrom) / 60_000) : 0;
+    const rest = !r?.everyMs ? "" : r.onBreak ? "on a break" : r.breaks.length ? `last break ${since} min ago` : `no break yet · ${since} min at it`;
+    if (!marks.length && !rest) return null;
     return (
-        <div data-wintos="in-flight" style={{ display: "flex", flexDirection: "column", gap: 6, padding: "9px 11px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>In flight</span>
-                <span style={{ fontFamily: T.mono, fontSize: 11, color: total >= limit ? T.apricot : T.muted }}>{total} of {limit}</span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${marks.length}, minmax(0, 1fr))`, gap: 3 }}>
-                {marks.map((c, i) => <span key={i} style={{ height: 6, borderRadius: 2, background: c }} />)}
-            </div>
-            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>{n.working} working · {n.waiting} your move</span>
+        <div data-wintos="rhythm-meter" style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: 7, padding: "10px 16px 12px" }}>
+            {marks.length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${marks.length}, minmax(0, 1fr))`, gap: 3 }}>
+                    {marks.map((c, i) => <span key={i} style={{ height: 4, borderRadius: 2, background: c }} />)}
+                </div>
+            )}
+            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: total >= limit && limit ? T.apricot : T.faint }}>{[limit ? `${total} of ${limit} in flight` : "", rest].filter(Boolean).join(" · ")}</span>
         </div>
     );
 }
 
-// One calm line under the clock: every loose end, and that each has a place. ⇧⌘E lists them.
-function LooseEnds({ state, yourMove }: { state: WintosState; yourMove: number }) {
-    const running = inFlight(state.sessions, Date.now()).working;
-    const wakes = Object.keys(state.wakes ?? {}).length;
-    const shelved = Object.values(state.shelf ?? {}).reduce((k, list) => k + list.length, 0);
-    const total = yourMove + running + wakes + shelved;
-    if (!total) return null;
-    const parts = [yourMove && `${yourMove} your move`, running && `${running} running`, wakes && `${wakes} wake${wakes === 1 ? "" : "s"}`, shelved && `${shelved} on shelves`].filter(Boolean).join(" · ");
+// The day as a tile: how much of the plan is done, or that it still needs one.
+const dayValue = (day: Day) => {
+    const items = focusList(day.focus).filter((i) => i.depth === 0);
+    return !day.planned ? "plan it" : items.length ? `${items.filter((i) => i.done).length} of ${items.length}` : "–";
+};
+
+// A small tile at the top of the sidebar: Today, PRs, On call. hot: it needs you (an unplanned
+// day); note: what is late, in brick; broken: its last run could not fetch everything.
+function Tile({ label, keys, value, note, hot, broken, busy, active, cursor, onClick }: { label: string; keys: string; value: string; note?: string; hot?: boolean; broken?: boolean; busy?: boolean; active?: boolean; cursor?: boolean; onClick: () => void }) {
     return (
-        <button type="button" data-wintos="loose-ends" data-key="⇧⌘E" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("wrapup")} title={parts} style={{ display: "flex", flexDirection: "column", gap: 1, padding: 0, marginTop: 4, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui }}>
-            <span style={{ fontSize: 11.5, color: T.secondary }}>{total} loose end{total === 1 ? "" : "s"}, all in place</span>
-            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{parts}</span>
-        </button>
+        <div data-key={active ? "" : keys} onClick={onClick} title={broken ? "couldn't fetch everything" : undefined} style={{ minWidth: 0, padding: "8px 10px", background: T.card, border: `1px solid ${cursor || hot ? T.apricot : "transparent"}`, borderRadius: 9, display: "flex", flexDirection: "column", gap: 2, cursor: "pointer", ...(active ? ACTIVE : {}) }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: T.muted }}>
+                {label}
+                {busy && <Drumming />}
+                <span style={{ marginLeft: "auto" }}><Key k={keys} label="" /></span>
+            </span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: hot ? T.apricot : broken ? T.brick : T.emphasis, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {value}
+                {note && <span style={{ fontSize: 12, fontWeight: 500, color: T.brick }}> · {note}</span>}
+            </span>
+        </div>
     );
 }
 
@@ -310,12 +313,9 @@ function Band({ kind, count, shown, note, children }: { kind: keyof typeof BAND_
     const s = BAND_STYLE[kind];
     return (
         <div data-band-group={kind} style={{ display: "flex", flexDirection: "column", gap: kind === "quiet" ? 3 : 7 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px" }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: kind === "quiet" ? T.border : s.color }} />
-                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: s.color }}>{s.label}</span>
-                <span style={{ flexGrow: 1, height: 1, background: kind === "quiet" ? T.card : T.hairline }} />
-                <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>{shown !== undefined && shown < count ? `${shown} of ${count}` : count}</span>
-            </div>
+            <span style={{ padding: "0 4px", fontSize: 12, fontWeight: 600, letterSpacing: "0.03em", color: kind === "quiet" ? T.faint : kind === "running" ? T.quietTitle : s.color }}>
+                {s.label} · {shown !== undefined && shown < count ? `${shown} of ${count}` : count}
+            </span>
             {note}
             {children}
         </div>
@@ -350,10 +350,10 @@ function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming"
     );
 }
 
-// The open project: a brighter row with a bar on its left, unmistakable at a glance (green is
-// taken by the focus frame), and the keys that walk away from it.
+// The open project: a brighter row with a bar on its left, unmistakable at a glance, and the keys
+// that walk away from it. The arrows mean nothing without their keys, so they show with them.
 const WalkKeys = () => (
-    <span style={{ display: "inline-flex", gap: 8 }}>
+    <span className="w-keycap" style={{ display: "inline-flex", gap: 8 }}>
         <Key k="⌘K" label="↑" />
         <Key k="⌘J" label="↓" />
     </span>
@@ -394,7 +394,8 @@ function CardRow(p: RowProps) {
     );
 }
 
-function QuietRow(p: RowProps) {
+// dot: a running project's mark before its title; its line is what it is doing.
+function QuietRow(p: RowProps & { dot?: string }) {
     const { v } = p;
     return (
         <div
@@ -417,6 +418,7 @@ function QuietRow(p: RowProps) {
             }}
         >
             {/* The title gets the room; the note is capped and cut, so neither wraps. */}
+            {p.dot && <span style={{ width: 6, height: 6, borderRadius: "50%", background: p.dot, flexShrink: 0, marginRight: -2 }} />}
             <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} />
             {p.active ? <WalkKeys /> : <span title={v.reason} style={{ maxWidth: "48%", fontSize: 11.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>}
         </div>
@@ -427,13 +429,9 @@ function QuietRow(p: RowProps) {
 // Its own component so the per-second tick re-renders only this line, not the sidebar.
 function Clock() {
     const d = new Date(useNow(1_000));
-    return <span style={{ fontFamily: T.mono, fontSize: 17, color: T.text, fontVariantNumeric: "tabular-nums" }}>{d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}</span>;
+    return <span style={{ fontFamily: T.mono, fontSize: 13, color: T.muted, fontVariantNumeric: "tabular-nums" }}>{d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}</span>;
 }
 
-function Today() {
-    const d = new Date(useNow(60_000));
-    return <span style={{ fontSize: 12, color: T.secondary }}>{d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</span>;
-}
 
 // A panel's title from its last run, so after a restart its loading card says "On call", not
 // the plugin's file name. Per-viewer convenience, so browser storage.

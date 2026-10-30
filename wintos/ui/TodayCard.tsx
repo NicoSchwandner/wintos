@@ -74,7 +74,6 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
                     </span>
                 </>
             )}
-            <BreakMarks />
             {day.reflection && (
                 <span data-wintos="reflect-nudge" data-key="⌥⌘Y" onClick={(e) => (e.stopPropagation(), openView("reflect"))} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 11.5, color: T.apricot }}>
                     <span>Write your {day.reflection.level} reflection{day.reflection.date < day.date ? ` from ${since(day.reflection.date, day.date)}` : ""}</span>
@@ -86,22 +85,6 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
     );
 });
 TodayCard.displayName = "TodayCard";
-
-// The day's breaks at a glance: one mark each, and how long since the last.
-function BreakMarks() {
-    const { state } = useWintos();
-    const now = useNow(60_000);
-    const r = state?.rhythm;
-    if (!r?.everyMs) return null;
-    const since = Math.round((now - r.stretchFrom) / 60_000);
-    const n = r.breaks.length;
-    return (
-        <span data-wintos="break-marks" style={{ display: "flex", alignItems: "center", gap: 3, fontFamily: T.mono, fontSize: 11, color: T.faint }}>
-            {r.breaks.slice(-8).map((b) => <span key={b.start} style={{ width: 14, height: 5, borderRadius: 2, background: T.moss }} />)}
-            <span style={{ marginLeft: n ? 5 : 0 }}>{r.onBreak ? "on a break" : n ? `${n} break${n === 1 ? "" : "s"} · ${since} min since the last` : `no break yet · ${since} min at it`}</span>
-        </span>
-    );
-}
 
 // ⌥⌘X: the card unfolded, up to 15 open items, the cursor on the first: j/k move, x ticks, Esc
 // folds it back to where you were. The same keys as on the Today page.

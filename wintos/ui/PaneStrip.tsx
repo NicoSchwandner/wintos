@@ -78,7 +78,7 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     return (
         // The strip's empty space drags the window. The chips' row doesn't, gaps included: a drag
         // region takes the wheel too, and the row scrolls sideways when it overflows.
-        <div style={{ display: "flex", alignItems: "center", padding: `${STRIP_GAP}px 8px ${Math.max(0, STRIP_GAP - tileGap / 2)}px`, flexShrink: 0, WebkitAppRegion: "drag" } as React.CSSProperties}>
+        <div data-wintos="pane-strip" style={{ display: "flex", alignItems: "center", padding: `${STRIP_GAP}px 8px ${Math.max(0, STRIP_GAP - tileGap / 2)}px`, flexShrink: 0, WebkitAppRegion: "drag" } as React.CSSProperties}>
         {title && state?.autoCloseOff?.includes(tabId) && <span data-wintos="autoclose-off" style={{ flexShrink: 0, marginRight: 14 }}><Key k="⌥⌘A" label="auto-close off" /></span>}
         {title && <span data-wintos="project-title" style={{ flexShrink: 0, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", margin: "0 14px 0 4px", fontFamily: T.display, fontSize: 18, lineHeight: 1, color: T.emphasis }}>{title}</span>}
         <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, fontFamily: T.mono, fontSize: 11, overflowX: "auto", WebkitAppRegion: "no-drag" } as React.CSSProperties}>

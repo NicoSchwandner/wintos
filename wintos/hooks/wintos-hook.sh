@@ -44,9 +44,13 @@ if [ -n "$WAVETERM_BLOCKID" ] && [ "$background" != "bg" ]; then
 fi
 
 # A question to the developer mid-turn (AskUserQuestion, ExitPlanMode) waits on them until it is
-# answered: its start and end go to the daemon, the question itself never does.
+# answered: its start and end go to the daemon, and for AskUserQuestion its first question and
+# options, so the decision batch can show them; nothing else of the call does.
 case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.tool_name // "")' 2>/dev/null)" in
-PreToolUse:AskUserQuestion | PreToolUse:ExitPlanMode | PostToolUse:AskUserQuestion | PostToolUse:ExitPlanMode)
+PreToolUse:AskUserQuestion)
+    payload="$(printf '%s' "$payload" | jq -c '{hook_event_name, session_id, cwd, tool_name}
+        + ((.tool_input.questions[0] // {}) as $q | {question: {text: ($q.question // ""), options: [($q.options // [])[:4][] | {label: (.label // ""), then: (.description // "")}]}})' 2>/dev/null)" ;;
+PreToolUse:ExitPlanMode | PostToolUse:AskUserQuestion | PostToolUse:ExitPlanMode)
     payload="$(printf '%s' "$payload" | jq -c '{hook_event_name, session_id, cwd, tool_name}' 2>/dev/null)" ;;
 esac
 

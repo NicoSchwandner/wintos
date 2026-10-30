@@ -319,7 +319,8 @@ export function runAction(action: string): void {
     if (action === "update") return updateWintos();
     if (action === "autoclose") return toggleAutoClose();
     if (action === "break") return void (flog("break: started"), daemonFetch("/rhythm/break", { method: "POST", body: {} }));
-    if (action === "release") return void (flog("batch: opened now"), daemonFetch("/rhythm/release", { method: "POST", body: {} }));
+    // ⌥⌘O: the decision batch, what was held back with it; again closes it.
+    if (action === "release") return void (globalStore.get(mainViewAtom) !== "decide" && (flog("batch: opened now"), void daemonFetch("/rhythm/release", { method: "POST", body: {} })), toggleView("decide"));
     if (action === "focus") return void (flog("focus block: toggled"), daemonFetch("/rhythm/focus", { method: "POST", body: { tabId: globalStore.get(atoms.staticTabId) } }));
     if (action === "break-later") return void (flog("break: in 10 min"), daemonFetch("/rhythm/snooze", { method: "POST", body: { minutes: 10 } }));
     if (action.startsWith("session-")) return toSession(Number(action.slice("session-".length)));

@@ -1,5 +1,5 @@
 // kind "bg": sent from Claude's background service, not from the pane's own Claude.
-export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string; reason?: string; last_assistant_message?: string; tool_name?: string; kind?: string; agent_id?: string };
+export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string; reason?: string; last_assistant_message?: string; tool_name?: string; kind?: string; agent_id?: string; question?: { text?: unknown; options?: unknown } };
 export type HookEvent = { tabId: string; blockId: string; payload: HookPayload };
 // parked: the turn ended waiting on something outside (CI, a review), not on the developer.
 // done: the turn ended with the goal met and nothing asked of the developer.
@@ -8,7 +8,12 @@ export type SessionState = "idle" | "working" | "waiting" | "parked" | "done" | 
 // question tool, the session itself (`wintos ask`), or a reading of its last message.
 export const ASK_KINDS = ["answer", "decide", "approve", "unblock"] as const;
 export type AskKind = (typeof ASK_KINDS)[number];
-export type Ask = { kind: AskKind; text?: string; by: "tool" | "session" | "model" | "guess" };
+// The card a decision batch shows (⌥⌘O): context, a line on what it is about; why, the reason it
+// asks; options with what each leads to, the recommended one by number from 1; final: it can't be
+// undone (a merge, a deploy, a delete).
+export type AskOption = { label: string; then?: string };
+export type AskCard = { context?: string; why?: string; options?: AskOption[]; recommend?: number; final?: boolean };
+export type Ask = { kind: AskKind; text?: string; by: "tool" | "session" | "model" | "guess" } & AskCard;
 export type Session = {
     id: string;
     tabId: string;
@@ -100,6 +105,14 @@ const TRANSITIONS: Record<string, SessionState> = {
 
 const ASKING_TOOLS: Record<string, AskKind> = { AskUserQuestion: "answer", ExitPlanMode: "approve" };
 
+// The question tool's first question and its options, as the hook passed them, for the batch card.
+function toolQuestion(q: { text?: unknown; options?: unknown } | undefined): Pick<Ask, "text" | "options"> {
+    const line = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
+    const text = line(q?.text, 240);
+    const options = (Array.isArray(q?.options) ? q.options : []).map((o) => ({ label: line(o?.label, 80), then: line(o?.then, 160) })).filter((o) => o.label).map((o) => (o.then ? o : { label: o.label }));
+    return { ...(text ? { text } : {}), ...(options.length >= 2 ? { options: options.slice(0, 4) } : {}) };
+}
+
 export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now: number): Map<string, Session> {
     const { session_id: id, hook_event_name: name, cwd, prompt, pr_verb } = ev.payload;
     const prev = sessions.get(id);
@@ -138,7 +151,7 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
         donePending: next ? undefined : prev?.donePending,
         askPending: next ? undefined : prev?.askPending,
         // A turn's ask lasts until the session moves on; a Stop with none is read by the daemon.
-        ask: asks === "waiting" ? { kind: tool, by: "tool" } : name === "Stop" && !parks && !finishes ? prev?.askPending : next ? undefined : prev?.ask,
+        ask: asks === "waiting" ? { kind: tool, by: "tool", ...toolQuestion(ev.payload.question) } : name === "Stop" && !parks && !finishes ? prev?.askPending : next ? undefined : prev?.ask,
         turnEndedAt: name === "Stop" ? now : prev?.turnEndedAt,
         promptAt: name === "UserPromptSubmit" ? now : prev?.promptAt,
     };
@@ -311,10 +324,10 @@ export function finishSession(sessions: Map<string, Session>, blockId: string, n
 }
 
 // `wintos ask` from inside a session: the turn's Stop waits on the developer for this.
-export function askSession(sessions: Map<string, Session>, blockId: string, kind: AskKind, text: string | undefined, now: number, sessionId?: string): Map<string, Session> {
+export function askSession(sessions: Map<string, Session>, blockId: string, kind: AskKind, text: string | undefined, now: number, sessionId?: string, card: AskCard = {}): Map<string, Session> {
     const live = liveIn(sessions, blockId, sessionId);
     if (!live) return sessions;
-    return new Map(sessions).set(live.id, { ...live, askPending: { kind, ...(text ? { text } : {}), by: "session" }, parkPending: undefined, donePending: undefined, lastAt: now });
+    return new Map(sessions).set(live.id, { ...live, askPending: { kind, ...(text ? { text } : {}), by: "session", ...card }, parkPending: undefined, donePending: undefined, lastAt: now });
 }
 
 // What the daemon read in a turn that ended saying nothing (no ask, wait or done): an ask, or

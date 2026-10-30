@@ -18,6 +18,7 @@ const KEYS: Record<MainView, readonly (readonly [string, string])[]> = {
     reflect: [],
     keyboard: [],
     wrapup: [],
+    decide: [],
 };
 
 const clock = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;

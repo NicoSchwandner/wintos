@@ -4,7 +4,10 @@
 #   wintos wait <what…>                end this turn parked on something outside (used by Claude)
 #   wintos wake <event> <pr> <prompt…> park until a PR is green, merged, released, re-requested or commented on, then get the prompt (used by Claude)
 #   wintos wake cancel                 drop this session's wakes
-#   wintos ask <kind> [<what…>]       end this turn waiting on the developer: answer, decide, approve or unblock
+#   wintos ask <kind> [<what…>]       end this turn waiting on the developer: answer, decide, approve or unblock;
+#                                     with a card for the decision batch: --context "<what this is about>"
+#                                     --why "<why you ask>" --option "<label>: <what it leads to>" (2-4)
+#                                     --recommend <n> --final (it can't be undone)
 #   wintos done                        end this turn done: nothing waits on the developer (used by Claude)
 #   wintos status <line…>              what this session is doing now, shown on its pane (used by Claude)
 #   wintos lane <name> <step…>         the process this session follows; ?step is the developer's call (used by Claude)
@@ -154,14 +157,29 @@ todo)
     ;;
 ask)
     shift
-    case "${1:-}" in answer | decide | approve | unblock) ;; *) die "usage: wintos ask answer|decide|approve|unblock [<what you need from them>]" ;; esac
+    case "${1:-}" in answer | decide | approve | unblock) ;; *) die "usage: wintos ask answer|decide|approve|unblock [<what you need from them>] [--context <line>] [--why <line>] [--option \"<label>: <then>\"]... [--recommend <n>] [--final]" ;; esac
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     kind="$1"
     shift
-    jq -n --arg k "$kind" --arg t "$*" '{kind: $k, text: $t}' |
-        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/ask$SESSION_Q" >/dev/null ||
-        die "wintosd not reachable on port $PORT, or it refused the text"
-    echo "asks the developer to $kind${*:+: $*}"
+    # The decision card: --context, --why, --option "label: what it leads to" (2-4), --recommend N, --final.
+    words=() context="" why="" recommend="" final=false options='[]'
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --context) context="${2:-}"; shift 2 ;;
+        --why) why="${2:-}"; shift 2 ;;
+        --option) options="$(jq -c --arg o "${2:-}" '. + [($o | capture("^(?<label>.*?)(: (?<then>.*))?$") | with_entries(select(.value != null)))]' <<<"$options")"; shift 2 ;;
+        --recommend) recommend="${2:-}"; shift 2 ;;
+        --final) final=true; shift ;;
+        *) words+=("$1"); shift ;;
+        esac
+    done
+    text="${words[*]:-}"
+    reply="$(jq -n --arg k "$kind" --arg t "$text" --arg c "$context" --arg w "$why" --argjson o "$options" --arg r "$recommend" --argjson f "$final" \
+        '{kind: $k, text: $t} + (if $c != "" then {context: $c} else {} end) + (if $w != "" then {why: $w} else {} end)
+         + (if ($o | length) > 0 then {options: $o} else {} end) + (if $r != "" then {recommend: ($r | tonumber)} else {} end) + (if $f then {final: true} else {} end)' |
+        curl -s -m 2 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/ask$SESSION_Q")" || die "wintosd not reachable on port $PORT"
+    [ "${reply##*$'\n'}" = 200 ] || die "wintosd refused the ask: ${reply%$'\n'*}"
+    echo "asks the developer to $kind${text:+: $text}"
     ;;
 done)
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"

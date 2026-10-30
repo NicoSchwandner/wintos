@@ -72,10 +72,17 @@ describe("wintos-hook.sh", () => {
 });
 
 describe("wintos-hook.sh and a question mid-turn", () => {
-    test.each(["PreToolUse", "PostToolUse"])("%s of AskUserQuestion goes to the daemon without the question itself", async (name) => {
+    test("PreToolUse of AskUserQuestion carries its first question and options for the decision batch, nothing else of the call", async () => {
         const d = await fakeDaemon("");
-        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, JSON.stringify({ hook_event_name: name, session_id: "s", cwd: "/x", tool_name: "AskUserQuestion", tool_input: { questions: [{ question: "secret?" }] } }));
-        expect(d.seen[0].body.payload).toEqual({ hook_event_name: name, session_id: "s", cwd: "/x", tool_name: "AskUserQuestion", config_dir: "/home/dev/.claude" });
+        const input = { questions: [{ question: "Which way?", options: [{ label: "Fast", description: "ships today" }, { label: "Safe", description: "a day later" }], multiSelect: false }, { question: "second" }], other: "x" };
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, JSON.stringify({ hook_event_name: "PreToolUse", session_id: "s", cwd: "/x", tool_name: "AskUserQuestion", tool_input: input }));
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PreToolUse", session_id: "s", cwd: "/x", tool_name: "AskUserQuestion", question: { text: "Which way?", options: [{ label: "Fast", then: "ships today" }, { label: "Safe", then: "a day later" }] }, config_dir: "/home/dev/.claude" });
+    });
+
+    test("PostToolUse of AskUserQuestion goes to the daemon without the question", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, JSON.stringify({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", tool_name: "AskUserQuestion", tool_input: { questions: [{ question: "secret?" }] } }));
+        expect(d.seen[0].body.payload).toEqual({ hook_event_name: "PostToolUse", session_id: "s", cwd: "/x", tool_name: "AskUserQuestion", config_dir: "/home/dev/.claude" });
     });
 });
 
@@ -423,6 +430,12 @@ describe("wintos ask", () => {
     test("sends what this block's session asks of the developer", async () => {
         const r = await ask(["decide", "two", "bands"]);
         expect([r.out.trim(), r.seen[0]]).toEqual(["asks the developer to decide: two bands", { url: "/blocks/blk-1/ask?session=s-1", body: { kind: "decide", text: "two bands" } }]);
+    });
+
+    test("with a card: context, why, options split at their colon, the recommended one, final", async () => {
+        const r = await ask(["decide", "merge or hold?", "--context", "routes all documents", "--why", "CI green", "--option", "Merge now: live Monday", "--option", "Hold", "--recommend", "1", "--final"]);
+        expect(r.seen[0].body).toEqual({ kind: "decide", text: "merge or hold?", context: "routes all documents", why: "CI green", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }], recommend: 1, final: true });
+        expect(r.out.trim()).toBe("asks the developer to decide: merge or hold?");
     });
 
     test("a kind it doesn't know is refused before anything is sent", async () => {

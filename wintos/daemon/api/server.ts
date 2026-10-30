@@ -21,7 +21,7 @@ import { groupOf, type DonePr, type PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
-import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
+import { askCard, askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { trail } from "../sessions/trail";
 import { reentry } from "../sessions/reentry";
 import { closeDay, prompted, release, snooze, startBreak, tick, toggleFocus, type Rhythm } from "../rhythm/rhythm";
@@ -607,7 +607,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const text = typeof b?.text === "string" ? b.text.trim() : "";
                 if (!isSafe(blockId) || !isAskKind(b?.kind) || (text && (!isSafe(text) || text.length > MAX_TITLE)))
                     return send(res, 400, `need kind: answer, decide, approve or unblock, and an optional one-line text up to ${MAX_TITLE} characters`);
-                sessions = askSession(sessions, blockId, b.kind, text || undefined, Date.now(), sid);
+                const card = askCard(b as Parameters<typeof askCard>[0]);
+                if (typeof card === "string") return send(res, 400, card);
+                sessions = askSession(sessions, blockId, b.kind, text || undefined, Date.now(), sid, card);
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");

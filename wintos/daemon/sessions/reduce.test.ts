@@ -161,6 +161,11 @@ describe("a question mid-turn (AskUserQuestion, ExitPlanMode)", () => {
         ]);
     });
 
+    test("the question's text and options, as the hook passes them, go on the ask for the batch card", () => {
+        const q = ev({ hook_event_name: "PreToolUse", session_id: prompt.session_id, tool_name: "AskUserQuestion", question: { text: "Which way?", options: [{ label: "Fast", then: "ships today" }, { label: "Safe", then: "" }, { label: "" }] } });
+        expect(only(run([ev(prompt), q])).ask).toEqual({ kind: "answer", by: "tool", text: "Which way?", options: [{ label: "Fast", then: "ships today" }, { label: "Safe" }] });
+    });
+
     test("any other tool changes nothing", () => {
         expect(only(run([ev(prompt), tool("PreToolUse", "Bash"), tool("PostToolUse", "Bash")])).state).toBe("working");
     });

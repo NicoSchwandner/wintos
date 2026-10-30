@@ -26,6 +26,7 @@ import { ReflectionPage } from "./ReflectionPage";
 import { TodayPage } from "./TodayPage";
 import { KeyboardPage } from "./KeyboardPage";
 import { WrapupPage } from "./WrapupPage";
+import { DecisionsPage } from "./DecisionsPage";
 import { WipDialog } from "./WipDialog";
 
 // The project area: session strip over the terminals, the notes rail beside them, and the Today
@@ -49,6 +50,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
             {view === "reflect" && <ReflectionPage />}
             {view === "keyboard" && <KeyboardPage />}
             {view === "wrapup" && <WrapupPage />}
+            {view === "decide" && <DecisionsPage />}
             <div className="flex flex-col flex-grow min-w-0" style={{ minHeight: 0, display: isPage(view) ? "none" : "flex" }}>
             {inbox ? (
                 <InboxArea tabId={tabId} list={inboxKind(tab)!} empty={empty}>

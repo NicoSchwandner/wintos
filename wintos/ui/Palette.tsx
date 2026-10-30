@@ -273,7 +273,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     out.push(action("update", "Update WintOS: rebuild and restart it", "⌥⌘U", "update"));
     out.push(action("break", "Take a break now", "⌥⌘B", "break"));
     out.push(action("break-later", "Move nudge: ask again in 10 minutes", "⇧⌥⌘B", "break-later"));
-    out.push(action("release", "Open the batch now: what Your move holds back", "⌥⌘O", "release"));
+    out.push(action("release", "Decisions: the turns waiting on you, one card at a time", "⌥⌘O", "release"));
     out.push(action("focus", `Focus block on ${here}: 45 minutes, the others wait`, "⌥⌘F", "focus"));
     out.push(action("wrapup", "Close the day: give each loose end a place", "⇧⌘E", "wrapup"));
     out.push(action("autoclose", "Auto-close finished sessions in this project: on or off", "⌥⌘A", "autoclose"));

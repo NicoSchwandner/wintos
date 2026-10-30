@@ -817,6 +817,38 @@ await scenario("33 · ⌥⌘B starts a break: the status bar counts it, the side
     await until("the sidebar's meter saying it", () => evalIn(t, `document.querySelector("[data-wintos=rhythm-meter]")?.innerText.includes("on a break")`));
 });
 
+await scenario("35 · ⌥⌘O shows a waiting turn as a card with its context and options; 2 answers it and the batch moves on", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const blockId = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const post = (hook_event_name, extra = {}) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-decide", hook_event_name, prompt: "e2e decide", ...extra } }) });
+    await post("UserPromptSubmit");
+    const card = { kind: "decide", text: "merge or hold?", context: "routes all documents", why: "CI green", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }], recommend: 1, final: true };
+    await fetch(`http://127.0.0.1:7731/blocks/${blockId}/ask?session=e2e-decide`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(card) });
+    await post("Stop", { last_assistant_message: "Merge or hold?" });
+    await press(t, "ø", { code: "KeyO", keyCode: 79, mods: ["alt", "meta"] }); // what macOS sends for ⌥O
+    // Turns left waiting by earlier scenarios come first (quick ones lead); s leaves each for later.
+    await until("the batch", () => evalIn(t, `!!document.querySelector("[data-wintos=decision-card]")`));
+    for (let i = 0; i < 6 && !(await evalIn(t, `!!document.querySelector("[data-wintos=decision-card][data-session=e2e-decide]")`)); i++) {
+        await press(t, "s");
+        await sleep(300);
+    }
+    try {
+        await until("the card", () => evalIn(t, `document.querySelector("[data-wintos=decision-card][data-session=e2e-decide]")?.innerText.includes("merge or hold?")`));
+    } catch (e) {
+        const page = await evalIn(t, `document.querySelector("[data-wintos=decisions]")?.innerText.slice(0, 300) ?? "no page"`);
+        const st = (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((x) => x.id === "e2e-decide");
+        throw new Error(`${e.message}; page: ${JSON.stringify(page)}; session: ${JSON.stringify(st && { state: st.state, ask: st.ask, blockId: st.blockId, subagents: st.subagents })}`);
+    }
+    const text = await evalIn(t, `document.querySelector("[data-wintos=decision-card]").innerText`);
+    for (const want of ["routes all documents", "CI green", "Merge now", "live Monday", "Hold", "recommended", "can't be undone", "Your call"]) if (!text.includes(want)) throw new Error(`the card lacks "${want}":\n${text}`);
+    await press(t, "2");
+    await until("the batch moved on", () => evalIn(t, `!document.querySelector("[data-wintos=decision-card][data-session=e2e-decide]")`));
+    await press(t, "o", { code: "KeyO", keyCode: 79, mods: ["alt", "meta"] });
+    await until("the page closed", async () => !(await evalIn(t, `!!document.querySelector("[data-wintos=decisions]")`)));
+    await post("SessionEnd", { reason: "prompt_input_exit" });
+});
+
 await scenario("34 · ⇧⌘E closes the day: t puts a waiting turn in tomorrow's plan and parks it, ⌘⏎ writes the plan and goes quiet", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");

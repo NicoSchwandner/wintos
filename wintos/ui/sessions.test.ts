@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { attachments, autoClosable, closeWarning, liveSessions, paneCloseWarns, unreadSessions } from "./sessions";
+import { atWork, attachments, autoClosable, closeWarning, liveSessions, paneCloseWarns, unreadSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
 
@@ -62,4 +62,20 @@ describe("autoClosable", () => {
         expect(autoClosable(sessions, "t", seen, new Set()).map((x) => x.id)).toEqual(["a", "b"]);
         expect(autoClosable(sessions, "t", seen, new Set(["pr/1"])).map((x) => x.id)).toEqual(["a"]);
     });
+});
+
+describe("atWork: what a restart of WintOS would stop", () => {
+    const now = 10 * 3_600_000;
+    test("turns in flight, and subagents still running behind a turn that ended", () =>
+        expect(
+            atWork([
+                s("w", "t", "working"),
+                { ...s("sub", "t", "waiting"), subagents: { a: now - 60_000, b: now - 1000 } },
+                { ...s("stale", "t", "waiting"), subagents: { c: now - 4 * 3_600_000 } },
+                { ...s("bg", "t", "working"), background: true },
+                { ...s("gone", "t", "ended"), subagents: { d: now } },
+                s("idle", "t", "idle"),
+            ], now),
+        ).toEqual({ working: 1, subagents: 2 }));
+    test("nothing at work", () => expect(atWork([s("x", "t", "waiting")], now)).toEqual({ working: 0, subagents: 0 }));
 });

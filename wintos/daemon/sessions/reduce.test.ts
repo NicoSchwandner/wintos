@@ -34,6 +34,17 @@ describe("reduceSession", () => {
         expect(only(m)).toMatchObject({ state: "waiting", since: 1000, lastAt: 1010 });
     });
 
+    test("a subagent counts from its start to its stop, whatever the turn does meanwhile", () => {
+        const sub = (name: string, agent_id: string) => ev({ ...stop, hook_event_name: name, agent_id });
+        let m = run([ev(prompt), sub("SubagentStart", "a1"), sub("SubagentStart", "a2"), ev(stop)]);
+        expect(only(m)).toMatchObject({ state: "waiting", subagents: { a1: 1010, a2: 1020 } });
+        m = reduceSession(m, sub("SubagentStop", "a1"), 2000);
+        expect(only(m).subagents).toEqual({ a2: 1020 });
+        m = reduceSession(m, sub("SubagentStop", "a2"), 2010);
+        expect(only(m).subagents).toBeUndefined();
+        expect(only(reduceSession(run([ev(prompt), sub("SubagentStart", "a1")]), ev({ ...prompt, hook_event_name: "SessionEnd" }), 3000)).subagents).toBeUndefined();
+    });
+
     test("SessionEnd → ended", () => {
         expect(only(run([ev(prompt), ev({ ...prompt, hook_event_name: "SessionEnd" })])).state).toBe("ended");
     });
@@ -212,6 +223,9 @@ describe("restoreSessions (after a WintOS restart)", () => {
             ["c", "parked", true],
         ]);
     });
+
+    test("a restart stopped every subagent: none comes back", () =>
+        expect(restoreSessions([{ ...s("a", "waiting"), subagents: { x: 1 } }]).get("a")?.subagents).toBeUndefined());
 
     test("given the time, one not seen for two weeks is gone: a pane closed some other way leaves no session for good", () => {
         const DAY = 86_400_000;

@@ -19,7 +19,7 @@ SESSION_Q="${CLAUDE_CODE_SESSION_ID:+?session=$CLAUDE_CODE_SESSION_ID}"
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 HOOK="$HERE/../hooks/wintos-hook.sh"
 SETTINGS="${WINTOS_CLAUDE_SETTINGS:-${HOME:-~}/.claude/settings.json}"
-EVENTS="SessionStart UserPromptSubmit Stop SubagentStop Notification SessionEnd"
+EVENTS="SessionStart UserPromptSubmit Stop SubagentStart SubagentStop Notification SessionEnd"
 
 die() { echo "wintos: $*" >&2; exit 1; }
 

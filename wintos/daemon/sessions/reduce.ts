@@ -1,5 +1,5 @@
 // kind "bg": sent from Claude's background service, not from the pane's own Claude.
-export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string; reason?: string; last_assistant_message?: string; tool_name?: string; kind?: string };
+export type HookPayload = { hook_event_name: string; session_id: string; cwd?: string; prompt?: string; prs?: unknown; pr_verb?: string; resume?: string; reason?: string; last_assistant_message?: string; tool_name?: string; kind?: string; agent_id?: string };
 export type HookEvent = { tabId: string; blockId: string; payload: HookPayload };
 // parked: the turn ended waiting on something outside (CI, a review), not on the developer.
 // done: the turn ended with the goal met and nothing asked of the developer.
@@ -35,6 +35,7 @@ export type Session = {
     resume?: string; // the pane's resume command for it: only the session the pane runs sends one
     background?: boolean; // runs only in Claude's background service: no pane shows it
     attachedTo?: string; // a pane showing it (`claude attach`) while it runs in the background service
+    subagents?: Record<string, number>; // the subagents it started that have not stopped, by id: when each started
 };
 
 // A step starting with ? is the developer's call: the session stops there.
@@ -149,6 +150,12 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     if (lane) session.lane = lane;
     if (background && !pinned) session.background = true;
     if (pinned) session.attachedTo = pinned.attachedTo;
+    // A subagent runs until its own stop, which may come turns later (one sent to the background).
+    const agent = ev.payload.agent_id;
+    let subagents = name === "SessionEnd" ? undefined : prev?.subagents;
+    if (agent && name === "SubagentStart") subagents = { ...subagents, [agent]: now };
+    if (agent && name === "SubagentStop" && subagents) subagents = Object.fromEntries(Object.entries(subagents).filter(([a]) => a !== agent));
+    if (subagents && Object.keys(subagents).length) session.subagents = subagents;
     const out = new Map(sessions);
     for (const s of leavingFor(sessions, ev)) out.delete(s.id);
     out.set(id, session);
@@ -194,7 +201,8 @@ export function restoreSessions(saved: Session[], now?: number): Map<string, Ses
     const out = new Map<string, Session>();
     for (const s of saved) {
         if (s.state === "ended" || (now !== undefined && now - s.lastAt > RESTORE_MAX_AGE_MS)) continue;
-        out.set(s.id, { ...s, state: s.state === "working" ? "idle" : s.state, restored: true });
+        const { subagents: _gone, ...rest } = s;
+        out.set(s.id, { ...rest, state: s.state === "working" ? "idle" : s.state, restored: true });
     }
     return out;
 }

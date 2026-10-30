@@ -252,7 +252,7 @@ describe("wintos hooks", () => {
         expect(s.model).toBe("x");
         expect(s.hooks.Stop).toHaveLength(2);
         expect(s.hooks.Stop[0].hooks[0].command).toBe("mine.sh");
-        for (const e of ["SessionStart", "UserPromptSubmit", "Stop", "SubagentStop", "Notification", "SessionEnd", "PreToolUse", "PostToolUse"])
+        for (const e of ["SessionStart", "UserPromptSubmit", "Stop", "SubagentStart", "SubagentStop", "Notification", "SessionEnd", "PreToolUse", "PostToolUse"])
             expect(s.hooks[e].filter((h: any) => h.hooks[0].command.endsWith("wintos-hook.sh"))).toHaveLength(1);
         // A question to the developer mid-turn: before it, the turn waits on them; after it, it runs on.
         expect([s.hooks.PreToolUse[0].matcher, s.hooks.PostToolUse[0].matcher]).toEqual(["AskUserQuestion|ExitPlanMode", "Bash|AskUserQuestion|ExitPlanMode"]);

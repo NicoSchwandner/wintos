@@ -46,3 +46,16 @@ export function attachments(panes: { blockId: string; script?: string }[], sessi
         return s && (s.blockId !== blockId || s.tabId !== tabId) && !sent.has(`${s.id}@${blockId}`) ? [{ sessionId: s.id, blockId }] : [];
     });
 }
+
+// A subagent whose stop never came (its Claude was killed) would count for good: past this, it no longer does.
+const SUBAGENT_MAX_MS = 3 * 3_600_000;
+
+// What restarting WintOS would stop: turns in flight, and subagents still running, also behind a
+// turn that ended. Claude's background service is not WintOS's to stop.
+export function atWork(sessions: Session[], now: number): { working: number; subagents: number } {
+    const running = sessions.filter((s) => s.state !== "ended" && !s.background);
+    return {
+        working: running.filter((s) => s.state === "working").length,
+        subagents: running.reduce((n, s) => n + Object.values(s.subagents ?? {}).filter((at) => now - at < SUBAGENT_MAX_MS).length, 0),
+    };
+}

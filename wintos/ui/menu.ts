@@ -4,7 +4,7 @@ import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, getBlockComponentModel, isDev } from "@/store/global";
 import { closeOverlay, editMine, enterProject, focusArea, focusSession, reopenProject, takeReopen, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
-import { closeWarning, paneCloseWarns } from "./sessions";
+import { atWork, closeWarning, paneCloseWarns } from "./sessions";
 import { toggleInbox } from "./inbox";
 import { mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, tickModeAtom, updateArmedAtom, type MainView } from "./notes/state";
 import { stepProject, switchProject, topProject } from "./switcher";
@@ -467,10 +467,12 @@ function toggleAutoClose(): void {
 }
 
 // ⌥⌘U: WintOS rebuilt and restarted from its checkout, once that has commits the running one
-// lacks. A restart ends every turn in flight, so while Claude works the first press only asks.
+// lacks. A restart ends every turn in flight and every subagent still running, so while one is,
+// the first press only asks.
 function updateWintos(): void {
     if (!currentState()?.update?.behind) return void flog("update: already up to date");
-    if (latestSessions().some((s) => s.state === "working") && !globalStore.get(updateArmedAtom)) {
+    const work = atWork(latestSessions(), Date.now());
+    if ((work.working || work.subagents) && !globalStore.get(updateArmedAtom)) {
         globalStore.set(updateArmedAtom, true);
         setTimeout(() => globalStore.set(updateArmedAtom, false), 3000);
         return;

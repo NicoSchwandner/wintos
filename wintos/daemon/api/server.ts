@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "fs";
+import { AsyncLocalStorage } from "async_hooks";
 import http from "http";
 import type { AddressInfo } from "net";
 import { basename, dirname, join } from "path";
@@ -21,6 +22,7 @@ import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
+import { trail } from "../sessions/trail";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
 import { fetchDone, unlisted } from "../prs/done";
@@ -91,7 +93,15 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // Saved on every change and restored at start, so a restart doesn't forget who waits on you.
     const sessionFile = join(opts.root, ".sessions.json");
     let sessions = restoreSessions(readJson<Session[]>(sessionFile, []), Date.now());
-    const saveSessions = () => writeFileSync(sessionFile, JSON.stringify([...sessions.values()]));
+    // Every change to a session leaves a line in the log, with what caused it: the request being
+    // served (cause), or the reading that ran after one.
+    let logged = sessions;
+    const cause = new AsyncLocalStorage<string>();
+    const saveSessions = (why = cause.getStore() ?? "wintosd", always?: string) => {
+        for (const line of trail(logged, sessions, why, (t) => store.byTab(t)?.title, always)) console.log(`[wintosd] ${line}`);
+        logged = sessions;
+        writeFileSync(sessionFile, JSON.stringify([...sessions.values()]));
+    };
     // When the developer last looked at each project: a reply after that is unread.
     const seenFile = join(opts.root, ".seen.json");
     const seen = readJson<Record<string, number>>(seenFile, {});
@@ -134,7 +144,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             const name = await writeTitle(cmd, namePrompt({ project, prompts, prs: open.map((pr) => `#${pr.number} ${pr.title}`), lane: s.lane?.name, branch: open[0]?.branch }));
             if (!name) return;
             sessions = titleSession(sessions, sessionId, name, Date.now());
-            saveSessions();
+            saveSessions("the model named it");
             broadcast();
         });
     };
@@ -153,7 +163,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             const next = readTurn(sessions, sessionId, turnAt, read);
             if (next === sessions) return;
             sessions = next;
-            saveSessions();
+            saveSessions("the model read the turn");
             broadcast();
         });
     };
@@ -374,6 +384,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         }
         try {
             const url = new URL(req.url ?? "/", "http://x");
+            const cli = /^\/blocks\/[^/]+\/(\w+)/.exec(url.pathname);
+            cause.enterWith(cli ? `wintos ${cli[1]}` : `${req.method} ${url.pathname.replace(/^\/(sessions|projects)\/[^/]+/, "/$1/…")}`);
             // The session a `wintos` call names (?session=), for the block routes.
             const sid = isSafe(url.searchParams.get("session")) ? url.searchParams.get("session")! : undefined;
             if (req.method === "OPTIONS") {
@@ -393,6 +405,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 // Shelved before the reduce drops them, while their status and PRs are still on hand.
                 for (const l of left) shelveLive(l);
                 sessions = reduceSession(sessions, ev, Date.now());
+                const typed = typeof p.prompt === "string" ? ` (you sent ${p.prompt.length} characters)` : "";
+                const hook = `hook ${p.hook_event_name}${p.tool_name ? ` ${p.tool_name}` : ""}${p.kind === "bg" ? " from the background service" : ""}${typed}`;
                 // Running again: started or prompted. Closing its pane ends it (SessionEnd) on the way onto the shelf.
                 // Off the shelf, it takes back the PRs it had there.
                 const runs = p.hook_event_name === "SessionStart" || p.hook_event_name === "UserPromptSubmit";
@@ -408,7 +422,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 }
                 // A gh pr command that acts on a PR touches it; reading one (gh pr view) does not.
                 if (p.hook_event_name === "PostToolUse" && p.pr_verb !== "view") applyTouch(touchPrs(sessions, shelf, p.session_id, prLinks(p.prs)));
-                saveSessions();
+                saveSessions(hook, p.hook_event_name === "UserPromptSubmit" ? p.session_id : undefined);
                 const configDir = (p as { config_dir?: unknown }).config_dir;
                 if (opts.claudeDirs && typeof configDir === "string" && configDir.startsWith("/")) watchStore(configDir);
                 const tp = (p as { transcript_path?: unknown }).transcript_path;

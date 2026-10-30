@@ -71,6 +71,25 @@ describe("wintosd API", () => {
         expect(state.sessions).toEqual([expect.objectContaining({ state: "parked", parkedOn: "CI on #1479" })]);
     });
 
+    test("what a session does, and every prompt you send it, leaves a line in the log, never the prompt's text", async () => {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        await event(prompt);
+        await post("/blocks/blk-1/wait", { reason: "CI on #1479" });
+        await event(stop);
+        await event(prompt);
+        await event(prompt);
+        const lines = log.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("] session "));
+        log.mockRestore();
+        expect(lines.map((l) => l.replace(/^.*← /, ""))).toEqual([
+            `hook UserPromptSubmit (you sent ${prompt.prompt.length} characters): new, working`,
+            'wintos wait: parked on "CI on #1479"; wait pending none → yes',
+            "hook Stop: state working → parked; wait pending yes → none",
+            `hook UserPromptSubmit (you sent ${prompt.prompt.length} characters): state parked → working; parked on none`,
+            `hook UserPromptSubmit (you sent ${prompt.prompt.length} characters): unchanged, working`,
+        ]);
+        expect(lines.join("\n")).not.toContain(prompt.prompt);
+    });
+
     test("`wintos done` then Stop ends the session done", async () => {
         await event(prompt);
         expect((await post("/blocks/blk-1/done", {})).status).toBe(200);

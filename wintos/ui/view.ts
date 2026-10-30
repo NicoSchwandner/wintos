@@ -1,3 +1,4 @@
+import type { Rhythm } from "../daemon/rhythm/rhythm";
 import { wakesOf, type Wake, type Wakes } from "../daemon/wakes/wakes";
 import type { Day } from "../daemon/journal/journal";
 import type { KeyStats } from "../daemon/keyboard/keyboard";
@@ -10,7 +11,7 @@ import { shelvedName, type Shelved } from "../daemon/shelf/shelf";
 import type { FixerState } from "../daemon/fixer/runner";
 import type { HeadsUp } from "../daemon/headsups/headsups";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]>; fixer?: FixerState; repoNames?: Record<string, string>; wakes?: Wakes; headsUps?: Record<string, HeadsUp[]>; headsUpProblem?: string; donePrs?: Record<string, DonePr>; update?: { behind: number }; autoCloseOff?: string[] };
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]>; fixer?: FixerState; repoNames?: Record<string, string>; wakes?: Wakes; headsUps?: Record<string, HeadsUp[]>; headsUpProblem?: string; donePrs?: Record<string, DonePr>; update?: { behind: number }; autoCloseOff?: string[]; rhythm?: Rhythm & { everyMs: number } };
 export type Tone = "apricot" | "blue" | "brick" | "secondary";
 export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
 

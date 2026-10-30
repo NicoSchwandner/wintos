@@ -164,6 +164,23 @@ describe("wintosd API", () => {
         expect(s.ask).toBeUndefined();
     });
 
+    test("the rhythm: idle time makes a break, ⌥⌘B starts one, a snooze holds the nudge, a prompt leaves its length", async () => {
+        const rhythm = async () => (await (await fetch(base + "/state")).json()).rhythm;
+        expect(await rhythm()).toMatchObject({ breaks: [], everyMs: 30 * 60_000 });
+        await post("/rhythm/idle", { idleMs: 5 * 60_000 });
+        expect((await rhythm()).awayFrom).toEqual(expect.any(Number));
+        await post("/rhythm/idle", { idleMs: 0 });
+        expect((await rhythm()).breaks).toHaveLength(1);
+        expect((await post("/rhythm/break", {})).status).toBe(200);
+        expect((await rhythm()).onBreak).toEqual(expect.any(Number));
+        expect((await post("/rhythm/snooze", { minutes: 10 })).status).toBe(200);
+        expect((await rhythm()).snoozedUntil).toBeGreaterThan(Date.now() + 9 * 60_000);
+        expect((await post("/rhythm/snooze", { minutes: 0 })).status).toBe(400);
+        expect((await post("/rhythm/idle", { idleMs: "x" })).status).toBe(400);
+        await event(prompt);
+        expect((await rhythm()).lastPrompt).toEqual({ at: expect.any(Number), chars: prompt.prompt.length });
+    });
+
     test("the prompt injection asks for a title only while there is none", async () => {
         const first = await (await event(prompt)).text();
         expect(first).toContain('wintos title "');

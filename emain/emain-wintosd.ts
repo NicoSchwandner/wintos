@@ -3,7 +3,7 @@
 // dying does not quit the app: the sidebar shows "daemon offline" instead.
 import * as child_process from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { ipcMain } from "electron";
+import { ipcMain, powerMonitor } from "electron";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { wintosInstance } from "../wintos/instance";
@@ -31,6 +31,20 @@ export function runWintosd(): void {
         proc = null;
     });
     proc.on("error", (e) => console.log(`[wintosd] could not start ${script}: ${e}`));
+    reportIdle();
+}
+
+// How long the Mac has had no input, for the day's rhythm (wintos/daemon/rhythm): a walk away
+// counts as a break whatever window had focus. Only the main process can read it.
+let idleTimer: NodeJS.Timeout | undefined;
+function reportIdle(): void {
+    if (idleTimer) return;
+    const { port } = wintosInstance(process.env);
+    idleTimer = setInterval(() => {
+        const idleMs = powerMonitor.getSystemIdleTime() * 1000;
+        fetch(`http://127.0.0.1:${port}/rhythm/idle`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idleMs }) }).catch(() => {});
+    }, 30_000);
+    idleTimer.unref();
 }
 
 export function stopWintosd(): void {

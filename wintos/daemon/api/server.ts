@@ -11,7 +11,7 @@ import { ProjectStore } from "../projects/store";
 import type { Journal } from "../journal/journal";
 import { formatMarkdown } from "../markdown";
 import { dayRecapper } from "../recap/day";
-import { prFact } from "../recap/recap";
+import { localDay, prFact } from "../recap/recap";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
@@ -23,6 +23,7 @@ import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { trail } from "../sessions/trail";
+import { prompted, snooze, startBreak, tick, type Rhythm } from "../rhythm/rhythm";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
 import { fetchDone, unlisted } from "../prs/done";
@@ -48,7 +49,7 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
     const factsOf = (ids: string[], day: string) => {
@@ -109,6 +110,15 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // The keyboard game's score, per instance like the rest of this folder.
     const keyboardFile = join(opts.root, ".keyboard.json");
     let keyboard = readJson<KeyStats>(keyboardFile, emptyStats());
+    // The day's breaks and the stretch since the last (rhythm.ts), fed the Mac's idle time.
+    const rhythmFile = join(opts.root, ".rhythm.json");
+    let rhythm = readJson<Rhythm>(rhythmFile, { day: localDay(Date.now()), stretchFrom: Date.now(), breaks: [] });
+    const setRhythm = (next: Rhythm) => {
+        if (next === rhythm) return;
+        rhythm = next;
+        writeFileSync(rhythmFile, JSON.stringify(rhythm));
+        broadcast();
+    };
     const shelfFile = join(opts.root, ".shelf.json");
     let shelf = readJson<Shelf>(shelfFile, {});
     const saveShelf = (next: Shelf) => ((shelf = next), writeFileSync(shelfFile, JSON.stringify(shelf)));
@@ -270,6 +280,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         fixer: fixer.state(),
         update: { behind: update?.behind() ?? 0 },
         autoCloseOff,
+        rhythm: { ...rhythm, everyMs: opts.moveEveryMs ?? 30 * 60_000 },
         ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
         keyboard,
         headsUps: Object.fromEntries(store.list().flatMap((p) => {
@@ -431,6 +442,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (p.hook_event_name === "Stop" && typeof p.last_assistant_message === "string" && p.last_assistant_message.trim()) readEndedTurn(p.session_id, p.last_assistant_message);
                 recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now());
                 if (p.hook_event_name === "UserPromptSubmit") markSeen(p.session_id); // you read it to answer it
+                if (p.hook_event_name === "UserPromptSubmit" && typeof p.prompt === "string" && p.kind !== "bg") setRhythm(prompted(rhythm, Date.now(), p.prompt.length));
                 const text =
                     p.hook_event_name === "UserPromptSubmit" ? injection(store.byTab(ev.tabId), store.mineDiff(ev.tabId, p.session_id)) : "";
                 broadcast();
@@ -630,6 +642,21 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 saveSessions();
                 saveShelf(r.shelf);
                 broadcast();
+                return send(res, 200, "");
+            }
+            // The main process, every half minute: how long the Mac has had no input.
+            if (req.method === "POST" && url.pathname === "/rhythm/idle") {
+                const b = (await body(req)) as { idleMs?: unknown };
+                if (typeof b?.idleMs !== "number" || !(b.idleMs >= 0)) return send(res, 400, "need idleMs, a number");
+                const now = Date.now();
+                setRhythm(tick(rhythm, b.idleMs, now, localDay(now)));
+                return send(res, 200, "");
+            }
+            if (req.method === "POST" && url.pathname === "/rhythm/break") return setRhythm(startBreak(rhythm, Date.now())), send(res, 200, "");
+            if (req.method === "POST" && url.pathname === "/rhythm/snooze") {
+                const b = (await body(req)) as { minutes?: unknown };
+                if (typeof b?.minutes !== "number" || !(b.minutes > 0 && b.minutes <= 240)) return send(res, 400, "need minutes, 1 to 240");
+                setRhythm(snooze(rhythm, Date.now(), b.minutes));
                 return send(res, 200, "");
             }
             if (req.method === "POST" && url.pathname === "/update") {

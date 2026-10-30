@@ -19,6 +19,8 @@ const KEYS: Record<MainView, readonly (readonly [string, string])[]> = {
     keyboard: [],
 };
 
+const clock = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+
 // "2 turns in flight and 1 subagent", or "" when nothing is at work.
 export const atWorkText = ({ working, subagents }: { working: number; subagents: number }) =>
     [working && `${working} turn${working === 1 ? "" : "s"} in flight`, subagents && `${subagents} subagent${subagents === 1 ? "" : "s"}`].filter(Boolean).join(" and ");
@@ -30,15 +32,21 @@ export const StatusBar = memo(({ inbox }: { inbox?: boolean }) => {
     const { state } = useWintos();
     const behind = state?.update?.behind ?? 0;
     const armed = useAtomValue(updateArmedAtom);
-    const now = useNow(60_000);
+    const now = useNow(state?.rhythm?.onBreak ? 1000 : 60_000);
     const work = atWorkText(atWork(state?.sessions ?? [], now));
     const keys = inbox ? [] : KEYS[view];
-    if (!keys.length && !behind) return null;
+    const onBreak = state?.rhythm?.onBreak;
+    if (!keys.length && !behind && !onBreak) return null;
     return (
         <div style={{ flexShrink: 0, minHeight: 30, boxSizing: "border-box", padding: "5px 16px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 14px", borderTop: `1px solid ${T.hairline}`, background: T.sidebar, fontFamily: T.ui }}>
             {keys.map(([k, label]) => (
                 <Key key={k} k={k} label={label} />
             ))}
+            {onBreak && (
+                <span data-wintos="on-break" style={{ fontFamily: T.mono, fontSize: 11, color: T.moss }}>
+                    on a break · {clock(now - onBreak)}
+                </span>
+            )}
             {behind > 0 && (
                 <button type="button" data-wintos="update" data-key="⌥⌘U" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("update")} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 7, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 11, color: armed ? T.brick : T.aqua }}>
                     <Key k="⌥⌘U" label="" />

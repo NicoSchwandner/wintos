@@ -17,3 +17,5 @@ export const tickModeAtom = atom(false);
 export const restartArmedAtom = atom(null as string | null);
 export const updateArmedAtom = atom(false);
 export const closeArmedAtom = atom(null as string | null); // the pane a second ⌘W closes
+// How many projects are in Your move now, as the sidebar counts them: a nudge to move waits until none.
+export const yourMoveAtom = atom(0);

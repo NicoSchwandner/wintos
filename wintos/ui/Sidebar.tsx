@@ -1,4 +1,5 @@
 import { ContextMenuModel } from "@/app/store/contextmenu";
+import { globalStore } from "@/app/store/jotaiStore";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { getWaveObjectAtom, makeORef, reloadWaveObject } from "@/app/store/wos";
@@ -20,7 +21,7 @@ import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, reopenProject, resumePane, setLatestSessions } from "./focus";
 import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
 import { closeProjectTab, registerWintosMenu } from "./menu";
-import { isPage, mainViewAtom, renamingAtom } from "./notes/state";
+import { isPage, mainViewAtom, renamingAtom, yourMoveAtom } from "./notes/state";
 import { liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { attention } from "./attention";
@@ -108,6 +109,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEffect(() => {
         if (state) setLatestSessions(state.sessions, model?.targets ?? {});
     }, [state, tabIds.join(",")]);
+    const yourMove = model ? model.needs.length + wokeClosed.length : 0;
+    useEffect(() => void globalStore.set(yourMoveAtom, yourMove), [yourMove]);
 
     // The project title is the source of truth; the tab name follows it.
     useEffect(() => {

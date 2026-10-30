@@ -88,6 +88,8 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:c{KeyR}", "restart-terminal"],
     ["Option:Cmd:c{KeyU}", "update"],
     ["Option:Cmd:c{KeyA}", "autoclose"],
+    ["Option:Cmd:c{KeyB}", "break"],
+    ["Shift:Option:Cmd:c{KeyB}", "break-later"],
     ["Option:Cmd:c{KeyX}", "tick"],
     ["Option:Cmd:c{KeyL}", "rail"],
     ["Ctrl:Cmd:c{KeyH}", "carry-left"],
@@ -295,6 +297,8 @@ export function runAction(action: string): void {
     if (action === "restart-terminal") return restartTerminal();
     if (action === "update") return updateWintos();
     if (action === "autoclose") return toggleAutoClose();
+    if (action === "break") return void (flog("break: started"), daemonFetch("/rhythm/break", { method: "POST", body: {} }));
+    if (action === "break-later") return void (flog("break: in 10 min"), daemonFetch("/rhythm/snooze", { method: "POST", body: { minutes: 10 } }));
     if (action.startsWith("session-")) return toSession(Number(action.slice("session-".length)));
     if (action === "rail") return toggleRail();
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);

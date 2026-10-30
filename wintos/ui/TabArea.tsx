@@ -19,6 +19,7 @@ import { Palette } from "./Palette";
 import { InboxArea } from "./InboxArea";
 import { inboxKind, isInboxTab } from "./view";
 import { PaneStrip } from "./PaneStrip";
+import { MoveNudge } from "./MoveNudge";
 import { StatusBar } from "./StatusBar";
 import { T } from "./tokens";
 import { ReflectionPage } from "./ReflectionPage";
@@ -72,6 +73,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
             {overlay === "keymap" && <Keymap />}
             {overlay === "confirm-close" && <ConfirmClose />}
             {overlay === "name-session" && <NameSession />}
+            <MoveNudge />
             <UndoToast />
         </div>
     );

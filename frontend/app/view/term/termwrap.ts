@@ -21,6 +21,7 @@ import * as services from "@/store/services";
 import { PLATFORM, PlatformMacOS } from "@/util/platformutil";
 import { base64ToArray, fireAndForget } from "@/util/util";
 import { formatRemoteUri } from "@/util/waveutil";
+import { backgroundReply, schemeReport } from "@/wintos/ui/termScheme";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -109,6 +110,8 @@ export class TermWrap {
     claudeCodeActiveAtom: jotai.PrimitiveAtom<boolean>;
     nodeModel: BlockNodeModel; // this can be null
     hoveredLinkUri: string | null = null;
+    schemeBg: string | null = null;
+    schemeAsked: boolean = false;
     onLinkHover?: (uri: string | null, mouseX: number, mouseY: number, showUrl: boolean) => void;
 
     // Paste deduplication
@@ -199,6 +202,13 @@ export class TermWrap {
                 console.error("[termwrap] osc 52 handler error", this.blockId, e);
                 return false;
             }
+        });
+        this.terminal.parser.registerOscHandler(11, (data: string) => {
+            if (data !== "?" || this.schemeBg == null) return false;
+            if (!this.loaded) return true;
+            this.schemeAsked = true;
+            this.sendDataHandler?.(backgroundReply(this.schemeBg));
+            return true;
         });
         this.terminal.parser.registerOscHandler(16162, (data: string) => {
             try {
@@ -503,6 +513,14 @@ export class TermWrap {
             }
         });
         this.mainFileSubject.release();
+    }
+
+    // Only a program that asked for the background during this command hears of a change; at a
+    // shell prompt the report would arrive as typed junk.
+    setSchemeBg(bg: string | null) {
+        const changed = this.schemeBg != null && bg != null && bg !== this.schemeBg;
+        this.schemeBg = bg;
+        if (changed && this.schemeAsked) this.sendDataHandler?.(schemeReport(bg));
     }
 
     handleTermData(data: string) {

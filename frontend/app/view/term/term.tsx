@@ -282,7 +282,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
         const termThemeName = globalStore.get(model.termThemeNameAtom);
         const termTransparency = globalStore.get(model.termTransparencyAtom);
         const termMacOptionIsMetaAtom = getOverrideConfigAtom(blockId, "term:macoptionismeta");
-        const [termTheme, _] = computeTheme(fullConfig, termThemeName, termTransparency);
+        const [termTheme, termBg] = computeTheme(fullConfig, termThemeName, termTransparency);
         let termScrollback = 2000;
         if (termSettings?.["term:scrollback"]) {
             termScrollback = Math.floor(termSettings["term:scrollback"]);
@@ -328,6 +328,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
                 nodeModel: model.nodeModel,
             }
         );
+        termWrap.setSchemeBg(termBg);
         (window as any).term = termWrap;
         model.termRef.current = termWrap;
         setTermWrapInst(termWrap);

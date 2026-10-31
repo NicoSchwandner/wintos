@@ -18,12 +18,13 @@ const TermThemeUpdater = ({ blockId, model, termRef }: TermThemeProps) => {
     const fullConfig = useAtomValue(atoms.fullConfigAtom);
     const blockTermTheme = useAtomValue(model.termThemeNameAtom);
     const transparency = useAtomValue(model.termTransparencyAtom);
-    const [theme, _] = computeTheme(fullConfig, blockTermTheme, transparency);
+    const [theme, bg] = computeTheme(fullConfig, blockTermTheme, transparency);
     useEffect(() => {
         if (termRef.current?.terminal) {
             termRef.current.terminal.options.theme = theme;
+            termRef.current.setSchemeBg(bg);
         }
-    }, [theme]);
+    }, [theme, bg]);
     return null;
 };
 

@@ -9,7 +9,8 @@ const FIELDS = `number title url isDraft createdAt author{login} repository{name
   commits(last:1){nodes{commit{oid committedDate statusCheckRollup{state}}}}
   timelineItems(last:10,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT,ISSUE_COMMENT]){nodes{__typename ... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt} ... on IssueComment{createdAt author{login}}}}
   reviewRequests(first:10){nodes{requestedReviewer{__typename ... on User{login} ... on Team{name} ... on Bot{login}}}}
-  latestReviews(first:20){nodes{author{login} state submittedAt}}`;
+  latestReviews(first:20){nodes{author{login} state submittedAt}}
+  pending:reviews(states:PENDING,first:1){nodes{comments{totalCount}}}`;
 const query = (fields: string) => `query($q:String!){search(query:$q,type:ISSUE,first:100){nodes{... on PullRequest{${fields}}}}}`;
 // Merged PRs need little, and the full field set over a month of merges makes GitHub time out.
 const MERGED_FIELDS = `number title url isDraft createdAt author{login} repository{nameWithOwner defaultBranchRef{name}} headRefName baseRefName additions deletions mergedAt mergeCommit{oid}`;

@@ -174,6 +174,9 @@ describe("wintosd API", () => {
         await post("/rhythm/focus", { tabId: "tab-1" });
         expect((await rhythm()).focus).toBeUndefined();
         expect((await post("/rhythm/focus", {})).status).toBe(400);
+        await post("/rhythm/later", { sessionId: "s-1", since: 42 });
+        expect((await rhythm()).later).toEqual({ "s-1": { since: 42, until: expect.any(Number) } });
+        expect((await post("/rhythm/later", { sessionId: "s-1" })).status).toBe(400);
         await post("/rhythm/close", {});
         expect((await rhythm()).closed).toMatchObject({ until: expect.any(Number) });
         await post("/rhythm/idle", { idleMs: 5 * 60_000 });

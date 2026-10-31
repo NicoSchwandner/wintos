@@ -22,6 +22,7 @@ export type Node = {
     latestReviews: { nodes: { author: { login: string } | null; state: string; submittedAt: string }[] };
     mergedAt?: string | null;
     mergeCommit?: { oid: string } | null;
+    pending?: { nodes: { comments: { totalCount: number } }[] };
 };
 
 // Copilot and CI bots request and leave reviews too; counting them hid PRs nobody had looked at.
@@ -58,6 +59,8 @@ export function normalize(n: Node, me: string, asked: { requestedMe: boolean; re
     if (n.repository.defaultBranchRef?.name) pr.defaultBranch = n.repository.defaultBranchRef.name;
     if (n.reviewDecision) pr.reviewDecision = n.reviewDecision;
     if (checks) pr.checks = checks;
+    const pending = n.pending?.nodes[0]?.comments.totalCount;
+    if (pending) pr.pendingComments = pending;
     const head = n.commits.nodes[0]?.commit.oid;
     if (head) pr.head = head;
     // Momentum: a PR that keeps moving is not late, however old it is. The author's own comments

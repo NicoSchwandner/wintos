@@ -12,7 +12,9 @@ export type AskKind = (typeof ASK_KINDS)[number];
 // asks; options with what each leads to, the recommended one by number from 1; final: it can't be
 // undone (a merge, a deploy, a delete).
 export type AskOption = { label: string; then?: string };
-export type AskCard = { context?: string; why?: string; options?: AskOption[]; recommend?: number; final?: boolean };
+// picks: findings or parts the developer toggles before answering (which review comments to post).
+export type AskPick = { label: string; on: boolean };
+export type AskCard = { context?: string; why?: string; options?: AskOption[]; recommend?: number; final?: boolean; picks?: AskPick[] };
 export type Ask = { kind: AskKind; text?: string; by: "tool" | "session" | "model" | "guess" } & AskCard;
 export type Session = {
     id: string;

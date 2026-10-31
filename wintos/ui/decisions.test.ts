@@ -27,6 +27,19 @@ describe("decisions", () => {
     });
 });
 
+describe("decisions: turns, and the ones left for later", () => {
+    test("each turn its own key, so a session that asks again comes back as a new card", () => {
+        const [d] = decisions(state([s("a", { kind: "answer", text: "which?", by: "session" })]), NOW, title);
+        expect(d.turn).toBe(`a:${NOW - 1000}`);
+    });
+    test("a turn left for the next batch stays out until then; its session's next turn does not", () => {
+        const st = (since: number) => ({ ...state([s("a", { kind: "answer", by: "guess" }, { since })]), rhythm: { later: { a: { since: NOW - 1000, until: NOW + 1 } } } }) as unknown as WintosState;
+        expect(decisions(st(NOW - 1000), NOW, title)).toEqual([]);
+        expect(decisions(st(NOW - 500), NOW, title)).toHaveLength(1);
+        expect(decisions(st(NOW - 1000), NOW + 1, title)).toHaveLength(1);
+    });
+});
+
 describe("answerText", () => {
     const d = decisions(state([s("a", { kind: "decide", text: "merge or hold?", by: "session", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }], recommend: 1 })]), NOW, title)[0];
     test.each([
@@ -34,5 +47,10 @@ describe("answerText", () => {
         [{ yourCall: true as const }, "Go with your recommendation: Merge now."],
         [{ own: "  per endpoint, not global " }, "per endpoint, not global"],
     ])("%j → %s", (a, text) => expect(answerText(d, a)).toBe(text));
+    test("picks: what is on and what is left out, after the answer", () => {
+        const r = decisions(state([s("r", { kind: "approve", text: "approve #7?", by: "session", options: [{ label: "Approve" }, { label: "Request changes" }], picks: [{ label: "Missing test", on: true }, { label: "Rename it", on: false }] })]), NOW, title)[0];
+        expect(answerText(r, { option: 1 }, [true, false])).toBe("Approve. Include: Missing test. Leave out: Rename it.");
+        expect(answerText(r, { own: "approve, but ask about the cache" }, [false, false])).toBe("approve, but ask about the cache. Leave out: Missing test; Rename it.");
+    });
     test("the question tool takes the option's number", () => expect(answerText({ ...d, by: "tool" }, { option: 2 })).toBe("2"));
 });

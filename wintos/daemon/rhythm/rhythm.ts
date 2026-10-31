@@ -2,12 +2,13 @@
 // It reads the Mac's idle time (any key or move, in WintOS or not), so walking away counts.
 
 export type Break = { start: number; end: number };
+// later: turns left for the next batch (s on a card), by session, the turn by when it began waiting.
 // stretchFrom: your first input after the last break. awayFrom: your last input before an idle
 // run that is long enough to be a break. onBreak: when ⌥⌘B started one.
 // lastPrompt: the last prompt you sent, by its length only. releasedAt: ⌥⌘O opened the batch.
 // focus: a focus block (⌥⌘F) on one project (hold.ts). closed: the day you closed (⇧⌘E), quiet
 // until the next workday starts.
-export type Rhythm = { day: string; stretchFrom: number; breaks: Break[]; awayFrom?: number; onBreak?: number; snoozedUntil?: number; lastPrompt?: { at: number; chars: number }; releasedAt?: number; focus?: { tabId: string; from: number; until: number }; closed?: { day: string; until: number } };
+export type Rhythm = { day: string; stretchFrom: number; breaks: Break[]; awayFrom?: number; onBreak?: number; snoozedUntil?: number; lastPrompt?: { at: number; chars: number }; releasedAt?: number; focus?: { tabId: string; from: number; until: number }; closed?: { day: string; until: number }; later?: Record<string, { since: number; until: number }> };
 export type Nudge = { kind: "move" | "dispatch" | "lunch" | "wrap"; minutes: number };
 
 export const AWAY_MS = 2 * 60_000;
@@ -33,6 +34,13 @@ export function tick(r: Rhythm, idleMs: number, now: number, day: string): Rhyth
 export const startBreak = (r: Rhythm, now: number): Rhythm => ({ ...r, onBreak: now });
 export const snooze = (r: Rhythm, now: number, minutes: number): Rhythm => ({ ...r, snoozedUntil: now + minutes * 60_000 });
 export const release = (r: Rhythm, now: number): Rhythm => ({ ...r, releasedAt: now });
+// Without batches, "the next batch" is as far off as the default batch length.
+const LATER_WITHOUT_BATCHES_MS = 20 * 60_000;
+export function later(r: Rhythm, sessionId: string, since: number, now: number, batchEveryMs: number): Rhythm {
+    const until = batchEveryMs ? (Math.floor(now / batchEveryMs) + 1) * batchEveryMs : now + LATER_WITHOUT_BATCHES_MS;
+    const kept = Object.entries(r.later ?? {}).filter(([, l]) => l.until > now);
+    return { ...r, later: { ...Object.fromEntries(kept), [sessionId]: { since, until } } };
+}
 export const FOCUS_MS = 45 * 60_000;
 // ⌥⌘F on the project it is on starts a block, again ends it; on another project it moves there.
 export function toggleFocus(r: Rhythm, tabId: string, now: number): Rhythm {

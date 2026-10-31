@@ -196,6 +196,12 @@ describe("the hold: batches, breaks and focus blocks", () => {
         expect(attention(["a", "b"], st({ releasedAt: T + 5.5 * 60_000 }, T + 5 * 60_000), {}, T + 6 * 60_000, "b").needs.map((r) => r.tabId)).toEqual(["a"]);
     });
 
+    test("a turn left for the next batch (s) stays held after ⌥⌘O, even in the project you are in; its next turn does not", () => {
+        const left = { releasedAt: T + 5.5 * 60_000, later: { "1": { since: T + 5 * 60_000, until: T + P } } };
+        expect(attention(["a", "b"], st(left, T + 5 * 60_000), {}, T + 6 * 60_000, "a").held).toEqual({ count: 1, until: T + P });
+        expect(attention(["a", "b"], st(left, T + 5.2 * 60_000), {}, T + 6 * 60_000, "b").needs.map((r) => r.tabId)).toEqual(["a"]);
+    });
+
     test("approvals lead Your move: the quick ones first", () => {
         const state = { ...st({ batchEveryMs: 0 }, T), sessions: [
             { id: "1", tabId: "a", blockId: "x", state: "waiting", since: T - 60_000, lastAt: T, ask: { kind: "decide", by: "model" } },

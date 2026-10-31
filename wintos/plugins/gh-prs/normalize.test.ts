@@ -31,6 +31,10 @@ describe("normalize", () => {
         expect(at({ timelineItems: { nodes: [{ __typename: "IssueComment", createdAt: "2026-10-03T09:00:00Z", author: { login: "bo" } }] } })).toBe("2026-10-03T09:00:00Z");
     });
 
+    test("the comments in your pending review: only you see them, and the review session picks them up", () => {
+        const pending = (n?: number) => normalize(node(n === undefined ? {} : { pending: { nodes: [{ comments: { totalCount: n } }] } }), "me", { requestedMe: true, requestedTeam: false }).pendingComments;
+        expect([pending(), pending(0), pending(3)]).toEqual([undefined, undefined, 3]);
+    });
     test("GitHub's merge state is carried", () =>
         expect(normalize(node({ mergeStateStatus: "BLOCKED" }), "me", { requestedMe: false, requestedTeam: false }).mergeState).toBe("BLOCKED"));
 

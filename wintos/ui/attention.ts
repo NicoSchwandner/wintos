@@ -123,6 +123,13 @@ export function attention(tabIds: string[], state: WintosState, names: Record<st
 const clock = (t: number) => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 const QUICK = new Set(["approve"]);
 
+// Every turn waiting in the row left for the next batch (s on its card): until the first of them is due.
+function leftUntil(row: Row, later: Record<string, { since: number; until: number }> | undefined, now: number): number | undefined {
+    const waiting = row.sessions.filter((s) => s.state === "waiting");
+    const untils = waiting.map((s) => later?.[s.id]).map((l, i) => (l && l.since === waiting[i].since && l.until > now ? l.until : undefined));
+    return waiting.length && untils.every((u) => u !== undefined) ? Math.min(...(untils as number[])) : undefined;
+}
+
 // Your move without what the hold keeps back, which waits at the top of Quiet saying until when;
 // what is left, the quick asks (an approval) first. A due wake is never held.
 function holding(split: Ranking, state: WintosState, now: number, here: string | undefined, waking: Record<string, string>): { split: Ranking; held: { rows: Map<string, number> } } {
@@ -131,7 +138,8 @@ function holding(split: Ranking, state: WintosState, now: number, here: string |
     const ctx = r && { now, batchEveryMs: r.batchEveryMs ?? 0, releasedAt: r.releasedAt, breakFrom: r.onBreak ?? r.awayFrom, focus: r.focus, here, quietUntil: r.closed?.until };
     for (const row of split.needs) {
         const until = ctx && row.waitingSince !== undefined && !waking[row.tabId] ? heldUntil({ tabId: row.tabId, waitingSince: row.waitingSince }, ctx) : undefined;
-        if (until !== undefined) rows.set(row.tabId, until);
+        const left = waking[row.tabId] ? undefined : leftUntil(row, r?.later, now);
+        if (until !== undefined || left !== undefined) rows.set(row.tabId, Math.max(until ?? 0, left ?? 0));
     }
     const quick = (row: Row) => (row.sessions.some((s) => s.state === "waiting" && QUICK.has(s.ask?.kind ?? "")) ? 0 : 1);
     const needs = split.needs.filter((x) => !rows.has(x.tabId)).sort((a, b) => quick(a) - quick(b));

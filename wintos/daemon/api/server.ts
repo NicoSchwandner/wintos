@@ -24,7 +24,7 @@ import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, re
 import { askCard, askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { trail } from "../sessions/trail";
 import { reentry } from "../sessions/reentry";
-import { closeDay, prompted, release, snooze, startBreak, tick, toggleFocus, type Rhythm } from "../rhythm/rhythm";
+import { closeDay, later, prompted, release, snooze, startBreak, tick, toggleFocus, type Rhythm } from "../rhythm/rhythm";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
 import { fetchDone, unlisted } from "../prs/done";
@@ -670,6 +670,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 return setRhythm(closeDay(rhythm, new Date(), start ? Number(start[1]) * 60 + Number(start[2]) : 8 * 60)), send(res, 200, "");
             }
             if (req.method === "POST" && url.pathname === "/rhythm/release") return setRhythm(release(rhythm, Date.now())), send(res, 200, "");
+            if (req.method === "POST" && url.pathname === "/rhythm/later") {
+                const b = (await body(req)) as { sessionId?: unknown; since?: unknown };
+                if (!isSafe(b?.sessionId) || !Number.isFinite(b?.since)) return send(res, 400, "need the sessionId and since of the turn to leave for the next batch");
+                return setRhythm(later(rhythm, b.sessionId as string, b.since as number, Date.now(), opts.batchEveryMs ?? 20 * 60_000)), send(res, 200, "");
+            }
             if (req.method === "POST" && url.pathname === "/rhythm/focus") {
                 const b = (await body(req)) as { tabId?: unknown };
                 if (!isSafe(b?.tabId)) return send(res, 400, "need the tabId of the project to focus on");

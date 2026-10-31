@@ -35,11 +35,15 @@ describe("askCard", () => {
             context: "Routes all documents", why: "CI green", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }], recommend: 1, final: true,
         }));
     test("nothing given is an empty card", () => expect(askCard({})).toEqual({}));
+    test("picks: findings to toggle, some on to start with", () =>
+        expect(askCard({ picks: [{ label: "Missing test for 0% VAT", on: true }, { label: "Rename feeVat" }] })).toEqual({ picks: [{ label: "Missing test for 0% VAT", on: true }, { label: "Rename feeVat", on: false }] }));
     test.each([
         [{ context: "a\nb" }, /^context/],
         [{ options: [{ label: "only one" }] }, /^options/],
         [{ options: [{ label: "a" }, { label: "b" }], recommend: 3 }, /^recommend/],
         [{ recommend: 1 }, /^recommend/],
+        [{ picks: [] }, /^picks/],
+        [{ picks: Array.from({ length: 9 }, (_, i) => ({ label: `p${i}` })) }, /^picks/],
     ])("a bad card is refused: %j", (b, why) => expect(askCard(b)).toMatch(why));
 });
 

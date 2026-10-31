@@ -32,6 +32,8 @@ import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 
+const BATCH_WORTH = 2;
+
 const BAND_STYLE = {
     needs: { label: "Your move", color: T.apricot },
     read: { label: "To read", color: T.blue },
@@ -220,10 +222,16 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                                 </span>
                             </button>
                         )}
-                        <Band kind="needs" count={model.needs.length + wokeClosed.length} note={model.held && (
+                        <Band kind="needs" count={model.needs.length + wokeClosed.length} note={model.held ? (
                             <button type="button" data-wintos="held" data-key="⌥⌘O" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("release")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "0 4px", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 11.5, color: T.muted, textAlign: "left" }}>
                                 <span>{model.held.count} held · {model.held.until === Infinity ? "until you are back" : `opens ${new Date(model.held.until).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`}</span>
                                 <Key k="⌥⌘O" label="now" />
+                            </button>
+                        ) : model.needs.length >= BATCH_WORTH && (
+                            // Enough waiting to be worth a sitting: say where the batch is.
+                            <button type="button" data-wintos="batch-ready" data-key="⌥⌘O" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("release")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "0 4px", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 11.5, color: T.muted, textAlign: "left" }}>
+                                <span>{model.needs.length} to decide in one go</span>
+                                <Key k="⌥⌘O" label="batch" />
                             </button>
                         )}>
                             {wokeClosed.map((w) => (

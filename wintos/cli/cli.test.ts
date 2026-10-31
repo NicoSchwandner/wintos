@@ -437,6 +437,10 @@ describe("wintos ask", () => {
         expect(r.seen[0].body).toEqual({ kind: "decide", text: "merge or hold?", context: "routes all documents", why: "CI green", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }], recommend: 1, final: true });
         expect(r.out.trim()).toBe("asks the developer to decide: merge or hold?");
     });
+    test("picks: --pick-on starts on, --pick starts off", async () => {
+        const r = await ask(["approve", "approve #7?", "--pick-on", "Missing test", "--pick", "Rename it"]);
+        expect(r.seen[0].body).toEqual({ kind: "approve", text: "approve #7?", picks: [{ label: "Missing test", on: true }, { label: "Rename it", on: false }] });
+    });
 
     test("a kind it doesn't know is refused before anything is sent", async () => {
         const r = await ask(["ponder"]);

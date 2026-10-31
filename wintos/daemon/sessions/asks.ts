@@ -53,10 +53,12 @@ export const isAskKind = (k: unknown): k is AskKind => (ASK_KINDS as readonly un
 
 const LINE_MAX = 240;
 const OPTION_MAX = 4;
+// One key each on the card, a to i without e (your own answer).
+const PICK_MAX = 8;
 const oneLine = (v: unknown, max: number) => typeof v === "string" && v.trim() !== "" && !/[\n\r]/.test(v) && v.trim().length <= max;
 
 // A decision card from `wintos ask` (context, why, options, recommend, final), or why it is refused.
-export function askCard(b: { context?: unknown; why?: unknown; options?: unknown; recommend?: unknown; final?: unknown }): AskCard | string {
+export function askCard(b: { context?: unknown; why?: unknown; options?: unknown; recommend?: unknown; final?: unknown; picks?: unknown }): AskCard | string {
     const card: AskCard = {};
     for (const k of ["context", "why"] as const) {
         if (b[k] === undefined) continue;
@@ -74,5 +76,10 @@ export function askCard(b: { context?: unknown; why?: unknown; options?: unknown
         card.recommend = b.recommend as number;
     }
     if (b.final === true) card.final = true;
+    if (b.picks !== undefined) {
+        const picks = Array.isArray(b.picks) ? b.picks : [];
+        if (!(picks.length >= 1 && picks.length <= PICK_MAX && picks.every((p) => p && oneLine(p.label, 160)))) return `picks: 1 to ${PICK_MAX}, each a label up to 160 characters`;
+        card.picks = picks.map((p) => ({ label: p.label.trim(), on: p.on === true }));
+    }
     return card;
 }

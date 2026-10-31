@@ -30,6 +30,7 @@ export type PR = {
     stackedOn?: string; // url of the open PR whose branch is `base`, when that PR is in the list
     mergedAt?: string; // merged into the default branch, not yet on main
     releasePr?: { url: string; draft: boolean }; // an open PR releasing that branch to main
+    pendingComments?: number; // in your own pending review, which only you can see
 };
 
 // A PR that is no longer open: merged, or closed without merging.

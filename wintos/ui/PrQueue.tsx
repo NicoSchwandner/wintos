@@ -234,7 +234,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                 <Key k="z" label="snooze" />
                 <Key k="n" label="name its repo" off={!flat[cursor]} />
                 <span data-wintos="pr-next" style={{ display: "contents" }}>
-                    <Key k="f" label={next ? (next === "merge" && mergeArmed === r?.pr.url ? `again: merge #${r.pr.number}` : NEXT_LABEL[next]) : "next step"} off={!next} />
+                    <Key k="f" label={next ? (next === "merge" && mergeArmed === r?.pr.url ? `again: merge #${r.pr.number}` : next === "review" && r?.pr.pendingComments ? `review with your ${r.pr.pendingComments} comments` : NEXT_LABEL[next]) : "next step"} off={!next} />
                 </span>
                 <Key k="c" label="fix red CI" off={!canFixCi} />
                 <Key k="/" label="filter" />
@@ -337,6 +337,7 @@ function PrRow({ r, depth, project, repo, cursor, cols, fix, onOpen }: { r: Queu
             <span style={{ flexGrow: 1, minWidth: 0, fontSize: 13.5, color: T.title, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {r.sla && <span data-wintos="pr-sla" title={r.sla === "team" ? "counted in the team's past SLA" : "counted in yours past SLA"} style={{ ...TAG, borderColor: T.brick, color: T.brick }}>past SLA</span>}
                 {pr.isDraft && <span style={TAG}>draft</span>}
+                {!!pr.pendingComments && <span data-wintos="pr-pending" title="in your pending review on GitHub; f sends them on with the review" style={{ ...TAG, borderColor: T.apricot, color: T.apricot }}>{pr.pendingComments} pending</span>}
                 {pr.title}
                 {r.qualifier && <span style={{ fontSize: 11, color: r.qualifier.brick ? T.brick : T.muted }}> — {r.qualifier.text}</span>}
                 {fix && <span data-wintos="pr-fix" style={{ fontSize: 11, color: fix.brick ? T.brick : T.apricot }}> · {fix.text}</span>}

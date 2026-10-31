@@ -817,7 +817,7 @@ await scenario("33 · ⌥⌘B starts a break: the status bar counts it, the side
     await until("the sidebar's meter saying it", () => evalIn(t, `document.querySelector("[data-wintos=rhythm-meter]")?.innerText.includes("on a break")`));
 });
 
-await scenario("35 · ⌥⌘O shows a waiting turn as a card with its context and options; 2 answers it and the batch moves on", async () => {
+await scenario("35 · ⌥⌘O shows a waiting turn as a card with its context and options; one that can't be undone takes 2 twice, then it is sent", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const blockId = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
@@ -843,9 +843,46 @@ await scenario("35 · ⌥⌘O shows a waiting turn as a card with its context an
     const text = await evalIn(t, `document.querySelector("[data-wintos=decision-card]").innerText`);
     for (const want of ["routes all documents", "CI green", "Merge now", "live Monday", "Hold", "recommended", "can't be undone", "Your call"]) if (!text.includes(want)) throw new Error(`the card lacks "${want}":\n${text}`);
     await press(t, "2");
-    await until("the batch moved on", () => evalIn(t, `!document.querySelector("[data-wintos=decision-card][data-session=e2e-decide]")`));
+    await until("2 armed, not sent", () => evalIn(t, `document.querySelector("[data-wintos=decision-card][data-session=e2e-decide]")?.innerText.includes("2 again")`));
+    await press(t, "2");
+    // The scenario's session is made of hook events: its pane may have no process to type into
+    // (earlier scenarios restart terminals), and then the card stays and says so.
+    await until("sent, or the card says it wasn't", () =>
+        evalIn(t, `!document.querySelector("[data-wintos=decision-card][data-session=e2e-decide]") || !!document.querySelector("[data-wintos=decision-failed]")?.innerText.startsWith("Not sent")`));
     await press(t, "o", { code: "KeyO", keyCode: 79, mods: ["alt", "meta"] });
     await until("the page closed", async () => !(await evalIn(t, `!!document.querySelector("[data-wintos=decisions]")`)));
+    await post("SessionEnd", { reason: "prompt_input_exit" });
+});
+
+await scenario("36 · a card's picks toggle with their letter, and s leaves the turn for the next batch", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const blockId = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const post = (hook_event_name, extra = {}) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-picks", hook_event_name, prompt: "e2e picks", ...extra } }) });
+    await post("UserPromptSubmit");
+    const card = { kind: "approve", text: "approve #7 with comments?", options: [{ label: "Approve" }, { label: "Request changes" }], picks: [{ label: "Missing test", on: true }, { label: "Rename it", on: false }] };
+    await fetch(`http://127.0.0.1:7731/blocks/${blockId}/ask?session=e2e-picks`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(card) });
+    await post("Stop", { last_assistant_message: "Approve #7?" });
+    await press(t, "ø", { code: "KeyO", keyCode: 79, mods: ["alt", "meta"] });
+    await until("the batch", () => evalIn(t, `!!document.querySelector("[data-wintos=decision-card]")`));
+    for (let i = 0; i < 6 && !(await evalIn(t, `!!document.querySelector("[data-wintos=decision-card][data-session=e2e-picks]")`)); i++) {
+        await press(t, "s");
+        await sleep(300);
+    }
+    const ons = () => evalIn(t, `[...document.querySelectorAll("[data-wintos=decision-picks] [data-on]")].map((e) => e.dataset.on).join("")`);
+    await until("the picks, as given", async () => (await ons()) === "10");
+    await press(t, "b");
+    await until("b toggled on", async () => (await ons()) === "11");
+    await press(t, "s");
+    const st = async () => await (await fetch("http://127.0.0.1:7731/state")).json();
+    await until("left for the next batch", async () => !!(await st()).rhythm?.later?.["e2e-picks"]);
+    await press(t, "o", { code: "KeyO", keyCode: 79, mods: ["alt", "meta"] });
+    await until("the page closed", async () => !(await evalIn(t, `!!document.querySelector("[data-wintos=decisions]")`)));
+    await press(t, "ø", { code: "KeyO", keyCode: 79, mods: ["alt", "meta"] });
+    await until("the page again", () => evalIn(t, `!!document.querySelector("[data-wintos=decisions]")`));
+    await sleep(500);
+    if (await evalIn(t, `!!document.querySelector("[data-wintos=decision-card][data-session=e2e-picks]")`)) throw new Error("the turn left for later came straight back");
+    await press(t, "o", { code: "KeyO", keyCode: 79, mods: ["alt", "meta"] });
     await post("SessionEnd", { reason: "prompt_input_exit" });
 });
 

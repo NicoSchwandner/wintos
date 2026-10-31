@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
+import type { Reentry } from "../daemon/sessions/reentry";
 import { answerText, decisions, type Decision } from "./decisions";
 import { focusSession } from "./focus";
 import { Key } from "./Key";
@@ -7,51 +8,74 @@ import { T } from "./tokens";
 import { typeIntoPane } from "./typeIntoPane";
 import { useFocusOnMount } from "./useFocusOnMount";
 import { useNow } from "./useNow";
-import { parkBlock, useWintos } from "./useWintos";
+import { daemonFetch, parkBlock, useWintos } from "./useWintos";
 import { relTime } from "./view";
 import { useZoneKeys } from "./zones";
 
 const KIND_WORD: Record<string, string> = { answer: "Answer", decide: "Decide", approve: "Approve", unblock: "Unblock" };
 const BY_WORD: Record<string, string> = { session: "written by the session", tool: "asked with Claude's question", model: "read by WintOS from the turn", guess: "read by WintOS from the turn" };
 
+// Toggles for a card's picks: a to i, without e (your own answer).
+const PICK_KEYS = "abcdfghi";
+
 // ⌥⌘O: the turns waiting on you, one card at a time, quick ones first. 1-4 answers with an
-// option, the number after them leaves it to the session's recommendation, e writes your own;
-// WintOS types the answer into the session. ⏎ goes into the session, w parks it, s leaves it for
-// the next batch.
+// option (one that can't be undone takes the same key twice), the number after them leaves it to
+// the session's recommendation, e writes your own, a-i toggle its picks; WintOS types the answer
+// into the session. ⏎ goes into the session, w parks it, s leaves it for the next batch.
 export const DecisionsPage = memo(() => {
     const ref = useFocusOnMount<HTMLDivElement>();
     const { state } = useWintos();
     const now = useNow(30_000);
-    // Decided or left for later in this sitting: the batch moves on while the session takes it up.
+    // Decided or left for later in this sitting, by turn: the batch moves on while the session takes it up.
     const [done, setDone] = useState<Record<string, "answered" | "parked" | "later">>({});
     const [own, setOwn] = useState<string | null>(null);
+    const [armed, setArmed] = useState<number | null>(null);
+    const [picked, setPicked] = useState<boolean[]>([]);
+    const [failed, setFailed] = useState<string | null>(null);
+    const [back, setBack] = useState<Reentry | null>(null);
     const ownRef = useRef<HTMLTextAreaElement>(null);
     const title = (tabId: string) => state?.projects.find((p) => p.id === tabId)?.title ?? "Untitled";
     const all = state ? decisions(state, now, title) : [];
     const seen = useRef<Decision[]>([]);
     // A card stays in the batch once shown, so the count holds while answered ones start working.
-    for (const d of all) if (!seen.current.some((x) => x.sessionId === d.sessionId)) seen.current.push(d);
+    for (const d of all) if (!seen.current.some((x) => x.turn === d.turn)) seen.current.push(d);
     const batch = seen.current;
-    const card = batch.find((d) => !done[d.sessionId] && all.some((x) => x.sessionId === d.sessionId));
+    const card = batch.find((d) => !done[d.turn] && all.some((x) => x.turn === d.turn));
     const at = card ? batch.indexOf(card) : batch.length;
     useEffect(() => void (own !== null && setTimeout(() => ownRef.current?.focus(), 0)), [own !== null]);
-    const mark = (d: Decision, how: "answered" | "parked" | "later") => (setDone({ ...done, [d.sessionId]: how }), setOwn(null), ref.current?.focus());
+    useEffect(() => {
+        setArmed(null), setFailed(null), setBack(null), setPicked(card?.picks?.map((p) => p.on) ?? []);
+        // A card the session gave no context: what you asked it and what it did, as on a return.
+        if (!card || card.context || card.why || card.options.length) return;
+        let live = true;
+        void daemonFetch(`/sessions/${encodeURIComponent(card.sessionId)}/reentry`)
+            .then((r) => (r.ok ? (r.json() as Promise<Reentry>) : null))
+            .then((r) => live && r && setBack(r))
+            .catch(() => {});
+        return () => void (live = false);
+    }, [card?.turn]);
+    const mark = (d: Decision, how: "answered" | "parked" | "later") => (setDone({ ...done, [d.turn]: how }), setOwn(null), ref.current?.focus());
     const answer = (d: Decision, a: Parameters<typeof answerText>[1]) => {
-        const text = answerText(d, a);
+        const text = answerText(d, a, picked);
         if (!text) return;
-        void typeIntoPane(d.blockId, text);
-        mark(d, "answered");
+        typeIntoPane(d.blockId, text).then(
+            () => mark(d, "answered"),
+            (e) => setFailed(`Not sent: the session's terminal didn't take it (${e instanceof Error ? e.message : String(e)}). ⏎ goes into it.`),
+        );
     };
+    // What can't be undone takes the same key twice.
+    const pick = (d: Decision, n: number, a: Parameters<typeof answerText>[1]) => (d.final && armed !== n ? setArmed(n) : answer(d, a));
     const yourCall = card && card.recommend ? card.options.length + 1 : undefined;
     const keys: Record<string, () => void> = {};
     if (card && own === null) {
-        card.options.forEach((_, i) => (keys[String(i + 1)] = () => answer(card, { option: i + 1 })));
-        if (yourCall) keys[String(yourCall)] = () => answer(card, { yourCall: true });
+        card.options.forEach((_, i) => (keys[String(i + 1)] = () => pick(card, i + 1, { option: i + 1 })));
+        if (yourCall) keys[String(yourCall)] = () => pick(card, yourCall, { yourCall: true });
         if (card.by !== "tool") keys.e = () => setOwn("");
+        card.picks?.forEach((_, i) => (keys[PICK_KEYS[i]] = () => setPicked(picked.map((on, j) => (j === i ? !on : on)))));
         keys.Enter = () => focusSession({ tabId: card.tabId, blockId: card.blockId });
         keys.w = () => (void parkBlock(card.blockId), mark(card, "parked"));
-        keys.s = () => mark(card, "later");
-    }
+        keys.s = () => (void daemonFetch("/rhythm/later", { method: "POST", body: { sessionId: card.sessionId, since: card.since } }).catch(() => {}), mark(card, "later"));
+    } else if (!card && batch.length) keys.Enter = () => runKey("release");
     useZoneKeys(ref, keys);
     const send = () => card && own?.trim() && answer(card, { own });
     const opt = (n: number, label: string, then: string | undefined, recommended: boolean, onPick: () => void) => (
@@ -61,6 +85,7 @@ export const DecisionsPage = memo(() => {
                 <span style={{ fontSize: 15, color: T.emphasis }}>
                     {label}
                     {recommended && <span style={{ fontSize: 12, color: T.moss, marginLeft: 8 }}>recommended</span>}
+                    {armed === n && <span style={{ fontSize: 12, color: T.brick, marginLeft: 8 }}>{n} again: it can't be undone</span>}
                 </span>
                 {then && <span style={{ fontSize: 13, color: T.muted }}>{then}</span>}
             </span>
@@ -88,7 +113,7 @@ export const DecisionsPage = memo(() => {
                 )}
                 {!card ? (
                     <div data-wintos="decisions-empty" style={{ padding: "26px 30px", background: T.card, borderRadius: 16, fontSize: 15, color: T.secondary }}>
-                        {batch.length ? "That was the batch: every turn has its answer, or waits for the next one." : "Nothing waits on you."}
+                        {batch.length ? "That was the batch: every turn has its answer, or waits for the next one. ⏎ takes you back." : "Nothing waits on you."}
                     </div>
                 ) : (
                     <div data-wintos="decision-card" data-session={card.sessionId} style={{ background: T.card, borderRadius: 16, padding: "26px 30px", display: "flex", flexDirection: "column", gap: 18 }}>
@@ -101,14 +126,29 @@ export const DecisionsPage = memo(() => {
                         </div>
                         <span style={{ fontSize: 22, lineHeight: 1.35, fontWeight: 600, color: T.emphasis }}>{card.question}</span>
                         {section("CONTEXT", card.context)}
+                        {back && section("YOU ASKED", back.asked)}
+                        {back && section("IT DID", back.did)}
                         {section("WHY IT ASKS", card.why, card.facts)}
                         {!card.why && card.facts && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.faint }}>{card.facts}</span>}
-                        {card.options.length > 0 && (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                                {card.options.map((o, i) => opt(i + 1, o.label, o.then, card.recommend === i + 1, () => answer(card, { option: i + 1 })))}
-                                {yourCall && opt(yourCall, "Your call", "Go with the session's recommendation.", false, () => answer(card, { yourCall: true }))}
+                        {card.picks && (
+                            <div data-wintos="decision-picks" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: "0.06em", color: T.faint }}>WHICH TO KEEP</span>
+                                {card.picks.map((p, i) => (
+                                    <button key={i} type="button" data-key={PICK_KEYS[i]} data-on={picked[i] ? "1" : "0"} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => setPicked(picked.map((on, j) => (j === i ? !on : on)))} style={{ display: "flex", gap: 12, alignItems: "baseline", padding: "6px 4px", background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui, fontSize: 14, color: picked[i] ? T.emphasis : T.faint }}>
+                                        <Key k={PICK_KEYS[i]} label="" always />
+                                        <span style={{ fontFamily: T.mono, color: picked[i] ? T.moss : T.faint }}>{picked[i] ? "[x]" : "[ ]"}</span>
+                                        <span style={{ textDecoration: picked[i] ? "none" : "line-through" }}>{p.label}</span>
+                                    </button>
+                                ))}
                             </div>
                         )}
+                        {card.options.length > 0 && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                {card.options.map((o, i) => opt(i + 1, o.label, o.then, card.recommend === i + 1, () => pick(card, i + 1, { option: i + 1 })))}
+                                {yourCall && opt(yourCall, "Your call", "Go with the session's recommendation.", false, () => pick(card, yourCall, { yourCall: true }))}
+                            </div>
+                        )}
+                        {failed && <span data-wintos="decision-failed" style={{ fontSize: 13, color: T.brick }}>{failed}</span>}
                         {own !== null && (
                             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                                 <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: "0.06em", color: T.apricot }}>YOUR OWN</span>
@@ -142,6 +182,7 @@ export const DecisionsPage = memo(() => {
                             <>
                                 {card.options.length > 0 && <Key k={`1–${yourCall ?? card.options.length}`} label="answer" always />}
                                 {card.by !== "tool" && <Key k="e" label="your own" always />}
+                                {card.picks && <Key k={`a–${PICK_KEYS[card.picks.length - 1]}`} label="keep or leave out" always />}
                                 <Key k="⏎" label="into the session" always />
                                 <Key k="w" label="park it" always />
                                 <Key k="s" label="next batch" always />

@@ -15,10 +15,9 @@ describe("terminal colour scheme", () => {
 
 describe("schemeNotices", () => {
     const s = (id: string, o: Partial<Session> = {}) => ({ id, tabId: "t1", blockId: `b-${id}`, state: "idle", since: 0, lastAt: 0, ...o }) as Session;
-    test("each live Claude pane in this tab, once per appearance", () => {
+    test("each live Claude pane in this tab, once", () => {
         const sessions = [s("a"), s("b", { state: "working" }), s("other", { tabId: "t2" }), s("gone", { state: "ended" }), s("bg", { background: true }), s("saved", { restored: true })];
-        expect(schemeNotices(sessions, "t1", true, new Map())).toEqual(["b-a", "b-b"]);
-        expect(schemeNotices(sessions, "t1", true, new Map([["b-a", true]]))).toEqual(["b-b"]);
-        expect(schemeNotices(sessions, "t1", false, new Map([["b-a", true], ["b-b", false]]))).toEqual(["b-a"]);
+        expect(schemeNotices(sessions, "t1", new Set())).toEqual(["b-a", "b-b"]);
+        expect(schemeNotices(sessions, "t1", new Set(["b-a"]))).toEqual(["b-b"]);
     });
 });

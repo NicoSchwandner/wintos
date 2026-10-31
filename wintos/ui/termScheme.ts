@@ -15,8 +15,8 @@ export const isDarkBg = (bg: string) => colord(bg).isDark();
 // program asks for the background again.
 export const schemeReport = (dark: boolean) => `\x1b[?997;${dark ? 1 : 2}n`;
 
-// The panes in this tab whose Claude hasn't been told the current appearance. A session that kept
-// running through a restart asked for the background only when it started, and no pane recorded
-// that it asked; told maps a pane to the appearance it was last told (true: light).
-export const schemeNotices = (sessions: Session[], tabId: string, light: boolean, told: Map<string, boolean>): string[] =>
-    sessions.filter((s) => s.tabId === tabId && s.state !== "ended" && !s.background && !s.restored && told.get(s.blockId) !== light).map((s) => s.blockId);
+// The panes in this tab whose Claude hasn't been told the appearance since this window opened. A
+// session that kept running through a restart asked for the background only when it started, and
+// the reopened pane doesn't know it asked; once told, it asks the pane, and the pane reports flips.
+export const schemeNotices = (sessions: Session[], tabId: string, told: Set<string>): string[] =>
+    sessions.filter((s) => s.tabId === tabId && s.state !== "ended" && !s.background && !s.restored && !told.has(s.blockId)).map((s) => s.blockId);

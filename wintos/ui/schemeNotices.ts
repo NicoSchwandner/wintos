@@ -1,7 +1,7 @@
+import { globalStore } from "@/app/store/jotaiStore";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { stringToBase64 } from "@/util/util";
-import { useAtomValue } from "jotai";
 import { useEffect, useRef, useState } from "react";
 import type { Session } from "../daemon/sessions/reduce";
 import { lightSchemeAtom } from "./scheme";
@@ -11,17 +11,18 @@ import { schemeNotices, schemeReport } from "./termScheme";
 // answers; this tab's terminals load right after the window opens.
 const LOADED_MS = 3000;
 
-// Tell each Claude session in this tab the appearance, on opening and whenever it flips.
+// Tell each Claude session in this tab the appearance once; flips after that are the pane's to
+// report, sent only once its own colour has changed (TermWrap.setSchemeBg).
 export function useSchemeNotices(sessions: Session[] | undefined, tabId: string): void {
-    const light = useAtomValue(lightSchemeAtom);
-    const told = useRef(new Map<string, boolean>());
+    const told = useRef(new Set<string>());
     const [ready, setReady] = useState(false);
     useEffect(() => void setTimeout(() => setReady(true), LOADED_MS), []);
     useEffect(() => {
         if (!ready || !sessions) return;
-        for (const blockId of schemeNotices(sessions, tabId, light, told.current)) {
-            told.current.set(blockId, light);
-            void RpcApi.ControllerInputCommand(TabRpcClient, { blockid: blockId, inputdata64: stringToBase64(schemeReport(!light)) }).catch(() => told.current.delete(blockId));
+        const report = schemeReport(!globalStore.get(lightSchemeAtom));
+        for (const blockId of schemeNotices(sessions, tabId, told.current)) {
+            told.current.add(blockId);
+            void RpcApi.ControllerInputCommand(TabRpcClient, { blockid: blockId, inputdata64: stringToBase64(report) }).catch(() => told.current.delete(blockId));
         }
-    }, [ready, sessions, tabId, light]);
+    }, [ready, sessions, tabId]);
 }

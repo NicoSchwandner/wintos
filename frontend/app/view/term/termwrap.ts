@@ -112,6 +112,7 @@ export class TermWrap {
     hoveredLinkUri: string | null = null;
     schemeBg: string | null = null;
     schemeAsked: boolean = false;
+    heldReply: string | null = null;
     onLinkHover?: (uri: string | null, mouseX: number, mouseY: number, showUrl: boolean) => void;
 
     // Paste deduplication
@@ -207,7 +208,11 @@ export class TermWrap {
             if (data !== "?" || this.schemeBg == null) return false;
             if (!this.loaded) return true;
             this.schemeAsked = true;
-            this.sendDataHandler?.(backgroundReply(this.schemeBg));
+            // Programs follow the query with a DA1 (ESC[c) and take an answer to that first as
+            // "no reply"; xterm answers DA1 from the same chunk, and the backend takes each input
+            // in its own goroutine, so both leave in one send.
+            this.heldReply = backgroundReply(this.schemeBg);
+            queueMicrotask(() => this.flushHeldReply(""));
             return true;
         });
         this.terminal.parser.registerOscHandler(16162, (data: string) => {
@@ -528,8 +533,14 @@ export class TermWrap {
             return;
         }
 
-        this.sendDataHandler?.(data);
+        this.flushHeldReply(data);
         this.multiInputCallback?.(data);
+    }
+
+    flushHeldReply(data: string) {
+        const out = (this.heldReply ?? "") + data;
+        this.heldReply = null;
+        if (out) this.sendDataHandler?.(out);
     }
 
     addFocusListener(focusFn: () => void) {

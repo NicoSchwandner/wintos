@@ -1,7 +1,7 @@
 import { chmodSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { discoverPlugins, PluginRunner } from "./runner";
 
 const script = (body: string) => {
@@ -26,6 +26,16 @@ describe("PluginRunner", () => {
         await r.run("x");
         expect(r.results.x).toMatchObject({ ok: false, data: { n: 1 } });
         expect(r.results.x.error).toContain("boom");
+    });
+
+    test("a failure shows its first line; the rest goes to the daemon log", async () => {
+        const logged: string[] = [];
+        const spy = vi.spyOn(console, "error").mockImplementation((m) => void logged.push(String(m)));
+        const r = new PluginRunner([{ name: "x", cmd: [script(`printf '\\ngh: HTTP 502\\nnode:child_process:978 throw err;\\n' >&2; exit 1`)], everyMs: 0 }], () => {});
+        await r.run("x");
+        spy.mockRestore();
+        expect(r.results.x.error).toBe("gh: HTTP 502");
+        expect(logged.join("\n")).toContain("node:child_process:978");
     });
 
     test("output that isn't JSON is an error, not data", async () => {

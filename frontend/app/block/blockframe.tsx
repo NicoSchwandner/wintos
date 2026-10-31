@@ -3,6 +3,7 @@
 
 import { BlockModel } from "@/app/block/block-model";
 import { BlockFrame_Header } from "@/app/block/blockframe-header";
+import { SessionHeader, SessionSteps } from "@/wintos/ui/SessionHeader";
 import { blockViewToIcon, getViewIconElem, useTabBackground } from "@/app/block/blockutil";
 import { ConnStatusOverlay } from "@/app/block/connstatusoverlay";
 import { ChangeConnectionBlockModal } from "@/app/modals/conntypeahead";
@@ -199,7 +200,20 @@ const BlockFrame_Default_Component = (props: BlockFrameProps) => {
             )}
             <div className="block-frame-default-inner" style={innerStyle}>
                 {noHeader || <ErrorBoundary fallback={headerElemNoView}>{headerElem}</ErrorBoundary>}
-                {preview ? previewElem : children}
+                {/* WintOS: a Claude terminal says what it works on, what its PRs need and where it is in its lane. */}
+                {preview ? (
+                    previewElem
+                ) : viewModel?.viewType === "term" ? (
+                    <div className="wintos-pane">
+                        <SessionHeader blockId={nodeModel.blockId} />
+                        <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+                            {children}
+                            <SessionSteps blockId={nodeModel.blockId} />
+                        </div>
+                    </div>
+                ) : (
+                    children
+                )}
             </div>
             {preview || viewModel == null || !connModalOpen ? null : (
                 <ChangeConnectionBlockModal

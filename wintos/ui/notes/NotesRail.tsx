@@ -1,60 +1,192 @@
 import { useAtomValue } from "jotai";
-import { isPlainKey } from "../keys";
-import { editMine } from "../focus";
-import { memo } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+import { useZoneKeys } from "../zones";
+import { cursorKeys } from "../itemCursor";
+import { railCollapsedAtom, setRailCollapsed, syncRailCollapsed, useRailWidth } from "./railWidth";
 import { Key } from "../Key";
 import { T } from "../tokens";
 import { Mine } from "./Mine";
-import { ProjectNotes } from "./ProjectNotes";
+import { Rich } from "./ProjectNotes";
 import { editingMineAtom } from "./state";
 import { useNotes } from "./useNotes";
-import { openProjectPr, PrList } from "./PrList";
-import { useWintos } from "../useWintos";
+import { notesKeys, PrList } from "./PrList";
+import { daemonFetch, useWintos } from "../useWintos";
+import { runKey } from "../menu";
+import { openPalette } from "../Palette";
+import { backgroundSessions, projectSessions, relTime, sessionName, type WintosState } from "../view";
+import { shelvedName } from "../../daemon/shelf/shelf";
+import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
+import { SESSION_DOT } from "../tokens";
+import { PrChipButton } from "../SessionHeader";
 
-// The notes rail beside the terminal (MainC): next action, project.md, mine.md.
+// The notes rail beside the terminal (MainC): heads-ups, mine.md, the sessions.
 export const NotesRail = memo(({ tabId }: { tabId: string }) => {
-    const { notes, project, save } = useNotes(tabId);
+    const { notes, save } = useNotes(tabId);
     const editing = useAtomValue(editingMineAtom);
     const { state } = useWintos();
+    const ref = useRef<HTMLDivElement>(null);
+    useZoneKeys(ref, { ...notesKeys(tabId, state, !editing && !!notes), ...cursorKeys(() => ref.current) });
+    const [width, setWidth, saveWidth] = useRailWidth();
+    const collapsed = useAtomValue(railCollapsedAtom);
+    useEffect(() => (window.addEventListener("storage", syncRailCollapsed), () => window.removeEventListener("storage", syncRailCollapsed)), []);
+    const drag = (e: React.PointerEvent<HTMLDivElement>) => {
+        const handle = e.currentTarget;
+        const right = handle.getBoundingClientRect().right + width; // the rail's right edge stays put
+        handle.setPointerCapture(e.pointerId);
+        handle.onpointermove = (m) => setWidth(right - m.clientX);
+        handle.onpointerup = () => ((handle.onpointermove = handle.onpointerup = null), saveWidth());
+    };
+    // Folded, the notes are a slim drawer handle saying what is inside; heads-ups in apricot.
+    if (collapsed) {
+        const open = (notes?.mine ?? "").split("\n").filter((l) => /^\s*[-*] \[ \]/.test(l)).length;
+        const sessions = (state?.sessions ?? []).filter((s) => s.tabId === tabId && s.state !== "ended" && !s.background).length;
+        const heads = state?.headsUps?.[tabId]?.length ?? 0;
+        const label: React.CSSProperties = { writingMode: "vertical-rl", fontSize: 12, letterSpacing: "0.04em", whiteSpace: "nowrap" };
+        return (
+            <button type="button" data-wintos="notes-drawer" data-key="⌥⌘L" tabIndex={-1} aria-label="Show the notes" onMouseDown={(e) => e.preventDefault()} onClick={() => setRailCollapsed(false)} style={{ width: 56, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: "18px 0 14px", background: T.sidebar, border: "none", borderLeft: `1px solid ${T.hairline}`, cursor: "pointer", fontFamily: T.ui }}>
+                {heads > 0 && <span style={{ ...label, color: T.apricot }}>{heads} heads-up{heads === 1 ? "" : "s"}</span>}
+                <span style={{ ...label, color: T.muted }}>mine.md{open ? ` · ${open} open` : ""}</span>
+                <span style={{ ...label, color: T.faint }}>sessions · {sessions}</span>
+                <span style={{ marginTop: "auto" }}>
+                    <Key k="⌥⌘L" label="" />
+                </span>
+            </button>
+        );
+    }
     return (
+        <>
+        {/* The rail's left edge: drag to resize, as the sidebar's right edge; the button on it folds the rail away. */}
+        <div onPointerDown={drag} style={{ position: "relative", width: 9, flexShrink: 0, cursor: "col-resize", borderLeft: `1px solid ${T.hairline}` }}>
+            <RailToggle open />
+        </div>
         <div
             data-wintos="notes-rail"
             tabIndex={0}
-            onKeyDown={(e) => {
-                if (!isPlainKey(e) && e.key !== "Escape") return;
-                if (e.key === "e" && !editing && notes) (e.preventDefault(), editMine(true));
-                else if (!editing && /^[1-9]$/.test(e.key) && openProjectPr(tabId, state, Number(e.key))) e.preventDefault();
-            }}
-            style={{ width: 352, flexShrink: 0, boxSizing: "border-box", padding: "12px 22px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", overflowX: "hidden", outline: "none", fontFamily: T.ui, borderLeft: `1px solid ${T.hairline}` }}
+            data-zone="list"
+            ref={ref}
+            style={{ width, flexShrink: 0, boxSizing: "border-box", padding: "12px 22px 12px 17px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", overflowX: "hidden", outline: "none", fontFamily: T.ui }}
         >
-            {project?.next && (
-                <div style={{ padding: "12px 14px", background: "#32302f", border: "1px solid #d65d0e", borderRadius: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: T.apricot }}>Next action</span>
-                    <span style={{ fontSize: 12.5, lineHeight: 1.55, color: "#ebdbb2" }}>{project.next}</span>
-                </div>
-            )}
-            <PrList tabId={tabId} size="rail" />
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.secondary }}>project.md</span>
-                    <span style={{ fontSize: 10, color: T.faint }}>written by the sessions</span>
-                </div>
-                {!notes ? (
-                    <span style={{ fontSize: 12.5, color: T.faint }}>No notes yet. They start once Claude names the project.</span>
-                ) : notes.projectMd === null ? (
-                    <span style={{ fontSize: 12.5, color: T.brick }}>project.md is unreadable. The next prompt asks Claude to repair it.</span>
-                ) : (
-                    <ProjectNotes md={notes.projectMd} size="rail" />
-                )}
-            </div>
-            <div style={{ padding: "12px 14px", background: "#282828", border: `1px solid ${editing ? T.borderActive : T.keycapBorder}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+            <HeadsUps tabId={tabId} state={state} />
+            <div style={{ padding: "12px 14px", background: T.sidebar, border: `1px solid ${editing ? T.borderActive : T.keycapBorder}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>mine.md</span>
                     <Key k={editing ? "⌘⏎" : "⌘E"} label={editing ? "save · esc discard" : "edit"} />
                 </div>
                 <Mine text={notes?.mine ?? ""} mtime={notes?.mineMtime ?? 0} canEdit={!!notes} save={save} size="rail" />
             </div>
+            <Sessions tabId={tabId} state={state} size="rail" />
         </div>
+        </>
     );
 });
 NotesRail.displayName = "NotesRail";
+
+// What the sessions' "You should know" side agent flagged in this project, newest first, until you
+// close it (j/k to one, x). The explanation is its tooltip.
+function HeadsUps({ tabId, state }: { tabId: string; state?: WintosState }) {
+    const list = [...(state?.headsUps?.[tabId] ?? [])].sort((a, b) => b.at - a.at);
+    const problem = state?.headsUpProblem;
+    if (!list.length && !problem) return null;
+    const nameOf = (id: string) => {
+        const live = state?.sessions.find((s) => s.id === id);
+        const shelved = state?.shelf?.[tabId]?.find((i) => i.sessionId === id);
+        return live ? sessionName(live) : shelved ? shelvedName(shelved) : undefined;
+    };
+    return (
+        <div data-wintos="headsups" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.apricot }}>Heads-up</span>
+                {list.length > 0 && <Key k="j k · x" label="close" />}
+            </div>
+            {problem && <span style={{ fontSize: 11, color: T.brick }}>New heads-ups can't be read: {problem}.</span>}
+            {list.map((h) => (
+                <div key={h.id} data-item="headsup" title={h.explanation} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "1px 4px", margin: "0 -4px", borderRadius: 4 }}>
+                    <span style={{ minWidth: 0, flexGrow: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+                        <span style={{ fontSize: 12.5, lineHeight: 1.5, color: T.secondary }}><Rich text={h.text} size="rail" /></span>
+                        <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>{[nameOf(h.sessionId), relTime(Date.now() - h.at)].filter(Boolean).join(" · ")}</span>
+                    </span>
+                    <button type="button" data-act data-key="x" tabIndex={-1} aria-label="Close this heads-up" title="Close (x)" onMouseDown={(e) => e.preventDefault()} onClick={() => void daemonFetch(`/headsups/${encodeURIComponent(h.id)}/dismiss`, { method: "POST", body: {} })} style={{ flexShrink: 0, padding: "0 2px", background: "transparent", border: "none", cursor: "pointer", color: T.faint, fontSize: 13, lineHeight: 1.4 }}>
+                        ×
+                    </button>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// This project's sessions: the live ones, then the shelved ones, each with its PRs, ⌥⌘1–9 back to
+// its pane or resumed; then the project's PRs no session owns.
+export function Sessions({ tabId, state, size }: { tabId: string; state?: WintosState; size: "rail" | "full" }) {
+    const blockIds = useAtomValue(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.blockids ?? [];
+    const list = state ? projectSessions(state, tabId, blockIds) : [];
+    const background = state ? backgroundSessions(state, tabId) : [];
+    return (
+        <div data-wintos="sessions" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {list.length + background.length > 0 && <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>Sessions</span>}
+            {list.slice(0, 9).map((x, i) => {
+                const live = x.kind === "live";
+                const id = live ? x.session.id : x.item.sessionId;
+                return (
+                    <div key={id} data-wintos={live ? "session-row" : "shelf-dock"} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <button type="button" data-key={`⌥⌘${i + 1}`} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey(`session-${i + 1}`)} style={{ display: "flex", alignItems: "center", gap: 9, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: size === "rail" ? 12.5 : 13, lineHeight: 1.55, color: live ? T.title : T.quietTitle, textAlign: "left" }}>
+                            <Key k={`⌥⌘${i + 1}`} label="" />
+                            <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: "50%", boxSizing: "border-box", background: live ? SESSION_DOT[x.session.state] : "transparent", border: live ? "none" : `1.5px solid ${T.faint}` }} />
+                            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</span>
+                            <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: T.faint }}>{live ? x.session.state : `shelved ${relTime(Date.now() - x.item.at)}`}</span>
+                        </button>
+                        {x.kind === "live" && x.session.status && <span style={{ paddingLeft: 54, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.session.status.text}</span>}
+                        {(x.prs.length > 0 || x.alsoIn.length > 0) && (
+                            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 5, paddingLeft: 54 }}>
+                                {x.prs.map((c) => <PrChipButton key={c.url} chip={c} small />)}
+                                {/* Quiet: PRs another session owns that this one worked on too. */}
+                                {x.alsoIn.map((c) => (
+                                    <span key={c.url} data-wintos="also-in" title="also in this session; another one owns it" style={{ opacity: 0.5 }}>
+                                        <PrChipButton chip={c} small />
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+            {background.map((s) => (
+                <div key={s.id} data-wintos="background-session" title="runs in Claude's background service, not in a pane" style={{ display: "flex", alignItems: "center", gap: 9, paddingLeft: 30, fontSize: size === "rail" ? 12 : 12.5, color: T.quietTitle }}>
+                    <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: "50%", background: SESSION_DOT[s.state], opacity: 0.6 }} />
+                    <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessionName(s)}</span>
+                    <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: T.faint }}>background · {s.state}</span>
+                </div>
+            ))}
+            {list.length > 9 && <button type="button" tabIndex={-1} onClick={() => openPalette("shelved")} style={{ alignSelf: "flex-start", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontSize: 12, color: T.faint }}><Key k="⇧⌘P" label={`${list.length - 9} more`} /></button>}
+            <PrList tabId={tabId} size={size} label="no session" />
+        </div>
+    );
+}
+
+// Fold or unfold the rail: a real button, 24px (WCAG 2.2 target size), named and stating whether
+// the rail is open, sitting on the divider. It never takes focus (⌘L is the keyboard way).
+function RailToggle({ open }: { open: boolean }) {
+    const [hover, setHover] = useState(false);
+    return (
+        <button
+            type="button"
+            aria-label={open ? "Hide the notes" : "Show the notes"}
+            aria-expanded={open}
+            title={open ? "Hide the notes (⌥⌘L)" : "Show the notes (⌥⌘L)"}
+            tabIndex={-1}
+            onPointerDown={(e) => (e.stopPropagation(), e.preventDefault())}
+            data-key="⌥⌘L"
+            onClick={(e) => (e.stopPropagation(), setRailCollapsed(open))}
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => setHover(false)}
+            // Open: on the divider. Folded: floating over the terminals, dimmed until pointed at.
+            // no-drag: folded it floats over the pane strip, a window-drag region that would take the click.
+            style={{ WebkitAppRegion: "no-drag", position: "absolute", top: 10, left: open ? -12 : -34, zIndex: 20, width: 24, height: 24, borderRadius: 12, border: `1px solid ${hover ? T.borderActive : T.border}`, background: T.ground, color: hover ? T.title : T.muted, opacity: open || hover ? 1 : 0.55, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, boxShadow: open ? "none" : "0 2px 8px rgba(0,0,0,0.4)" } as React.CSSProperties}
+        >
+            <i className={`fa-solid ${open ? "fa-chevron-right" : "fa-chevron-left"}`} style={{ fontSize: 11 }} />
+            {/* The key beside the button, on the terminals' side, as every WintOS button shows its key. */}
+            <span style={{ position: "absolute", right: 30, pointerEvents: "none", opacity: open || hover ? 1 : 0.8 }}>
+                <Key k="⌥⌘L" label="" />
+            </span>
+        </button>
+    );
+}

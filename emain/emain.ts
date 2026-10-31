@@ -60,13 +60,17 @@ import { getLaunchSettings } from "./launchsettings";
 import { configureAutoUpdater, updater } from "./updater";
 
 const electronApp = electron.app;
+// The dev instance sits behind the developer's windows, so macOS reports it covered; Chromium then
+// keeps a tab shown meanwhile hidden, and drops the keys an e2e run sends it.
+if (process.env.WINTOS_INSTANCE === "dev") electronApp.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
 
 let confirmQuit = true;
 
 const waveDataDir = getWaveDataDir();
 const waveConfigDir = getWaveConfigDir();
 
-electron.nativeTheme.themeSource = "dark";
+// WintOS: light by day, dark by night, as System Settings switches the appearance.
+electron.nativeTheme.themeSource = "system";
 
 console.log = log;
 console.log(

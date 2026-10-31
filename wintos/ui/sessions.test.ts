@@ -1,40 +1,8 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { closeWarning, liveSessions, nextNeedsYou, nextWaiting, unreadSessions } from "./sessions";
+import { atWork, inFlight, shownState, attachments, autoClosable, closeWarning, liveSessions, paneCloseWarns, unreadSessions } from "./sessions";
 
 const s = (id: string, tabId: string, state: Session["state"], since = 0): Session => ({ id, tabId, blockId: `b-${id}`, state, since, lastAt: since });
-
-describe("nextWaiting", () => {
-    const tabs = ["t", "u", "v"];
-
-    test("cycles to the next waiting session in this tab after the current block", () => {
-        const all = [s("1", "t", "waiting"), s("2", "t", "working"), s("3", "t", "waiting")];
-        expect(nextWaiting(all, tabs, "t", "b-1")).toEqual({ tabId: "t", blockId: "b-3" });
-        expect(nextWaiting(all, tabs, "t", "b-3")).toEqual({ tabId: "t", blockId: "b-1" });
-    });
-
-    test("with nothing else waiting here, goes to the longest wait in another tab", () => {
-        const all = [s("1", "t", "working"), s("2", "u", "waiting", 50), s("3", "v", "waiting", 10)];
-        expect(nextWaiting(all, tabs, "t", "b-1")).toEqual({ tabId: "v", blockId: "b-3" });
-    });
-
-    test("when the only waiting session here is the current one, move on to another tab", () => {
-        const all = [s("1", "t", "waiting", 5), s("2", "u", "waiting", 50)];
-        expect(nextWaiting(all, tabs, "t", "b-1")).toEqual({ tabId: "u", blockId: "b-2" });
-    });
-
-    test("the only waiting session is the current one: stay", () => {
-        expect(nextWaiting([s("1", "t", "waiting")], tabs, "t", "b-1")).toEqual({ tabId: "t", blockId: "b-1" });
-    });
-
-    test("tabs outside the workspace are never targets", () => {
-        expect(nextWaiting([s("1", "gone", "waiting")], tabs, "t", undefined)).toBeNull();
-    });
-
-    test("nothing waiting anywhere", () => {
-        expect(nextWaiting([s("1", "t", "working")], tabs, "t", "b-1")).toBeNull();
-    });
-});
 
 describe("liveSessions", () => {
     test("a session whose block was closed no longer counts", () => {
@@ -59,31 +27,65 @@ describe("closeWarning", () => {
     });
 });
 
-describe("nextNeedsYou", () => {
-    test("a waiting session comes first", () => {
-        expect(nextNeedsYou([s("a", "t2", "waiting")], ["t1", "t2"], "t1", undefined, ["t3"])).toEqual({ tabId: "t2", blockId: "b-a" });
-    });
+describe("paneCloseWarns", () => {
+    test("the first ⌘W on a pane whose session is working only warns", () =>
+        expect(paneCloseWarns([s("a", "t", "working")], "b-a", null)).toBe(true));
+    test("the second ⌘W on it closes", () => expect(paneCloseWarns([s("a", "t", "working")], "b-a", "b-a")).toBe(false));
+    test("a warning armed for another pane does not count", () => expect(paneCloseWarns([s("a", "t", "working")], "b-a", "b-x")).toBe(true));
+    test.each(["waiting", "idle", "parked", "done", "ended"] as const)("a %s session closes at once", (state) =>
+        expect(paneCloseWarns([s("a", "t", state)], "b-a", null)).toBe(false));
+    test("a pane without a session closes at once", () => expect(paneCloseWarns([], "b-a", null)).toBe(false));
+});
 
-    test("with none waiting, the next project in Needs you (a PR that needs you), cycling", () => {
-        expect(nextNeedsYou([], ["t1", "t2", "t3"], "t1", undefined, ["t2", "t3"])).toEqual({ tabId: "t2" });
-        expect(nextNeedsYou([], ["t1", "t2", "t3"], "t3", undefined, ["t2", "t3"])).toEqual({ tabId: "t2" });
-    });
+test("a session only in the background service is in no pane: never counted as live", () => {
+    const s = (id: string, o = {}) => ({ id, tabId: "t", blockId: "b", state: "waiting", since: 0, lastAt: 0, ...o }) as never;
+    expect(liveSessions([s("pane"), s("fork", { background: true })], { t: ["b"] }).map((x: { id: string }) => x.id)).toEqual(["pane"]);
+});
 
-    test("the open project as the only one in Needs you is still the answer (back to its terminals)", () => {
-        expect(nextNeedsYou([], ["t1"], "t1", undefined, ["t1"])).toEqual({ tabId: "t1" });
-    });
+test("a pane resuming a session placed elsewhere is reported; one already right, or ended, is not", () => {
+    const s = (id: string, o = {}) => ({ id, tabId: "t", blockId: "old", state: "waiting", since: 0, lastAt: 0, ...o }) as never;
+    const panes = [{ blockId: "v1", script: "cd '/w' && claude --resume 'fork'" }, { blockId: "v2", script: "cd '/w' && claude --resume 'here'" }, { blockId: "v3" }, { blockId: "v4", script: "claude --resume 'gone'" }];
+    expect(attachments(panes, [s("fork"), s("here", { blockId: "v2" }), s("gone", { state: "ended" })], "t", new Set())).toEqual([{ sessionId: "fork", blockId: "v1" }]);
+});
 
-    test("nothing needs you, nowhere to go", () => {
-        expect(nextNeedsYou([], ["t1"], "t1", undefined, [])).toBeNull();
+test("a pane attaches its session once: two panes resuming one session never take it back from each other", () => {
+    const s = (o = {}) => ({ id: "fork", tabId: "other", blockId: "w1", state: "waiting", since: 0, lastAt: 0, ...o }) as never;
+    const panes = [{ blockId: "v1", script: "claude --resume 'fork'" }];
+    expect(attachments(panes, [s()], "t", new Set(["fork@v1"]))).toEqual([]);
+});
+
+describe("autoClosable", () => {
+    const s = (id: string, o: Partial<Session> = {}): Session => ({ id, tabId: "t", blockId: `b-${id}`, state: "done", since: 1, lastAt: 5, turnEndedAt: 5, ...o });
+    const seen = { a: 9, b: 9, c: 1, d: 9, e: 9 };
+    test("done, read, and every PR merged or closed; this tab only", () => {
+        const sessions = [s("a"), s("b", { prs: ["pr/1"] }), s("c"), s("d", { state: "waiting" }), s("e", { tabId: "other" })];
+        expect(autoClosable(sessions, "t", seen, new Set()).map((x) => x.id)).toEqual(["a", "b"]);
+        expect(autoClosable(sessions, "t", seen, new Set(["pr/1"])).map((x) => x.id)).toEqual(["a"]);
     });
 });
 
-describe("unreadSessions", () => {
-    const e = (id: string, tabId: string, state: Session["state"], turnEndedAt?: number): Session => ({ ...s(id, tabId, state), turnEndedAt });
-
-    test("sessions of this tab whose last turn ended after you last looked", () => {
-        const all = [e("a", "t1", "done", 50), e("b", "t1", "working", 10), e("c", "t2", "done", 50), e("d", "t1", "ended", 60)];
-        expect(unreadSessions(all, "t1", 20).map((x) => x.id)).toEqual(["a"]);
-        expect(unreadSessions(all, "t1", undefined).map((x) => x.id)).toEqual(["a", "b"]);
-    });
+describe("atWork: what a restart of WintOS would stop", () => {
+    const now = 10 * 3_600_000;
+    test("turns in flight, and subagents still running behind a turn that ended", () =>
+        expect(
+            atWork([
+                s("w", "t", "working"),
+                { ...s("sub", "t", "waiting"), subagents: { a: now - 60_000, b: now - 1000 } },
+                { ...s("stale", "t", "waiting"), subagents: { c: now - 4 * 3_600_000 } },
+                { ...s("bg", "t", "working"), background: true },
+                { ...s("gone", "t", "ended"), subagents: { d: now } },
+                s("idle", "t", "idle"),
+            ], now),
+        ).toEqual({ working: 1, subagents: 2 }));
+    test("nothing at work", () => expect(atWork([s("x", "t", "waiting")], now)).toEqual({ working: 0, subagents: 0 }));
 });
+
+test("shownState: a turn that ended with its subagents still running shows as working", () => {
+    const now = 10 * 3_600_000;
+    expect(shownState({ ...s("a", "t", "waiting"), subagents: { x: now - 1000 } }, now)).toBe("working");
+    expect(shownState({ ...s("a", "t", "waiting"), subagents: { x: now - 4 * 3_600_000 } }, now)).toBe("waiting");
+    expect(shownState(s("a", "t", "parked"), now)).toBe("parked");
+});
+
+test("inFlight: at work and waiting on you count; parked, done, idle, background and not-started ones don't", () =>
+    expect(inFlight([s("a", "t", "working"), s("b", "t", "waiting"), s("c", "t", "parked"), s("d", "t", "done"), s("e", "t", "idle"), { ...s("f", "t", "working"), background: true }, { ...s("g", "t", "waiting"), restored: true }, { ...s("h", "t", "waiting"), subagents: { x: 1000 } }], 2000)).toEqual({ working: 2, waiting: 1 }));

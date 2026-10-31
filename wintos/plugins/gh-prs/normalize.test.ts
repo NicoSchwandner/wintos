@@ -1,12 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { linkStacks, normalize, orgQualifier, type Node } from "./normalize";
+import { linkStacks, normalize, orgQualifier, unreleased, type Node } from "./normalize";
 
 const node = (n: Partial<Node> = {}): Node => ({
     number: 7, title: "Add flag", url: "https://github.com/o/r/pull/7", isDraft: false,
     createdAt: "2026-09-25T09:00:00Z", author: { login: "ana" }, repository: { nameWithOwner: "o/r" },
     headRefName: "DEV-1-flag", reviewDecision: "REVIEW_REQUIRED", mergeable: "MERGEABLE",
     additions: 10, deletions: 2,
-    commits: { nodes: [{ commit: { statusCheckRollup: { state: "SUCCESS" } } }] },
+    commits: { nodes: [{ commit: { oid: "abc123", statusCheckRollup: { state: "SUCCESS" } } }] },
     reviewRequests: { nodes: [{ requestedReviewer: { __typename: "User", login: "me" } }, { requestedReviewer: { __typename: "Bot", login: "copilot" } }] },
     latestReviews: { nodes: [] },
     ...n,
@@ -16,11 +16,25 @@ describe("normalize", () => {
     test("maps a search node to the PR shape", () =>
         expect(normalize(node(), "me", { requestedMe: true, requestedTeam: false })).toEqual({
             repo: "o/r", number: 7, url: "https://github.com/o/r/pull/7", title: "Add flag", author: "ana",
-            isDraft: false, createdAt: "2026-09-25T09:00:00Z", reviewDecision: "REVIEW_REQUIRED", checks: "SUCCESS",
+            isDraft: false, createdAt: "2026-09-25T09:00:00Z", reviewDecision: "REVIEW_REQUIRED", checks: "SUCCESS", head: "abc123",
             conflict: false, requestedMe: true, requestedTeam: false, reviewedByMe: false, reviewers: ["me"],
-            additions: 10, deletions: 2, branch: "DEV-1-flag",
+            additions: 10, deletions: 2, branch: "DEV-1-flag", movedAt: "2026-09-25T09:00:00Z",
         }));
 
+    test("its momentum: the latest human review, (re-)requested review, ready for review, push, or someone else's comment", () => {
+        const at = (n: Partial<Node>) => normalize(node(n), "me", { requestedMe: false, requestedTeam: false }).movedAt;
+        expect(at({})).toBe("2026-09-25T09:00:00Z");
+        expect(at({ commits: { nodes: [{ commit: { oid: "a", committedDate: "2026-10-01T09:00:00Z", statusCheckRollup: null } }] } })).toBe("2026-10-01T09:00:00Z");
+        expect(at({ timelineItems: { nodes: [{ __typename: "ReviewRequestedEvent", createdAt: "2026-10-02T09:00:00Z" }, { __typename: "ReadyForReviewEvent", createdAt: "2026-09-30T09:00:00Z" }] } })).toBe("2026-10-02T09:00:00Z");
+        // The author's own ping and a bot's comment are no momentum.
+        expect(at({ timelineItems: { nodes: [{ __typename: "IssueComment", createdAt: "2026-10-03T09:00:00Z", author: { login: "ana" } }, { __typename: "IssueComment", createdAt: "2026-10-04T09:00:00Z", author: { login: "ci[bot]" } }] } })).toBe("2026-09-25T09:00:00Z");
+        expect(at({ timelineItems: { nodes: [{ __typename: "IssueComment", createdAt: "2026-10-03T09:00:00Z", author: { login: "bo" } }] } })).toBe("2026-10-03T09:00:00Z");
+    });
+
+    test("the comments in your pending review: only you see them, and the review session picks them up", () => {
+        const pending = (n?: number) => normalize(node(n === undefined ? {} : { pending: { nodes: [{ comments: { totalCount: n } }] } }), "me", { requestedMe: true, requestedTeam: false }).pendingComments;
+        expect([pending(), pending(0), pending(3)]).toEqual([undefined, undefined, 3]);
+    });
     test("GitHub's merge state is carried", () =>
         expect(normalize(node({ mergeStateStatus: "BLOCKED" }), "me", { requestedMe: false, requestedTeam: false }).mergeState).toBe("BLOCKED"));
 
@@ -41,6 +55,17 @@ describe("normalize", () => {
             ] },
         }), "me", { requestedMe: false, requestedTeam: false });
         expect([p.lastReviewAt, p.changesRequestedBy, p.reviewedByMe]).toEqual(["2026-09-26T10:00:00Z", "bo.k", true]);
+    });
+
+    test("changes requested, and everyone who asked has been asked again: re-requested", () => {
+        const cr = (latest: Node["latestReviews"]["nodes"], asked: string[]) =>
+            normalize(node({ reviewDecision: "CHANGES_REQUESTED", latestReviews: { nodes: latest }, reviewRequests: { nodes: asked.map((login) => ({ requestedReviewer: { __typename: "User", login } })) } }), "me", { requestedMe: false, requestedTeam: false }).changesRerequested;
+        const bo = { author: { login: "bo.k" }, state: "CHANGES_REQUESTED", submittedAt: "2026-09-26T10:00:00Z" };
+        expect(cr([bo], ["bo.k"])).toBe(true);
+        // GitHub can drop the old review from latestReviews once its author is asked again.
+        expect(cr([], ["bo.k"])).toBe(true);
+        expect(cr([bo], [])).toBeUndefined();
+        expect(cr([bo, { ...bo, author: { login: "cy" } }], ["bo.k"])).toBeUndefined();
     });
 
     test("team review requests use the team name; conflicts and missing checks are read", () => {
@@ -95,4 +120,16 @@ describe("approval in a repo that requires no reviews", () => {
         const p = normalize(node({ reviewDecision: "REVIEW_REQUIRED", latestReviews: { nodes: [review("genne", "APPROVED")] } }), "me", asked);
         expect(p.reviewDecision).toBe("REVIEW_REQUIRED");
     });
+});
+
+describe("unreleased", () => {
+    const merged = (repo: string, oid: string, defaultBranch = "development") =>
+        node({ repository: { nameWithOwner: repo, defaultBranchRef: { name: defaultBranch } }, mergedAt: "2026-09-23T09:00:00Z", mergeCommit: { oid } });
+    test("keeps the merges main does not have yet", () => {
+        const nodes = [merged("o/a", "1"), merged("o/a", "2"), merged("o/b", "3")];
+        expect(unreleased(nodes, { "o/a": new Set(["2"]), "o/b": new Set() }).map((n) => n.mergeCommit!.oid)).toEqual(["2"]);
+    });
+    test("skips a repo it could not compare", () => expect(unreleased([merged("o/a", "1")], {})).toEqual([]));
+    test("normalize carries when it merged", () =>
+        expect(normalize(merged("o/a", "1"), "me", { requestedMe: false, requestedTeam: false }).mergedAt).toBe("2026-09-23T09:00:00Z"));
 });

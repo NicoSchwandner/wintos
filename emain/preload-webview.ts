@@ -36,4 +36,28 @@ document.addEventListener("mouseup", (event) => {
     }
 });
 
+// WintOS: a press in the page, so the host can tell your click from the page taking focus by
+// itself (wintos/ui/focusOwner.ts).
+document.addEventListener(
+    "pointerdown",
+    (event) => {
+        if (event.isTrusted) ipcRenderer.sendToHost("wintos-page-pressed");
+    },
+    true
+);
+
+// WintOS: whether what has focus here takes text, so the host leaves the page its editing keys
+// (Esc, ⌘⏎, ⌘K, ⌘E, ⌘I, ⌘B, ⇧⌘P) while you type in it (emain-ipc.ts).
+const takesText = (el: Element | null) =>
+    !!el && (el.tagName === "TEXTAREA" || (el as HTMLElement).isContentEditable || (el.tagName === "INPUT" && !["button", "checkbox", "radio", "submit", "reset", "file", "image", "range", "color"].includes((el as HTMLInputElement).type)));
+let editing = false;
+const reportEditing = () => {
+    const now = takesText(document.activeElement);
+    if (now === editing) return;
+    editing = now;
+    ipcRenderer.send("wintos-page-editing", now);
+};
+document.addEventListener("focusin", reportEditing, true);
+document.addEventListener("focusout", () => setTimeout(reportEditing, 0), true);
+
 console.log("loaded wave preload-webview.ts");

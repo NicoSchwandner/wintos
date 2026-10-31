@@ -10,13 +10,17 @@ export type PR = {
     lastReviewAt?: string;
     reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED";
     checks?: string; // statusCheckRollup state: SUCCESS, FAILURE, ERROR, PENDING, EXPECTED
+    head?: string; // the head commit's oid
+    movedAt?: string; // its momentum: the latest review, review request, ready for review, push or someone else's comment
     conflict: boolean;
     mergeState?: string; // mergeStateStatus: CLEAN, BLOCKED, BEHIND, UNSTABLE, DIRTY, …
+    openThreads?: number; // unresolved review threads
     requestedMe: boolean; // asked of me personally
     requestedTeam: boolean; // asked of one of my teams
     reviewedByMe: boolean;
     reviewers: string[]; // people and teams still asked, bots excluded
     changesRequestedBy?: string;
+    changesRerequested?: boolean; // everyone who asked for changes has been asked to review again
     approvedBy?: string[]; // people whose latest review approves
     additions: number;
     deletions: number;
@@ -24,13 +28,21 @@ export type PR = {
     base?: string; // the branch it merges into
     defaultBranch?: string; // the repo's
     stackedOn?: string; // url of the open PR whose branch is `base`, when that PR is in the list
+    mergedAt?: string; // merged into the default branch, not yet on main
+    releasePr?: { url: string; draft: boolean }; // an open PR releasing that branch to main
+    pendingComments?: number; // in your own pending review, which only you can see
 };
 
+// A PR that is no longer open: merged, or closed without merging.
+export type DonePr = { url: string; number: number; repo: string; merged: boolean };
+
 // On another branch than the repo's default: merging it would land on that branch, not ship.
-export const isStacked = (pr: PR) => !!pr.base && !!pr.defaultBranch && pr.base !== pr.defaultBranch;
+// Stacked: based on another PR's branch. A release, the default branch itself into main, is not.
+export const isStacked = (pr: PR) => !!pr.base && !!pr.defaultBranch && pr.base !== pr.defaultBranch && pr.branch !== pr.defaultBranch;
 // team: reviews asked of your team, undone work. waiting: yours, with someone else, fine for now.
-export type Group = "merge" | "fix" | "review" | "chase" | "waiting" | "team";
-export const GROUPS: Group[] = ["merge", "fix", "review", "chase", "team", "waiting"];
+// release: merged, but past the SLA still not on main; nobody else chases a release.
+export type Group = "merge" | "fix" | "review" | "chase" | "release" | "waiting" | "team";
+export const GROUPS: Group[] = ["merge", "fix", "review", "chase", "release", "team", "waiting"];
 
 // The team's rule: past two working days a PR comes back to its author. A draft is nobody
 // else's problem yet, so it only becomes a decision after a longer silence.
@@ -38,9 +50,13 @@ export const SLA_WORKING_DAYS = 2;
 export const DRAFT_SLA_WORKING_DAYS = 5;
 
 const DAY = 86_400_000;
-const redChecks = (pr: PR) => pr.checks === "FAILURE" || pr.checks === "ERROR";
+export const redChecks = (pr: PR) => pr.checks === "FAILURE" || pr.checks === "ERROR";
 const sla = (pr: PR) => (pr.isDraft ? DRAFT_SLA_WORKING_DAYS : SLA_WORKING_DAYS);
-export const lastMovement = (pr: PR) => pr.lastReviewAt ?? pr.createdAt;
+export const lastMovement = (pr: PR) => pr.mergedAt ?? pr.movedAt ?? pr.lastReviewAt ?? pr.createdAt;
+// The one urgency order, wherever PRs are ranked: the queue's groups top to bottom, then the
+// one still longest.
+export const byUrgency = (a: { pr: PR; group: Group }, b: { pr: PR; group: Group }) =>
+    GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || Date.parse(lastMovement(a.pr)) - Date.parse(lastMovement(b.pr));
 
 // Weekdays elapsed after `from` up to `now`. No holiday calendar (spec §4).
 export function workingDaysBetween(from: string, now: number): number {
@@ -72,14 +88,22 @@ export function isSnoozed(pr: PR, snoozes: Snoozes, now: number): boolean {
 }
 
 export function groupOf(pr: PR, me: string, now: number): Group {
+    // A ready release PR is your part done: the release is the reviewers' now.
+    if (pr.mergedAt) return workingDaysBetween(pr.mergedAt, now) >= SLA_WORKING_DAYS && !(pr.releasePr && !pr.releasePr.draft) ? "release" : "waiting";
     const mine = pr.author === me;
     const approved = pr.reviewDecision === "APPROVED";
     // No CI at all is green: a repo without checks must still reach Merge. BLOCKED is GitHub
-    // saying no: an approval alone does not satisfy code owners.
+    // saying no: an approval alone does not satisfy code owners. Approved and blocked with
+    // threads open is the conversation rule, which the author clears by resolving them.
     const green = pr.checks === undefined || pr.checks === "SUCCESS";
-    if (mine && approved && green && !pr.isDraft && !pr.conflict && pr.mergeState !== "BLOCKED" && !isStacked(pr)) return "merge";
+    const blocked = pr.mergeState === "BLOCKED" && !pr.openThreads;
+    if (mine && approved && green && !pr.isDraft && !pr.conflict && !blocked && !isStacked(pr)) return "merge";
     // Red CI on a draft is work in progress; the draft keeps its own, longer clock.
-    if (mine && (pr.reviewDecision === "CHANGES_REQUESTED" || (redChecks(pr) && !pr.isDraft) || pr.conflict)) return "fix";
+    // Changes requested stays GitHub's decision until the reviewer reviews again; once you have
+    // asked every one of them again, the next move is theirs.
+    if (mine && ((pr.reviewDecision === "CHANGES_REQUESTED" && !pr.changesRerequested) || (redChecks(pr) && !pr.isDraft) || pr.conflict)) return "fix";
+    // Nobody reviews a draft, so a draft past its clock has nobody to chase: it is yours to move.
+    if (mine && pr.isDraft && workingDaysBetween(lastMovement(pr), now) >= DRAFT_SLA_WORKING_DAYS) return "fix";
     // GitHub drops a request when you review, so being asked means a review is owed, re-requests included.
     if (!mine && pr.requestedMe) return "review";
     // An approved PR that can't merge yet is waiting on checks or code owners, not on attention.
@@ -89,16 +113,21 @@ export function groupOf(pr: PR, me: string, now: number): Group {
 
 // reviewers: false leaves out who it waits on, for views that show reviewers themselves.
 export function qualifier(pr: PR, group: Group, opts: { reviewers?: boolean } = {}): { text: string; brick?: boolean } | undefined {
-    if (group === "merge") return undefined;
+    if (group === "merge") return pr.openThreads ? { text: `resolve ${pr.openThreads} thread${pr.openThreads === 1 ? "" : "s"} first` } : undefined;
+    if (pr.mergedAt) return { text: pr.releasePr && !pr.releasePr.draft ? "merged, in the release PR" : "merged, not on main" };
     if (group === "fix") {
-        if (pr.reviewDecision === "CHANGES_REQUESTED") return { text: pr.changesRequestedBy ? `changes requested by ${pr.changesRequestedBy}` : "changes requested" };
+        if (pr.reviewDecision === "CHANGES_REQUESTED" && !pr.changesRerequested) return { text: pr.changesRequestedBy ? `changes requested by ${pr.changesRequestedBy}` : "changes requested" };
         if (redChecks(pr)) return { text: "CI red", brick: true };
         if (pr.conflict) return { text: "merge conflict", brick: true };
+        if (pr.isDraft) return { text: `draft past its ${DRAFT_SLA_WORKING_DAYS} working days: make it ready or close it`, brick: true };
     }
     if (pr.reviewDecision === "APPROVED" && pr.mergeState === "BLOCKED") return { text: "approved · blocked by required reviews" };
     if (pr.reviewDecision === "APPROVED" && (pr.checks === "PENDING" || pr.checks === "EXPECTED")) return { text: "approved · checks pending" };
-    if (opts.reviewers === false) return undefined;
+    // Beside reviewer chips, a chase still names who asked for changes: they owe the re-review.
+    if (opts.reviewers === false) return group === "chase" && pr.changesRequestedBy ? { text: `nudge ${pr.changesRequestedBy}` } : undefined;
     if (group === "chase" && !pr.isDraft && pr.reviewers.length === 0) return { text: "no reviewer assigned" };
+    // Chase: someone owes you the review. Whoever asked for changes owes the re-review.
+    if (group === "chase") return { text: `nudge ${pr.changesRequestedBy ?? pr.reviewers.join(", ")}` };
     if (pr.reviewers.length) return { text: `waiting on ${pr.reviewers.join(", ")}` };
     return undefined;
 }
@@ -132,24 +161,24 @@ function parseRef(ref: string): { repo: string; number: number } | undefined {
 
 export type ProjectPrs = {
     items: { pr: PR; group: Group }[];
-    blocked?: { since: number; text: string; tone: "apricot" | "brick" };
+    blocked?: { since: number; text: string; tone: "apricot" | "brick"; url: string };
     reason?: string; // the quiet row's right column
 };
 
-// What a project's PRs mean for its sidebar row: whether one needs you (spec §3.3, Fix or
-// Chase), and otherwise why the project is quiet.
+// What a project's PRs mean for its sidebar row: whether one needs you (Fix, Chase or Release,
+// the most urgent speaking for it), and otherwise why the project is quiet.
 export function projectPrs(project: { pr?: string[]; title?: string }, prs: PR[], me: string, now: number): ProjectPrs {
     const items = prsForProject(project.pr ?? [], project.title ?? "", prs).map((pr) => ({ pr, group: groupOf(pr, me, now) }));
-    const needing = items.filter((i) => i.group === "fix" || i.group === "chase");
-    const oldest = needing.sort((a, b) => Date.parse(lastMovement(a.pr)) - Date.parse(lastMovement(b.pr)))[0];
-    if (oldest) {
-        const { pr, group } = oldest;
+    const urgent = items.filter((i) => i.group === "fix" || i.group === "chase" || i.group === "release").sort(byUrgency)[0];
+    if (urgent) {
+        const { pr, group } = urgent;
         const since = Date.parse(lastMovement(pr));
-        if (group === "fix") return { items, blocked: { since, text: `#${pr.number}: ${qualifier(pr, group)?.text ?? "needs a fix"}`, tone: "apricot" } };
+        if (group === "fix") return { items, blocked: { since, text: `#${pr.number}: ${qualifier(pr, group)?.text ?? "needs a fix"}`, tone: "apricot", url: pr.url } };
         const wd = workingDaysBetween(lastMovement(pr), now);
-        return { items, blocked: { since, text: `Nobody has looked at #${pr.number} in ${wd} working days`, tone: "brick" } };
+        if (group === "release") return { items, blocked: { since, text: `#${pr.number} merged ${wd} working days ago, not on main`, tone: "brick", url: pr.url } };
+        return { items, blocked: { since, text: `Nobody has looked at #${pr.number} in ${wd} working days`, tone: "brick", url: pr.url } };
     }
-    const first = items[0]?.pr;
+    const first = [...items].sort(byUrgency)[0]?.pr;
     if (!first) return { items };
     const reason = first.reviewDecision === "APPROVED" ? "approved" : first.reviewers.length ? `with ${first.reviewers[0]}` : first.isDraft ? "draft" : "open";
     return { items, reason: `#${first.number} ${reason}` };

@@ -1,35 +1,23 @@
+import { Key } from "../Key";
 import { T } from "../tokens";
-import { checkbox, type CheckState } from "./checkbox";
-import { parseNotes, spans } from "./parse";
-
+import { type CheckState } from "./checkbox";
+import { Md } from "./Md";
 
 export type Size = "rail" | "full";
-const SIZES = {
+export const SIZES = {
     rail: { label: 10.5, text: 12.5, line: 1.55, gap: 6, textColor: T.quietTitle, code: 11.5 },
     full: { label: 11, text: 13.5, line: 1.6, gap: 9, textColor: T.secondary, code: 12.5 },
 };
 
-export function Rich({ text, size }: { text: string; size: Size }) {
-    return (
-        <>
-            {spans(text).map((s, i) =>
-                s.code ? (
-                    <span key={i} style={{ fontFamily: T.mono, fontSize: SIZES[size].code, color: T.emphasis, background: T.cardActive, borderRadius: 4, padding: "0 4px", overflowWrap: "anywhere" }}>
-                        {s.text}
-                    </span>
-                ) : (
-                    <span key={i}>{s.text}</span>
-                )
-            )}
-        </>
-    );
+export function Rich({ text, size, links = true }: { text: string; size: Size; links?: boolean }) {
+    return <Md text={text} size={size} inline links={links} />;
 }
 
 // A task box: done filled green with a tick, partial half-filled, todo empty. Clickable only
 // where the file is the developer's (mine.md), as a real button so ⇥ and Space reach it.
-export function Box({ state, size, onToggle }: { state: CheckState; size: Size; onToggle?: () => void }) {
+export function Box({ state, size, onToggle, top }: { state: CheckState; size: Size; onToggle?: () => void; top?: number }) {
     const style: React.CSSProperties = {
-        width: 12, height: 12, padding: 0, flexShrink: 0, marginTop: size === "rail" ? 4 : 6, borderRadius: 3,
+        width: 12, height: 12, padding: 0, flexShrink: 0, marginTop: top ?? (size === "rail" ? 4 : 6), borderRadius: 3,
         border: `1.5px solid ${state === "done" ? T.moss : state === "partial" ? T.apricot : T.muted}`,
         background: state === "done" ? T.moss : state === "partial" ? `linear-gradient(90deg, ${T.apricot} 50%, transparent 50%)` : "transparent",
         display: "inline-flex", alignItems: "center", justifyContent: "center", color: T.ground, fontSize: 9, fontWeight: 700, lineHeight: 1,
@@ -44,91 +32,14 @@ export function Box({ state, size, onToggle }: { state: CheckState; size: Size; 
     );
 }
 
-function Section({ label, size, children }: { label: string; size: Size; children: React.ReactNode }) {
-    const z = SIZES[size];
-    return (
-        <div style={{ display: "flex", flexDirection: "column", gap: z.gap }}>
-            <span style={{ fontSize: z.label, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>{label}</span>
-            {children}
-        </div>
-    );
-}
+// A plain bullet among task boxes: a dot where a box would be.
+export const Dot = () => <span data-bullet="" style={{ width: 12, flexShrink: 0, textAlign: "center", color: T.muted }}>•</span>;
 
-function Line({ lead, size, children }: { lead: React.ReactNode; size: Size; children: React.ReactNode }) {
-    const z = SIZES[size];
+export function More({ open, label, onClick }: { open: boolean; label: string; onClick: () => void }) {
     return (
-        <div style={{ display: "flex", gap: size === "rail" ? 9 : 11, fontSize: z.text, lineHeight: z.line, color: z.textColor }}>
-            {lead}
-            <span style={{ textWrap: "pretty", minWidth: 0, overflowWrap: "anywhere" } as React.CSSProperties}>{children}</span>
-        </div>
-    );
-}
-
-export function ProjectNotes({ md, size }: { md: string; size: Size }) {
-    const n = parseNotes(md);
-    const z = SIZES[size];
-    const dot = (color: string) => (
-        <span style={{ width: size === "rail" ? 6 : 7, height: size === "rail" ? 6 : 7, borderRadius: "50%", background: color, flexShrink: 0, marginTop: size === "rail" ? 6 : 8 }} />
-    );
-    const empty = !n.goal && !n.decisions.length && !n.built.length && !n.questions.length && !n.other.length;
-    if (empty) return <span style={{ fontSize: z.text, color: T.faint }}>Nothing written yet. The sessions fill this in as the work moves.</span>;
-    return (
-        <div style={{ display: "flex", flexDirection: "column", gap: size === "rail" ? 12 : 20 }}>
-            {n.goal && (
-                <Section label="Goal" size={size}>
-                    <p style={{ margin: 0, fontSize: size === "rail" ? 12.5 : 14, lineHeight: size === "rail" ? 1.6 : 1.65, color: z.textColor }}>
-                        <Rich text={n.goal} size={size} />
-                    </p>
-                </Section>
-            )}
-            {n.decisions.length > 0 && (
-                <Section label="Decisions" size={size}>
-                    {n.decisions.map((d, i) => (
-                        <Line
-                            key={i}
-                            size={size}
-                            lead={<span style={{ fontFamily: T.mono, fontSize: size === "rail" ? 10 : 10.5, color: T.faint, flexShrink: 0, paddingTop: 3, width: size === "rail" ? undefined : 42 }}>{d.date ?? "·"}</span>}
-                        >
-                            <Rich text={d.text} size={size} />
-                        </Line>
-                    ))}
-                </Section>
-            )}
-            {n.built.length > 0 && (
-                <Section label="Built" size={size}>
-                    {n.built.map((b, i) => (
-                        <Line key={i} size={size} lead={b.state ? <Box state={b.state} size={size} /> : dot(T.dim)}>
-                            <Rich text={b.text} size={size} />
-                        </Line>
-                    ))}
-                </Section>
-            )}
-            {n.questions.length > 0 && (
-                <Section label="Open questions" size={size}>
-                    {n.questions.map((q, i) => (
-                        <Line key={i} size={size} lead={<span style={{ color: T.apricot, flexShrink: 0 }}>?</span>}>
-                            <Rich text={q.text} size={size} />
-                            {q.blocking && <span style={{ color: T.apricot, fontWeight: 600 }}> Blocking.</span>}
-                        </Line>
-                    ))}
-                </Section>
-            )}
-            {n.other.map((o, i) => (
-                <Section key={i} label={o.heading || "Notes"} size={size}>
-                    {o.text.split("\n").map((line, j) => {
-                        const cb = checkbox(line);
-                        return cb ? (
-                            <Line key={j} size={size} lead={<Box state={cb.state} size={size} />}>
-                                <Rich text={cb.text} size={size} />
-                            </Line>
-                        ) : (
-                            <p key={j} style={{ margin: 0, fontSize: z.text, lineHeight: z.line, color: z.textColor, whiteSpace: "pre-wrap" }}>
-                                <Rich text={line} size={size} />
-                            </p>
-                        );
-                    })}
-                </Section>
-            ))}
-        </div>
+        <button type="button" data-more={open ? "open" : "closed"} data-key="m" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 8, padding: 0, background: "transparent", border: "none", fontFamily: T.ui, fontSize: 11.5, color: T.muted, cursor: "pointer" }}>
+            {open ? "Show fewer" : label}
+            <Key k="m" label="" />
+        </button>
     );
 }

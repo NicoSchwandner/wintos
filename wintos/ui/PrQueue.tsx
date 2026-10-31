@@ -1,33 +1,48 @@
+import { rememberUndo } from "./undo";
 import { useFocusOnMount } from "./useFocusOnMount";
-import { isPlainKey } from "./keys";
-import { enterProject, focusArea } from "./focus";
+import { useZoneKeys } from "./zones";
+import { wantPane } from "./focusOwner";
+import { motionKeys } from "./listMotion";
+import { enterProject, focusSession, reopenProject, resumePane } from "./focus";
 import { atoms, createTab } from "@/store/global";
 import { offerPrompt, prLinkPaste } from "./newproject";
 import { useAtomValue } from "jotai";
-import { memo, useEffect, useRef, useState } from "react";
+import { useOnResize } from "@/app/hook/useDimensions";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Group } from "../daemon/prs/group";
 import { runAction } from "./menu";
-import { Key } from "./Key";
-import { initials, keepSelection, queueModel, reviewerChips, type QueueRow } from "./prs";
-import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
+import { Key, KeyOr } from "./Key";
+import { fixNote, initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns, type QueueRow, type RowColumns } from "./prs";
+import { typeIntoPane } from "./typeIntoPane";
+import type { FixRun } from "../daemon/fixer/runner";
+import { groupOf, lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
+import { nextAction, type NextKind } from "../daemon/fixer/plan";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
-import { ghPrs, prProjects, relTime } from "./view";
+import { ghPrs, prOwners, prProjectLists, prProjects, relTime, reopenFor, repoLabel } from "./view";
 
 export const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
     merge: { label: "Merge", note: "approved, green, waiting on the button", color: T.moss },
     fix: { label: "Fix", note: "your PR, ball in your court", color: T.apricot },
     review: { label: "Review", note: "someone asked you", color: T.title },
     chase: { label: "Chase", note: "past the team's two working days with nobody on it", color: T.brick },
+    release: { label: "Release", note: "merged past two working days, not on main yet", color: T.brick },
     waiting: { label: "Waiting", note: "yours, with someone else", color: T.muted },
     team: { label: "The team's", note: "asked of your team: yours to review too", color: T.muted },
 };
 
 // The Inbox's PR list (⇧⌘G): every PR that concerns you, grouped by the action it asks of you.
 // A PR opens as an ordinary browser pane beside it, in the Inbox's own layout.
-export const PrQueue = memo(() => {
+// pageOpen: a page is open beside the list, so Esc or ⌘L has somewhere to go.
+export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
     const focusRef = useFocusOnMount<HTMLDivElement>();
+    // The rows drop the author, size and full reviewer names only when there is no room for them:
+    // the list alone, or a wide screen with a page beside it, shows everything.
+    const rowsRef = useRef<HTMLDivElement>(null);
+    const [width, setWidth] = useState(0);
+    useOnResize(rowsRef, useCallback((r: DOMRectReadOnly) => setWidth(r.width), []));
+    const cols = rowColumns(width);
     const { state } = useWintos();
     const now = useNow();
     const [selected, setSelected] = useState<string | undefined>();
@@ -35,7 +50,20 @@ export const PrQueue = memo(() => {
     const [refreshing, setRefreshing] = useState(false);
     const result = state?.plugins?.["gh-prs"];
     const gh = state && ghPrs(state);
-    const model = gh ? queueModel(gh.prs, gh.me, now, state?.snoozes) : null;
+    // f: narrows the list to the PRs matching what you type; Esc clears it, ⏎ goes back to the rows.
+    const [filter, setFilter] = useState<string | null>(null);
+    const [mergeArmed, setMergeArmed] = useState<string | null>(null);
+    const filterRef = useRef<HTMLInputElement>(null);
+    // n: the short name of the selected PR's repo, typed here; ⏎ saves it to your names file.
+    const [naming, setNaming] = useState<{ repo: string; text: string } | null>(null);
+    const repos = gh?.prs.map((p) => p.repo) ?? [];
+    const labelOf = (repo: string) => repoLabel(repo, state?.repoNames ?? {}, repos);
+    const saveName = () => {
+        if (naming) void daemonFetch("/repos/name", { method: "POST", body: { repo: naming.repo, short: naming.text } }).catch(() => {});
+        setNaming(null);
+        focusRef.current?.focus();
+    };
+    const model = gh ? queueModel(filter ? gh.prs.filter((p) => matchesPr(p, filter)) : gh.prs, gh.me, now, state?.snoozes) : null;
     // A stacked PR's row follows its base, one indent per step; the cursor walks them in order.
     const withStack = (r: QueueRow, depth = 0): { r: QueueRow; depth: number }[] => [{ r, depth }, ...r.children.flatMap((c) => withStack(c, depth + 1))];
     const flat = [...(model?.groups.flatMap((g) => g.rows.flatMap((r) => withStack(r).map((x) => x.r))) ?? []), ...(model?.snoozed ?? [])];
@@ -47,20 +75,39 @@ export const PrQueue = memo(() => {
         shownBefore.current = urls;
         if (current !== selected) setSelected(current);
     }, [urls.join(" ")]);
-    const step = (d: 1 | -1) => setSelected(urls[Math.max(0, Math.min(cursor + d, urls.length - 1))]);
+    // Only a cursor move brings its row into view: a re-render (the clock) leaves your scrolling alone.
+    useEffect(() => focusRef.current?.querySelector("[data-selected]")?.scrollIntoView({ block: "nearest" }), [current]);
+    const step = (d: number) => setSelected(urls[Math.max(0, Math.min(cursor + d, urls.length - 1))]);
     // z: looked at, handed on. Back at the next working day, or as soon as the PR moves.
-    const toggleSnooze = (r: QueueRow) =>
-        daemonFetch("/prs/snooze", { method: "POST", body: snoozedUrls.has(r.pr.url) ? { url: r.pr.url, until: null } : { url: r.pr.url, until: nextWorkingDayStart(Date.now()), movedAt: lastMovement(r.pr) } }).catch(() => {});
+    const toggleSnooze = (r: QueueRow) => (
+        snoozedUrls.has(r.pr.url) || rememberUndo({ kind: "pr-snooze", url: r.pr.url, label: `Snoozed #${r.pr.number}` }),
+        daemonFetch("/prs/snooze", { method: "POST", body: snoozedUrls.has(r.pr.url) ? { url: r.pr.url, until: null } : { url: r.pr.url, until: nextWorkingDayStart(Date.now()), movedAt: lastMovement(r.pr) } }).catch(() => {})
+    );
 
     const openPr = (r: QueueRow) => runAction(`open-page:${r.pr.url}`);
     const tabIds = useAtomValue(atoms.workspace)?.tabids ?? [];
     const projectOf = state ? prProjects(tabIds, state) : new Map<string, string>();
     const titleOf = (tabId: string) => state?.projects.find((p) => p.id === tabId)?.title ?? "its project";
-    // o: the PR's project, or a new one for it whose Claude prompt starts with the PR's link.
+    const lists = state ? prProjectLists(tabIds, state) : new Map<string, string[]>();
+    // The owner's project; the others it is also in follow, and o goes to the owner's.
+    const projectLabel = (url: string) => {
+        const [id, ...also] = lists.get(url) ?? [];
+        return id && `${titleOf(id)}${tabIds.includes(id) ? "" : " · closed, o opens it again"}${also.length ? ` · also in ${also.map(titleOf).join(", ")}` : ""}`;
+    };
+    // o: the session that owns the PR (resumed from the shelf if need be), else its project, else
+    // a new project for it whose Claude prompt starts with the PR's link.
     const goToProject = (r: QueueRow) => {
         const tabId = projectOf.get(r.pr.url);
         if (!tabId) return void (offerPrompt(prLinkPaste(r.pr.url)), createTab());
-        enterProject(tabId);
+        const owner = state && prOwners(state, tabId).get(r.pr.url);
+        // A closed project opens again on its shelved session for this PR (reopenFor); a session
+        // still listed as live there belongs to a pane that is gone with the tab.
+        if (!tabIds.includes(tabId)) {
+            const on = reopenFor(state?.shelf?.[tabId] ?? [], r.pr.url);
+            return reopenProject(tabId, on ? [resumePane(on.script)] : []);
+        }
+        if (!owner) return enterProject(tabId);
+        focusSession("resume" in owner ? { tabId, blockId: "", resume: owner.resume } : { tabId, blockId: owner.blockId });
     };
     const refresh = async () => {
         setRefreshing(true);
@@ -68,29 +115,50 @@ export const PrQueue = memo(() => {
         setRefreshing(false);
     };
 
+    const r = flat[Math.min(cursor, flat.length - 1)];
+    const fixer = state?.fixer;
+    const fixOf = (url: string) => fixer?.runs.find((x) => x.url === url);
+    const canFixCi = !!r && r.mine && (r.pr.checks === "FAILURE" || r.pr.checks === "ERROR");
+    const next = r && gh ? nextAction(r.pr, gh.me, groupOf(r.pr, gh.me, now)) : undefined;
+    // f: the row's next step. Merging can't be taken back, so it takes f twice.
+    const doNext = () => {
+        if (!r || !next) return;
+        if (next === "merge" && mergeArmed !== r.pr.url) return setMergeArmed(r.pr.url);
+        setMergeArmed(null);
+        void dispatchNext(r.pr.url);
+    };
+    const openFilter = () => (filter === null ? setFilter("") : filterRef.current?.focus());
+    useZoneKeys(focusRef, {
+        // a: the conflicts babysitter on or off. c: this PR's red CI to the session that wrote it.
+        a: (e) => void (e.repeat || daemonFetch("/fixer/settings", { method: "POST", body: { conflicts: !fixer?.conflicts } }).catch(() => {})),
+        c: (e) => void (!e.repeat && canFixCi && dispatchCiFix(r.pr.url)),
+        ...motionKeys(step, (end) => setSelected(urls[end === "first" ? 0 : urls.length - 1])),
+        j: () => step(1),
+        k: () => step(-1),
+        // Some layouts type / with shift (Swedish ⇧7), which Wave's matcher tells apart.
+        "/": () => void openFilter(),
+        "Shift:/": () => void openFilter(),
+        f: (e) => void (e.repeat || doNext()),
+        Escape: () => (filter === null ? false : (setFilter(null), focusRef.current?.focus(), true)),
+        // ⏎ reads the PR: focus goes with it. A click opens it beside the list and stays there.
+        Enter: () => (r ? (wantPane("⏎ opens the PR"), openPr(r)) : false),
+        o: () => (r ? goToProject(r) : false),
+        n: (e) => void (!e.repeat && r && setNaming({ repo: r.pr.repo, text: labelOf(r.pr.repo) })),
+        r: (e) => void (e.repeat || refresh()),
+        z: (e) => {
+            if (!r || e.repeat) return;
+            // Snoozing sends the PR to the bottom; carry on with the next one instead.
+            if (!snoozedUrls.has(r.pr.url)) setSelected(urls[cursor + 1] ?? urls[cursor - 1]);
+            void toggleSnooze(r);
+        },
+    });
     return (
         <div
             data-wintos="inbox-list"
             tabIndex={0}
             ref={focusRef}
-            onKeyDown={(e) => {
-                if (!isPlainKey(e) && e.key !== "Escape") return;
-                const r = flat[Math.min(cursor, flat.length - 1)];
-                if (e.key === "j") step(1);
-                else if (e.key === "k") step(-1);
-                else if (e.key === "Enter" && r) openPr(r);
-                else if (e.key === "o" && r) goToProject(r);
-                else if (e.key === "r" && !e.repeat) void refresh();
-                else if (e.key === "z" && r && !e.repeat) {
-                    // Snoozing sends the PR to the bottom; carry on with the next one instead.
-                    if (!snoozedUrls.has(r.pr.url)) setSelected(urls[cursor + 1] ?? urls[cursor - 1]);
-                    void toggleSnooze(r);
-                }
-                else if (e.key === "Escape") focusArea("terminal");
-                else return;
-                e.preventDefault();
-            }}
-            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: "#1d2021", outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
+            data-zone="list"
+            style={{ flexGrow: 1, display: "flex", flexDirection: "column", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}
         >
             <div style={{ padding: "18px 26px 16px", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
@@ -98,16 +166,54 @@ export const PrQueue = memo(() => {
                     {model && <span style={{ fontSize: 12, color: T.muted }}>{model.yours} yours · {model.waiting} waiting · {model.team} team</span>}
                 </div>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11, color: result && !result.ok ? T.brick : T.faint }}>
+                    <span style={{ color: fixer?.conflicts ? T.moss : T.faint }}>{fixer?.conflicts ? "conflicts fix themselves" : "conflicts wait for you"}</span>
+                    <Key k="a" label="" />
+                    <span style={{ width: 8 }} />
                     {refreshing ? "refreshing…" : result ? (result.ok ? `GitHub · ${relTime(now - result.at)} ago` : `GitHub failed ${relTime(now - result.at)} ago: ${result.error}`) : "fetching from GitHub…"}
                     <Key k="r" label="" />
                 </span>
             </div>
-            <div style={{ flexGrow: 1, overflowY: "auto", padding: "0 26px", display: "flex", flexDirection: "column", gap: 14 }}>
+            {naming && (
+                <div style={{ margin: "0 26px 12px", display: "flex", alignItems: "center", gap: 12, fontSize: 12, color: T.muted }}>
+                    <span>Short name for {naming.repo}</span>
+                    <input
+                        autoFocus
+                        value={naming.text}
+                        maxLength={16}
+                        data-wintos="repo-name"
+                        onChange={(e) => setNaming({ ...naming, text: e.target.value })}
+                        onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") e.preventDefault(), saveName();
+                            if (e.key === "Escape") e.preventDefault(), setNaming(null), focusRef.current?.focus();
+                        }}
+                        style={{ width: 120, padding: "4px 8px", background: T.card, border: `1px solid ${T.borderActive}`, borderRadius: 8, outline: "none", color: T.text, fontFamily: T.mono, fontSize: 12 }}
+                    />
+                    <Key k="⏎" label="save, on every chip" />
+                    <Key k="esc" label="keep it" />
+                </div>
+            )}
+            {filter !== null && (
+                <input
+                    ref={filterRef}
+                    autoFocus
+                    value={filter}
+                    data-wintos="pr-filter"
+                    placeholder="Filter by title, repo, number, author or branch"
+                    onChange={(e) => setFilter(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") e.preventDefault(), focusRef.current?.focus();
+                        if (e.key === "Escape") e.preventDefault(), e.stopPropagation(), setFilter(null), focusRef.current?.focus();
+                    }}
+                    style={{ margin: "0 26px 12px", padding: "6px 10px", maxWidth: 460, background: T.card, border: `1px solid ${T.borderActive}`, borderRadius: 8, outline: "none", color: T.text, fontFamily: T.ui, fontSize: 13 }}
+                />
+            )}
+            <div ref={rowsRef} style={{ flexGrow: 1, overflowY: "auto", padding: "0 26px", display: "flex", flexDirection: "column", gap: 14 }}>
                 {model?.groups.map(({ group, rows }) => (
-                    <div key={group} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <div key={group} data-group={group} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         <GroupHeader {...HEADERS[group]} count={rows.length} />
                         {rows.flatMap((row) => withStack(row)).map(({ r, depth }) => (
-                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} compact onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={depth} project={projectLabel(r.pr.url)} repo={labelOf(r.pr.repo)} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 ))}
@@ -115,28 +221,59 @@ export const PrQueue = memo(() => {
                     <div style={{ display: "flex", flexDirection: "column", gap: 2, opacity: 0.6 }}>
                         <GroupHeader label="Snoozed" note="back next working day, or when it moves · z wakes" color={T.muted} count={model.snoozed.length} />
                         {model.snoozed.map((r) => (
-                            <PrRow key={r.pr.url} r={r} depth={0} project={projectOf.has(r.pr.url) ? titleOf(projectOf.get(r.pr.url)!) : undefined} cursor={flat[cursor] === r} compact onOpen={() => openPr(r)} />
+                            <PrRow key={r.pr.url} r={r} depth={0} project={projectLabel(r.pr.url)} repo={labelOf(r.pr.repo)} cursor={flat[cursor] === r} cols={cols} fix={fixNote(fixOf(r.pr.url), r.pr, fixer?.queued ?? [])} onOpen={() => openPr(r)} />
                         ))}
                     </div>
                 )}
-                {model && model.groups.length === 0 && <span style={{ color: T.muted, fontSize: 13, padding: "0 12px" }}>Nothing open that concerns you.</span>}
+                {model && model.groups.length === 0 && <span style={{ color: T.muted, fontSize: 13, padding: "0 12px" }}>{filter ? `No PR matches “${filter}”.` : "Nothing open that concerns you."}</span>}
             </div>
-            <div style={{ flexShrink: 0, height: 30, padding: "0 26px", display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
+            <div style={{ flexShrink: 0, minHeight: 30, padding: "4px 26px", boxSizing: "border-box", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 14px", borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
                 <Key k="j k" label="row" />
                 <Key k="⏎" label="open" />
                 <Key k="o" label={flat[cursor] && !projectOf.has(flat[cursor].pr.url) ? "open as new project" : "go to project"} off={!flat[cursor]} />
                 <Key k="z" label="snooze" />
-                <Key k="esc" label="to the panes" />
+                <Key k="n" label="name its repo" off={!flat[cursor]} />
+                <span data-wintos="pr-next" style={{ display: "contents" }}>
+                    <Key k="f" label={next ? (next === "merge" && mergeArmed === r?.pr.url ? `again: merge #${r.pr.number}` : next === "review" && r?.pr.pendingComments ? `review with your ${r.pr.pendingComments} comments` : NEXT_LABEL[next]) : "next step"} off={!next} />
+                </span>
+                <Key k="c" label="fix red CI" off={!canFixCi} />
+                <Key k="/" label="filter" />
+                <Key k="a" label={fixer?.conflicts ? "conflicts: stop fixing them" : "conflicts: fix them"} />
+                {pageOpen && <KeyOr keys={["esc", "⌘L"]} label="to the page" />}
             </div>
         </div>
     );
 });
 PrQueue.displayName = "PrQueue";
 
-// compact: with a PR open beside the list the row has ~400px, so the name and size columns go.
-const CHIP: React.CSSProperties = { flexShrink: 0, maxWidth: 96, padding: "2px 7px", borderRadius: 10, border: `1px solid ${T.keycapBorder}`, fontSize: 10.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const NEXT_LABEL: Record<NextKind, string> = { conflict: "fix the conflict", ci: "fix red CI", comments: "work the review comments", rereview: "re-review", review: "review", merge: "merge" };
 
-function Reviewers({ r, compact }: { r: QueueRow; compact: boolean }) {
+// A review needs you in it: a new project whose Claude starts on the link. The rest goes the
+// fixer's way, typed into the owning session's pane when it is live.
+async function dispatchNext(url: string): Promise<void> {
+    const res = await daemonFetch("/fixer/next", { method: "POST", body: { url } }).catch(() => undefined);
+    if (!res?.ok) return;
+    const r = (await res.json()) as { review?: boolean; blockId?: string; prompt?: string };
+    if (r.review) return void (offerPrompt(`\x1b[200~${url} review\x1b[201~\r`), createTab());
+    if (r.blockId && r.prompt) await typeIntoPane(r.blockId, r.prompt);
+}
+
+// The same route an automatic run takes: a live owning session gets the prompt typed into its
+// pane; the daemon runs the rest.
+async function dispatchCiFix(url: string): Promise<void> {
+    const res = await daemonFetch("/fixer/ci", { method: "POST", body: { url } }).catch(() => undefined);
+    if (!res?.ok) return;
+    const r = (await res.json()) as { run: FixRun; blockId?: string; prompt?: string };
+    if (r.blockId && r.prompt) await typeIntoPane(r.blockId, r.prompt);
+}
+
+// Inline in a clipped one-line title: its own line box, or the border is cut off.
+const TAG: React.CSSProperties = { display: "inline-block", fontSize: 11, lineHeight: "13px", verticalAlign: "1px", border: `1px solid ${T.keycapBorder}`, borderRadius: 5, padding: "0 5px", marginRight: 8, color: T.muted };
+
+const CHIP: React.CSSProperties = { flexShrink: 0, maxWidth: 96, padding: "2px 7px", borderRadius: 10, border: `1px solid ${T.keycapBorder}`, fontSize: 11.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+
+function Reviewers({ r, names }: { r: QueueRow; names: boolean }) {
+    const compact = !names;
     const { chips, more, none, approved } = reviewerChips(r.pr, compact ? 1 : 2);
     return (
         // As wide as its chips (up to a cap), so a short reviewer list leaves the room to the title.
@@ -162,46 +299,55 @@ function GroupHeader({ label, note, color, count }: { label: string; note: strin
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "0 12px 4px" }}>
             <span style={{ fontFamily: T.display, fontSize: 18, color }}>{label}</span>
             <span style={{ fontSize: 11, color: T.faint }}>{note}</span>
-            <span style={{ flexGrow: 1, height: 1, background: "#32302f" }} />
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{count}</span>
+            <span style={{ flexGrow: 1, height: 1, background: T.card }} />
+            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>{count}</span>
         </div>
     );
 }
 
 // project: the title of the project this PR belongs to, for its marker (o goes there).
-function PrRow({ r, depth, project, cursor, compact, onOpen }: { r: QueueRow; depth: number; project?: string; cursor: boolean; compact: boolean; onOpen: () => void }) {
+function PrRow({ r, depth, project, repo, cursor, cols, fix, onOpen }: { r: QueueRow; depth: number; project?: string; repo: string; cursor: boolean; cols: RowColumns; fix?: { text: string; brick?: boolean }; onOpen: () => void }) {
     const { pr } = r;
+    const compact = !cols.names;
     return (
         <div
             data-pr={`${pr.repo}#${pr.number}`}
             data-selected={cursor || undefined}
+            data-key="j k ⏎"
             onClick={onOpen}
             style={{ display: "flex", alignItems: "center", gap: 16, height: 44, padding: "0 12px", marginLeft: depth * 22, overflow: "hidden", borderRadius: 10, cursor: "pointer", background: cursor ? T.cardActive : "transparent", border: `1px solid ${cursor ? T.borderActive : "transparent"}` }}
         >
+            {/* Which of the PRs card's numbers this row is in. */}
+            <span data-wintos="pr-counts" data-counts={r.counts} title={r.counts ? `counted in the PRs card: ${r.counts}` : undefined} style={{ width: 3, height: 20, marginRight: -10, flexShrink: 0, borderRadius: 2, background: r.counts === "yours" ? T.apricot : r.counts === "team" ? T.title : "transparent" }} />
             {depth > 0 && <span style={{ marginRight: -8, fontFamily: T.mono, color: T.faint }}>└</span>}
             <span style={{ width: 54, flexShrink: 0, fontFamily: T.mono, fontSize: 12.5, color: r.age.late ? T.brick : T.quietTitle }}>{r.age.text}</span>
             <span style={{ width: compact ? 22 : 118, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: 22, height: 22, borderRadius: "50%", background: r.mine ? "#504945" : "#3c3836", color: r.mine ? "#fbf1c7" : "#d5c4a1", fontFamily: T.mono, fontSize: 8.5, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ width: 22, height: 22, borderRadius: "50%", background: r.mine ? T.borderActive : T.border, color: r.mine ? T.emphasis : T.secondary, fontFamily: T.mono, fontSize: 8.5, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {initials(pr.author)}
                 </span>
                 {!compact && <span style={{ fontSize: 12, color: r.mine ? T.title : T.quietTitle, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.mine ? "you" : pr.author}</span>}
             </span>
-            {!compact && <span style={{ width: 104, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            {cols.size && <span style={{ width: 104, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ display: "flex", gap: 2, width: 44 }}>
                     <span style={{ height: 5, borderRadius: 3, background: T.moss, flexGrow: Math.max(pr.additions, 0.5) }} />
                     <span style={{ height: 5, borderRadius: 3, background: T.brick, flexGrow: Math.max(pr.deletions, 0.5) }} />
                 </span>
-                <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>{r.total}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{r.total}</span>
             </span>}
             <span style={{ flexGrow: 1, minWidth: 0, fontSize: 13.5, color: T.title, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {pr.isDraft && <span style={{ fontSize: 10, border: `1px solid ${T.keycapBorder}`, borderRadius: 5, padding: "1px 5px", marginRight: 8, color: T.muted }}>draft</span>}
+                {r.sla && <span data-wintos="pr-sla" title={r.sla === "team" ? "counted in the team's past SLA" : "counted in yours past SLA"} style={{ ...TAG, borderColor: T.brick, color: T.brick }}>past SLA</span>}
+                {pr.isDraft && <span style={TAG}>draft</span>}
+                {!!pr.pendingComments && <span data-wintos="pr-pending" title="in your pending review on GitHub; f sends them on with the review" style={{ ...TAG, borderColor: T.apricot, color: T.apricot }}>{pr.pendingComments} pending</span>}
                 {pr.title}
                 {r.qualifier && <span style={{ fontSize: 11, color: r.qualifier.brick ? T.brick : T.muted }}> — {r.qualifier.text}</span>}
+                {fix && <span data-wintos="pr-fix" style={{ fontSize: 11, color: fix.brick ? T.brick : T.apricot }}> · {fix.text}</span>}
             </span>
-            <Reviewers r={r} compact={compact} />
+            <Reviewers r={r} names={cols.names} />
             <span title={project ? `Project: ${project} (o)` : "No project"} style={{ width: 12, flexShrink: 0, textAlign: "center", fontSize: 11, color: project ? T.moss : "transparent" }}>◆</span>
-            <span style={{ width: compact ? 120 : 150, flexShrink: 0, textAlign: "right", fontFamily: T.mono, fontSize: 10.5, color: T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {r.repoShort} #{pr.number}
+            {/* The repo gives way; the number never does. */}
+            <span style={{ width: compact ? 120 : 150, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: "0.6em", fontFamily: T.mono, fontSize: 11.5, color: T.faint, whiteSpace: "nowrap" }}>
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{repo}</span>
+                <span style={{ flexShrink: 0 }}>#{pr.number}</span>
             </span>
         </div>
     );

@@ -152,7 +152,15 @@ export default defineConfig({
         },
         server: {
             open: false,
-            watch: {
+            // WintOS: each instance owns its port. Taking the next free one let the dev instance
+            // push the everyday one off 5173, and its daemon then refused the window's origin.
+            port: Number(process.env.WINTOS_UI_PORT ?? 5173),
+            strictPort: true,
+            // WintOS: the everyday instance takes new code only when ⌥⌘U restarts it; a checkout
+            // moving under it (a merge, a pull) would otherwise reload its windows mid-work.
+            // The dev instance (WINTOS_INSTANCE) reloads as you edit.
+            hmr: !!process.env.WINTOS_INSTANCE,
+            watch: process.env.WINTOS_INSTANCE ? {
                 ignored: [
                     "dist/**",
                     "**/*.go",
@@ -165,7 +173,7 @@ export default defineConfig({
                     "**/*.txt",
                     "**/*.log",
                 ],
-            },
+            } : null,
         },
         css: {
             preprocessorOptions: {

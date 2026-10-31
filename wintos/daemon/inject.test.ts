@@ -8,9 +8,10 @@ describe("injection", () => {
         expect(text).toContain("/p/x/project.md is unreadable (no front matter)");
     });
 
-    test("a titled project gets the section formats the notes view renders", () => {
+    test("a titled project gets the sections its sessions keep: what is true now, no log of how it got there", () => {
         const text = injection({ id: "t", title: "X", dir: "/p/x", mtime: 0, pr: [], titleLocked: false, body: "" }, { text: "m" });
-        for (const marker of ["- 19 sep — ", "- [x]", "- [~]", "- [ ]", "(blocking)"]) expect(text).toContain(marker);
+        for (const marker of ["## Goal", "## Known", "(blocking)", "no dates of when"]) expect(text).toContain(marker);
+        for (const log of ["## Built", "## Decisions", "dated bullets", "newest last"]) expect(text).not.toContain(log);
     });
 
     test("it shows the exact front-matter lines to keep, since it only ever sees the body", () => {
@@ -24,6 +25,10 @@ describe("injection", () => {
     ])("%s is told to park a turn that ends waiting on something outside", (_n, project) => {
         expect(injection(project as never, { text: "m" })).toContain('wintos wait "');
         expect(injection(project as never, { text: "m" })).toContain("wintos done");
+        expect(injection(project as never, { text: "m" })).toContain('wintos status "');
+        expect(injection(project as never, { text: "m" })).toContain("wintos lane");
+        expect(injection(project as never, { text: "m" })).toContain("wintos todo");
+        expect(injection(project as never, { text: "m" })).toContain("wintos pr <link");
     });
 
     test("no project at all asks for a title", () => {

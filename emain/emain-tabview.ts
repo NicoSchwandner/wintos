@@ -140,6 +140,9 @@ export class WaveTabView extends WebContentsView {
             webPreferences: {
                 preload: path.join(getElectronAppBasePath(), "preload", "index.cjs"),
                 webviewTag: true,
+                // WintOS: the dev instance is driven by the e2e scenarios while it sits behind the
+                // developer's own windows; throttled, its focus handoffs (requestAnimationFrame) stall.
+                backgroundThrottling: process.env.WINTOS_INSTANCE !== "dev",
             },
         });
         this.createdTs = Date.now();
@@ -304,7 +307,7 @@ export function clearTabCache() {
 // returns [tabview, initialized]
 export async function getOrCreateWebViewForTab(waveWindowId: string, tabId: string): Promise<[WaveTabView, boolean]> {
     let tabView = getWaveTabView(tabId);
-    if (tabView) {
+    if (tabView && !tabView.isDestroyed) {
         return [tabView, true];
     }
     const fullConfig = await RpcApi.GetFullConfigCommand(ElectronWshClient);
@@ -332,6 +335,8 @@ export async function getOrCreateWebViewForTab(waveWindowId: string, tabId: stri
         // console.log("WIN bie", tabView.waveTabId.substring(0, 8), waveEvent.type, waveEvent.code);
         handleCtrlShiftState(tabView.webContents, waveEvent);
         setWasActive(true);
+        // WintOS: whether an Esc reaches the window at all; a walk's ⌘Esc has gone missing.
+        if (input.key === "Escape") console.log(`wintos-key ${input.type} ${input.meta ? "⌘" : ""}Esc tab ${tabView.waveTabId.slice(0, 8)}`);
         if (input.type == "keyDown" && tabView.keyboardChordMode) {
             e.preventDefault();
             tabView.setKeyboardChordMode(false);
@@ -387,6 +392,12 @@ export function ensureHotSpareTab(fullConfig: FullConfigType) {
 
 export function getSpareTab(fullConfig: FullConfigType): WaveTabView {
     setTimeout(() => ensureHotSpareTab(fullConfig), 500);
+    // WintOS: the spare can sit unused for hours, and its web contents can be gone by then (a dead
+    // renderer); handing that one out leaves the new tab without a view, blanking the window.
+    if (HotSpareTab?.isDestroyed) {
+        console.log("getSpareTab: the hot spare was destroyed, dropping it");
+        HotSpareTab = null;
+    }
     if (HotSpareTab != null) {
         const rtn = HotSpareTab;
         HotSpareTab = null;

@@ -111,6 +111,12 @@ declare global {
         getWintosInstance: () => { port: number; label: string }; // wintos-instance
         writeClipboard: (text: string) => void; // wintos-clipboard
         onWintosOpenPane: (callback: (url: string) => void) => void; // wintos-open-pane
+        onWintosWindowFocus: (callback: (focused: boolean) => void) => void; // wintos-window-focus
+        setWintosWalking: (on: boolean, hold?: "Meta" | "Control") => void; // wintos-walking
+        nativeUndo: () => void; // wintos-native-undo
+        onWintosWalkEsc: (callback: () => void) => void; // wintos-walk-esc
+        onWintosWalkMetaUp: (callback: () => void) => void; // wintos-walk-meta-up
+        getWintosFullScreen: () => boolean; // wintos-is-fullscreen
         updateWindowControlsOverlay: (rect: Dimensions) => void; // update-window-controls-overlay
         onReinjectKey: (callback: (waveEvent: WaveKeyboardEvent) => void) => void; // reinject-key
         setWebviewFocus: (focusedId: number) => void; // webview-focus, focusedId is the getWebContentsId of the webview
@@ -120,7 +126,7 @@ declare global {
         switchWorkspace: (workspaceId: string) => void; // switch-workspace
         deleteWorkspace: (workspaceId: string) => void; // delete-workspace
         setActiveTab: (tabId: string) => void; // set-active-tab
-        createTab: () => void; // create-tab
+        createTab: (opts?: { first?: MetaType }) => void; // create-tab; first: the tab's first pane, no Claude of its own
         closeTab: (workspaceId: string, tabId: string, confirmClose: boolean) => Promise<boolean>; // close-tab
         setWindowInitStatus: (status: "ready" | "wave-ready") => void; // set-window-init-status
         onWaveInit: (callback: (initOpts: WaveInitOpts) => void) => void; // wave-init

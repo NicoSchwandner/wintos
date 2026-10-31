@@ -13,6 +13,7 @@ import { Key } from "./Key";
 import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
 import { closedWakes, useWakeDelivery, type ClosedWake } from "./wakes";
+import { useSchemeNotices } from "./schemeNotices";
 import { TodayCard } from "./TodayCard";
 import { meetingsFrom } from "./meetings";
 import { ACTIVE, T } from "./tokens";
@@ -76,6 +77,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
     const { state: raw, offline } = useWintos();
     useWakeDelivery(raw?.wakes, raw?.sessions, raw?.shelf?.[activeTabId], activeTabId);
+    useSchemeNotices(raw?.sessions, activeTabId);
     const wokeClosed = raw ? closedWakes(raw.wakes ?? {}, raw.shelf ?? {}, raw.projects, tabIds, (u) => prRef(raw, u)) : [];
     useFreshPaneLists(raw?.sessions, tabs);
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };

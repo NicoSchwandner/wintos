@@ -21,7 +21,7 @@ import * as services from "@/store/services";
 import { PLATFORM, PlatformMacOS } from "@/util/platformutil";
 import { base64ToArray, fireAndForget } from "@/util/util";
 import { formatRemoteUri } from "@/util/waveutil";
-import { backgroundReply, schemeReport } from "@/wintos/ui/termScheme";
+import { backgroundReply, isDarkBg, schemeReport } from "@/wintos/ui/termScheme";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -520,7 +520,7 @@ export class TermWrap {
     setSchemeBg(bg: string | null) {
         const changed = this.schemeBg != null && bg != null && bg !== this.schemeBg;
         this.schemeBg = bg;
-        if (changed && this.schemeAsked) this.sendDataHandler?.(schemeReport(bg));
+        if (changed && this.schemeAsked) this.sendDataHandler?.(schemeReport(isDarkBg(bg)));
     }
 
     handleTermData(data: string) {

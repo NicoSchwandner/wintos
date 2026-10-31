@@ -178,12 +178,12 @@ function RailToggle({ open }: { open: boolean }) {
             onMouseLeave={() => setHover(false)}
             // Open: on the divider. Folded: floating over the terminals, dimmed until pointed at.
             // no-drag: folded it floats over the pane strip, a window-drag region that would take the click.
-            style={{ WebkitAppRegion: "no-drag", position: "absolute", top: 10, left: open ? -12 : -34, zIndex: 20, width: 24, height: 24, borderRadius: 12, border: `1px solid ${hover ? T.borderActive : T.border}`, background: T.ground, color: hover ? T.title : T.muted, opacity: open || hover ? 1 : 0.55, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, boxShadow: open ? "none" : "0 2px 8px rgba(0,0,0,0.4)" } as React.CSSProperties}
+            style={{ WebkitAppRegion: "no-drag", position: "absolute", top: 7, left: open ? -12 : -34, zIndex: 20, width: 24, height: 24, borderRadius: 12, border: `1px solid ${hover ? T.borderActive : T.border}`, background: T.ground, color: hover ? T.title : T.muted, opacity: open || hover ? 1 : 0.55, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, boxShadow: open ? "none" : "0 2px 8px rgba(0,0,0,0.4)" } as React.CSSProperties}
         >
             <i className={`fa-solid ${open ? "fa-chevron-right" : "fa-chevron-left"}`} style={{ fontSize: 11 }} />
             {/* The key beside the button, on the terminals' side, as every WintOS button shows its key. */}
             <span style={{ position: "absolute", right: 30, pointerEvents: "none", opacity: open || hover ? 1 : 0.8 }}>
-                <Key k="⌥⌘L" label="" />
+                <Key k="⌥⌘L" label={open ? "hide notes" : "notes"} />
             </span>
         </button>
     );

@@ -33,7 +33,8 @@ export function tick(r: Rhythm, idleMs: number, now: number, day: string): Rhyth
 
 export const startBreak = (r: Rhythm, now: number): Rhythm => ({ ...r, onBreak: now });
 export const snooze = (r: Rhythm, now: number, minutes: number): Rhythm => ({ ...r, snoozedUntil: now + minutes * 60_000 });
-export const release = (r: Rhythm, now: number): Rhythm => ({ ...r, releasedAt: now });
+// Opening the batch is starting work, so it also ends a closed day's quiet.
+export const release = ({ closed: _, ...r }: Rhythm, now: number): Rhythm => ({ ...r, releasedAt: now });
 // Without batches, "the next batch" is as far off as the default batch length.
 const LATER_WITHOUT_BATCHES_MS = 20 * 60_000;
 export function later(r: Rhythm, sessionId: string, since: number, now: number, batchEveryMs: number): Rhythm {

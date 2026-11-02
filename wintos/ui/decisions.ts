@@ -24,6 +24,7 @@ export type Decision = {
     final: boolean;
     by: string;
     since: number;
+    restored?: true; // saved at the last quit: its Claude starts when answered
 };
 
 // Without a word from the session, these read as something that can't be undone.
@@ -48,7 +49,7 @@ const leftForLater = (s: Session, state: WintosState, now: number) => {
 export function decisions(state: WintosState, now: number, titleOf: (tabId: string) => string): Decision[] {
     const prs = (state.plugins?.["gh-prs"]?.data as { prs?: PR[] } | undefined)?.prs ?? [];
     const out = state.sessions
-        .filter((s) => !s.background && !s.restored && shownState(s, now) === "waiting" && !leftForLater(s, state, now))
+        .filter((s) => !s.background && shownState(s, now) === "waiting" && !leftForLater(s, state, now))
         .map((s): Decision => {
             // Not read yet (the daemon reads an ended turn a moment later): a plain turn of yours.
             const a = s.ask ?? { kind: "answer" as const, by: "guess" as const };
@@ -72,6 +73,7 @@ export function decisions(state: WintosState, now: number, titleOf: (tabId: stri
                 final: a.final ?? (a.by !== "session" && FINAL_WORDS.test(question)),
                 by: a.by,
                 since: s.since,
+                ...(s.restored ? { restored: true as const } : {}),
             };
         });
     return out.sort((a, b) => Number(a.final) - Number(b.final) || (KIND_ORDER[a.kind] ?? 1) - (KIND_ORDER[b.kind] ?? 1) || a.since - b.since);

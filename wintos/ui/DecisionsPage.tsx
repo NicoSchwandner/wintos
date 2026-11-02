@@ -5,7 +5,7 @@ import { focusSession } from "./focus";
 import { Key } from "./Key";
 import { runKey } from "./menu";
 import { T } from "./tokens";
-import { typeIntoPane } from "./typeIntoPane";
+import { startPane, typeIntoPane } from "./typeIntoPane";
 import { useFocusOnMount } from "./useFocusOnMount";
 import { useNow } from "./useNow";
 import { daemonFetch, parkBlock, useWintos } from "./useWintos";
@@ -17,6 +17,9 @@ const BY_WORD: Record<string, string> = { session: "written by the session", too
 
 // Toggles for a card's picks: a to i, without e (your own answer).
 const PICK_KEYS = "abcdfghi";
+// A resumed Claude reports in within seconds; its prompt takes input a moment after.
+const START_MS = 60_000;
+const SETTLE_MS = 1500;
 
 // ⌥⌘O: the turns waiting on you, one card at a time, quick ones first. 1-4 answers with an
 // option (one that can't be undone takes the same key twice), the number after them leaves it to
@@ -55,13 +58,29 @@ export const DecisionsPage = memo(() => {
         return () => void (live = false);
     }, [card?.turn]);
     const mark = (d: Decision, how: "answered" | "parked" | "later") => (setDone({ ...done, [d.turn]: how }), setOwn(null), ref.current?.focus());
+    const latest = useRef(state);
+    latest.current = state;
+    // A session saved at the last quit: its Claude starts first, and takes the answer once it is up.
+    const started = async (d: Decision) => {
+        if (!d.restored) return;
+        await startPane(d.tabId, d.blockId, latest.current?.termCols ?? 110);
+        const until = Date.now() + START_MS;
+        while (latest.current?.sessions.find((s) => s.id === d.sessionId)?.restored) {
+            if (Date.now() > until) throw new Error("its Claude didn't start");
+            await new Promise((r) => setTimeout(r, 500));
+        }
+        await new Promise((r) => setTimeout(r, SETTLE_MS));
+    };
     const answer = (d: Decision, a: Parameters<typeof answerText>[1]) => {
         const text = answerText(d, a, picked);
         if (!text) return;
-        typeIntoPane(d.blockId, text).then(
-            () => mark(d, "answered"),
-            (e) => setFailed(`Not sent: the session's terminal didn't take it (${e instanceof Error ? e.message : String(e)}). ⏎ goes into it.`),
-        );
+        if (d.restored) setFailed("Starting its Claude, then sending…");
+        started(d)
+            .then(() => typeIntoPane(d.blockId, text))
+            .then(
+                () => mark(d, "answered"),
+                (e) => setFailed(`Not sent: the session's terminal didn't take it (${e instanceof Error ? e.message : String(e)}). ⏎ goes into it.`),
+            );
     };
     // What can't be undone takes the same key twice.
     const pick = (d: Decision, n: number, a: Parameters<typeof answerText>[1]) => (d.final && armed !== n ? setArmed(n) : answer(d, a));
@@ -125,6 +144,7 @@ export const DecisionsPage = memo(() => {
                             </span>
                         </div>
                         <span style={{ fontSize: 22, lineHeight: 1.35, fontWeight: 600, color: T.emphasis }}>{card.question}</span>
+                        {card.restored && <span data-wintos="decision-restored" style={{ fontSize: 13, color: T.muted }}>Not started since WintOS last quit: answering starts its Claude, then sends the answer.</span>}
                         {section("CONTEXT", card.context)}
                         {back && section("YOU ASKED", back.asked)}
                         {back && section("IT DID", back.did)}

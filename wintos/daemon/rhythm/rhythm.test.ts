@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { AWAY_MS, closeDay, FOCUS_MS, later, nudge, prompted, startBreak, snooze, tick, toggleFocus, type Rhythm } from "./rhythm";
+import { AWAY_MS, closeDay, FOCUS_MS, later, nudge, prompted, release, startBreak, snooze, tick, toggleFocus, type Rhythm } from "./rhythm";
 
 const MIN = 60_000;
 const T0 = 1_000 * MIN;
@@ -99,6 +99,10 @@ describe("closing the day", () => {
         expect(nudge(fri, { ...calm, now: at(30, 18), workday: [480, 1020], today: new Date(2026, 9, 30) })).toBeUndefined();
         expect(tick(fri, 0, at(31, 9), "d2").closed).toEqual(fri.closed);
         expect(tick(fri, 0, at(33, 9), "d3").closed).toBeUndefined();
+    });
+    test("opening the batch (⌥⌘O) ends the quiet: you are working", () => {
+        const fri = closeDay({ day: "d", stretchFrom: 0, breaks: [] }, new Date(2026, 9, 30, 17, 10));
+        expect(release(fri, at(33, 5)).closed).toBeUndefined();
     });
 });
 

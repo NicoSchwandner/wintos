@@ -966,6 +966,22 @@ describe("the shelf", () => {
         expect(await shelfOf()).toEqual({});
     });
 
+    test("a support or review lane gives the project its kind once; closing it puts it on the day's Closed list, reopening takes it off", async () => {
+        await post("/projects/tab-1/title", { title: "Heart case 1", manual: true });
+        await event({ ...prompt, session_id: "a", resume: script("a") });
+        await post("/blocks/blk-1/lane", { name: "fast", steps: ["Fix"] });
+        const st = async () => await (await fetch(`${base}/state`)).json();
+        expect((await st()).projects[0].kind).toBeUndefined();
+        await post("/blocks/blk-1/lane", { name: "support", steps: ["Root cause"] });
+        await post("/blocks/blk-1/lane", { name: "review", steps: ["Submit"] });
+        expect((await st()).projects[0].kind).toBe("support");
+        await post("/projects/tab-1/shelve-all", {});
+        await post("/projects/tab-1/shelve-all", {});
+        expect((await st()).closed).toEqual([{ tabId: "tab-1", title: "Heart case 1", kind: "support", at: expect.any(Number) }]);
+        await post("/projects/tab-1/reopen", { tabId: "tab-2" });
+        expect((await st()).closed).toEqual([]);
+    });
+
     test("closing the project (⇧⌘W) shelves every session it runs first, and a second time changes nothing", async () => {
         await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
         await event({ ...prompt, session_id: "a", resume: script("a") });

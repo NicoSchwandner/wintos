@@ -225,6 +225,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         <FocusRows day={state.day} limit={FOCUS_SHOWN} />
                     </div>
                 )}
+                <ClosedToday closed={state?.closed ?? []} now={now} />
                 {state?.day?.reflection && (
                     <button type="button" data-wintos="reflect-nudge" data-key="⌥⌘Y" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openView("reflect")} style={{ display: "flex", justifyContent: "space-between", gap: 8, margin: "-8px 2px 0", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12.5, color: T.apricot, textAlign: "left" }}>
                         Write your {state.day.reflection.level} reflection
@@ -320,6 +321,7 @@ function RhythmMeter({ state }: { state: WintosState }) {
 
 // The day as a tile: how much of the plan is done, or that it still needs one.
 const FOCUS_SHOWN = 5;
+const CLOSED_SHOWN = 5;
 const dayValue = (day: Day) => {
     const items = focusList(day.focus).filter((i) => i.depth === 0);
     return !day.planned ? "plan it" : items.length ? `${items.filter((i) => i.done).length} of ${items.length}` : "–";
@@ -405,6 +407,14 @@ const RowClose = ({ p }: { p: RowProps }) =>
         </button>
     ) : null;
 
+// An errand past its finish line: a click closes it, as ⇧⌘W does when it is the open one.
+const Done = ({ p }: { p: RowProps }) => (
+    <button type="button" data-wintos="row-done" data-key={p.active ? "⇧⌘W" : ""} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={(e) => (e.stopPropagation(), p.onClose?.())}
+        title="Close this project" style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 11.5, color: T.moss, textAlign: "left", whiteSpace: "nowrap" }}>
+        ✓ {p.v.done} · close
+    </button>
+);
+
 function CardRow(p: RowProps & { children?: React.ReactNode }) {
     const { v } = p;
     const tone = { apricot: T.apricot, blue: T.blue, brick: T.brick, secondary: T.secondary }[v.tone ?? "secondary"];
@@ -439,6 +449,7 @@ function CardRow(p: RowProps & { children?: React.ReactNode }) {
                 </span>
             </div>
             {v.next && <div style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty" } as React.CSSProperties}><Rich text={v.next} size="rail" links={false} /></div>}
+            {v.done && <Done p={p} />}
             {p.children}
             {v.meta && <div title={v.meta} style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.meta}</div>}
         </div>
@@ -494,12 +505,28 @@ function QuietRow(p: RowProps & { dot?: string }) {
             {p.dot && <span style={{ width: 6, height: 6, borderRadius: "50%", background: p.dot, flexShrink: 0, marginRight: -2 }} />}
             <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} />
             {p.active && <WalkKeys />}
-            <span title={v.reason} style={{ maxWidth: "48%", fontSize: 11.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>
+            {v.done ? <Done p={p} /> : <span title={v.reason} style={{ maxWidth: "48%", fontSize: 11.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>}
             <RowClose p={p} />
         </div>
     );
 }
 
+
+// ⇧⌘W ticks a project off: the day's closed ones, newest first.
+function ClosedToday({ closed, now }: { closed: { tabId: string; title: string; at: number }[]; now: number }) {
+    const today = new Date(now).toDateString();
+    const list = closed.filter((c) => new Date(c.at).toDateString() === today).sort((a, b) => b.at - a.at);
+    if (!list.length) return null;
+    return (
+        <div data-wintos="closed-today" style={{ display: "flex", flexDirection: "column", gap: 3, margin: "-8px 4px 0", fontSize: 12, color: T.muted }}>
+            <span style={{ fontSize: 11.5, color: T.faint }}>Closed today · {list.length}</span>
+            {list.slice(0, CLOSED_SHOWN).map((c) => (
+                <span key={c.tabId} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><span style={{ color: T.moss }}>✓</span> {c.title}</span>
+            ))}
+            {list.length > CLOSED_SHOWN && <span style={{ fontSize: 11, color: T.faint }}>+{list.length - CLOSED_SHOWN} more</span>}
+        </div>
+    );
+}
 
 // Its own component so the per-second tick re-renders only this line, not the sidebar.
 function Clock() {

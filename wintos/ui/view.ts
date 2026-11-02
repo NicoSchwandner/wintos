@@ -11,9 +11,10 @@ import { shelvedName, type Shelved } from "../daemon/shelf/shelf";
 import type { FixerState } from "../daemon/fixer/runner";
 import type { HeadsUp } from "../daemon/headsups/headsups";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; projectSnoozes?: Record<string, number>; driving?: string[]; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]>; fixer?: FixerState; repoNames?: Record<string, string>; wakes?: Wakes; headsUps?: Record<string, HeadsUp[]>; headsUpProblem?: string; donePrs?: Record<string, DonePr>; update?: { behind: number }; rhythm?: Rhythm & { everyMs: number; batchEveryMs?: number }; wip?: number; termCols?: number };
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; projectSnoozes?: Record<string, number>; driving?: string[]; closed?: { tabId: string; title: string; kind?: string; at: number }[]; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]>; fixer?: FixerState; repoNames?: Record<string, string>; wakes?: Wakes; headsUps?: Record<string, HeadsUp[]>; headsUpProblem?: string; donePrs?: Record<string, DonePr>; update?: { behind: number }; rhythm?: Rhythm & { everyMs: number; batchEveryMs?: number }; wip?: number; termCols?: number };
 export type Tone = "apricot" | "blue" | "brick" | "secondary";
-export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };
+// done: an errand past its finish line, what reached it ("PR up"); the row says ⇧⌘W closes it.
+export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string; done?: string };
 
 export function relTime(ms: number): string {
     const s = Math.max(0, Math.floor(ms / 1000));

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { basename, join } from "path";
 import { lineDiff } from "./diff";
-import { parseProjectMd, ProjectMeta, serializeProjectMd } from "./parse";
+import { parseProjectMd, ProjectMeta, serializeProjectMd, type Kind } from "./parse";
 import { slugify } from "./slug";
 
 export type Project = Partial<ProjectMeta> & { dir: string; mtime: number; mineMtime?: number; error?: string; body?: string };
@@ -63,10 +63,20 @@ export class ProjectStore {
             pr: existing?.pr ?? [],
             title,
             ...(existing?.next ? { next: existing.next } : {}),
+            ...(existing?.kind ? { kind: existing.kind } : {}),
         };
         writeFileSync(join(dir, "project.md"), serializeProjectMd(meta, existing?.body ?? ""));
         this.reload();
         return this.byTab(tabId)!;
+    }
+
+    // A kind already in the file stays: whoever wrote it knew better than a lane.
+    setKindOnce(tabId: string, kind: Kind): void {
+        const p = this.byTab(tabId);
+        if (!p?.id || p.error || p.kind) return;
+        const { dir, mtime: _m, mineMtime: _mm, error: _e, body, ...meta } = p;
+        writeFileSync(join(dir, "project.md"), serializeProjectMd({ ...(meta as ProjectMeta), kind }, body ?? ""));
+        this.reload();
     }
 
     mineDiff(tabId: string, sessionId: string): { text: string; diff?: string } {

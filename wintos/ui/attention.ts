@@ -1,7 +1,8 @@
 import { isUnread, rank, type Ranking, type Row } from "../daemon/ranking/rank";
 import { liveSubagents, type Session } from "../daemon/sessions/reduce";
 import type { Project } from "../daemon/projects/store";
-import { isSnoozed, nextWorkingDayStart, projectPrs, type ProjectPrs } from "../daemon/prs/group";
+import { isSnoozed, nextWorkingDayStart, projectPrs, type PR, type ProjectPrs } from "../daemon/prs/group";
+import type { Kind } from "../daemon/projects/parse";
 import type { Target } from "./sessions";
 import { ghPrs, prOwners, prRef, relTime, repoLabeler, type Owner, type RowView, type WintosState } from "./view";
 import { WOKE } from "./wakes";
@@ -80,6 +81,25 @@ export function waking(split: Ranking, tabs: Record<string, string>): Ranking {
     return { ...split, needs: [...lifted, ...split.needs], read: kept(split.read), running: kept(split.running), quiet: kept(split.quiet), quietMore: kept(split.quietMore), quietStale: kept(split.quietStale) };
 }
 
+// When an errand is finished: a support errand once a PR of yours is up (the lane past its Draft
+// PR step says so before the PR list does), a review once it is posted (the lane at Submit with
+// its turn over; GitHub drops a reviewed PR from the requests, so the lane is often all there is).
+const AFTER_DRAFT = ["your ok", "ready", "test path"];
+export function finishLine(kind: Kind | undefined, sessions: Session[], prs: PR[], me: string | undefined): string | undefined {
+    const step = (s: Session) => s.lane?.steps[s.lane.at]?.replace(/^\?\s*/, "").toLowerCase();
+    if (kind === "support") {
+        const mine = prs.filter((p) => p.author === me);
+        if (mine.some((p) => p.mergedAt)) return "PR merged";
+        if (mine.length || sessions.some((s) => s.lane?.name === "support" && AFTER_DRAFT.includes(step(s) ?? ""))) return "PR up";
+    }
+    if (kind === "review") {
+        const posted = prs.some((p) => p.author !== me && p.reviewedByMe && !p.requestedMe);
+        // "?Submit" is your OK still to come; only a plain Submit step is the review going out.
+        if (posted || sessions.some((s) => s.lane?.name === "review" && s.lane.steps[s.lane.at]?.toLowerCase() === "submit" && s.state !== "working")) return "review posted";
+    }
+    return undefined;
+}
+
 // Pinned projects leave every band, whatever their state; the snooze and the hold never hide them.
 function drivingSplit(split: Ranking, pinned: string[], seen: Record<string, number>, now: number): { split: Ranking; driving: Drive[] } {
     const all = [...split.needs, ...split.read, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale];
@@ -147,6 +167,11 @@ export function attention(tabIds: string[], state: WintosState, names: Record<st
     const label = repoLabeler(state);
     const views = Object.fromEntries(rows.map((r) => [r.tabId, lines[r.tabId] ? { ...rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label), next: lines[r.tabId], tone: "apricot" as const } : rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label)]));
     for (const [tabId, until] of held.rows) views[tabId] = { ...views[tabId], reason: [`held ${until === Infinity ? "until you are back" : until === state.rhythm?.closed?.until ? `until ${clock(until)}: the day is closed` : `for the ${clock(until)} batch`}`, askLine(rows.find((r) => r.tabId === tabId)!.sessions)].filter(Boolean).join(" · ") };
+    const me = ghPrs(state)?.me;
+    for (const r of rows) {
+        const done = finishLine(project(r.tabId)?.kind, r.sessions, prs[r.tabId]?.items.map((i) => i.pr) ?? [], me);
+        if (done) views[r.tabId] = { ...views[r.tabId], done };
+    }
     // Quiet rows show the reason, the others the next line: the snooze goes on both.
     if (here && isSnoozedProject(state.projectSnoozes, here, now) && views[here]) {
         const v = views[here];

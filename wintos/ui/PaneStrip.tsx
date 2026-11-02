@@ -1,22 +1,21 @@
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atom, useAtomValue } from "jotai";
-import { atoms, getSettingsKeyAtom } from "@/app/store/global";
+import { getSettingsKeyAtom } from "@/app/store/global";
 import { memo, useEffect, useMemo, useRef } from "react";
 
 const STRIP_GAP = 6; // above the chips, and (with the tile gap) below them
-import type { Session } from "../daemon/sessions/reduce";
 import { focusSession, takeHandoff } from "./focus";
 import { Key } from "./Key";
-import { closePane, closeProjectTab, runKey, shelvePane } from "./menu";
+import { closePane } from "./menu";
 import { openPalette } from "./Palette";
 import { closeArmedAtom, restartArmedAtom } from "./notes/state";
 import { paneOrder, stripPanes } from "./panes";
-import { attachments, autoClosable, liveSessions, shownState, unreadSessions } from "./sessions";
+import { attachments, liveSessions, shownState, unreadSessions } from "./sessions";
 import { SESSION_DOT, T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
-import { ghPrs, isInboxTab, relTime } from "./view";
+import { isInboxTab, relTime } from "./view";
 
 // A pane's chip is edged in its session's colour when it is not the one shown: what waits on you
 // or is working reads at a glance even with another pane magnified.
@@ -60,11 +59,6 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
         }
     }, [attachKey]);
     const sessions = state ? liveSessions(state.sessions, { [tabId]: ids }) : [];
-    useAutoClose(tabId, !isInboxTab(tab) && !state?.autoCloseOff?.includes(tabId), sessions, (blockId) => {
-        const node = lm.getNodeByBlockId(blockId);
-        shelvePane(blockId);
-        if (node) void lm.closeNode(node.id);
-    });
     const chips = stripPanes(blocks, sessions);
     // The strip is where every pane's controls live, so it shows whenever there is a pane.
     if (!chips.length) return null;
@@ -79,7 +73,6 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
         // The strip's empty space drags the window. The chips' row doesn't, gaps included: a drag
         // region takes the wheel too, and the row scrolls sideways when it overflows.
         <div data-wintos="pane-strip" style={{ display: "flex", alignItems: "center", padding: `${STRIP_GAP}px 8px ${Math.max(0, STRIP_GAP - tileGap / 2)}px`, flexShrink: 0, WebkitAppRegion: "drag" } as React.CSSProperties}>
-        {title && state?.autoCloseOff?.includes(tabId) && <StripAction k="⌥⌘A" label="auto-close off" onClick={() => runKey("autoclose")} id="autoclose-off" first />}
         {title && <span data-wintos="project-title" style={{ flexShrink: 0, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", margin: "0 14px 0 4px", fontFamily: T.display, fontSize: 18, lineHeight: 1, color: T.emphasis }}>{title}</span>}
         <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, fontFamily: T.mono, fontSize: 11, overflowX: "auto", WebkitAppRegion: "no-drag" } as React.CSSProperties}>
             {/* ⌘H / ⌘L step pane by pane (in an Inbox tab from the list through its pages). */}
@@ -160,41 +153,6 @@ PaneStrip.displayName = "PaneStrip";
 // Auto-close, while this project is not the one shown: finished sessions go to the shelf (⌘Z
 // brings one back), and once none is left and none of the project's PRs is open, the project.
 // Without the PR list nothing counts as merged, so nothing closes.
-function useAutoClose(tabId: string, on: boolean, sessions: Session[], closePane: (blockId: string) => void): void {
-    const { state } = useWintos();
-    // Another tab is the active one. Not page visibility, which a covered window shares.
-    const ws = useAtomValue(atoms.workspace);
-    const hidden = !!ws?.activetabid && ws.activetabid !== tabId;
-    const gh = state && ghPrs(state);
-    const open = new Set(gh?.prs.filter((p) => !p.mergedAt).map((p) => p.url));
-    const done = on && hidden && gh && state ? autoClosable(sessions, tabId, state.seen, open) : [];
-    const key = done.map((s) => s.id).join(" ");
-    useEffect(() => {
-        if (!done.length || !state) return;
-        for (const s of done) closePane(s.blockId);
-        const left = sessions.filter((s) => !done.includes(s) && s.state !== "ended");
-        const prs = [...sessions, ...(state.shelf?.[tabId] ?? [])].flatMap((x) => x.prs ?? []);
-        if (!left.length && !prs.some((u) => open.has(u))) closeProjectTab(tabId, false, false);
-    }, [key]);
-}
-
-// A key you can also click, as a label; it never takes focus, which stays in the pane.
-function StripAction({ k, label, onClick, id, first }: { k: string; label: string; onClick: () => void; id?: string; first?: boolean }) {
-    return (
-        <button
-            type="button"
-            data-wintos={id}
-            onMouseDown={(e) => e.preventDefault()}
-            tabIndex={-1}
-            data-key={k}
-            onClick={onClick}
-            style={{ WebkitAppRegion: "no-drag", flexShrink: 0, margin: first ? "0 14px 0 0" : "0 0 0 10px", padding: 0, background: "transparent", border: "none", cursor: "pointer" } as React.CSSProperties}
-        >
-            <Key k={k} label={label} />
-        </button>
-    );
-}
-
 // An icon inside a chip, for the mouse; k is its key, badged while ⌘ is held. hover: shown only on
 // the open chip and the one pointed at.
 function ChipIcon({ icon, title, k, onClick, hover }: { icon: string; title: string; k?: string; onClick: () => void; hover?: boolean }) {

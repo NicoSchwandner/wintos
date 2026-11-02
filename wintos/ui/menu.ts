@@ -104,7 +104,6 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:u", "open-external"],
     ["Option:Cmd:c{KeyR}", "restart-terminal"],
     ["Option:Cmd:c{KeyU}", "update"],
-    ["Option:Cmd:c{KeyA}", "autoclose"],
     ["Option:Cmd:c{KeyB}", "break"],
     ["Shift:Option:Cmd:c{KeyB}", "break-later"],
     ["Option:Cmd:c{KeyO}", "release"],
@@ -321,7 +320,6 @@ export function runAction(action: string): void {
     if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));
     if (action === "restart-terminal") return restartTerminal();
     if (action === "update") return updateWintos();
-    if (action === "autoclose") return toggleAutoClose();
     if (action === "break") return void (flog("break: started"), daemonFetch("/rhythm/break", { method: "POST", body: {} }));
     // ⌥⌘O: the next session waiting on you, in its own pane; what was held back comes in with it.
     if (action === "release") return void walkDecisions();
@@ -507,14 +505,6 @@ function openExternal(): void {
     const blockId = globalStore.get(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
     const url = blockId && focusedPageUrl(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId))));
     if (url) getApi().openExternal(url);
-}
-
-// ⌥⌘A: whether the open project's finished sessions, and then the project, close by themselves.
-function toggleAutoClose(): void {
-    const tabId = globalStore.get(atoms.staticTabId);
-    if (isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId))))) return;
-    const off = currentState()?.autoCloseOff?.includes(tabId) ?? false;
-    void daemonFetch(`/projects/${encodeURIComponent(tabId)}/autoclose`, { method: "POST", body: { on: off } });
 }
 
 // ⌥⌘U: WintOS rebuilt and restarted from its checkout, once that has commits the running one

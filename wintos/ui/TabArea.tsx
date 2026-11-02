@@ -1,5 +1,5 @@
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
-import { atoms, getApi } from "@/store/global";
+import { atoms } from "@/store/global";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { atom, useAtomValue } from "jotai";
 import { memo, useEffect, useMemo } from "react";
@@ -11,7 +11,6 @@ import { Keymap } from "./Keymap";
 import { useSeenReporter } from "./useSeenReporter";
 import { useNewProjectPaste } from "./newproject";
 import { useWintos } from "./useWintos";
-import { rememberUndo } from "./undo";
 import { KeyBadges } from "./KeyBadges";
 import { UndoToast } from "./UndoToast";
 import { NotesRail } from "./notes/NotesRail";
@@ -99,20 +98,10 @@ function useMagnifyFollowsFocus(): void {
     }, [magnified, focused?.id]);
 }
 
-// Closing the last pane leaves the project open; say what to do next. Leaving it empty shelves
-// it: the tab closes, its folder and shelf stay, and ⇧⌘P opens it again on its newest session.
+// Closing the last pane leaves the project open, until you close it yourself; say what to do next.
 function EmptyProject({ tabId }: { tabId: string }) {
     const { state } = useWintos();
     const shelved = state?.shelf?.[tabId]?.length ?? 0;
-    const title = state?.projects.find((p) => p.id === tabId)?.title;
-    // Left: another tab is the active one. Not page visibility, which a covered window shares.
-    const ws = useAtomValue(atoms.workspace);
-    const left = !!ws?.activetabid && ws.activetabid !== tabId;
-    useEffect(() => {
-        if (!left) return;
-        rememberUndo({ kind: "project", projectId: tabId, metas: [], label: `Shelved ${title ?? "the project"}` });
-        void getApi().closeTab(ws.oid, tabId, false);
-    }, [left]);
     const keys: [string, string, () => void][] = [
         ...(shelved ? [["⌥⌘1", shelved > 1 ? `the newest of ${shelved} shelved sessions back (in the notes)` : "the shelved session back (in the notes)", () => runKey("session-1")] as [string, string, () => void]] : []),
         ["⇧⌘T", "new Claude session", () => runKey("session")],

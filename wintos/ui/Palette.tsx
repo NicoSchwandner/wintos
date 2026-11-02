@@ -277,7 +277,6 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     out.push(action("release", "Decisions: the turns waiting on you, one card at a time", "⌥⌘O", "release"));
     out.push(action("focus", `Focus block on ${here}: 45 minutes, the others wait`, "⌥⌘F", "focus"));
     out.push(action("wrapup", "Close the day: give each loose end a place", "⇧⌘E", "wrapup"));
-    out.push(action("autoclose", "Auto-close finished sessions in this project: on or off", "⌥⌘A", "autoclose"));
     out.push(action("keys", "Keyboard shortcuts", "⇧⌘K", "keymap"));
     return out;
 }

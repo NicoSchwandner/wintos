@@ -41,7 +41,6 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         item("Focus Block", "focus", "Alt+Cmd+F"),
         item("Close the Day", "wrapup", "Shift+Cmd+E"),
         item("Show the Quiet Projects", "quiet", "Alt+Cmd+S"),
-        item("Auto-Close Finished Sessions", "autoclose", "Alt+Cmd+A"),
         item("Tick Off Today", "tick", "Alt+Cmd+X"),
         { type: "separator" },
         item("Focus Left", "focus-left", "Cmd+H"),

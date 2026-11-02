@@ -311,7 +311,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
                 fontSize: termFontSize,
                 fontFamily: termSettings?.["term:fontfamily"] ?? connFontFamily ?? "Hack",
                 drawBoldTextInBrightColors: false,
-                fontWeight: "normal",
+                fontWeight: 500,
                 fontWeightBold: "bold",
                 allowTransparency: true,
                 scrollback: termScrollback,

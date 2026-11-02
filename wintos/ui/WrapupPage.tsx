@@ -6,6 +6,7 @@ import { Key } from "./Key";
 import { runKey } from "./menu";
 import { Dot } from "./notes/ProjectNotes";
 import { Panel } from "./TodayPage";
+import { DriveBoard } from "./DriveBoard";
 import { shownState } from "./sessions";
 import { T } from "./tokens";
 import { useFocusOnMount } from "./useFocusOnMount";
@@ -67,6 +68,7 @@ export const WrapupPage = memo(() => {
                     <Key k="esc" label="back" />
                 </span>
             </div>
+            <DriveBoard />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14, alignItems: "start" }}>
                 <Panel label={`Waiting on you · ${looseLeft}`}>
                     {waiting.length === 0 && <span style={{ fontSize: 12, color: T.faint }}>Nothing waits on you.</span>}

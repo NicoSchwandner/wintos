@@ -5,14 +5,16 @@ import type { StandupItem } from "./standup";
 // session ran in as the events arrive, since a transcript only knows its folder and a session
 // started in a repo belongs to whatever project's tab it ran in.
 
-export type Activity = Record<string, Record<string, { title: string; prompts: number; sessions: Record<string, string> }>>; // day → tab → …
+// waitedMs: how long its sessions waited for the prompts you sent them that day.
+export type Activity = Record<string, Record<string, { title: string; prompts: number; sessions: Record<string, string>; waitedMs?: number }>>; // day → tab → …
 // minutes: how long its sessions were busy that day; facts: what its PRs did, one line each.
 // asked: what the developer asked its sessions, for a project whose sessions wrote no recap.
 export type RecapItem = { title: string; minutes: number; prompts: number; recaps: string[]; facts: string[]; asked?: string[] };
 
-export function recordActivity(a: Activity, day: string, tabId: string, title: string, sessionId: string, transcript: string, prompt: boolean, keepDays: number): Activity {
+export function recordActivity(a: Activity, day: string, tabId: string, title: string, sessionId: string, transcript: string, prompt: boolean, keepDays: number, waitedMs = 0): Activity {
     const was = a[day]?.[tabId];
-    const entry = { title, prompts: (was?.prompts ?? 0) + (prompt ? 1 : 0), sessions: { ...was?.sessions, [sessionId]: transcript } };
+    const waited = (was?.waitedMs ?? 0) + waitedMs;
+    const entry = { title, prompts: (was?.prompts ?? 0) + (prompt ? 1 : 0), sessions: { ...was?.sessions, [sessionId]: transcript }, ...(waited ? { waitedMs: waited } : {}) };
     const next = { ...a, [day]: { ...a[day], [tabId]: entry } };
     const from = new Date(`${day}T12:00:00`);
     from.setDate(from.getDate() - keepDays);
@@ -118,4 +120,12 @@ export function prFact(pr: PR, me: string, day: string): string {
     const on = (iso?: string) => !!iso && localDay(Date.parse(iso)) === day;
     const where = pr.mergedAt ? (on(pr.mergedAt) ? "merged today" : "merged") : [on(pr.createdAt) && "opened today", pr.isDraft ? "draft" : "ready for review"].filter(Boolean).join(", ");
     return `${pr.repo}#${pr.number} ${pr.title} (${pr.author === me ? "yours" : `by ${pr.author}`}, ${where})`;
+}
+
+// How long a session sat waiting for the prompt you are sending it: since it asked, or since its
+// turn ended. A wait past WAIT_CAP_MS is a night or a weekend, not a session buried behind others.
+export const WAIT_CAP_MS = 4 * 3_600_000;
+export function waitedFor(s: { state: string; since: number; turnEndedAt?: number } | undefined, now: number): number {
+    const from = s?.state === "waiting" ? s.since : s?.state === "working" ? undefined : s?.turnEndedAt;
+    return from && now > from && now - from <= WAIT_CAP_MS ? now - from : 0;
 }

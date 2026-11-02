@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { activeMinutes, cutItems, mergeByTitle, prFact, lastRecaps, lastWorkday, localDay, recordActivity, recapPrompt, type Activity } from "./recap";
+import { activeMinutes, cutItems, mergeByTitle, prFact, lastRecaps, lastWorkday, localDay, recordActivity, recapPrompt, waitedFor, WAIT_CAP_MS, type Activity } from "./recap";
 
 describe("recordActivity", () => {
     test("a session's project and transcript, per day; prompts counted; old days dropped", () => {
@@ -8,6 +8,25 @@ describe("recordActivity", () => {
         a = recordActivity(a, "2026-10-06", "tab1", "Idea skill", "s1", "/t/s1.jsonl", false, 14);
         a = recordActivity(a, "2026-10-06", "tab1", "Idea skill", "s2", "/t/s2.jsonl", true, 14);
         expect(a).toEqual({ "2026-10-06": { tab1: { title: "Idea skill", prompts: 2, sessions: { s1: "/t/s1.jsonl", s2: "/t/s2.jsonl" } } } });
+    });
+});
+
+describe("waited time", () => {
+    test("adds up per project and day", () => {
+        let a: Activity = {};
+        a = recordActivity(a, "2026-11-02", "t", "Backstage", "s1", "/t", true, 14, 60_000);
+        a = recordActivity(a, "2026-11-02", "t", "Backstage", "s1", "/t", true, 14, 30_000);
+        expect(a["2026-11-02"].t.waitedMs).toBe(90_000);
+    });
+    test("since it asked, or since its turn ended; nothing while it works, before it ever ran, or past the cap", () => {
+        const now = 10 * WAIT_CAP_MS;
+        expect([
+            waitedFor({ state: "waiting", since: now - 5000, turnEndedAt: now - 9000 }, now),
+            waitedFor({ state: "idle", since: 0, turnEndedAt: now - 7000 }, now),
+            waitedFor({ state: "working", since: now - 5000, turnEndedAt: now - 7000 }, now),
+            waitedFor(undefined, now),
+            waitedFor({ state: "idle", since: 0, turnEndedAt: now - WAIT_CAP_MS - 1 }, now),
+        ]).toEqual([5000, 7000, 0, 0, 0]);
     });
 });
 

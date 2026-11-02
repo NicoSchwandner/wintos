@@ -29,9 +29,9 @@ export function dayRecapper(root: string, cmd?: string, extra?: string, factsOf:
     let activity = read<Activity>(activityFile, {});
     let curation = read<Curation>(curationFile, { days: {}, examples: [] });
 
-    const record = (tabId: string, title: string, sessionId: string, transcript: string | undefined, prompt: boolean, now: number) => {
+    const record = (tabId: string, title: string, sessionId: string, transcript: string | undefined, prompt: boolean, now: number, waitedMs = 0) => {
         if (!transcript) return;
-        activity = recordActivity(activity, isoDay(now), tabId, title, sessionId, transcript, prompt, KEEP_DAYS);
+        activity = recordActivity(activity, isoDay(now), tabId, title, sessionId, transcript, prompt, KEEP_DAYS, waitedMs);
         try {
             writeFileSync(activityFile, JSON.stringify(activity));
         } catch {} // the daily recap is a convenience; a failed write must not fail the event
@@ -125,7 +125,10 @@ export function dayRecapper(root: string, cmd?: string, extra?: string, factsOf:
         return last ? gist(last) : undefined;
     };
 
-    return { record, recap, editList, readOut, gistOf, transcriptOf, numbersOf };
+    // Today's prompts and waits per tab, for the drive board.
+    const today = (now: number): Record<string, { prompts: number; waitedMs: number }> =>
+        Object.fromEntries(Object.entries(activity[isoDay(now)] ?? {}).map(([tab, a]) => [tab, { prompts: a.prompts, waitedMs: a.waitedMs ?? 0 }]));
+    return { record, today, recap, editList, readOut, gistOf, transcriptOf, numbersOf };
 }
 
 function safeText(file: string): string {

@@ -11,7 +11,7 @@ import { ProjectStore } from "../projects/store";
 import type { Journal } from "../journal/journal";
 import { formatMarkdown } from "../markdown";
 import { dayRecapper } from "../recap/day";
-import { localDay, prFact } from "../recap/recap";
+import { localDay, prFact, waitedFor } from "../recap/recap";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
@@ -287,6 +287,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         projectSnoozes,
         driving,
         closed,
+        activityToday: recapper.today(Date.now()),
         seen,
         fixer: fixer.state(),
         update: { behind: update?.behind() ?? 0 },
@@ -431,6 +432,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const p = ev?.payload;
                 if (![ev?.tabId, ev?.blockId, p?.session_id, p?.hook_event_name].every(isSafe))
                     return send(res, 400, "need string tabId, blockId, payload.session_id, payload.hook_event_name");
+                const before = sessions.get(p.session_id);
                 const left = leavingFor(sessions, ev);
                 // Shelved before the reduce drops them, while their status and PRs are still on hand.
                 for (const l of left) shelveLive(l);
@@ -458,7 +460,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const tp = (p as { transcript_path?: unknown }).transcript_path;
                 if (p.hook_event_name === "Stop" && typeof tp === "string") nameByModel(p.session_id, tp, store.byTab(ev.tabId)?.title);
                 if (p.hook_event_name === "Stop" && typeof p.last_assistant_message === "string" && p.last_assistant_message.trim()) readEndedTurn(p.session_id, p.last_assistant_message);
-                recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now());
+                recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now(), p.hook_event_name === "UserPromptSubmit" ? waitedFor(before, Date.now()) : 0);
                 if (p.hook_event_name === "UserPromptSubmit") markSeen(p.session_id); // you read it to answer it
                 if (p.hook_event_name === "UserPromptSubmit" && typeof p.prompt === "string" && p.kind !== "bg") setRhythm(prompted(rhythm, Date.now(), p.prompt.length));
                 const text =

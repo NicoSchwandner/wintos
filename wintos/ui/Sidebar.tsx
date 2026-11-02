@@ -27,6 +27,7 @@ import { isPage, mainViewAtom, renamingAtom, tickModeAtom, yourMoveAtom } from "
 import { inFlight, liveSessions } from "./sessions";
 import { instance, setProjectSnoozed, setProjectTitle, useWintos } from "./useWintos";
 import { attention, type Drive, type DriveLine } from "./attention";
+import { driveDay, driveDayLine } from "./driveDay";
 import { ghPrs, inboxKind, isInboxTab, type InboxList, prRef, projectTabIds, relTime, RowView, type WintosState } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
@@ -162,6 +163,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 onOpen={() => open(d.row.tabId)} onMenu={(e) => menu(e, d.row.tabId)} onClose={() => closeProjectTab(d.row.tabId, true)}
                 onRename={(title) => (setRenaming(null), focusArea("terminal"), title?.trim() && fireAndForget(() => setProjectTitle(d.row.tabId, title.trim(), true)))}>
                 <DriveLines tabId={d.row.tabId} lines={d.lines} now={now} />
+                <div style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>today · {driveDayLine(driveDay(state?.activityToday?.[d.row.tabId], model!.prs[d.row.tabId]?.items.map((i) => i.pr) ?? [], gh?.me, now))}</div>
             </CardRow>
         );
     };

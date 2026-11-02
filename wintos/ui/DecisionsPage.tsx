@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import type { Reentry } from "../daemon/sessions/reentry";
-import { answerText, decisions, questions, type Decision } from "./decisions";
+import { answerText, currentCard, decisions, questions, type Decision } from "./decisions";
 import { clearDraft, keepDraft, restoreDraft } from "./drafts";
 import { focusSession } from "./focus";
 import { Key } from "./Key";
@@ -47,8 +47,8 @@ export const DecisionsPage = memo(() => {
     // A card stays in the batch once shown, so the count holds while answered ones start working.
     for (const d of all) if (!seen.current.some((x) => x.turn === d.turn)) seen.current.push(d);
     const batch = seen.current;
-    const card = batch.find((d) => !done[d.turn] && all.some((x) => x.turn === d.turn));
-    const at = card ? batch.indexOf(card) : batch.length;
+    const card = currentCard(batch, all, done);
+    const at = card ? batch.findIndex((d) => d.turn === card.turn) : batch.length;
     useEffect(() => void (own !== null && setTimeout(() => ownRef.current?.focus(), 0)), [own !== null]);
     useEffect(() => {
         setArmed(null), setFailed(null), setBack(null), setChosen([]), setPicked(card?.picks?.map((p) => p.on) ?? []);
@@ -144,7 +144,7 @@ export const DecisionsPage = memo(() => {
                 </div>
                 {batch.length > 0 && (
                     <div style={{ display: "grid", gridTemplateColumns: `repeat(${batch.length}, minmax(0, 1fr))`, gap: 4 }}>
-                        {batch.map((d) => <span key={d.sessionId} style={{ height: 4, borderRadius: 2, background: d === card ? T.apricot : done[d.sessionId] || !all.some((x) => x.sessionId === d.sessionId) ? T.moss : T.borderActive }} />)}
+                        {batch.map((d) => <span key={d.sessionId} style={{ height: 4, borderRadius: 2, background: d.turn === card?.turn ? T.apricot : done[d.sessionId] || !all.some((x) => x.sessionId === d.sessionId) ? T.moss : T.borderActive }} />)}
                     </div>
                 )}
                 {!card ? (

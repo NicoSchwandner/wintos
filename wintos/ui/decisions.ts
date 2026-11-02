@@ -82,6 +82,16 @@ export function decisions(state: WintosState, now: number, titleOf: (tabId: stri
 
 export const questions = (d: Decision) => optionGroups(d.options);
 
+// The card on screen: the first in the batch not yet decided and still waiting, as it reads now.
+// The batch holds its order, but a turn is often read a moment after it is shown.
+export function currentCard(batch: Decision[], all: Decision[], done: Record<string, unknown>): Decision | undefined {
+    for (const d of batch) {
+        const now = !done[d.turn] && all.find((x) => x.turn === d.turn);
+        if (now) return now;
+    }
+    return undefined;
+}
+
 type Answer = { option: number } | { options: number[] } | { yourCall: true } | { own: string };
 
 // What WintOS types into the session for an answer: an option by its label (the question tool

@@ -29,7 +29,7 @@ export const KeyBadges = memo(() => {
     return (
         <div data-wintos="key-badges" style={{ position: "fixed", inset: 0, zIndex: 1000, pointerEvents: "none" }}>
             {badges.map((b, i) => (
-                <span key={i} style={{ ...capStyle, position: "absolute", left: b.x, top: b.y, transform: "translate(-85%, -35%)", whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(0,0,0,0.25)" }}>
+                <span key={i} style={{ ...capStyle, position: "absolute", left: b.x, top: b.y, transform: "translate(-85%, -80%)", whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(0,0,0,0.25)" }}>
                     {b.k}
                 </span>
             ))}

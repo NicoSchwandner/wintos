@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { answerText, decisions, questions } from "./decisions";
+import { answerText, currentCard, decisions, questions } from "./decisions";
 import type { WintosState } from "./view";
 
 const NOW = 1_000_000;
@@ -43,6 +43,14 @@ describe("decisions: turns, and the ones left for later", () => {
         expect(decisions(st(NOW - 500), NOW, title)).toHaveLength(1);
         expect(decisions(st(NOW - 1000), NOW + 1, title)).toHaveLength(1);
     });
+});
+
+test("the card shows its turn as read now, not as first shown", () => {
+    const first = decisions(state([s("a", { kind: "answer", by: "guess" })]), NOW, title);
+    const read = decisions(state([s("a", { kind: "decide", text: "where matching lives", by: "model" })]), NOW, title);
+    expect(currentCard(first, read, {})?.question).toBe("where matching lives");
+    expect(currentCard(first, read, { [first[0].turn]: "answered" })).toBeUndefined();
+    expect(currentCard(first, [], {})).toBeUndefined();
 });
 
 describe("answerText", () => {

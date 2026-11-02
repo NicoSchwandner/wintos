@@ -405,7 +405,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             const sid = isSafe(url.searchParams.get("session")) ? url.searchParams.get("session")! : undefined;
             if (req.method === "OPTIONS") {
                 res.setHeader("Access-Control-Allow-Headers", "content-type, x-wintos-token");
-                res.setHeader("Access-Control-Allow-Methods", "GET, POST");
+                res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT");
                 return send(res, 204, "");
             }
             if (req.method === "GET" && url.pathname === "/state") return json(res, state());

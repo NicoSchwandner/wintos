@@ -255,6 +255,11 @@ describe("wintosd API", () => {
         const ok = await fetch(base + "/state", { headers: { Origin: "http://localhost:5173", "X-Wintos-Token": "t0ken" } });
         expect(ok.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
     });
+
+    test("the preflight allows every method the UI sends, PUT for the day's list too", async () => {
+        const r = await fetch(base + "/day/recap", { method: "OPTIONS", headers: { Origin: "http://localhost:5173", "Access-Control-Request-Method": "PUT" } });
+        expect(r.headers.get("access-control-allow-methods")?.split(/,\s*/)).toEqual(expect.arrayContaining(["GET", "POST", "PUT"]));
+    });
 });
 
 describe("search and reopen", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { allowedInInbox, blockDefFor, focusedPageUrl, newSessionScript, paneShowing, shelvable } from "./menu";
+import { allowedInInbox, blockDefFor, focusedPageUrl, newSessionScript, paneShowing, shelvable, WINTOS_KEYS } from "./menu";
 
 const widgets = {
     "defwidget@terminal": { blockdef: { meta: { view: "term", controller: "shell" } } },
@@ -76,4 +76,12 @@ describe("shelvable", () => {
         for (const meta of [{ "cmd:initscript": "cd '/w' && claude" }, { "cmd:initscript": "" }, { view: "term" }, { view: "web", url: "https://x" }, undefined])
             expect(shelvable(meta as MetaType)).toBeUndefined();
     });
+});
+
+// ⌥ changes the character a key types on a Mac (⌥D is ∂), so a ⌥ shortcut matched by its
+// character never fires from a real keyboard; it names the physical key, c{KeyD}.
+test("every ⌥ shortcut names its physical key", () => {
+    const option = WINTOS_KEYS.map(([k]) => k).filter((k) => k.includes("Option"));
+    expect(option.length).toBeGreaterThan(10);
+    expect(option.filter((k) => !/:c\{(Key[A-Z]|Digit\d)\}$|:(Arrow\w+|\d)$/.test(k))).toEqual([]);
 });

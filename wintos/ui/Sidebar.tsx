@@ -223,7 +223,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     )
                 )}
                 {state?.day?.planned && !ticking && focusList(state.day.focus).some((i) => !i.done) && (
-                    <div data-wintos="today-focus" style={{ display: "flex", flexDirection: "column", gap: 5, margin: "-8px 4px 0" }}>
+                    <div data-wintos="today-focus" style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: -10, padding: "9px 11px", background: T.card, borderRadius: 9 }}>
                         <FocusRows day={state.day} limit={FOCUS_SHOWN} />
                     </div>
                 )}

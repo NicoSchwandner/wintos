@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import type { Reentry } from "../daemon/sessions/reentry";
 import { answerText, decisions, questions, type Decision } from "./decisions";
+import { clearDraft, keepDraft, restoreDraft } from "./drafts";
 import { focusSession } from "./focus";
 import { Key } from "./Key";
 import { runKey } from "./menu";
@@ -51,6 +52,8 @@ export const DecisionsPage = memo(() => {
     useEffect(() => void (own !== null && setTimeout(() => ownRef.current?.focus(), 0)), [own !== null]);
     useEffect(() => {
         setArmed(null), setFailed(null), setBack(null), setChosen([]), setPicked(card?.picks?.map((p) => p.on) ?? []);
+        // Your own answer, half written when you left the batch, is open again with its text.
+        setOwn(card ? (restoreDraft(`decision:${card.turn}`, "")?.text ?? null) : null);
         // What you asked it and its whole last message: the background it gave for the decision.
         if (!card) return;
         let live = true;
@@ -60,7 +63,7 @@ export const DecisionsPage = memo(() => {
             .catch(() => {});
         return () => void (live = false);
     }, [card?.turn]);
-    const mark = (d: Decision, how: "answered" | "parked" | "later") => (setDone({ ...done, [d.turn]: how }), setOwn(null), ref.current?.focus());
+    const mark = (d: Decision, how: "answered" | "parked" | "later") => (setDone({ ...done, [d.turn]: how }), how === "answered" && clearDraft(`decision:${d.turn}`), setOwn(null), ref.current?.focus());
     const latest = useRef(state);
     latest.current = state;
     // A session saved at the last quit: its Claude starts first, and takes the answer once it is up.
@@ -209,11 +212,11 @@ export const DecisionsPage = memo(() => {
                                     data-wintos="decision-own"
                                     value={own}
                                     rows={3}
-                                    onChange={(e) => setOwn(e.target.value)}
+                                    onChange={(e) => (setOwn(e.target.value), keepDraft(`decision:${card.turn}`, e.target.value, ""))}
                                     onKeyDown={(e) => {
                                         e.stopPropagation();
                                         if (e.key === "Enter" && e.metaKey) (e.preventDefault(), send());
-                                        if (e.key === "Escape") (e.preventDefault(), setOwn(null), ref.current?.focus());
+                                        if (e.key === "Escape") (e.preventDefault(), clearDraft(`decision:${card.turn}`), setOwn(null), ref.current?.focus());
                                     }}
                                     style={{ resize: "vertical", padding: "12px 14px", borderRadius: 11, background: T.terminal, border: `1px solid ${T.borderActive}`, outline: "none", color: T.text, fontFamily: T.mono, fontSize: 13.5, lineHeight: 1.6 }}
                                 />

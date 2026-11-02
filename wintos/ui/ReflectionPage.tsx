@@ -93,7 +93,7 @@ export const ReflectionPage = memo(() => {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflowY: "auto" }}>
                     <Panel label="Your reflection" keys={editing ? <><Key k="⌘⏎" label="save" /><Key k="esc" label="discard" /></> : <Key k="⌘E" label="write" />}>
-                        <Mine text={view.body} mtime={view.mtime} canEdit save={save} size="full" file="the reflection's journal file" />
+                        <Mine text={view.body} mtime={view.mtime} canEdit save={save} size="full" draftKey={`reflection:${view.level}:${view.date}`} file="the reflection's journal file" />
                     </Panel>
                 </div>
             </div>

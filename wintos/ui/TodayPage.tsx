@@ -93,7 +93,7 @@ export const TodayPage = memo(() => {
                         warn={!day.planned}
                         keys={editing ? <><Key k="⌘⏎" label="save" /><Key k="esc" label="discard" /></> : <><Key k="⌘E" label="edit" />{!day.planned && <Key k="⌘⏎" label="plan done" />}</>}
                     >
-                        <Mine text={day.focus} mtime={day.mtime} canEdit save={save} size="full" file="today's journal file" empty={left.length ? `Nothing planned yet. ⌘E starts from the ${left.length} things yesterday left open.` : "Nothing planned yet. Press ⌘E and write one to three things that matter today."} start={left.map((t) => `- [ ] ${t}`).join("\n")} />
+                        <Mine text={day.focus} mtime={day.mtime} canEdit save={save} size="full" draftKey={`today:${day.date}`} file="today's journal file" empty={left.length ? `Nothing planned yet. ⌘E starts from the ${left.length} things yesterday left open.` : "Nothing planned yet. Press ⌘E and write one to three things that matter today."} start={left.map((t) => `- [ ] ${t}`).join("\n")} />
                     </Panel>
                 </div>
             </div>

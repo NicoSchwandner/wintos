@@ -1,6 +1,7 @@
 import { useAtomValue } from "jotai";
 import { useEffect, useState } from "react";
 import { editMine } from "../focus";
+import { hasDraft } from "../drafts";
 import { T } from "../tokens";
 import { toggleCheckbox } from "./checkbox";
 import { Md } from "./Md";
@@ -19,6 +20,7 @@ export function Mine({
     file = "mine.md",
     empty = "Empty. Press ⌘E to write what the sessions must respect.",
     start = "",
+    draftKey,
 }: {
     text: string;
     mtime: number;
@@ -28,6 +30,7 @@ export function Mine({
     file?: string;
     empty?: string;
     start?: string; // what an edit of an empty file begins with (the Today page: yesterday's leftovers)
+    draftKey: string;
 }) {
     const editing = useAtomValue(editingMineAtom);
     const [error, setError] = useState<string | null>(null);
@@ -35,7 +38,7 @@ export function Mine({
     const [base, setBase] = useState(mtime);
     useEffect(() => void (editing && setBase(mtime)), [editing]);
 
-    if (editing && canEdit) return <MdEditor initial={text.trim() ? text : start} save={(t) => save(t, base)} close={() => editMine(false)} file={file} size={size} id="mine-editor" />;
+    if (editing && canEdit) return <MdEditor initial={text.trim() ? text : start} save={(t) => save(t, base)} close={() => editMine(false)} file={file} size={size} id="mine-editor" draftKey={draftKey} />;
     // A task box ticks in place: its line of the file flips and is saved like an edit, refused if
     // mine.md changed on disk meanwhile.
     const tick = async (i: number) => {
@@ -45,6 +48,7 @@ export function Mine({
     return (
         <div data-wintos={canEdit ? "mine-editable" : undefined} style={{ display: "flex", flexDirection: "column", gap: size === "rail" ? 4 : 6 }}>
             {error && <span style={{ color: T.brick, fontSize: 11 }}>{error}</span>}
+            {canEdit && hasDraft(draftKey) && <span data-wintos="draft-kept" style={{ color: T.apricot, fontSize: 11 }}>An unsaved edit is kept · ⌘E goes on with it</span>}
             {!text.trim() && (
                 <span style={{ fontSize: 12.5, color: T.faint }}>
                     {canEdit ? empty : "Available once the project has a title."}

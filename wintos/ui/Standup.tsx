@@ -60,7 +60,7 @@ export function Standup({ today, focus, panel }: { today: string; focus: string;
                 keys: recap && keys,
                 children: (
                     <>
-                        {editing && recap && <MdEditor initial={itemsMarkdown(recap.items)} save={save} close={close} file="the daily" size="full" id="daily-editor" />}
+                        {editing && recap && <MdEditor initial={itemsMarkdown(recap.items)} save={save} close={close} file="the daily" size="full" id="daily-editor" draftKey={`daily:${recap.date}`} />}
                         {!editing && open && read && (
                             <div data-wintos="standup">
                                 <Md text={read} size="full" />

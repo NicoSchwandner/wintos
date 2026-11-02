@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { clearDraft, keepDraft, restoreDraft } from "../drafts";
 import { T } from "../tokens";
 import { useZoneKeys } from "../zones";
 import { fitHeight, revealCaret } from "./caret";
@@ -7,23 +8,27 @@ import type { SaveResult } from "./useNotes";
 
 // The one editor for markdown you write in WintOS: mine.md, today's focus, the reflection, the
 // daily. ⏎ ⇥ ⌘L edit lists, ⌘⏎ saves, esc discards (a second esc when there are changes).
-// file names it in errors; id is its data-wintos, what focus and tests find it by.
-export function MdEditor({ initial, save, close, file, size, id }: { initial: string; save: (text: string) => Promise<SaveResult>; close: () => void; file: string; size: "rail" | "full"; id: string }) {
-    const [draft, setDraft] = useState(initial);
+// file names it in errors; id is its data-wintos, what focus and tests find it by. draftKey: an edit
+// left unsaved comes back the next time this editor opens.
+export function MdEditor({ initial, save, close, file, size, id, draftKey }: { initial: string; save: (text: string) => Promise<SaveResult>; close: () => void; file: string; size: "rail" | "full"; id: string; draftKey: string }) {
+    const [kept] = useState(() => restoreDraft(draftKey, initial));
+    const [draft, setDraft] = useState(kept?.text ?? initial);
     const [error, setError] = useState<string | null>(null);
     const [warned, setWarned] = useState(false);
     const ref = useRef<HTMLTextAreaElement>(null);
     useEffect(() => void setTimeout(() => ref.current?.focus(), 0), []);
+    useEffect(() => keepDraft(draftKey, draft, initial), [draft]);
+    const discard = () => (clearDraft(draftKey), close());
     useLayoutEffect(() => {
         if (!ref.current) return;
         fitHeight(ref.current, size === "rail" ? 160 : 260);
         if (document.activeElement === ref.current) revealCaret(ref.current);
     }, [draft]);
     useZoneKeys(ref, {
-        Escape: () => (draft === initial || warned ? close() : setWarned(true)),
+        Escape: () => (draft === initial || warned ? discard() : setWarned(true)),
         "Cmd:Enter": () =>
             void save(draft).then((r) => {
-                if (r === "ok") close();
+                if (r === "ok") discard();
                 else if (r === "conflict") setError(`${file} changed on disk while you edited. Copy your text, press esc and edit again.`);
                 else setError("could not save: wintosd refused or is offline");
             }),
@@ -31,6 +36,7 @@ export function MdEditor({ initial, save, close, file, size, id }: { initial: st
     return (
         <>
             {error && <span style={{ color: T.brick, fontSize: 11 }}>{error}</span>}
+            {kept && !warned && <span style={{ color: T.apricot, fontSize: 11 }}>{kept.stale ? `Your unsaved edit, restored · ${file} changed since you wrote it` : "Your unsaved edit, restored"}</span>}
             {warned && <span style={{ color: T.apricot, fontSize: 11 }}>Unsaved changes · esc again to discard, ⌘⏎ to save</span>}
             <textarea
                 ref={ref}

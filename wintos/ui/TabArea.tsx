@@ -12,6 +12,7 @@ import { useSeenReporter } from "./useSeenReporter";
 import { useNewProjectPaste } from "./newproject";
 import { useWintos } from "./useWintos";
 import { rememberUndo } from "./undo";
+import { KeyBadges } from "./KeyBadges";
 import { UndoToast } from "./UndoToast";
 import { NotesRail } from "./notes/NotesRail";
 import { isPage, mainViewAtom, overlayAtom } from "./notes/state";
@@ -20,6 +21,7 @@ import { InboxArea } from "./InboxArea";
 import { inboxKind, isInboxTab } from "./view";
 import { PaneStrip } from "./PaneStrip";
 import { MoveNudge } from "./MoveNudge";
+import { closeProjectTab, runKey } from "./menu";
 import { StatusBar } from "./StatusBar";
 import { T } from "./tokens";
 import { ReflectionPage } from "./ReflectionPage";
@@ -81,6 +83,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
             {overlay === "wip" && <WipDialog />}
             <MoveNudge />
             <UndoToast />
+            <KeyBadges />
         </div>
     );
 });
@@ -112,12 +115,22 @@ function EmptyProject({ tabId }: { tabId: string }) {
         rememberUndo({ kind: "project", projectId: tabId, metas: [], label: `Shelved ${title ?? "the project"}` });
         void getApi().closeTab(ws.oid, tabId, false);
     }, [left]);
-    const keys: [string, string][] = [...(shelved ? [["⌥⌘1", shelved > 1 ? `the newest of ${shelved} shelved sessions back (in the notes)` : "the shelved session back (in the notes)"] as [string, string]] : []), ["⇧⌘T", "new Claude session"], ["⌘T", "new terminal"], ["⌘J ⌘K", "another project"], ["⌘W", "close this project"]];
+    const keys: [string, string, () => void][] = [
+        ...(shelved ? [["⌥⌘1", shelved > 1 ? `the newest of ${shelved} shelved sessions back (in the notes)` : "the shelved session back (in the notes)", () => runKey("session-1")] as [string, string, () => void]] : []),
+        ["⇧⌘T", "new Claude session", () => runKey("session")],
+        ["⌘T", "new terminal", () => runKey("terminal")],
+        ["⌘J ⌘K", "another project", () => runKey("switch-next")],
+        ["⌘W", "close this project", () => closeProjectTab(tabId, false)],
+    ];
     return (
         <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, fontFamily: T.ui, color: T.muted }}>
             <span style={{ fontFamily: T.display, fontSize: 24, color: T.secondary }}>Nothing open in this project</span>
             <div style={{ display: "grid", gridTemplateColumns: "auto auto", gap: "10px 28px" }}>
-                {keys.map(([k, label]) => <Key key={k} k={k} label={label} />)}
+                {keys.map(([k, label, act]) => (
+                    <button key={k} type="button" data-key={k} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={act} style={{ justifySelf: "start", padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                        <Key k={k} label={label} />
+                    </button>
+                ))}
             </div>
         </div>
     );

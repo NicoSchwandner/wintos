@@ -1,5 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { Key } from "./Key";
+import { runKey } from "./menu";
 import { T } from "./tokens";
 import { readUndo, UNDO_EVENT } from "./undo";
 
@@ -26,10 +27,12 @@ export const UndoToast = memo(() => {
     return (
         <div
             data-wintos="undo-toast"
-            style={{ position: "absolute", bottom: 18, left: "50%", transform: "translateX(-50%)", zIndex: 90, maxWidth: "calc(100% - 32px)", padding: "8px 14px", background: T.ground, border: `1px solid ${T.borderActive}`, borderRadius: 10, fontFamily: T.ui, fontSize: 12.5, color: T.secondary, display: "flex", alignItems: "center", gap: 14, pointerEvents: "none" }}
+            style={{ position: "absolute", bottom: 18, left: "50%", transform: "translateX(-50%)", zIndex: 90, maxWidth: "calc(100% - 32px)", padding: "8px 14px", background: T.ground, border: `1px solid ${T.borderActive}`, borderRadius: 10, fontFamily: T.ui, fontSize: 12.5, color: T.secondary, display: "flex", alignItems: "center", gap: 14 }}
         >
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-            <Key k="⌘Z" label="undo" />
+            <button type="button" data-key="⌘Z" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("undo")} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                <Key k="⌘Z" label="undo" />
+            </button>
         </div>
     );
 });

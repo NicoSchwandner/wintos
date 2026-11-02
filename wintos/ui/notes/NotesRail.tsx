@@ -11,6 +11,7 @@ import { editingMineAtom } from "./state";
 import { useNotes } from "./useNotes";
 import { notesKeys, PrList } from "./PrList";
 import { daemonFetch, useWintos } from "../useWintos";
+import { editMine } from "../focus";
 import { runKey } from "../menu";
 import { openPalette } from "../Palette";
 import { backgroundSessions, projectSessions, relTime, sessionName, type WintosState } from "../view";
@@ -70,7 +71,13 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
             <div style={{ padding: "12px 14px", background: T.sidebar, border: `1px solid ${editing ? T.borderActive : T.keycapBorder}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>mine.md</span>
-                    <Key k={editing ? "⌘⏎" : "⌘E"} label={editing ? "save · esc discard" : "edit"} />
+                    {editing ? (
+                        <Key k="⌘⏎" label="save · esc discard" always />
+                    ) : (
+                        <button type="button" data-key="⌘E" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => editMine(true)} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                            <Key k="⌘E" label="edit" />
+                        </button>
+                    )}
                 </div>
                 <Mine text={notes?.mine ?? ""} mtime={notes?.mineMtime ?? 0} canEdit={!!notes} save={save} size="rail" draftKey={`mine:${tabId}`} />
             </div>
@@ -96,7 +103,7 @@ function HeadsUps({ tabId, state }: { tabId: string; state?: WintosState }) {
         <div data-wintos="headsups" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.apricot }}>Heads-up</span>
-                {list.length > 0 && <Key k="j k · x" label="close" />}
+                {list.length > 0 && <Key k="j k · x" label="close" hold />}
             </div>
             {problem && <span style={{ fontSize: 11, color: T.brick }}>New heads-ups can't be read: {problem}.</span>}
             {list.map((h) => (

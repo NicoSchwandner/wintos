@@ -118,9 +118,16 @@ body {
     }
 }
 
-/* On the chrome that is always on screen, keycaps stay out of sight until ⌘ is held
-   (keyHold.ts); their labels stay. Pages, footers and the nudge keep theirs: there a key is
-   the instruction. */
-body:not(.w-show-keys) :is([data-wintos="sidebar"], [data-wintos="pane-strip"], [data-wintos="session-header"], [data-wintos="notes-rail"], [data-wintos="notes-drawer"]) .w-keycap:not(.w-always) {
+/* The chrome that is always on screen is laid out for the mouse: its keycaps stay out of sight,
+   and holding ⌘ badges each button with its key (KeyBadges.tsx) without moving anything. A key
+   with no button of its own (.w-hold) shows inline while ⌘ is held. Pages, footers and the nudge
+   keep their caps: there a key is the instruction. */
+:is([data-wintos="sidebar"], [data-wintos="pane-strip"], [data-wintos="session-header"], [data-wintos="notes-rail"], [data-wintos="notes-drawer"]) .w-keycap:not(.w-always):not(.w-hold),
+body:not(.w-show-keys) .w-hold {
     display: none !important;
 }
+/* What a mouse acts on in place, out of sight until pointed at; visibility keeps its room, so
+   nothing moves on hover. The open one shows its controls anyway. */
+.w-hover-x { visibility: hidden; }
+:is(.w-chip, .w-row):hover .w-hover-x,
+:is(.w-chip, .w-row)[data-on] .w-hover-x { visibility: visible; }

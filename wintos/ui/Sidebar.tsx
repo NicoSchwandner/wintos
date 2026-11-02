@@ -158,6 +158,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             renaming: renaming === row.tabId,
             onOpen: () => open(row.tabId),
             onMenu: (e: React.MouseEvent) => menu(e, row.tabId),
+            onClose: () => closeProjectTab(row.tabId, true),
             onRename: (title: string | null) => {
                 setRenaming(null);
                 focusArea("terminal");
@@ -227,13 +228,13 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         <Band kind="needs" count={model.needs.length + wokeClosed.length} note={model.held ? (
                             <button type="button" data-wintos="held" data-key="⌥⌘O" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("release")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "0 4px", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 11.5, color: T.muted, textAlign: "left" }}>
                                 <span>{model.held.count} held · {model.held.until === Infinity ? "until you are back" : `opens ${new Date(model.held.until).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`}</span>
-                                <Key k="⌥⌘O" label="now" />
+                                <Key k="⌥⌘O" label="open now" />
                             </button>
                         ) : model.needs.length >= BATCH_WORTH && (
                             // Enough waiting to be worth a sitting: say where the batch is.
                             <button type="button" data-wintos="batch-ready" data-key="⌥⌘O" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("release")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "0 4px", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 11.5, color: T.muted, textAlign: "left" }}>
                                 <span>{model.needs.length} to decide in one go</span>
-                                <Key k="⌥⌘O" label="batch" />
+                                <Key k="⌥⌘O" label="open the batch" />
                             </button>
                         )}>
                             {wokeClosed.map((w) => (
@@ -341,6 +342,7 @@ type RowProps = {
     onOpen: () => void;
     onMenu: (e: React.MouseEvent) => void;
     onRename: (title: string | null) => void;
+    onClose?: () => void;
 };
 
 function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming" | "onRename"> & { style: React.CSSProperties }) {
@@ -363,11 +365,19 @@ function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming"
 // The open project: a brighter row with a bar on its left, unmistakable at a glance, and the keys
 // that walk away from it. The arrows mean nothing without their keys, so they show with them.
 const WalkKeys = () => (
-    <span className="w-keycap" style={{ display: "inline-flex", gap: 8 }}>
-        <Key k="⌘K" label="↑" />
-        <Key k="⌘J" label="↓" />
+    <span className="w-hold" style={{ display: "inline-flex", alignItems: "center", height: 0, gap: 8 }}>
+        <Key k="⌘K" label="↑" hold />
+        <Key k="⌘J" label="↓" hold />
     </span>
 );
+
+// A project's ×, shown on the row pointed at (and the open one); it closes like the menu's Close tab.
+const RowClose = ({ p }: { p: RowProps }) =>
+    p.onClose ? (
+        <button type="button" className="w-hover-x" aria-label="Close this project" title={p.active ? "Close this project (⇧⌘W)" : "Close this project"} data-key={p.active ? "⇧⌘W" : ""} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={(e) => (e.stopPropagation(), p.onClose!())} style={{ flexShrink: 0, width: 18, height: 18, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", borderRadius: 5, color: T.muted, cursor: "pointer" }}>
+            <i className="fa-solid fa-xmark" style={{ fontSize: 10.5 }} />
+        </button>
+    ) : null;
 
 function CardRow(p: RowProps) {
     const { v } = p;
@@ -376,7 +386,10 @@ function CardRow(p: RowProps) {
         <div
             data-tabid={p.tabId}
             data-band="card"
+            className="w-row"
+            data-on={p.active || undefined}
             data-key="⌘J / ⌘K"
+            data-nobadge
             onClick={p.onOpen}
             onContextMenu={p.onMenu}
             style={{
@@ -396,6 +409,7 @@ function CardRow(p: RowProps) {
                 <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                     {p.active && <WalkKeys />}
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>{v.age}</span>
+                    <RowClose p={p} />
                 </span>
             </div>
             {v.next && <div style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty" } as React.CSSProperties}><Rich text={v.next} size="rail" links={false} /></div>}
@@ -411,7 +425,10 @@ function QuietRow(p: RowProps & { dot?: string }) {
         <div
             data-tabid={p.tabId}
             data-band="quiet"
+            className="w-row"
+            data-on={p.active || undefined}
             data-key="⌘J / ⌘K"
+            data-nobadge
             onClick={p.onOpen}
             onContextMenu={p.onMenu}
             style={{
@@ -430,7 +447,9 @@ function QuietRow(p: RowProps & { dot?: string }) {
             {/* The title gets the room; the note is capped and cut, so neither wraps. */}
             {p.dot && <span style={{ width: 6, height: 6, borderRadius: "50%", background: p.dot, flexShrink: 0, marginRight: -2 }} />}
             <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} />
-            {p.active ? <WalkKeys /> : <span title={v.reason} style={{ maxWidth: "48%", fontSize: 11.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>}
+            {p.active && <WalkKeys />}
+            <span title={v.reason} style={{ maxWidth: "48%", fontSize: 11.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>
+            <RowClose p={p} />
         </div>
     );
 }

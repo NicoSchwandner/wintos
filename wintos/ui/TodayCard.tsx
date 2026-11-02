@@ -10,7 +10,7 @@ import type { Day } from "../daemon/journal/journal";
 import { lastDayName, leftFromYesterday, tickFocus } from "./day";
 import { focusLines, focusList, openWithNotes } from "./dayplan";
 import { Key } from "./Key";
-import { openView } from "./menu";
+import { openView, runKey } from "./menu";
 import { Box, Dot, Rich } from "./notes/ProjectNotes";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
@@ -49,7 +49,11 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>Today</span>
                 <span style={{ display: "flex", gap: 8 }}>
-                    {day.planned && open.length > 0 && <Key k="⌥⌘X" label="tick" />}
+                    {day.planned && open.length > 0 && (
+                        <button type="button" data-key="⌥⌘X" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={(e) => (e.stopPropagation(), runKey("tick"))} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                            <Key k="⌥⌘X" label="tick" />
+                        </button>
+                    )}
                     <Key k="⇧⌘Y" label="" />
                 </span>
             </div>
@@ -106,8 +110,8 @@ function TickList({ day }: { day: Day }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>Tick off</span>
                 <span style={{ display: "flex", gap: 8 }}>
-                    <Key k="j k · x" label="" />
-                    <Key k="esc" label="" />
+                    <Key k="j k · x" label="" always />
+                    <Key k="esc" label="" always />
                 </span>
             </div>
             {/* A ticked parent of open items is there for context only: no cursor stop. */}

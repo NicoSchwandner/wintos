@@ -196,10 +196,17 @@ export class WebViewModel implements ViewModel {
                 });
             }
 
+            // WintOS: the page's own controls live in its address bar, where a mouse looks for them.
+            buttons.push({
+                elemtype: "iconbutton",
+                icon: "copy",
+                title: "Copy URL (⇧⌘C)",
+                click: () => void navigator.clipboard.writeText(url ?? ""),
+            });
             buttons.push({
                 elemtype: "iconbutton",
                 icon: "arrow-up-right-from-square",
-                title: "Open in External Browser",
+                title: "Open in External Browser (⇧⌘U)",
                 click: () => {
                     console.log("open external", url);
                     if (url != null && url != "") {

@@ -4,13 +4,16 @@ import { T } from "./tokens";
 // ⇧ ⌃ ⌥ are drawn at text weight, where SF Mono's hairline ⇧ nearly vanishes at 11px.
 export const KEYCAP_FONT = "system-ui, -apple-system, sans-serif";
 
+export const capStyle: React.CSSProperties = { fontFamily: KEYCAP_FONT, fontSize: 12, fontWeight: 500, letterSpacing: "0.04em", lineHeight: 1, color: T.keycapText, background: T.keycapBg, border: `1px solid ${T.keycapBorder}`, borderBottomWidth: 2, borderRadius: 5, padding: "3px 7px" };
+
 // off: the key does nothing right now (e.g. "go to project" on a PR without one).
-// The cap shows while ⌘ is held (keyHold.ts), its label always; always: the cap shows anyway
-// (the status bar's few keys).
-export function Key({ k, label, off, always }: { k: string; label: string; off?: boolean; always?: boolean }) {
+// On the always-on chrome the cap stays hidden and holding ⌘ badges the button instead
+// (KeyBadges.tsx); always: the cap shows anyway (the status bar's keys, a "press again" prompt);
+// hold: shown inline while ⌘ is held, for a key with no button to badge (⌘J/⌘K, ⌘H/⌘L).
+export function Key({ k, label, off, always, hold }: { k: string; label: string; off?: boolean; always?: boolean; hold?: boolean }) {
     return (
         <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontFamily: T.mono, fontSize: 11, color: T.muted, whiteSpace: "nowrap", opacity: off ? 0.35 : 1 }}>
-            <span className={always ? "w-keycap w-always" : "w-keycap"} style={{ fontFamily: KEYCAP_FONT, fontSize: 12, fontWeight: 500, letterSpacing: "0.04em", lineHeight: 1, color: T.keycapText, background: T.keycapBg, border: `1px solid ${T.keycapBorder}`, borderBottomWidth: 2, borderRadius: 5, padding: "3px 7px" }}>{k}</span>
+            <span className={always ? "w-keycap w-always" : hold ? "w-keycap w-hold" : "w-keycap"} style={capStyle}>{k}</span>
             {label}
         </span>
     );

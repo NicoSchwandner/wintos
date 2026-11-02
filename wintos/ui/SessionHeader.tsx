@@ -3,7 +3,7 @@ import { useAtomValue } from "jotai";
 import { GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft } from "lucide-react";
 import { memo } from "react";
 import { Key } from "./Key";
-import { runAction } from "./menu";
+import { runAction, runKey } from "./menu";
 import { HEADERS } from "./PrQueue";
 import { SESSION_DOT, T } from "./tokens";
 import { useNow } from "./useNow";
@@ -36,8 +36,8 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                     {shown !== s.state ? ` · ${agents} subagent${agents === 1 ? "" : "s"}` : s.state !== "working" && ` ${relTime(now - s.since)}`}
                 </span>
                 <span data-wintos="session-name" style={{ color: T.emphasis, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>{sessionName(s)}</span>
-                {s.name?.by === "session" && now - s.name.at < NAME_PROPOSAL_MS && <Key k="⌥⌘N" label={`change the name · ${Math.min(60, Math.ceil((NAME_PROPOSAL_MS - (now - s.name.at)) / 1000))}s`} />}
-                {s.name?.suggested && <Key k="⌥⌘N" label={`it suggests “${s.name.suggested}”`} />}
+                {s.name?.by === "session" && now - s.name.at < NAME_PROPOSAL_MS && <NameButton label={`change the name · ${Math.min(60, Math.ceil((NAME_PROPOSAL_MS - (now - s.name.at)) / 1000))}s`} />}
+                {s.name?.suggested && <NameButton label={`it suggests “${s.name.suggested}”`} />}
                 {h.task && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>{h.task}</span>}
                 {h.branch && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.branch}</span>}
             </div>
@@ -84,6 +84,12 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
 SessionHeader.displayName = "SessionHeader";
 
 const HEADER_CHIPS = 4;
+
+const NameButton = ({ label }: { label: string }) => (
+    <button type="button" data-key="⌥⌘N" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("name-session")} style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>
+        <Key k="⌥⌘N" label={label} />
+    </button>
+);
 
 // The session's own name stands unless you change it within this minute (the session carries on).
 const NAME_PROPOSAL_MS = 60_000;

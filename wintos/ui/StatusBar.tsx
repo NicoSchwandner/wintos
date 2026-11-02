@@ -12,8 +12,8 @@ import { useWintos } from "./useWintos";
 // own on screen: a key shown where it acts (⌘J/⌘K on the open project, ⌘E on mine.md, ⇧⌘G on
 // the PRs card, ⌃⇥ in the sidebar) is not repeated here.
 // The full-page views (Today, Reflect) show their own keys. Typed by view, so a new one can't be missed.
-const KEYS: Record<MainView, readonly (readonly [string, string])[]> = {
-    terminal: [["⇧⌘P", "everything"], ["⇧⌘T", "new session"], ["⌥⌘L", "notes"], ["⇧⌘K", "keys"]],
+const KEYS: Record<MainView, readonly (readonly [string, string, string])[]> = {
+    terminal: [["⇧⌘P", "everything", "palette"], ["⇧⌘T", "new session", "session"], ["⌥⌘L", "notes", "rail"], ["⇧⌘K", "keys", "keymap"]],
     day: [],
     reflect: [],
     keyboard: [],
@@ -41,8 +41,10 @@ export const StatusBar = memo(({ inbox }: { inbox?: boolean }) => {
     if (inbox && !behind && !onBreak) return null;
     return (
         <div style={{ flexShrink: 0, minHeight: 30, boxSizing: "border-box", padding: "5px 16px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 14px", borderTop: `1px solid ${T.hairline}`, background: T.sidebar, fontFamily: T.ui }}>
-            {keys.map(([k, label]) => (
-                <Key key={k} k={k} label={label} always />
+            {keys.map(([k, label, action]) => (
+                <button key={k} type="button" data-key={k} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey(action)} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                    <Key k={k} label={label} always />
+                </button>
             ))}
             <span data-wintos="key-tip" style={{ fontSize: 11.5, color: T.faint }}>hold ⌘ for every shortcut</span>
             {onBreak && (

@@ -2,13 +2,13 @@ import { getLayoutModelForStaticTab } from "@/layout/index";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atom, useAtomValue } from "jotai";
 import { atoms, getSettingsKeyAtom } from "@/app/store/global";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 
 const STRIP_GAP = 6; // above the chips, and (with the tile gap) below them
 import type { Session } from "../daemon/sessions/reduce";
 import { focusSession, takeHandoff } from "./focus";
 import { Key } from "./Key";
-import { closeProjectTab, confirmPaneClose, copiedAtAtom, focusedPageUrl, runKey, shelvePane } from "./menu";
+import { closePane, closeProjectTab, runKey, shelvePane } from "./menu";
 import { openPalette } from "./Palette";
 import { closeArmedAtom, restartArmedAtom } from "./notes/state";
 import { paneOrder, stripPanes } from "./panes";
@@ -79,21 +79,22 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
         // The strip's empty space drags the window. The chips' row doesn't, gaps included: a drag
         // region takes the wheel too, and the row scrolls sideways when it overflows.
         <div data-wintos="pane-strip" style={{ display: "flex", alignItems: "center", padding: `${STRIP_GAP}px 8px ${Math.max(0, STRIP_GAP - tileGap / 2)}px`, flexShrink: 0, WebkitAppRegion: "drag" } as React.CSSProperties}>
-        {title && state?.autoCloseOff?.includes(tabId) && <span data-wintos="autoclose-off" style={{ flexShrink: 0, marginRight: 14 }}><Key k="⌥⌘A" label="auto-close off" /></span>}
+        {title && state?.autoCloseOff?.includes(tabId) && <StripAction k="⌥⌘A" label="auto-close off" onClick={() => runKey("autoclose")} id="autoclose-off" first />}
         {title && <span data-wintos="project-title" style={{ flexShrink: 0, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", margin: "0 14px 0 4px", fontFamily: T.display, fontSize: 18, lineHeight: 1, color: T.emphasis }}>{title}</span>}
         <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, fontFamily: T.mono, fontSize: 11, overflowX: "auto", WebkitAppRegion: "no-drag" } as React.CSSProperties}>
             {/* ⌘H / ⌘L step pane by pane (in an Inbox tab from the list through its pages). */}
             {(chips.length > 1 || !inProject) && (
-                <span style={{ marginRight: 6 }}>
-                    <Key k="⌘H" label="←" />
+                <span className="w-hold" style={{ marginRight: 6 }}>
+                    <Key k="⌘H" label="←" hold />
                 </span>
             )}
             {chips.map((c) => {
                 const isOn = on != null && on === lm.getNodeByBlockId(c.blockId)?.id;
                 const s = c.session;
+                const canMagnify = isOn && inProject && chips.length > 1 && !magnified;
                 return (
+                    <span key={c.blockId} className="w-chip" data-on={isOn || undefined} style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, borderRadius: 8, border: `1px solid ${isOn ? T.borderActive : (STATE_BORDER[s ? shownState(s, now) : ""] ?? T.border)}`, background: isOn ? T.cardActive : "transparent" }}>
                     <button
-                        key={c.blockId}
                         data-pane={c.blockId}
                         data-on={isOn || undefined}
                         type="button"
@@ -101,8 +102,9 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                         onMouseDown={(e) => e.preventDefault()}
                         tabIndex={-1}
                         data-key="⌘H / ⌘L"
+                        data-nobadge
                         onClick={() => focusSession({ tabId, blockId: c.blockId })}
-                        style={{ WebkitAppRegion: "no-drag", display: "inline-flex", alignItems: "center", gap: 7, maxWidth: 240, padding: "5px 10px", borderRadius: 8, border: `1px solid ${isOn ? T.borderActive : (STATE_BORDER[s ? shownState(s, now) : ""] ?? T.border)}`, background: isOn ? T.cardActive : "transparent", color: isOn ? T.emphasis : T.secondary, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}
+                        style={{ WebkitAppRegion: "no-drag", display: "inline-flex", alignItems: "center", gap: 7, maxWidth: 240, padding: "5px 4px 5px 10px", border: "none", background: "transparent", color: isOn ? T.emphasis : T.secondary, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}
                     >
                         {s ? (
                             // Unread: a ring in the to-read colour until you have looked.
@@ -113,26 +115,25 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
                         {s && shownState(s, now) === "waiting" && <span style={{ color: T.apricot }}>{relTime(now - s.since)}</span>}
                     </button>
+                    {canMagnify && <ChipIcon icon="up-right-and-down-left-from-center" title="Magnify this pane" k="⌘M" onClick={() => focused && lm.magnifyNodeToggle(focused.id)} />}
+                    {/* Another pane's ×: it is focused first, so a working session's "again" shows on it. */}
+                    <ChipIcon icon="xmark" title="Close this pane" k={isOn ? "⌘W" : undefined} onClick={() => (isOn || focusSession({ tabId, blockId: c.blockId }), closePane(c.blockId))} hover />
+                    </span>
                 );
             })}
             {(chips.length > 1 || !inProject) && (
-                <span style={{ marginLeft: 6 }}>
-                    <Key k="⌘L" label="→" />
+                <span className="w-hold" style={{ marginLeft: 6 }}>
+                    <Key k="⌘L" label="→" hold />
                 </span>
             )}
-            {/* The focused pane's controls, the same for a terminal and a page. */}
-            {inProject && chips.length > 1 && !magnified && focused && <StripAction k="⌘M" label="magnify" onClick={() => lm.magnifyNodeToggle(focused.id)} />}
-            {focused && focusedPageUrl(blocks[ids.indexOf(focused.data?.blockId)]) && <CopyUrl />}
-            {focused && focusedPageUrl(blocks[ids.indexOf(focused.data?.blockId)]) && <StripAction k="⇧⌘U" label="browser" onClick={() => runKey("open-external")} />}
-            {focused && <StripAction k="⌘W" label="close" onClick={() => confirmPaneClose(focused.data?.blockId) && (shelvePane(focused.data?.blockId), void lm.closeNode(focused.id))} />}
             {closeArmed && focused?.data?.blockId === closeArmed && (
                 <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 7, color: T.brick }}>
-                    <Key k="⌘W" label="again to stop the working session" />
+                    <Key k="⌘W" label="again (or × again) to stop the working session" always />
                 </span>
             )}
             {armed && focused?.data?.blockId === armed && (
                 <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 7, color: T.brick }}>
-                    <Key k="⌥⌘R" label="again to restart this terminal" />
+                    <Key k="⌥⌘R" label="again to restart this terminal" always />
                 </span>
             )}
             {/* Magnify hides the other panes and has no header button here: say so, and offer the way back. */}
@@ -146,8 +147,8 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
                     title="Show all panes again"
                     style={{ WebkitAppRegion: "no-drag", marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 7, padding: "3px 9px", borderRadius: 8, border: `1px solid ${T.apricot}`, background: "transparent", color: T.apricot, cursor: "pointer", fontFamily: T.mono, fontSize: 11 } as React.CSSProperties}
                 >
-                    magnified
-                    <Key k="⌘M" label="all panes" />
+                    magnified · show all panes
+                    <Key k="⌘M" label="" />
                 </button>
             )}
         </div>
@@ -177,30 +178,39 @@ function useAutoClose(tabId: string, on: boolean, sessions: Session[], closePane
     }, [key]);
 }
 
-function CopyUrl() {
-    const copiedAt = useAtomValue(copiedAtAtom);
-    const [, rerender] = useState(0);
-    const copied = Date.now() - copiedAt < 1500;
-    useEffect(() => {
-        if (!copied) return;
-        const t = setTimeout(() => rerender((n) => n + 1), 1500);
-        return () => clearTimeout(t);
-    }, [copiedAt]);
-    return <StripAction k="⇧⌘C" label={copied ? "copied" : "copy url"} onClick={() => runKey("copy-url")} />;
-}
-
-// A key hint you can also click; it never takes focus, which stays in the pane.
-function StripAction({ k, label, onClick }: { k: string; label: string; onClick: () => void }) {
+// A key you can also click, as a label; it never takes focus, which stays in the pane.
+function StripAction({ k, label, onClick, id, first }: { k: string; label: string; onClick: () => void; id?: string; first?: boolean }) {
     return (
         <button
             type="button"
+            data-wintos={id}
             onMouseDown={(e) => e.preventDefault()}
             tabIndex={-1}
             data-key={k}
             onClick={onClick}
-            style={{ WebkitAppRegion: "no-drag", marginLeft: 10, padding: 0, background: "transparent", border: "none", cursor: "pointer" } as React.CSSProperties}
+            style={{ WebkitAppRegion: "no-drag", flexShrink: 0, margin: first ? "0 14px 0 0" : "0 0 0 10px", padding: 0, background: "transparent", border: "none", cursor: "pointer" } as React.CSSProperties}
         >
             <Key k={k} label={label} />
+        </button>
+    );
+}
+
+// An icon inside a chip, for the mouse; k is its key, badged while ⌘ is held. hover: shown only on
+// the open chip and the one pointed at.
+function ChipIcon({ icon, title, k, onClick, hover }: { icon: string; title: string; k?: string; onClick: () => void; hover?: boolean }) {
+    return (
+        <button
+            type="button"
+            className={hover ? "w-hover-x" : undefined}
+            aria-label={title}
+            title={k ? `${title} (${k})` : title}
+            onMouseDown={(e) => e.preventDefault()}
+            tabIndex={-1}
+            data-key={k ?? ""}
+            onClick={onClick}
+            style={{ WebkitAppRegion: "no-drag", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, marginRight: 3, padding: 0, borderRadius: 5, background: "transparent", border: "none", color: T.muted, cursor: "pointer" } as React.CSSProperties}
+        >
+            <i className={`fa-solid fa-${icon}`} style={{ fontSize: 10.5 }} />
         </button>
     );
 }

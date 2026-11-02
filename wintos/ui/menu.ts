@@ -352,6 +352,15 @@ export function wintosClose(): boolean {
     return action !== "pane";
 }
 
+// ⌘W on a pane, or its ×: a working session's pane asks first, then the pane goes to the shelf.
+export function closePane(blockId: string): void {
+    if (!confirmPaneClose(blockId)) return;
+    shelvePane(blockId);
+    const lm = getLayoutModelForStaticTab();
+    const node = lm.getNodeByBlockId(blockId);
+    if (node) void lm.closeNode(node.id);
+}
+
 // True when the pane may close now; a working session's pane first asks for a second ⌘W.
 export function confirmPaneClose(blockId: string | undefined): boolean {
     if (!blockId || !paneCloseWarns(currentState()?.sessions ?? [], blockId, globalStore.get(closeArmedAtom))) {

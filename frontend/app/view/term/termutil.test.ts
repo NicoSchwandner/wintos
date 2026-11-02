@@ -9,3 +9,11 @@ describe("computeTheme", () => {
         expect(bg).toBe("#fbfaf680");
     });
 });
+
+describe("computeTheme over the window's ground", () => {
+    test("the hidden background is the colour the pane shows: the theme's at its opacity over the ground", () => {
+        const config = { termthemes: { light: { background: "#fbfaf6" } } } as unknown as FullConfigType;
+        expect(computeTheme(config, "light", 0.5, "#f3f0e9")[0].background).toBe("#f7f5f000");
+        expect(computeTheme(config, "light", 0, "#f3f0e9")[0].background).toBe("#fbfaf600");
+    });
+});

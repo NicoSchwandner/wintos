@@ -29,11 +29,20 @@ function applyTransparencyToColor(hexColor: string, transparency: number): strin
     return colord(hexColor).alpha(alpha).toHex();
 }
 
+function shownColor(bg: string, behind: string | undefined): string {
+    const top = colord(bg).toRgb();
+    if (!behind || top.a >= 1) return bg;
+    const under = colord(behind).toRgb();
+    const mix = (a: number, b: number) => Math.round(a * top.a + b * (1 - top.a));
+    return colord({ r: mix(top.r, under.r), g: mix(top.g, under.g), b: mix(top.b, under.b) }).toHex();
+}
+
 // returns (theme, bgcolor, transparency (0 - 1.0))
 export function computeTheme(
     fullConfig: FullConfigType,
     themeName: string,
-    termTransparency: number
+    termTransparency: number,
+    behind?: string
 ): [TermThemeType, string] {
     let theme: TermThemeType = fullConfig?.termthemes?.[themeName];
     if (theme == null) {
@@ -49,9 +58,10 @@ export function computeTheme(
         }
     }
     const bgcolor = themeCopy.background;
-    // Invisible, so the block's own background shows; but in its colour, not black, since WebGL
-    // draws dim and italic glyphs on it and on a light theme they come out as black boxes.
-    themeCopy.background = bgcolor ? colord(bgcolor).alpha(0).toHex() : "#00000000";
+    // Invisible, so the block's own background shows; but in the colour the pane shows (its own
+    // over what is behind it), since WebGL draws dim and italic glyphs on it opaque: in black they
+    // came out as black boxes on a light theme, in the bare theme colour as lighter ones.
+    themeCopy.background = bgcolor ? colord(shownColor(bgcolor, behind)).alpha(0).toHex() : "#00000000";
     return [themeCopy, bgcolor];
 }
 

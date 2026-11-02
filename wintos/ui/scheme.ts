@@ -8,3 +8,6 @@ query.addEventListener("change", (e) => globalStore.set(lightSchemeAtom, e.match
 
 // The WintOS terminal theme has a light twin, used while the system is light.
 export const schemeTermTheme = (name: string, light: boolean) => (name === "wintos" && light ? "wintos-light" : name);
+
+// The window's ground, which a pane's background is drawn over at its transparency.
+export const paneGround = () => getComputedStyle(document.documentElement).getPropertyValue("--w-ground").trim() || undefined;

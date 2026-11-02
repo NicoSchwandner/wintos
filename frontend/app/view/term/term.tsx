@@ -26,6 +26,7 @@ import { TermStickers } from "./termsticker";
 import { TermThemeUpdater } from "./termtheme";
 import { useWintos } from "@/wintos/ui/useWintos";
 import { computeTheme, normalizeCursorStyle } from "./termutil";
+import { paneGround } from "@/wintos/ui/scheme";
 import { TermWrap } from "./termwrap";
 import "./xterm.css";
 
@@ -282,7 +283,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
         const termThemeName = globalStore.get(model.termThemeNameAtom);
         const termTransparency = globalStore.get(model.termTransparencyAtom);
         const termMacOptionIsMetaAtom = getOverrideConfigAtom(blockId, "term:macoptionismeta");
-        const [termTheme, termBg] = computeTheme(fullConfig, termThemeName, termTransparency);
+        const [termTheme, termBg] = computeTheme(fullConfig, termThemeName, termTransparency, paneGround());
         let termScrollback = 2000;
         if (termSettings?.["term:scrollback"]) {
             termScrollback = Math.floor(termSettings["term:scrollback"]);

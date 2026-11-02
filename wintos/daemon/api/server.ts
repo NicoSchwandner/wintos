@@ -277,6 +277,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         pluginNames: runner.names,
         pluginsRunning: runner.running,
         snoozes,
+        projectSnoozes,
         seen,
         fixer: fixer.state(),
         update: { behind: update?.behind() ?? 0 },
@@ -310,6 +311,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
     let autoCloseOff = readJson<string[]>(autoCloseOffFile, []);
     const snoozeFile = join(opts.root, ".snoozes.json");
     let snoozes = readJson<Snoozes>(snoozeFile, {});
+    // ⌥⌘Z: tab id → until when the project stays out of the sidebar.
+    const projectSnoozeFile = join(opts.root, ".project-snoozes.json");
+    let projectSnoozes = readJson<Record<string, number>>(projectSnoozeFile, {});
     const fixer = new Fixer(opts.root, () => broadcast(), opts.fixCmd, opts.fixCwd);
     const ghData = () => runner.results["gh-prs"]?.data as { me: string; prs: PR[] } | undefined;
     // Every PR refresh is a chance for the conflicts babysitter.
@@ -577,6 +581,18 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const tabId = decodeURIComponent(autoClose[1]);
                 autoCloseOff = b.on ? autoCloseOff.filter((t) => t !== tabId) : [...new Set([...autoCloseOff, tabId])];
                 writeFileSync(autoCloseOffFile, JSON.stringify(autoCloseOff));
+                broadcast();
+                return send(res, 200, "");
+            }
+            const snoozeTab = /^\/projects\/([^/]+)\/snooze$/.exec(url.pathname);
+            if (req.method === "POST" && snoozeTab) {
+                const b = (await body(req)) as { until?: unknown };
+                if (b?.until !== null && typeof b?.until !== "number") return send(res, 400, "need until: a time, or null");
+                const tabId = decodeURIComponent(snoozeTab[1]);
+                const now = Date.now();
+                const { [tabId]: _old, ...rest } = projectSnoozes;
+                projectSnoozes = Object.fromEntries(Object.entries(b.until === null ? rest : { ...rest, [tabId]: b.until as number }).filter(([, t]) => t > now));
+                writeFileSync(projectSnoozeFile, JSON.stringify(projectSnoozes));
                 broadcast();
                 return send(res, 200, "");
             }

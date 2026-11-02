@@ -17,7 +17,8 @@ import { closeAction, escapeAction, isTextField, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
 import { installKeyHold } from "./keyHold";
 import { installFocusRing } from "./focusRing";
-import { currentState, daemonFetch, parkBlock } from "./useWintos";
+import { currentState, daemonFetch, parkBlock, setProjectSnoozed } from "./useWintos";
+import { snoozeToggle } from "./attention";
 import { flog } from "./focusLog";
 import { meetingToJoin } from "./meetings";
 import { installKeyGame } from "./keyGame";
@@ -80,6 +81,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Cmd:t", "terminal"],
     ["Shift:Cmd:t", "session"],
     ["Shift:Cmd:w", "close-project"],
+    ["Option:Cmd:z", "snooze-project"],
     ["Cmd:e", "edit-mine"],
     ["Shift:Cmd:p", "palette"],
     ["Shift:Cmd:k", "keymap"],
@@ -249,7 +251,7 @@ export function runKey(action: string): boolean {
 // The Inbox holds pages and nothing else: a terminal or a Claude session started there would
 // belong to no project and never show in the sidebar, Needs you or ⌃⇥.
 const PANE_MAKERS = new Set(["session", "terminal", "browser", "files", "sysinfo", "processes", "open-page"]);
-const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session"]);
+const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session", "snooze-project"]);
 export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
 
@@ -265,6 +267,7 @@ export function runAction(action: string): void {
     if (action === "switch-next" || action === "switch-prev") return switchProject(action === "switch-next" ? 1 : -1, false);
     if (action === "project") return void createTab();
     if (action === "close-project") return closeProject();
+    if (action === "snooze-project") return snoozeProject(globalStore.get(atoms.staticTabId));
     if (action === "undo") return undo();
     if (action === "edit-mine") return editMine(true);
     // Wave's own new-terminal def: the focused terminal's directory and connection.
@@ -590,4 +593,11 @@ export function registerWintosMenu(): void {
 async function skipOnboarding(): Promise<void> {
     await ClientService.AgreeTos();
     await RpcApi.SetMetaCommand(TabRpcClient, { oref: makeORef("client", ClientModel.getInstance().clientId), meta: { "onboarding:lastversion": CurrentOnboardingVersion } });
+}
+
+// ⌥⌘Z: out of the sidebar until the next working day; it stays while you are in it.
+export function snoozeProject(tabId: string): void {
+    const until = snoozeToggle(currentState()?.projectSnoozes, tabId, Date.now());
+    flog(`snooze: ${tabId} ${until ? `until ${new Date(until).toISOString()}` : "woken"}`);
+    void setProjectSnoozed(tabId, until);
 }

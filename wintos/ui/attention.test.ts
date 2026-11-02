@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
 import type { Session } from "../daemon/sessions/reduce";
 import type { WintosState } from "./view";
-import { attention, prsByTab, rowView, sidebarModel } from "./attention";
+import { attention, prsByTab, rowView, sidebarModel, snoozeToggle } from "./attention";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -172,6 +172,30 @@ describe("attention", () => {
             sessions: [{ id: "1", tabId: "a", blockId: "x", state: "waiting", since: NOW - 1, lastAt: NOW - 1 }],
         }, {}, NOW);
         expect([a.needs.map((r) => r.tabId), a.quiet.map((r) => r.tabId), a.views.a.title, a.views.b.title]).toEqual([["a"], ["b"], "Alpha", "Beta"]);
+    });
+});
+
+describe("⌥⌘Z: a snoozed project", () => {
+    const projects = ["a", "b", "c"].map((id) => ({ id, title: id, dir: `/${id}`, mtime: 0 }) as never);
+    const st = (snoozes: Record<string, number>, sessions: Session[] = []) => ({ now: NOW, projects, sessions, projectSnoozes: snoozes }) as WintosState;
+    const shown = (a: ReturnType<typeof attention>) => [...a.needs, ...a.read, ...a.running, ...a.quiet, ...a.quietMore, ...a.quietStale].map((r) => r.tabId).sort();
+    test("leaves the bands until its time, and is listed as snoozed", () => {
+        const a = attention(["a", "b", "c"], st({ a: NOW + 1, b: NOW - 1 }), {}, NOW);
+        expect([shown(a), a.snoozed, a.wake]).toEqual([["b", "c"], ["a"], []]);
+    });
+    test("⌥⌘Z snoozes until the next working day's start, or wakes a snoozed one", () => {
+        const fri = new Date(2026, 9, 30, 16).getTime();
+        expect([snoozeToggle({}, "a", fri), snoozeToggle({ a: fri - 1 }, "a", fri), snoozeToggle({ a: fri + 1 }, "a", fri)]).toEqual([new Date(2026, 10, 2).getTime(), new Date(2026, 10, 2).getTime(), null]);
+    });
+    test("the project you are in stays, to find it again", () => {
+        const a = attention(["a", "b"], st({ a: NOW + 1 }), {}, NOW, "a");
+        expect([shown(a), a.views.a.reason?.endsWith("⌥⌘Z wakes it")]).toEqual([["a", "b"], true]);
+    });
+    test("a session waiting on you, or a reply, brings it back and wakes it", () => {
+        const waiting = { id: "1", tabId: "a", blockId: "x", state: "waiting", since: NOW - 1, lastAt: NOW - 1 } as Session;
+        const reply = { id: "2", tabId: "b", blockId: "y", state: "idle", since: NOW - 1, lastAt: NOW - 1, turnEndedAt: NOW - 1 } as Session;
+        const a = attention(["a", "b", "c"], st({ a: NOW + 1, b: NOW + 1 }, [waiting, reply]), {}, NOW);
+        expect([a.needs.map((r) => r.tabId), a.read.map((r) => r.tabId), a.wake.sort(), a.snoozed]).toEqual([["a"], ["b"], ["a", "b"], []]);
     });
 });
 

@@ -1,7 +1,7 @@
 import { isUnread, rank, type Ranking, type Row } from "../daemon/ranking/rank";
 import { liveSubagents, type Session } from "../daemon/sessions/reduce";
 import type { Project } from "../daemon/projects/store";
-import { isSnoozed, projectPrs, type ProjectPrs } from "../daemon/prs/group";
+import { isSnoozed, nextWorkingDayStart, projectPrs, type ProjectPrs } from "../daemon/prs/group";
 import type { Target } from "./sessions";
 import { ghPrs, prOwners, prRef, relTime, repoLabeler, type Owner, type RowView, type WintosState } from "./view";
 import { WOKE } from "./wakes";
@@ -80,6 +80,22 @@ export function waking(split: Ranking, tabs: Record<string, string>): Ranking {
     return { ...split, needs: [...lifted, ...split.needs], read: kept(split.read), running: kept(split.running), quiet: kept(split.quiet), quietMore: kept(split.quietMore), quietStale: kept(split.quietStale) };
 }
 
+// ⌥⌘Z: snoozed until the next working day, or awake again when it already is.
+export const snoozeToggle = (snoozes: Record<string, number> = {}, tabId: string, now: number): number | null => ((snoozes[tabId] ?? 0) > now ? null : nextWorkingDayStart(now));
+export const isSnoozedProject = (snoozes: Record<string, number> = {}, tabId: string, now: number) => (snoozes[tabId] ?? 0) > now;
+
+// The project you are in stays in its band, so a snooze doesn't lose it from under you.
+function snoozing(split: Ranking, snoozes: Record<string, number>, now: number, here?: string): { split: Ranking; snoozed: string[]; wake: string[] } {
+    const is = (r: Row) => isSnoozedProject(snoozes, r.tabId, now);
+    const out = (rows: Row[]) => rows.filter((r) => !is(r) || r.tabId === here);
+    const asleep = [...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale].filter((r) => is(r) && r.tabId !== here);
+    return {
+        split: { ...split, running: out(split.running), quiet: out(split.quiet), quietMore: out(split.quietMore), quietStale: out(split.quietStale) },
+        snoozed: asleep.map((r) => r.tabId),
+        wake: [...split.needs, ...split.read].filter(is).map((r) => r.tabId),
+    };
+}
+
 // What the longest-waiting turn expects of you, ahead of what it said: "Decide · two bands or one".
 // A turn not read yet shows what it said.
 const ASK_LABEL = { answer: "Answer", decide: "Decide", approve: "Approve", unblock: "Unblock" } as const;
@@ -100,16 +116,25 @@ const lastSaid = (sessions: Session[]) => sessions.filter((s) => s.outcome).sort
 // else the latest reply.
 // held: what the hold keeps out of Your move for now (hold.ts), and when the first of it shows.
 // here: the project you are in, never held.
-export type Attention = Ranking & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target>; held?: { count: number; until: number } };
+// snoozed: out of the bands until their time (⌥⌘Z). wake: snoozed but waiting on you or with a
+// reply, so back in the bands and to be woken for good.
+export type Attention = Ranking & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target>; held?: { count: number; until: number }; snoozed: string[]; wake: string[] };
 export function attention(tabIds: string[], state: WintosState, names: Record<string, string | undefined>, now: number, here?: string): Attention {
     const prs = prsByTab(tabIds, state);
     const lines = wakingTabs(state, tabIds);
-    const { split, held } = holding(waking(sidebarModel(tabIds, state), lines), state, now, here, lines);
+    const { split: unsnoozed, held } = holding(waking(sidebarModel(tabIds, state), lines), state, now, here, lines);
+    const { split, snoozed, wake } = snoozing(unsnoozed, state.projectSnoozes ?? {}, now, here);
     const rows = [...split.needs, ...split.read, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale];
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const label = repoLabeler(state);
     const views = Object.fromEntries(rows.map((r) => [r.tabId, lines[r.tabId] ? { ...rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label), next: lines[r.tabId], tone: "apricot" as const } : rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label)]));
     for (const [tabId, until] of held.rows) views[tabId] = { ...views[tabId], reason: [`held ${until === Infinity ? "until you are back" : until === state.rhythm?.closed?.until ? `until ${clock(until)}: the day is closed` : `for the ${clock(until)} batch`}`, askLine(rows.find((r) => r.tabId === tabId)!.sessions)].filter(Boolean).join(" · ") };
+    // Quiet rows show the reason, the others the next line: the snooze goes on both.
+    if (here && isSnoozedProject(state.projectSnoozes, here, now) && views[here]) {
+        const v = views[here];
+        const until = `snoozed until ${day(state.projectSnoozes![here])} · ⌥⌘Z wakes it`;
+        views[here] = { ...v, reason: [v.reason, until].filter(Boolean).join(" · "), ...(v.next ? { next: `${v.next} · ${until}` } : {}) };
+    }
     const targets: Record<string, Target> = {};
     for (const r of [...split.needs, ...split.read]) {
         const waiting = r.sessions.filter((s) => s.state === "waiting").sort((a, b) => a.since - b.since)[0];
@@ -117,9 +142,10 @@ export function attention(tabIds: string[], state: WintosState, names: Record<st
         const to = waiting ?? reply;
         if (to) targets[r.tabId] = { tabId: r.tabId, blockId: to.blockId };
     }
-    return { ...split, views, prs, targets, ...(held.rows.size ? { held: { count: held.rows.size, until: Math.min(...held.rows.values()) } } : {}) };
+    return { ...split, views, prs, targets, snoozed, wake, ...(held.rows.size ? { held: { count: held.rows.size, until: Math.min(...held.rows.values()) } } : {}) };
 }
 
+export const day = (t: number) => new Date(t).toLocaleDateString("en-GB", { weekday: "long" });
 const clock = (t: number) => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 const QUICK = new Set(["approve"]);
 

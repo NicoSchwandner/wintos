@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { askCard, askPrompt, guessAsk, parseAsk } from "./asks";
+import type { Ask } from "./reduce";
 
 describe("parseAsk", () => {
     test("a kind and what it is about", () => {
@@ -34,6 +35,10 @@ describe("askCard", () => {
         expect(askCard({ context: "Routes all documents", why: "CI green", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }], recommend: 1, final: true })).toEqual({
             context: "Routes all documents", why: "CI green", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }], recommend: 1, final: true,
         }));
+    test("several questions: each option names its question, 2 to 4 per question, up to 8 in all", () =>
+        expect(askCard({ options: [{ label: "Keep", q: "KR1" }, { label: "Drop", q: "KR1" }, { label: "Open", q: "Denominator" }, { label: "47,300", q: "Denominator" }] })).toEqual({
+            options: [{ label: "Keep", q: "KR1" }, { label: "Drop", q: "KR1" }, { label: "Open", q: "Denominator" }, { label: "47,300", q: "Denominator" }],
+        }));
     test("nothing given is an empty card", () => expect(askCard({})).toEqual({}));
     test("picks: findings to toggle, some on to start with", () =>
         expect(askCard({ picks: [{ label: "Missing test for 0% VAT", on: true }, { label: "Rename feeVat" }] })).toEqual({ picks: [{ label: "Missing test for 0% VAT", on: true }, { label: "Rename feeVat", on: false }] }));
@@ -43,6 +48,8 @@ describe("askCard", () => {
         [{ options: [{ label: "a" }, { label: "b" }], recommend: 3 }, /^recommend/],
         [{ recommend: 1 }, /^recommend/],
         [{ picks: [] }, /^picks/],
+        [{ options: [{ label: "a", q: "x" }, { label: "b", q: "x" }, { label: "c", q: "y" }] }, /^options/],
+        [{ options: [{ label: "a", q: "x" }, { label: "b", q: "x" }, { label: "c", q: "y" }, { label: "d", q: "y" }], recommend: 1 }, /^recommend/],
         [{ picks: Array.from({ length: 9 }, (_, i) => ({ label: `p${i}` })) }, /^picks/],
     ])("a bad card is refused: %j", (b, why) => expect(askCard(b)).toMatch(why));
 });
@@ -51,3 +58,12 @@ test("the model's reading carries the context and the options it found", () =>
     expect(parseAsk("decide: merge or hold\ncontext: routes all documents\noption: Merge now — live Monday\noption: Hold — two days later")).toEqual({
         kind: "decide", text: "merge or hold", by: "model", context: "routes all documents", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold", then: "two days later" }],
     }));
+
+test("a message asking two things: each question line starts the options that answer it", () =>
+    expect((parseAsk("decide: KR1 target and denominator\nquestion: KR1 target\noption: Keep — guessed target\noption: Drop — overlap stays\nquestion: Denominator\noption: Open — honest\noption: 47,300 — stand-in") as Ask).options).toEqual([
+        { label: "Keep", then: "guessed target", q: "KR1 target" }, { label: "Drop", then: "overlap stays", q: "KR1 target" },
+        { label: "Open", then: "honest", q: "Denominator" }, { label: "47,300", then: "stand-in", q: "Denominator" },
+    ]));
+
+test("one question line only is one question: its options carry no question", () =>
+    expect((parseAsk("decide: x\nquestion: Which\noption: A\noption: B") as Ask).options).toEqual([{ label: "A" }, { label: "B" }]));

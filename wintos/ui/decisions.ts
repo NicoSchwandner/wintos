@@ -1,5 +1,6 @@
 import type { PR } from "../daemon/prs/group";
 import type { AskOption, AskPick, Session } from "../daemon/sessions/reduce";
+import { optionGroups } from "../daemon/sessions/asks";
 import { shownState } from "./sessions";
 import { sessionName, type WintosState } from "./view";
 
@@ -79,9 +80,13 @@ export function decisions(state: WintosState, now: number, titleOf: (tabId: stri
     return out.sort((a, b) => Number(a.final) - Number(b.final) || (KIND_ORDER[a.kind] ?? 1) - (KIND_ORDER[b.kind] ?? 1) || a.since - b.since);
 }
 
+export const questions = (d: Decision) => optionGroups(d.options);
+
+type Answer = { option: number } | { options: number[] } | { yourCall: true } | { own: string };
+
 // What WintOS types into the session for an answer: an option by its label (the question tool
 // takes its number), your call, or your own words; then which picks are in and which left out.
-export function answerText(d: Decision, answer: { option: number } | { yourCall: true } | { own: string }, picked?: boolean[]): string {
+export function answerText(d: Decision, answer: Answer, picked?: boolean[]): string {
     const text = answerOnly(d, answer);
     if (!text || !d.picks) return text;
     const list = (on: boolean) => d.picks!.filter((_, i) => (picked?.[i] ?? d.picks![i].on) === on).map((p) => p.label).join("; ");
@@ -89,8 +94,9 @@ export function answerText(d: Decision, answer: { option: number } | { yourCall:
     return [/[.!?]$/.test(text) ? text : `${text}.`, inc && `Include: ${inc}.`, out && `Leave out: ${out}.`].filter(Boolean).join(" ");
 }
 
-function answerOnly(d: Decision, answer: { option: number } | { yourCall: true } | { own: string }): string {
+function answerOnly(d: Decision, answer: Answer): string {
     if ("own" in answer) return answer.own.trim();
+    if ("options" in answer) return answer.options.map((n) => d.options[n - 1]).filter(Boolean).map((o) => `${o.q ? `${o.q}: ` : ""}${o.label}.`).join(" ");
     if ("yourCall" in answer) return d.recommend ? `Go with your recommendation: ${d.options[d.recommend - 1]?.label}.` : "Go with what you recommend.";
     if (d.by === "tool") return String(answer.option);
     const o = d.options[answer.option - 1];

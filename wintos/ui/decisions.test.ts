@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { answerText, decisions } from "./decisions";
+import { answerText, decisions, questions } from "./decisions";
 import type { WintosState } from "./view";
 
 const NOW = 1_000_000;
@@ -57,5 +57,11 @@ describe("answerText", () => {
         expect(answerText(r, { option: 1 }, [true, false])).toBe("Approve. Include: Missing test. Leave out: Rename it.");
         expect(answerText(r, { own: "approve, but ask about the cache" }, [false, false])).toBe("approve, but ask about the cache. Leave out: Missing test; Rename it.");
     });
+    test("several questions: one pick each, named by its question", () => {
+        const m = decisions(state([s("m", { kind: "decide", text: "two things", by: "model", options: [{ label: "Keep", q: "KR1" }, { label: "Drop", q: "KR1" }, { label: "Open", q: "Denominator" }, { label: "47,300", q: "Denominator" }] })]), NOW, title)[0];
+        expect(questions(m)).toEqual([{ q: "KR1", from: 1, to: 2 }, { q: "Denominator", from: 3, to: 4 }]);
+        expect(answerText(m, { options: [2, 3] })).toBe("KR1: Drop. Denominator: Open.");
+    });
+    test("one question is one group of all its options", () => expect(questions(d)).toEqual([{ from: 1, to: 2 }]));
     test("the question tool takes the option's number", () => expect(answerText({ ...d, by: "tool" }, { option: 2 })).toBe("2"));
 });

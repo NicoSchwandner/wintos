@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import type { Reentry } from "../daemon/sessions/reentry";
-import { answerText, decisions, type Decision } from "./decisions";
+import { answerText, decisions, questions, type Decision } from "./decisions";
 import { focusSession } from "./focus";
 import { Key } from "./Key";
 import { runKey } from "./menu";
@@ -35,6 +35,8 @@ export const DecisionsPage = memo(() => {
     const [own, setOwn] = useState<string | null>(null);
     const [armed, setArmed] = useState<number | null>(null);
     const [picked, setPicked] = useState<boolean[]>([]);
+    // On a card that asks several things: the option chosen for each question so far, by question.
+    const [chosen, setChosen] = useState<number[]>([]);
     const [failed, setFailed] = useState<string | null>(null);
     const [back, setBack] = useState<Reentry | null>(null);
     const ownRef = useRef<HTMLTextAreaElement>(null);
@@ -48,7 +50,7 @@ export const DecisionsPage = memo(() => {
     const at = card ? batch.indexOf(card) : batch.length;
     useEffect(() => void (own !== null && setTimeout(() => ownRef.current?.focus(), 0)), [own !== null]);
     useEffect(() => {
-        setArmed(null), setFailed(null), setBack(null), setPicked(card?.picks?.map((p) => p.on) ?? []);
+        setArmed(null), setFailed(null), setBack(null), setChosen([]), setPicked(card?.picks?.map((p) => p.on) ?? []);
         // What you asked it and its whole last message: the background it gave for the decision.
         if (!card) return;
         let live = true;
@@ -85,10 +87,20 @@ export const DecisionsPage = memo(() => {
     };
     // What can't be undone takes the same key twice.
     const pick = (d: Decision, n: number, a: Parameters<typeof answerText>[1]) => (d.final && armed !== n ? setArmed(n) : answer(d, a));
+    // Several questions: a key chooses within its question, and the answer goes once each has one.
+    const groups = card ? questions(card) : [];
+    const several = groups.length > 1;
+    const choose = (d: Decision, n: number) => {
+        const next = groups.map((g, i) => (n >= g.from && n <= g.to ? n : chosen[i]));
+        setChosen(next);
+        if (next.every(Boolean)) pick(d, n, { options: next });
+        else setArmed(null);
+    };
+    const onOption = (d: Decision, n: number) => (several ? choose(d, n) : pick(d, n, { option: n }));
     const yourCall = card && card.recommend ? card.options.length + 1 : undefined;
     const keys: Record<string, () => void> = {};
     if (card && own === null) {
-        card.options.forEach((_, i) => (keys[String(i + 1)] = () => pick(card, i + 1, { option: i + 1 })));
+        card.options.forEach((_, i) => (keys[String(i + 1)] = () => onOption(card, i + 1)));
         if (yourCall) keys[String(yourCall)] = () => pick(card, yourCall, { yourCall: true });
         if (card.by !== "tool") keys.e = () => setOwn("");
         card.picks?.forEach((_, i) => (keys[PICK_KEYS[i]] = () => setPicked(picked.map((on, j) => (j === i ? !on : on)))));
@@ -99,12 +111,13 @@ export const DecisionsPage = memo(() => {
     useZoneKeys(ref, keys);
     const send = () => card && own?.trim() && answer(card, { own });
     const opt = (n: number, label: string, then: string | undefined, recommended: boolean, onPick: () => void) => (
-        <button key={n} type="button" data-key={String(n)} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onPick} style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: "13px 15px", borderRadius: 11, background: recommended ? T.cardActive : T.sidebar, border: `1px solid ${recommended ? T.apricot : "transparent"}`, cursor: "pointer", textAlign: "left", fontFamily: T.ui }}>
+        <button key={n} type="button" data-key={String(n)} data-chosen={chosen.includes(n) || undefined} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onPick} style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: "13px 15px", borderRadius: 11, background: recommended || chosen.includes(n) ? T.cardActive : T.sidebar, border: `1px solid ${recommended || chosen.includes(n) ? T.apricot : "transparent"}`, cursor: "pointer", textAlign: "left", fontFamily: T.ui }}>
             <Key k={String(n)} label="" always />
             <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                 <span style={{ fontSize: 15, color: T.emphasis }}>
                     {label}
                     {recommended && <span style={{ fontSize: 12, color: T.moss, marginLeft: 8 }}>recommended</span>}
+                    {chosen.includes(n) && armed !== n && <span style={{ fontSize: 12, color: T.apricot, marginLeft: 8 }}>chosen</span>}
                     {armed === n && <span style={{ fontSize: 12, color: T.brick, marginLeft: 8 }}>{n} again: it can't be undone</span>}
                 </span>
                 {then && <span style={{ fontSize: 13, color: T.muted }}>{then}</span>}
@@ -171,7 +184,16 @@ export const DecisionsPage = memo(() => {
                                 ))}
                             </div>
                         )}
-                        {card.options.length > 0 && (
+                        {several &&
+                            groups.map((g, gi) => (
+                                <div key={g.from} data-wintos="decision-question" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                    <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: "0.06em", color: chosen[gi] ? T.faint : T.apricot }}>
+                                        {(g.q ?? "").toUpperCase()} · {chosen[gi] ? "chosen" : `pick ${g.from}–${g.to}`}
+                                    </span>
+                                    {card.options.slice(g.from - 1, g.to).map((o, i) => opt(g.from + i, o.label, o.then, false, () => choose(card, g.from + i)))}
+                                </div>
+                            ))}
+                        {!several && card.options.length > 0 && (
                             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                                 {card.options.map((o, i) => opt(i + 1, o.label, o.then, card.recommend === i + 1, () => pick(card, i + 1, { option: i + 1 })))}
                                 {yourCall && opt(yourCall, "Your call", "Go with the session's recommendation.", false, () => pick(card, yourCall, { yourCall: true }))}
@@ -209,7 +231,7 @@ export const DecisionsPage = memo(() => {
                     ) : (
                         card && (
                             <>
-                                {card.options.length > 0 && <Key k={`1–${yourCall ?? card.options.length}`} label="answer" always />}
+                                {card.options.length > 0 && <Key k={`1–${yourCall ?? card.options.length}`} label={several ? "one per question, sent when each has one" : "answer"} always />}
                                 {card.by !== "tool" && <Key k="e" label="your own" always />}
                                 {card.picks && <Key k={`a–${PICK_KEYS[card.picks.length - 1]}`} label="keep or leave out" always />}
                                 <Key k="⏎" label="into the session" always />

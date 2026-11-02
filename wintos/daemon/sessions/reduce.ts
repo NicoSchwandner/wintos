@@ -11,7 +11,7 @@ export type AskKind = (typeof ASK_KINDS)[number];
 // The card a decision batch shows (⌥⌘O): context, a line on what it is about; why, the reason it
 // asks; options with what each leads to, the recommended one by number from 1; final: it can't be
 // undone (a merge, a deploy, a delete).
-export type AskOption = { label: string; then?: string };
+export type AskOption = { label: string; then?: string; q?: string }; // q: the question it answers, on a card that asks several
 // picks: findings or parts the developer toggles before answering (which review comments to post).
 export type AskPick = { label: string; on: boolean };
 export type AskCard = { context?: string; why?: string; options?: AskOption[]; recommend?: number; final?: boolean; picks?: AskPick[] };

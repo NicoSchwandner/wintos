@@ -437,6 +437,10 @@ describe("wintos ask", () => {
         expect(r.seen[0].body).toEqual({ kind: "decide", text: "merge or hold?", context: "routes all documents", why: "CI green", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }], recommend: 1, final: true });
         expect(r.out.trim()).toBe("asks the developer to decide: merge or hold?");
     });
+    test("several questions: --question names the one the options after it answer", async () => {
+        const r = await ask(["decide", "two things", "--question", "KR1", "--option", "Keep", "--option", "Drop", "--question", "Denominator", "--option", "Open: honest", "--option", "47,300"]);
+        expect(r.seen[0].body.options).toEqual([{ label: "Keep", q: "KR1" }, { label: "Drop", q: "KR1" }, { label: "Open", then: "honest", q: "Denominator" }, { label: "47,300", q: "Denominator" }]);
+    });
     test("picks: --pick-on starts on, --pick starts off", async () => {
         const r = await ask(["approve", "approve #7?", "--pick-on", "Missing test", "--pick", "Rename it"]);
         expect(r.seen[0].body).toEqual({ kind: "approve", text: "approve #7?", picks: [{ label: "Missing test", on: true }, { label: "Rename it", on: false }] });

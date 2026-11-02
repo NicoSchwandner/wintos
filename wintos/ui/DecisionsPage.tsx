@@ -10,6 +10,7 @@ import { useFocusOnMount } from "./useFocusOnMount";
 import { useNow } from "./useNow";
 import { daemonFetch, parkBlock, useWintos } from "./useWintos";
 import { relTime } from "./view";
+import { Md } from "./notes/Md";
 import { useZoneKeys } from "./zones";
 
 const KIND_WORD: Record<string, string> = { answer: "Answer", decide: "Decide", approve: "Approve", unblock: "Unblock" };
@@ -48,8 +49,8 @@ export const DecisionsPage = memo(() => {
     useEffect(() => void (own !== null && setTimeout(() => ownRef.current?.focus(), 0)), [own !== null]);
     useEffect(() => {
         setArmed(null), setFailed(null), setBack(null), setPicked(card?.picks?.map((p) => p.on) ?? []);
-        // A card the session gave no context: what you asked it and what it did, as on a return.
-        if (!card || card.context || card.why || card.options.length) return;
+        // What you asked it and its whole last message: the background it gave for the decision.
+        if (!card) return;
         let live = true;
         void daemonFetch(`/sessions/${encodeURIComponent(card.sessionId)}/reentry`)
             .then((r) => (r.ok ? (r.json() as Promise<Reentry>) : null))
@@ -147,9 +148,17 @@ export const DecisionsPage = memo(() => {
                         {card.restored && <span data-wintos="decision-restored" style={{ fontSize: 13, color: T.muted }}>Not started since WintOS last quit: answering starts its Claude, then sends the answer.</span>}
                         {section("CONTEXT", card.context)}
                         {back && section("YOU ASKED", back.asked)}
-                        {back && section("IT DID", back.did)}
+                        {back && !back.reply && section("IT DID", back.did)}
                         {section("WHY IT ASKS", card.why, card.facts)}
                         {!card.why && card.facts && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.faint }}>{card.facts}</span>}
+                        {back?.reply && (
+                            <div data-wintos="decision-reply" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: "0.06em", color: T.faint }}>ITS LAST MESSAGE</span>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 9, padding: "14px 16px", borderRadius: 10, background: T.sidebar }}>
+                                    <Md text={back.reply} size="full" />
+                                </div>
+                            </div>
+                        )}
                         {card.picks && (
                             <div data-wintos="decision-picks" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                                 <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: "0.06em", color: T.faint }}>WHICH TO KEEP</span>

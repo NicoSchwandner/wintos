@@ -23,7 +23,7 @@ import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askCard, askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { trail } from "../sessions/trail";
-import { reentry } from "../sessions/reentry";
+import { lastReply, reentry } from "../sessions/reentry";
 import { closeDay, later, prompted, release, snooze, startBreak, tick, toggleFocus, type Rhythm } from "../rhythm/rhythm";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
@@ -730,7 +730,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 try {
                     if (tp) text = readFileSync(tp, "utf8");
                 } catch {}
-                return json(res, reentry(s, userPrompts(text), recapper.gistOf(s.id)));
+                return json(res, reentry(s, userPrompts(text), recapper.gistOf(s.id), lastReply(text)));
             }
             const unpark = /^\/sessions\/([^/]+)\/unpark$/.exec(url.pathname);
             if (req.method === "POST" && unpark) {

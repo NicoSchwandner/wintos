@@ -195,12 +195,12 @@ describe("wintosd API", () => {
 
     test("coming back to a session: what you asked last, what it did, what it needs", async () => {
         const tp = join(root, "t.jsonl");
-        writeFileSync(tp, [JSON.stringify({ type: "user", message: { content: "review #7" } }), JSON.stringify({ type: "user", message: { content: "approve if good" } })].join("\n"));
+        writeFileSync(tp, [JSON.stringify({ type: "user", message: { content: "review #7" } }), JSON.stringify({ type: "user", message: { content: "approve if good" } }), JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Looks good.\n\nOne comment on the cache." }] } })].join("\n"));
         await event({ ...prompt, transcript_path: tp });
         await post("/blocks/blk-1/ask", { kind: "approve", text: "approve with 1 comment?" });
         await event({ ...stop, transcript_path: tp, last_assistant_message: "Looks good." });
         const r = await (await fetch(base + `/sessions/${prompt.session_id}/reentry`)).json();
-        expect(r).toMatchObject({ asked: "approve if good", needs: "Approve · approve with 1 comment?" });
+        expect(r).toMatchObject({ asked: "approve if good", needs: "Approve · approve with 1 comment?", reply: "Looks good.\n\nOne comment on the cache." });
         expect((await fetch(base + "/sessions/nope/reentry")).status).toBe(404);
     });
 

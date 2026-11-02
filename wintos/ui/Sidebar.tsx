@@ -14,7 +14,7 @@ import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
 import { closedWakes, useWakeDelivery, type ClosedWake } from "./wakes";
 import { useSchemeNotices } from "./schemeNotices";
-import { TodayCard } from "./TodayCard";
+import { FocusRows, TodayCard } from "./TodayCard";
 import { meetingsFrom } from "./meetings";
 import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
@@ -202,6 +202,11 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         </div>
                     )
                 )}
+                {state?.day?.planned && !ticking && focusList(state.day.focus).some((i) => !i.done) && (
+                    <div data-wintos="today-focus" style={{ display: "flex", flexDirection: "column", gap: 5, margin: "-8px 4px 0" }}>
+                        <FocusRows day={state.day} limit={FOCUS_SHOWN} />
+                    </div>
+                )}
                 {state?.day?.reflection && (
                     <button type="button" data-wintos="reflect-nudge" data-key="⌥⌘Y" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openView("reflect")} style={{ display: "flex", justifyContent: "space-between", gap: 8, margin: "-8px 2px 0", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12.5, color: T.apricot, textAlign: "left" }}>
                         Write your {state.day.reflection.level} reflection
@@ -295,6 +300,7 @@ function RhythmMeter({ state }: { state: WintosState }) {
 }
 
 // The day as a tile: how much of the plan is done, or that it still needs one.
+const FOCUS_SHOWN = 5;
 const dayValue = (day: Day) => {
     const items = focusList(day.focus).filter((i) => i.depth === 0);
     return !day.planned ? "plan it" : items.length ? `${items.filter((i) => i.done).length} of ${items.length}` : "–";

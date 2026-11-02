@@ -32,8 +32,6 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
     if (ticking && day.planned && focusList(day.focus).some((i) => !i.done)) return <TickList day={day} />;
     const items = focusList(day.focus);
     const open = items.filter((i) => !i.done);
-    const done = items.length - open.length;
-    const shown = openWithNotes(focusLines(day.focus));
     const left = leftFromYesterday(day).length;
     return (
         <div
@@ -62,21 +60,7 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
             ) : open.length === 0 ? (
                 <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{items.length ? `all ${items.length} done` : "nothing planned"}</span>
             ) : (
-                <>
-                    {shown.slice(0, SHOWN).map((i) => (
-                        <div key={i.line} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: i.done ? T.muted : T.secondary, minWidth: 0, marginLeft: i.depth * INDENT }}>
-                            {i.note ? <Dot /> : (
-                                <span data-key="" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()} style={{ display: "contents" }}>
-                                    <Box state={i.done ? "done" : "todo"} size="rail" top={BOX_TOP} onToggle={() => void tickFocus(day, i.line)} />
-                                </span>
-                            )}
-                            <span style={{ minWidth: 0, overflowWrap: "anywhere", textDecoration: i.done ? "line-through" : undefined }}><Rich text={i.text} size="rail" /></span>
-                        </div>
-                    ))}
-                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>
-                        {[shown.length > SHOWN ? `+${shown.length - SHOWN} more` : "", done ? `${done} done` : ""].filter(Boolean).join(" · ")}
-                    </span>
-                </>
+                <FocusRows day={day} />
             )}
             {day.reflection && (
                 <span data-wintos="reflect-nudge" data-key="⌥⌘Y" onClick={(e) => (e.stopPropagation(), openView("reflect"))} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 11.5, color: T.apricot }}>
@@ -89,6 +73,30 @@ export const TodayCard = memo(({ day, active, cursor, walk }: { day: Day; active
     );
 });
 TodayCard.displayName = "TodayCard";
+
+// The day's open items with their boxes; under the sidebar tiles too, so the plan stays in view.
+export function FocusRows({ day, limit = SHOWN }: { day: Day; limit?: number }) {
+    const items = focusList(day.focus);
+    const done = items.filter((i) => i.done).length;
+    const shown = openWithNotes(focusLines(day.focus));
+    return (
+        <>
+            {shown.slice(0, limit).map((i) => (
+                <div key={i.line} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.4, color: i.done ? T.muted : T.secondary, minWidth: 0, marginLeft: i.depth * INDENT }}>
+                    {i.note ? <Dot /> : (
+                        <span data-key="" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()} style={{ display: "contents" }}>
+                            <Box state={i.done ? "done" : "todo"} size="rail" top={BOX_TOP} onToggle={() => void tickFocus(day, i.line)} />
+                        </span>
+                    )}
+                    <span style={{ minWidth: 0, overflowWrap: "anywhere", textDecoration: i.done ? "line-through" : undefined }}><Rich text={i.text} size="rail" /></span>
+                </div>
+            ))}
+            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>
+                {[shown.length > limit ? `+${shown.length - limit} more` : "", done ? `${done} done` : ""].filter(Boolean).join(" · ")}
+            </span>
+        </>
+    );
+}
 
 // ⌥⌘X: the card unfolded, up to 15 open items, the cursor on the first: j/k move, x ticks, Esc
 // folds it back to where you were. The same keys as on the Today page.

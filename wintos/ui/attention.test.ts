@@ -199,6 +199,23 @@ describe("⌥⌘Z: a snoozed project", () => {
     });
 });
 
+describe("⌥⌘D: driving", () => {
+    const projects = ["a", "b", "c"].map((id) => ({ id, title: id, dir: `/${id}`, mtime: 0 }) as never);
+    const s = (id: string, tabId: string, o: Partial<Session>) => ({ id, tabId, blockId: `b-${id}`, since: NOW - 10, lastAt: NOW - 10, ...o }) as Session;
+    const sessions = [
+        s("1", "a", { state: "working" }), s("2", "a", { state: "waiting", since: NOW - 5 }), s("3", "a", { state: "idle" }), s("4", "a", { state: "waiting", since: NOW - 9 }),
+        s("5", "b", { state: "waiting" }), s("6", "c", { state: "idle", turnEndedAt: NOW - 1 }), s("7", "c", { state: "working" }),
+    ];
+    const a = attention(["a", "b", "c"], { now: NOW, projects, sessions, driving: ["c", "a"], projectSnoozes: { c: NOW + 1, a: NOW + 1 } } as WintosState, {}, NOW);
+    test("pinned projects leave the bands, in pin order, snoozed or not", () => {
+        expect([a.driving.map((d) => d.row.tabId), a.needs.map((r) => r.tabId), a.read, a.snoozed]).toEqual([["c", "a"], ["b"], [], []]);
+    });
+    test("each lists what waits on you (longest first), then replies, then what runs; nothing idle", () => {
+        expect(a.driving.map((d) => d.lines.map((l) => [l.sessionId, l.state]))).toEqual([[["6", "reply"], ["7", "running"]], [["4", "waiting"], ["2", "waiting"], ["1", "running"]]]);
+    });
+    test("a click on a driving project lands on what waits longest", () => expect(a.targets.a?.blockId).toBe("b-4"));
+});
+
 describe("the hold: batches, breaks and focus blocks", () => {
     const P = 20 * 60_000;
     const T = Math.ceil(NOW / P) * P;

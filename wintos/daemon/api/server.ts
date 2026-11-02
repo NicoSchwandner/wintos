@@ -50,6 +50,8 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
+export const DRIVING_MAX = 3;
+
 export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; batchEveryMs?: number; wipLimit?: number; termCols?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
@@ -278,6 +280,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         pluginsRunning: runner.running,
         snoozes,
         projectSnoozes,
+        driving,
         seen,
         fixer: fixer.state(),
         update: { behind: update?.behind() ?? 0 },
@@ -310,6 +313,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // ⌥⌘Z: tab id → until when the project stays out of the sidebar.
     const projectSnoozeFile = join(opts.root, ".project-snoozes.json");
     let projectSnoozes = readJson<Record<string, number>>(projectSnoozeFile, {});
+    // ⌥⌘D: the projects you drive all day, in the order pinned; three at most, so they stay a short list.
+    const drivingFile = join(opts.root, ".driving.json");
+    let driving = readJson<string[]>(drivingFile, []);
     const fixer = new Fixer(opts.root, () => broadcast(), opts.fixCmd, opts.fixCwd);
     const ghData = () => runner.results["gh-prs"]?.data as { me: string; prs: PR[] } | undefined;
     // Every PR refresh is a chance for the conflicts babysitter.
@@ -568,6 +574,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const r = store.saveMine(decodeURIComponent(mine[1]), await formatMarkdown(b.text), typeof b.baseMtime === "number" ? b.baseMtime : undefined);
                 if (r === "no project") return send(res, 404, "no project for this tab");
                 if (r === "conflict") return send(res, 409, "mine.md changed on disk since you started editing");
+                return send(res, 200, "");
+            }
+            const drive = /^\/projects\/([^/]+)\/drive$/.exec(url.pathname);
+            if (req.method === "POST" && drive) {
+                const b = (await body(req)) as { on?: unknown };
+                if (typeof b?.on !== "boolean") return send(res, 400, "need on: true or false");
+                const tabId = decodeURIComponent(drive[1]);
+                if (b.on && !driving.includes(tabId) && driving.length >= DRIVING_MAX) return send(res, 409, `already driving ${DRIVING_MAX}: unpin one first`);
+                driving = b.on ? [...new Set([...driving, tabId])] : driving.filter((t) => t !== tabId);
+                writeFileSync(drivingFile, JSON.stringify(driving));
+                broadcast();
                 return send(res, 200, "");
             }
             const snoozeTab = /^\/projects\/([^/]+)\/snooze$/.exec(url.pathname);

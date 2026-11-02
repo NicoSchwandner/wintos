@@ -27,6 +27,14 @@ describe("decisions", () => {
     });
 });
 
+describe("decisions: a driving project's turns first", () => {
+    test("⌥⌘O reaches the driving project's turn before an older one elsewhere", () => {
+        const sessions = [s("old", { kind: "answer", by: "guess" }, { since: NOW - 9000 }), s("drive", { kind: "answer", by: "guess" })];
+        expect(decisions({ ...state(sessions), driving: ["t-drive"] }, NOW, title).map((d) => d.sessionId)).toEqual(["drive", "old"]);
+        expect(decisions(state(sessions), NOW, title).map((d) => d.sessionId)).toEqual(["old", "drive"]);
+    });
+});
+
 describe("decisions: turns, and the ones left for later", () => {
     test("each turn its own key, so a session that asks again comes back as a new card", () => {
         const [d] = decisions(state([s("a", { kind: "answer", text: "which?", by: "session" })]), NOW, title);

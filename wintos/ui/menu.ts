@@ -82,6 +82,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:t", "session"],
     ["Shift:Cmd:w", "close-project"],
     ["Option:Cmd:z", "snooze-project"],
+    ["Option:Cmd:d", "drive-project"],
     ["Cmd:e", "edit-mine"],
     ["Shift:Cmd:p", "palette"],
     ["Shift:Cmd:k", "keymap"],
@@ -250,7 +251,7 @@ export function runKey(action: string): boolean {
 // The Inbox holds pages and nothing else: a terminal or a Claude session started there would
 // belong to no project and never show in the sidebar, Needs you or ⌃⇥.
 const PANE_MAKERS = new Set(["session", "terminal", "browser", "files", "sysinfo", "processes", "open-page"]);
-const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session", "snooze-project"]);
+const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session", "snooze-project", "drive-project"]);
 export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
 
@@ -267,6 +268,7 @@ export function runAction(action: string): void {
     if (action === "project") return void createTab();
     if (action === "close-project") return closeProject();
     if (action === "snooze-project") return snoozeProject(globalStore.get(atoms.staticTabId));
+    if (action === "drive-project") return driveProject(globalStore.get(atoms.staticTabId));
     if (action === "undo") return undo();
     if (action === "edit-mine") return editMine(true);
     // Wave's own new-terminal def: the focused terminal's directory and connection.
@@ -590,4 +592,10 @@ export function snoozeProject(tabId: string): void {
     const until = snoozeToggle(currentState()?.projectSnoozes, tabId, Date.now());
     flog(`snooze: ${tabId} ${until ? `until ${new Date(until).toISOString()}` : "woken"}`);
     void setProjectSnoozed(tabId, until);
+}
+
+// ⌥⌘D: pinned to the sidebar's Driving section, or off it again. The daemon refuses a fourth.
+export function driveProject(tabId: string): void {
+    const on = !currentState()?.driving?.includes(tabId);
+    void daemonFetch(`/projects/${encodeURIComponent(tabId)}/drive`, { method: "POST", body: { on } }).then((r) => flog(`drive: ${tabId.slice(0, 6)} ${on ? (r.ok ? "pinned" : "refused, three already") : "unpinned"}`));
 }

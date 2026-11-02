@@ -80,6 +80,19 @@ export function waking(split: Ranking, tabs: Record<string, string>): Ranking {
     return { ...split, needs: [...lifted, ...split.needs], read: kept(split.read), running: kept(split.running), quiet: kept(split.quiet), quietMore: kept(split.quietMore), quietStale: kept(split.quietStale) };
 }
 
+// Pinned projects leave every band, whatever their state; the snooze and the hold never hide them.
+function drivingSplit(split: Ranking, pinned: string[], seen: Record<string, number>, now: number): { split: Ranking; driving: Drive[] } {
+    const all = [...split.needs, ...split.read, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale];
+    const out = (rows: Row[]) => rows.filter((r) => !pinned.includes(r.tabId));
+    const lineOf = (s: Session): DriveLine | undefined => {
+        const state = s.state === "ended" || s.background ? undefined : s.state === "waiting" && !liveSubagents(s, now) ? "waiting" : s.state === "working" || liveSubagents(s, now) ? "running" : isUnread(s, seen) ? "reply" : undefined;
+        return state && { sessionId: s.id, blockId: s.blockId, name: s.name?.text ?? s.label ?? "session", state, since: state === "reply" ? s.turnEndedAt! : s.since };
+    };
+    const order = { waiting: 0, reply: 1, running: 2 } as const;
+    const driving = pinned.flatMap((id) => all.filter((r) => r.tabId === id)).map((row) => ({ row, lines: row.sessions.flatMap((s) => lineOf(s) ?? []).sort((a, b) => order[a.state] - order[b.state] || a.since - b.since) }));
+    return { split: { ...split, needs: out(split.needs), read: out(split.read), running: out(split.running), quiet: out(split.quiet), quietMore: out(split.quietMore), quietStale: out(split.quietStale) }, driving };
+}
+
 // ⌥⌘Z: snoozed until the next working day, or awake again when it already is.
 export const snoozeToggle = (snoozes: Record<string, number> = {}, tabId: string, now: number): number | null => ((snoozes[tabId] ?? 0) > now ? null : nextWorkingDayStart(now));
 export const isSnoozedProject = (snoozes: Record<string, number> = {}, tabId: string, now: number) => (snoozes[tabId] ?? 0) > now;
@@ -118,13 +131,18 @@ const lastSaid = (sessions: Session[]) => sessions.filter((s) => s.outcome).sort
 // here: the project you are in, never held.
 // snoozed: out of the bands until their time (⌥⌘Z). wake: snoozed but waiting on you or with a
 // reply, so back in the bands and to be woken for good.
-export type Attention = Ranking & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target>; held?: { count: number; until: number }; snoozed: string[]; wake: string[] };
+// driving: the projects pinned with ⌥⌘D, out of the bands and in their own section, each with the
+// sessions that are waiting on you or at work.
+export type DriveLine = { sessionId: string; blockId: string; name: string; state: "waiting" | "reply" | "running"; since: number };
+export type Drive = { row: Row; lines: DriveLine[] };
+export type Attention = Ranking & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target>; held?: { count: number; until: number }; snoozed: string[]; wake: string[]; driving: Drive[] };
 export function attention(tabIds: string[], state: WintosState, names: Record<string, string | undefined>, now: number, here?: string): Attention {
     const prs = prsByTab(tabIds, state);
     const lines = wakingTabs(state, tabIds);
     const { split: unsnoozed, held } = holding(waking(sidebarModel(tabIds, state), lines), state, now, here, lines);
-    const { split, snoozed, wake } = snoozing(unsnoozed, state.projectSnoozes ?? {}, now, here);
-    const rows = [...split.needs, ...split.read, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale];
+    const { split: undriven, driving } = drivingSplit(unsnoozed, state.driving ?? [], state.seen ?? {}, now);
+    const { split, snoozed, wake } = snoozing(undriven, state.projectSnoozes ?? {}, now, here);
+    const rows = [...driving.map((d) => d.row), ...split.needs, ...split.read, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale];
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const label = repoLabeler(state);
     const views = Object.fromEntries(rows.map((r) => [r.tabId, lines[r.tabId] ? { ...rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label), next: lines[r.tabId], tone: "apricot" as const } : rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label)]));
@@ -136,13 +154,13 @@ export function attention(tabIds: string[], state: WintosState, names: Record<st
         views[here] = { ...v, reason: [v.reason, until].filter(Boolean).join(" · "), ...(v.next ? { next: `${v.next} · ${until}` } : {}) };
     }
     const targets: Record<string, Target> = {};
-    for (const r of [...split.needs, ...split.read]) {
+    for (const r of [...driving.map((d) => d.row), ...split.needs, ...split.read]) {
         const waiting = r.sessions.filter((s) => s.state === "waiting").sort((a, b) => a.since - b.since)[0];
         const reply = r.sessions.filter((s) => isUnread(s, state.seen ?? {})).sort((a, b) => b.turnEndedAt! - a.turnEndedAt!)[0];
         const to = waiting ?? reply;
         if (to) targets[r.tabId] = { tabId: r.tabId, blockId: to.blockId };
     }
-    return { ...split, views, prs, targets, snoozed, wake, ...(held.rows.size ? { held: { count: held.rows.size, until: Math.min(...held.rows.values()) } } : {}) };
+    return { ...split, views, prs, targets, snoozed, wake, driving, ...(held.rows.size ? { held: { count: held.rows.size, until: Math.min(...held.rows.values()) } } : {}) };
 }
 
 export const day = (t: number) => new Date(t).toLocaleDateString("en-GB", { weekday: "long" });

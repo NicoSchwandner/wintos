@@ -49,7 +49,9 @@ export function computeTheme(
         }
     }
     const bgcolor = themeCopy.background;
-    themeCopy.background = "#00000000";
+    // Invisible, so the block's own background shows; but in its colour, not black, since WebGL
+    // draws dim and italic glyphs on it and on a light theme they come out as black boxes.
+    themeCopy.background = bgcolor ? colord(bgcolor).alpha(0).toHex() : "#00000000";
     return [themeCopy, bgcolor];
 }
 

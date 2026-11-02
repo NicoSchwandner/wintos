@@ -234,7 +234,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                             // Enough waiting to be worth a sitting: say where the batch is.
                             <button type="button" data-wintos="batch-ready" data-key="⌥⌘O" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("release")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "0 4px", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 11.5, color: T.muted, textAlign: "left" }}>
                                 <span>{model.needs.length} to decide in one go</span>
-                                <Key k="⌥⌘O" label="open the batch" />
+                                <Key k="⌥⌘O" label="go through them" />
                             </button>
                         )}>
                             {wokeClosed.map((w) => (

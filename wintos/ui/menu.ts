@@ -11,6 +11,7 @@ import { stepProject, switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, LayoutTreeActionType, NavigateDirection, type LayoutTreeSwapNodeAction } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
 import { isInboxTab, projectSessions, sessionHeader, sessionName, urgentPr } from "./view";
+import { decisions, nextDecision } from "./decisions";
 import { rememberUndo, takeUndo } from "./undo";
 import { closeAction, escapeAction, isTextField, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
@@ -319,8 +320,8 @@ export function runAction(action: string): void {
     if (action === "update") return updateWintos();
     if (action === "autoclose") return toggleAutoClose();
     if (action === "break") return void (flog("break: started"), daemonFetch("/rhythm/break", { method: "POST", body: {} }));
-    // ⌥⌘O: the decision batch, what was held back with it; again closes it.
-    if (action === "release") return void (globalStore.get(mainViewAtom) !== "decide" && (flog("batch: opened now"), void daemonFetch("/rhythm/release", { method: "POST", body: {} })), toggleView("decide"));
+    // ⌥⌘O: the next session waiting on you, in its own pane; what was held back comes in with it.
+    if (action === "release") return void walkDecisions();
     if (action === "focus") return void (flog("focus block: toggled"), daemonFetch("/rhythm/focus", { method: "POST", body: { tabId: globalStore.get(atoms.staticTabId) } }));
     if (action === "break-later") return void (flog("break: in 10 min"), daemonFetch("/rhythm/snooze", { method: "POST", body: { minutes: 10 } }));
     if (action.startsWith("session-")) return toSession(Number(action.slice("session-".length)));
@@ -350,6 +351,16 @@ export function wintosClose(): boolean {
         shelvePane(focused?.data?.blockId);
     }
     return action !== "pane";
+}
+
+function walkDecisions(): void {
+    void daemonFetch("/rhythm/release", { method: "POST", body: {} });
+    const state = currentState();
+    if (!state) return;
+    const list = decisions(state, Date.now(), (tabId) => state.projects.find((p) => p.id === tabId)?.title ?? "Untitled");
+    const next = nextDecision(list, focusedSession()?.id);
+    flog(next ? `walk: to ${next.session} (${list.length} waiting)` : `walk: nothing else waiting (${list.length})`);
+    if (next) focusSession({ tabId: next.tabId, blockId: next.blockId });
 }
 
 // ⌘W on a pane, or its ×: a working session's pane asks first, then the pane goes to the shelf.

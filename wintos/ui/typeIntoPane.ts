@@ -12,8 +12,3 @@ export async function typeIntoPane(blockId: string, text: string): Promise<void>
     await new Promise((done) => setTimeout(done, 300));
     await type("\r");
 }
-
-// Starts a pane's process from anywhere, as a pane does when its project opens: a session saved at
-// the last quit resumes its Claude without taking you there.
-export const startPane = (tabId: string, blockId: string, cols: number) =>
-    RpcApi.ControllerResyncCommand(TabRpcClient, { tabid: tabId, blockid: blockId, rtopts: { termsize: { rows: 40, cols } } });

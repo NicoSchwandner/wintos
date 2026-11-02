@@ -2,6 +2,7 @@ import { getLayoutModelForStaticTab } from "@/layout/index";
 import { useAtomValue } from "jotai";
 import { GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft } from "lucide-react";
 import { memo } from "react";
+import { decisions } from "./decisions";
 import { Key } from "./Key";
 import { runAction, runKey } from "./menu";
 import { HEADERS } from "./PrQueue";
@@ -26,6 +27,9 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     const shown = shownState(s, now);
     const agents = liveSubagents(s, now);
     const urgent = urgentPr(h);
+    // In a session waiting on you: how many more wait, and the key to the next.
+    const waiting = focused && state ? decisions(state, now, () => "") : [];
+    const more = waiting.some((d) => d.sessionId === s.id) ? waiting.length - 1 : 0;
     return (
         <div data-wintos="session-header" style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", gap: 5, padding: "7px 10px 8px 12px", borderBottom: `1px solid ${T.border}`, fontFamily: T.ui, fontSize: 12, minWidth: 0 }}>
             {h.tone && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: h.tone === "brick" ? T.brick : T.apricot }} />}
@@ -38,6 +42,11 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                 <span data-wintos="session-name" style={{ color: T.emphasis, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>{sessionName(s)}</span>
                 {s.name?.by === "session" && now - s.name.at < NAME_PROPOSAL_MS && <NameButton label={`change the name · ${Math.min(60, Math.ceil((NAME_PROPOSAL_MS - (now - s.name.at)) / 1000))}s`} />}
                 {s.name?.suggested && <NameButton label={`it suggests “${s.name.suggested}”`} />}
+                {more > 0 && (
+                    <button type="button" data-wintos="walk-next" data-key="⌥⌘O" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("release")} style={{ flexShrink: 0, marginLeft: "auto", order: 9, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                        <Key k="⌥⌘O" label={`next waiting · ${more} more`} always />
+                    </button>
+                )}
                 {h.task && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>{h.task}</span>}
                 {h.branch && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.branch}</span>}
             </div>

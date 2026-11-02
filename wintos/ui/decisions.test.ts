@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { answerText, currentCard, decisions, questions } from "./decisions";
+import { decisions, nextDecision } from "./decisions";
 import type { WintosState } from "./view";
 
 const NOW = 1_000_000;
@@ -45,31 +45,15 @@ describe("decisions: turns, and the ones left for later", () => {
     });
 });
 
-test("the card shows its turn as read now, not as first shown", () => {
-    const first = decisions(state([s("a", { kind: "answer", by: "guess" })]), NOW, title);
-    const read = decisions(state([s("a", { kind: "decide", text: "where matching lives", by: "model" })]), NOW, title);
-    expect(currentCard(first, read, {})?.question).toBe("where matching lives");
-    expect(currentCard(first, read, { [first[0].turn]: "answered" })).toBeUndefined();
-    expect(currentCard(first, [], {})).toBeUndefined();
-});
-
-describe("answerText", () => {
-    const d = decisions(state([s("a", { kind: "decide", text: "merge or hold?", by: "session", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }], recommend: 1 })]), NOW, title)[0];
-    test.each([
-        [{ option: 2 }, "Hold."],
-        [{ yourCall: true as const }, "Go with your recommendation: Merge now."],
-        [{ own: "  per endpoint, not global " }, "per endpoint, not global"],
-    ])("%j → %s", (a, text) => expect(answerText(d, a)).toBe(text));
-    test("picks: what is on and what is left out, after the answer", () => {
-        const r = decisions(state([s("r", { kind: "approve", text: "approve #7?", by: "session", options: [{ label: "Approve" }, { label: "Request changes" }], picks: [{ label: "Missing test", on: true }, { label: "Rename it", on: false }] })]), NOW, title)[0];
-        expect(answerText(r, { option: 1 }, [true, false])).toBe("Approve. Include: Missing test. Leave out: Rename it.");
-        expect(answerText(r, { own: "approve, but ask about the cache" }, [false, false])).toBe("approve, but ask about the cache. Leave out: Missing test; Rename it.");
+describe("nextDecision", () => {
+    const list = decisions(state([s("a", { kind: "approve", by: "session" }), s("b", { kind: "decide", by: "session" })]), NOW, title);
+    test("from outside the list, the first; from one of them, the next, round the end", () => {
+        expect(nextDecision(list, undefined)?.sessionId).toBe("a");
+        expect(nextDecision(list, "a")?.sessionId).toBe("b");
+        expect(nextDecision(list, "b")?.sessionId).toBe("a");
     });
-    test("several questions: one pick each, named by its question", () => {
-        const m = decisions(state([s("m", { kind: "decide", text: "two things", by: "model", options: [{ label: "Keep", q: "KR1" }, { label: "Drop", q: "KR1" }, { label: "Open", q: "Denominator" }, { label: "47,300", q: "Denominator" }] })]), NOW, title)[0];
-        expect(questions(m)).toEqual([{ q: "KR1", from: 1, to: 2 }, { q: "Denominator", from: 3, to: 4 }]);
-        expect(answerText(m, { options: [2, 3] })).toBe("KR1: Drop. Denominator: Open.");
+    test("nothing else waiting: none", () => {
+        expect(nextDecision(list.slice(0, 1), "a")).toBeUndefined();
+        expect(nextDecision([], undefined)).toBeUndefined();
     });
-    test("one question is one group of all its options", () => expect(questions(d)).toEqual([{ from: 1, to: 2 }]));
-    test("the question tool takes the option's number", () => expect(answerText({ ...d, by: "tool" }, { option: 2 })).toBe("2"));
 });

@@ -28,6 +28,8 @@ import type { WebViewEnv } from "./webviewenv";
 // User agent strings for mobile emulation
 const USER_AGENT_IPHONE =
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+import { chromeUserAgent } from "./chromeua";
+
 const USER_AGENT_ANDROID =
     "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.43 Mobile Safari/537.36";
 
@@ -873,6 +875,9 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
         userAgent = USER_AGENT_IPHONE;
     } else if (userAgentType === "mobile:android") {
         userAgent = USER_AGENT_ANDROID;
+    } else {
+        // WintOS: Google refuses sign-in from a browser naming itself Electron or the app.
+        userAgent = chromeUserAgent(navigator.userAgent);
     }
 
     // Search

@@ -13,14 +13,16 @@ const ACTS: Group[] = ["merge", "fix", "review", "chase"];
 // nobody took up in time.
 export type QueueModel = { groups: { group: Group; rows: QueueRow[] }[]; snoozed: QueueRow[]; yours: number; waiting: number; team: number; pastSla: number; teamPastSla: number };
 
-export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes = {}): QueueModel {
+// ownTeam: your own team as its name and members (WINTOS_TEAM); reviews asked only of your other
+// teams then leave the team's group.
+export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes = {}, ownTeam?: string[]): QueueModel {
     const toRow = (pr: PR): QueueRow => {
         const group = groupOf(pr, me, now);
         return { pr, group, mine: pr.author === me, age: ageLabel(pr, now), qualifier: qualifier(pr, group, { reviewers: false }), total: pr.additions + pr.deletions, children: [] };
     };
     const snoozed = prs.filter((p) => isSnoozed(p, snoozes, now)).map(toRow);
     // Someone else's draft asks nothing of your team yet, whoever is requested on it.
-    const all = prs.filter((p) => !isSnoozed(p, snoozes, now)).map(toRow).filter((r) => !(r.group === "team" && r.pr.isDraft));
+    const all = prs.filter((p) => !isSnoozed(p, snoozes, now)).map(toRow).filter((r) => !(r.group === "team" && (r.pr.isDraft || (ownTeam && !r.pr.reviewers.some((x) => ownTeam.includes(x))))));
     const byUrl = new Map(all.map((r) => [r.pr.url, r]));
     const numbers = new Map(prs.map((p) => [p.url, p.number])); // snoozed bases too
     // A stacked PR that asks nothing of you waits under its base; one that does keeps its own

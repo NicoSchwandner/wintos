@@ -131,3 +131,11 @@ body:not(.w-show-keys) .w-hold {
 .w-hover-x { visibility: hidden; }
 :is(.w-chip, .w-row):hover .w-hover-x,
 :is(.w-chip, .w-row)[data-on] .w-hover-x { visibility: visible; }
+
+/* In dark the terminal and the gaps between panes are near the same black, so the panes run
+   together; an unfocused pane gets a quiet frame. Light reads apart by its paler terminal. */
+@media (prefers-color-scheme: dark) {
+    .block.block-frame-default:not(.block-focused) .block-mask {
+        border-color: var(--w-border-active);
+    }
+}

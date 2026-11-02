@@ -92,7 +92,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const model = state ? attention(tabIds, state, names, now, activeTabId) : null;
     const focus = state?.rhythm?.focus && now < state.rhythm.focus.until ? state.rhythm.focus : undefined;
     const gh = state ? ghPrs(state) : undefined;
-    const queue = gh ? queueModel(gh.prs, gh.me, now, state?.snoozes) : null;
+    const queue = gh ? queueModel(gh.prs, gh.me, now, state?.snoozes, gh.team) : null;
     const panels = state ? pluginPanels(state) : [];
     const loading = state ? loadingPanels(state, lastPanelTitles(panels)) : [];
     const running = new Set(state?.pluginsRunning ?? []);
@@ -199,7 +199,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     state && (
                         <div style={{ display: "grid", gridTemplateColumns: `repeat(${1 + (state.day ? 1 : 0) + Math.max(1, panels.length + loading.length)}, minmax(0, 1fr))`, gap: 6 }}>
                             {state.day && <Tile label="Today" keys="⇧⌘Y" value={dayValue(state.day)} hot={!state.day.planned} active={mainView === "day" || mainView === "reflect"} cursor={switchTarget === "card:today"} onClick={() => openView("day")} />}
-                            <Tile label="PRs" keys="⇧⌘G" value={queue ? String(queue.yours) : "…"} note={queue && queue.pastSla ? `${queue.pastSla} late` : undefined} busy={running.has("gh-prs")} active={shows("prs")} cursor={switchTarget === "card:prs"} onClick={() => goToInbox("prs")} />
+                            <Tile label="PRs" keys="⇧⌘G" value={queue ? String(queue.yours) : "…"} note={queue && queue.pastSla ? `${queue.pastSla} late` : undefined} sub={queue?.team ? `${queue.team} team` : undefined} busy={running.has("gh-prs")} active={shows("prs")} cursor={switchTarget === "card:prs"} onClick={() => goToInbox("prs")} />
                             {panels.map((p) => <Tile key={p.name} label={p.title} keys="⇧⌘O" value={cardValue(p.counts).map((c) => c.value).join(" · ")} broken={!!p.error || p.counts.some((x) => x.count == null)} busy={running.has(p.name)} active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
                             {loading.map((p) => <Tile key={p.name} label={p.title} keys="⇧⌘O" value="…" active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
                         </div>
@@ -311,7 +311,7 @@ const dayValue = (day: Day) => {
 
 // A small tile at the top of the sidebar: Today, PRs, On call. hot: it needs you (an unplanned
 // day); note: what is late, in brick; broken: its last run could not fetch everything.
-function Tile({ label, keys, value, note, hot, broken, busy, active, cursor, onClick }: { label: string; keys: string; value: string; note?: string; hot?: boolean; broken?: boolean; busy?: boolean; active?: boolean; cursor?: boolean; onClick: () => void }) {
+function Tile({ label, keys, value, note, sub, hot, broken, busy, active, cursor, onClick }: { label: string; keys: string; value: string; note?: string; sub?: string; hot?: boolean; broken?: boolean; busy?: boolean; active?: boolean; cursor?: boolean; onClick: () => void }) {
     return (
         <div data-key={active ? "" : keys} onClick={onClick} title={broken ? "couldn't fetch everything" : undefined} style={{ minWidth: 0, padding: "8px 10px", background: T.card, border: `1px solid ${cursor || hot ? T.apricot : "transparent"}`, borderRadius: 9, display: "flex", flexDirection: "column", gap: 2, cursor: "pointer", ...(active ? ACTIVE : {}) }}>
             <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: T.muted }}>
@@ -323,6 +323,7 @@ function Tile({ label, keys, value, note, hot, broken, busy, active, cursor, onC
                 {value}
                 {note && <span style={{ fontSize: 12, fontWeight: 500, color: T.brick }}> · {note}</span>}
             </span>
+            {sub && <span style={{ fontSize: 11.5, color: T.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>}
         </div>
     );
 }

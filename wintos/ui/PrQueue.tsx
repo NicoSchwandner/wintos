@@ -63,7 +63,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
         setNaming(null);
         focusRef.current?.focus();
     };
-    const model = gh ? queueModel(filter ? gh.prs.filter((p) => matchesPr(p, filter)) : gh.prs, gh.me, now, state?.snoozes) : null;
+    const model = gh ? queueModel(filter ? gh.prs.filter((p) => matchesPr(p, filter)) : gh.prs, gh.me, now, state?.snoozes, gh.team) : null;
     // A stacked PR's row follows its base, one indent per step; the cursor walks them in order.
     const withStack = (r: QueueRow, depth = 0): { r: QueueRow; depth: number }[] => [{ r, depth }, ...r.children.flatMap((c) => withStack(c, depth + 1))];
     const flat = [...(model?.groups.flatMap((g) => g.rows.flatMap((r) => withStack(r).map((x) => x.r))) ?? []), ...(model?.snoozed ?? [])];

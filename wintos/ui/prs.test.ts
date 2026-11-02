@@ -44,6 +44,11 @@ describe("queueModel", () => {
     });
 
     test("past SLA is what you are late on: a late review counts, a chase (someone owes you) does not", () => expect(m.pastSla).toBe(1));
+    test("with your own team set, only reviews asked of it or its members are the team's", () => {
+        const t = queueModel([pr({ number: 5, author: "bo.k", requestedTeam: true, reviewers: ["team-x"] }), pr({ number: 6, author: "bo.k", requestedTeam: true, reviewers: ["ana"] }), pr({ number: 7, author: "cy", requestedTeam: true, reviewers: ["platform"] })], "me", MON, {}, ["team-x", "ana"]);
+        expect([t.groups.flatMap((g) => g.rows.map((r) => r.pr.number)), t.team]).toEqual([[5, 6], 2]);
+        expect(queueModel([pr({ number: 7, author: "cy", requestedTeam: true, reviewers: ["platform"] })], "me", MON).team).toBe(1);
+    });
     test("the team's review requests past the SLA have their own count", () => {
         const t = queueModel([pr({ number: 5, author: "bo.k", requestedTeam: true, createdAt: "2026-09-21T09:00:00Z" }), pr({ number: 6, author: "bo.k", requestedTeam: true })], "me", MON);
         expect([t.team, t.teamPastSla]).toEqual([2, 1]);

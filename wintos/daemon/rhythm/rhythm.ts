@@ -7,7 +7,7 @@ export type Break = { start: number; end: number };
 // run that is long enough to be a break. onBreak: when ⌥⌘B started one.
 // lastPrompt: the last prompt you sent, by its length only. releasedAt: ⌥⌘O opened the batch.
 // focus: a focus block (⌥⌘F) on one project (hold.ts). closed: the day you closed (⇧⌘E), quiet
-// until the next workday starts.
+// until 06:00 the next workday.
 export type Rhythm = { day: string; stretchFrom: number; breaks: Break[]; awayFrom?: number; onBreak?: number; snoozedUntil?: number; lastPrompt?: { at: number; chars: number }; releasedAt?: number; focus?: { tabId: string; from: number; until: number }; closed?: { day: string; until: number }; later?: Record<string, { since: number; until: number }> };
 export type Nudge = { kind: "move" | "dispatch" | "lunch" | "wrap"; minutes: number };
 
@@ -48,9 +48,11 @@ export function toggleFocus(r: Rhythm, tabId: string, now: number): Rhythm {
     if (focus && focus.tabId === tabId && now < focus.until) return rest;
     return { ...rest, focus: { tabId, from: now, until: now + FOCUS_MS } };
 }
-// ⇧⌘E then ⌘⏎: the day is done, quiet until the next workday starts (a Friday's until Monday's).
-export function closeDay(r: Rhythm, now: Date, startMinutes: number): Rhythm {
-    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, startMinutes);
+// The quiet after a closed day ends well before the workday does, so an early start isn't held.
+const OPENS_AT = 6 * 60;
+// ⇧⌘E then ⌘⏎: the day is done, quiet until the next workday's morning (a Friday's until Monday's).
+export function closeDay(r: Rhythm, now: Date): Rhythm {
+    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, OPENS_AT);
     while (next.getDay() === 0 || next.getDay() === 6) next.setDate(next.getDate() + 1);
     return { ...r, closed: { day: r.day, until: next.getTime() } };
 }

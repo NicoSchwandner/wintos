@@ -665,10 +665,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 return send(res, 200, "");
             }
             if (req.method === "POST" && url.pathname === "/rhythm/break") return setRhythm(startBreak(rhythm, Date.now())), send(res, 200, "");
-            if (req.method === "POST" && url.pathname === "/rhythm/close") {
-                const start = /^(\d{1,2}):(\d{2})-/.exec(opts.workday ?? "");
-                return setRhythm(closeDay(rhythm, new Date(), start ? Number(start[1]) * 60 + Number(start[2]) : 8 * 60)), send(res, 200, "");
-            }
+            if (req.method === "POST" && url.pathname === "/rhythm/close") return setRhythm(closeDay(rhythm, new Date())), send(res, 200, "");
             if (req.method === "POST" && url.pathname === "/rhythm/release") return setRhythm(release(rhythm, Date.now())), send(res, 200, "");
             if (req.method === "POST" && url.pathname === "/rhythm/later") {
                 const b = (await body(req)) as { sessionId?: unknown; since?: unknown };

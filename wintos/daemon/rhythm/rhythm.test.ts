@@ -92,10 +92,10 @@ describe("closing the day", () => {
         expect(nudge(r, { ...c, now: at(30, 16, 59) })).toBeUndefined();
         expect(nudge(r, { ...c, now: at(30, 17, 5) })).toMatchObject({ kind: "wrap" });
     });
-    test("closed: quiet until the next workday starts, a Friday's until Monday, and no nudges meanwhile", () => {
-        const fri = closeDay({ day: "d", stretchFrom: 0, breaks: [] }, new Date(2026, 9, 30, 17, 10), 8 * 60);
-        expect(fri.closed).toEqual({ day: "d", until: at(33, 8) });
-        expect(closeDay({ day: "d", stretchFrom: 0, breaks: [] }, new Date(2026, 9, 28, 17, 10), 8 * 60).closed?.until).toBe(at(29, 8));
+    test("closed: quiet until 06:00 the next workday, a Friday's until Monday, and no nudges meanwhile", () => {
+        const fri = closeDay({ day: "d", stretchFrom: 0, breaks: [] }, new Date(2026, 9, 30, 17, 10));
+        expect(fri.closed).toEqual({ day: "d", until: at(33, 6) });
+        expect(closeDay({ day: "d", stretchFrom: 0, breaks: [] }, new Date(2026, 9, 28, 17, 10)).closed?.until).toBe(at(29, 6));
         expect(nudge(fri, { ...calm, now: at(30, 18), workday: [480, 1020], today: new Date(2026, 9, 30) })).toBeUndefined();
         expect(tick(fri, 0, at(31, 9), "d2").closed).toEqual(fri.closed);
         expect(tick(fri, 0, at(33, 9), "d3").closed).toBeUndefined();

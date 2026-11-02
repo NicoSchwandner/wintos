@@ -19,7 +19,7 @@ import { mainViewAtom } from "./notes/state";
 // ⇧⌘E: the day closed on purpose. Every loose end gets a place: a turn waiting on you goes to
 // tomorrow's plan (t) or is let go (d), both parking its session; what still runs, and the wakes,
 // finish on their own. ⌘⏎ writes tomorrow's plan under today's goals for tomorrow and keeps
-// WintOS quiet until the next workday starts.
+// WintOS quiet until 06:00 the next workday.
 export const WrapupPage = memo(() => {
     const ref = useFocusOnMount<HTMLDivElement>();
     const { state } = useWintos();
@@ -113,7 +113,7 @@ export const WrapupPage = memo(() => {
                 </Panel>
             </div>
             <button type="button" data-wintos="close-day" data-key="⌘⏎" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => void close()} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "14px 18px", background: T.card, border: `1px solid ${T.moss}`, borderRadius: 12, cursor: "pointer", fontFamily: T.ui, textAlign: "left" }}>
-                <span style={{ fontSize: 14, color: T.emphasis }}>{looseLeft ? `${looseLeft} still without a place; closing keeps them for tomorrow.` : "Everything has a place."} WintOS stays quiet until the workday starts.</span>
+                <span style={{ fontSize: 14, color: T.emphasis }}>{looseLeft ? `${looseLeft} still without a place; closing keeps them for tomorrow.` : "Everything has a place."} WintOS stays quiet until 06:00 the next workday.</span>
                 <Key k="⌘⏎" label="close the day" />
             </button>
         </div>

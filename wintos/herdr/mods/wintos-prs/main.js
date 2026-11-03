@@ -104,9 +104,9 @@ export default class WintosPrs extends View {
             this.follow = true;
         };
         const act = {
-            go: () => sel && void this.go(sel),
-            open: () => sel && void exec("open", [sel.url]),
-            snooze: (cx) => sel && cx.spawn(async (cx) => { await this.snooze(sel, sel.snoozed); this.load(cx); }),
+            go: (_cx, r = sel) => r && void this.go(r),
+            open: (_cx, r = sel) => r && void exec("open", [r.url]),
+            snooze: (cx, r = sel) => r && cx.spawn(async (cx) => { await this.snooze(r, r.snoozed); this.load(cx); }),
             refresh: (cx) => cx.spawn(async (cx) => { await post("/plugins/gh-prs/run"); this.load(cx); }),
         };
         const item = (i) => {
@@ -114,6 +114,8 @@ export default class WintosPrs extends View {
             if (x.head) return h_flex().w_full().h(HEAD).items_end().gap(8).px(4).pb(4).child(div().text_size(12).font_semibold().child(x.head)).child(div().text_size(11).text_color(t.dim).child(x.note));
             const r = x.row;
             const on = x.at === this.at;
+            // Pointing at a row offers its buttons as choosing it does; the keys stay on the chosen one.
+            const hovered = this.hovered === r.url;
             return h_flex().id(`pr-${r.url}`).w_full().h(ROW).gap(10).px(10).rounded(8).items_center()
                 .when(on, (el) => el.bg(t.selected))
                 .hover((s) => s.bg(t.hover))
@@ -122,11 +124,12 @@ export default class WintosPrs extends View {
                 .child(v_flex().flex_1().min_w(0)
                     .child(div().truncate().text_color(r.snoozed ? t.dim : t.foreground).child(r.title))
                     .child(div().truncate().text_size(11).text_color(t.muted).child([r.author, r.why, r.owner ? `session: ${r.owner}${r.live ? "" : " (closed)"}` : r.project ? `project: ${r.project}` : ""].filter(Boolean).join(" · "))))
-                .when(on, (el) => el.child(h_flex().flex_none().gap(4)
-                    .child(btn(t, "go", "o", r.owner ? "its session" : r.project ? "its project" : "new session", act.go))
-                    .child(btn(t, "open", "⏎", "browser", act.open))
-                    .child(btn(t, "snooze", "z", r.snoozed ? "wake" : "snooze", act.snooze))))
-                .when(!on, (el) => el.child(div().flex_none().text_size(11).text_color(r.late ? t.blocked : t.dim).child(r.age)));
+                .on_hover((hovered, cx) => { this.hovered = hovered ? r.url : this.hovered === r.url ? null : this.hovered; cx.notify(); })
+                .when(on || hovered, (el) => el.child(h_flex().flex_none().gap(4)
+                    .child(btn(t, `go-${x.at}`, "o", r.owner ? "its session" : r.project ? "its project" : "new session", (cx) => act.go(cx, r)))
+                    .child(btn(t, `open-${x.at}`, "⏎", "browser", (cx) => act.open(cx, r)))
+                    .child(btn(t, `snooze-${x.at}`, "z", r.snoozed ? "wake" : "snooze", (cx) => act.snooze(cx, r)))))
+                .when(!on && !hovered, (el) => el.child(div().flex_none().text_size(11).text_color(r.late ? t.blocked : t.dim).child(r.age)));
         };
         return v_flex().id("wintos-prs").track_focus(this.handle).size_full().p(16).gap(10).bg(t.popover).text_size(13).text_color(t.foreground)
             .on_key_down((e, cx) => {

@@ -9,6 +9,8 @@ import { lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { deliverable, type Delivery } from "../ui/wakePlan";
 
 export { relTime, nextWorkingDayStart };
+export { focusList, focusLines, openWithNotes } from "../ui/dayplan";
+export { toggleCheckbox } from "../ui/notes/checkbox";
 
 export function sidebar(state: WintosState, tabIds: string[], names: Record<string, string>, now: number, here?: string) {
     const a = attention(tabIds, state, names, now, here);

@@ -5,10 +5,11 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, focused, run, theme, shared, setShared, setAgentOrder, nextCommand, exec } from "herdr";
 import { CHECKOUT, PORT } from "./config.js";
-import { sidebar, deliveries, relTime } from "./model.js";
+import { sidebar, deliveries, relTime, focusLines, focusList, openWithNotes, toggleCheckbox } from "./model.js";
 
 const BASE = `http://127.0.0.1:${PORT}`;
 const post = (path, body = {}) => fetch(BASE + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+const TODAY_SHOWN = 6;
 const LINE = { waiting: "your move", reply: "to read", running: "running" };
 
 export default class WintOS extends View {
@@ -115,6 +116,7 @@ export default class WintOS extends View {
                 .child(btn(t, "snooze", "⌥⌘Z", snoozed ? "wake" : "snooze", () => this.command("snooze"))));
         return root
             .child(bar)
+            .when(!!this.state.day, (el) => el.child(this.today(t, this.state.day)))
             .when(m.driving.length > 0, (el) => el.child(this.section(t, "Driving", t.foreground, m.driving.map((d) => this.drive(t, d, here)))))
             .when(m.needs.length > 0, (el) => el.child(this.section(t, "Your move", t.blocked, m.needs.map((r) => this.card(t, r, here, t.blocked)))))
             .when(m.read.length > 0, (el) => el.child(this.section(t, "To read", t.done, m.read.map((r) => this.card(t, r, here, t.done)))))
@@ -126,6 +128,34 @@ export default class WintOS extends View {
                             .on_click(() => setShared("wintos.quiet", !showQuiet))
                             .child(`Quiet · ${m.quiet.length}`).child(showQuiet ? "fold" : "show"))
                         .children((showQuiet ? m.quiet : m.quiet.filter((r) => r.tabId === here)).map((r) => this.quiet(t, r, here, null)))));
+    }
+
+    // Today's plan from the journal: what is still open, a box to tick each, and its editor.
+    today(t, day) {
+        const items = focusList(day.focus);
+        const open = openWithNotes(focusLines(day.focus));
+        const done = items.filter((i) => i.done).length;
+        // Herdr's daemon keeps its own record of planned days; a plan written in WintOS counts too.
+        const planned = day.planned || items.length > 0;
+        const edit = btn(t, "today-edit", "⇧⌘Y", planned ? "edit" : "plan", () => run("wintos-notes.today"));
+        return v_flex().gap(5).px(11).py(9).rounded(9).bg(t.background).border(1).border_color(planned ? t.border : t.blocked)
+            .child(h_flex().items_center().gap(8)
+                .child(div().flex_1().font_semibold().child("Today"))
+                .when(items.length > 0, (el) => el.child(div().text_size(11).text_color(t.dim).child(`${done} of ${items.length}`)))
+                .child(edit))
+            .when(!planned, (el) => el.child(div().text_color(t.blocked).child("Plan your day")))
+            .when(planned && open.length === 0, (el) => el.child(div().text_color(t.muted).child(items.length ? `all ${items.length} done` : "nothing planned")))
+            .children(open.slice(0, TODAY_SHOWN).map((i) => h_flex().id(`focus-${i.line}`).gap(8).items_center().pl(i.depth * 14)
+                .child(i.note
+                    ? div().w(4).h(4).mx(4).rounded(2).flex_none().bg(t.dim)
+                    : div().id(`tick-${i.line}`).w(12).h(12).flex_none().rounded(3).border(1).border_color(i.done ? t.working : t.input).bg(i.done ? t.working : t.background)
+                        .hover((s) => s.border_color(t.foreground))
+                        .on_click((_e, cx) => cx.spawn(async (cx) => {
+                            await post("/day/focus", { text: toggleCheckbox(day.focus, i.line), baseMtime: day.mtime });
+                            this.refresh(cx);
+                        })))
+                .child(div().flex_1().truncate().text_color(i.done ? t.dim : t.foreground).child(i.text))))
+            .when(open.length > TODAY_SHOWN, (el) => el.child(div().text_size(11).text_color(t.dim).child(`+${open.length - TODAY_SHOWN} more`)));
     }
 
     section(t, label, color, children) {

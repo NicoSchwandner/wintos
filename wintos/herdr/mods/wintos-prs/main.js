@@ -124,13 +124,13 @@ export default class WintosPrs extends View {
                 .child(v_flex().flex_1().min_w(0)
                     .child(div().truncate().text_color(r.snoozed ? t.dim : t.foreground).child(r.title))
                     .child(div().truncate().text_size(11).text_color(t.muted).child([r.author, r.why, r.owner ? `session: ${r.owner}${r.live ? "" : " (closed)"}` : r.project ? `project: ${r.project}` : ""].filter(Boolean).join(" · "))))
-                .child(size(t, r.added, r.removed))
                 .on_hover((hovered, cx) => { this.hovered = hovered ? r.url : this.hovered === r.url ? null : this.hovered; cx.notify(); })
                 .when(on || hovered, (el) => el.child(h_flex().flex_none().gap(4)
                     .child(btn(t, `go-${x.at}`, "o", r.owner ? "its session" : r.project ? "its project" : "new session", (cx) => act.go(cx, r)))
                     .child(btn(t, `open-${x.at}`, "⏎", "browser", (cx) => act.open(cx, r)))
                     .child(btn(t, `snooze-${x.at}`, "z", r.snoozed ? "wake" : "snooze", (cx) => act.snooze(cx, r)))))
-                .when(!on && !hovered, (el) => el.child(div().flex_none().text_size(11).text_color(r.late ? t.blocked : t.dim).child(r.age)));
+                .when(!on && !hovered, (el) => el.child(div().flex_none().text_size(11).text_color(r.late ? t.blocked : t.dim).child(r.age)))
+                .child(size(t, r.added, r.removed));
         };
         return v_flex().id("wintos-prs").track_focus(this.handle).size_full().p(16).gap(10).bg(t.popover).text_size(13).text_color(t.foreground)
             .on_key_down((e, cx) => {

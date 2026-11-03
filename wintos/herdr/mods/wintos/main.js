@@ -80,7 +80,7 @@ export default class WintOS extends View {
     }
 
     async command(c) {
-        const tab = focused()?.tab?.id;
+        const tab = focused()?.tab;
         if (!tab || !this.state) return;
         if (c === "drive") await post(`/projects/${encodeURIComponent(tab)}/drive`, { on: !(this.state.driving ?? []).includes(tab) });
         if (c === "snooze") {
@@ -101,7 +101,7 @@ export default class WintOS extends View {
         if (!this.state) return root.child(div().text_color(t.muted).child(this.down ?? "connecting to wintosd…"));
         const tabs = this.tabs();
         const names = Object.fromEntries(tabs.map((x) => [x.id, x.name]));
-        const here = focused()?.tab?.id;
+        const here = focused()?.tab;
         const m = sidebar(this.state, tabs.map((x) => x.id), names, Date.now(), here);
         setAgentOrder(m.order);
         const showQuiet = !!shared("wintos.quiet");

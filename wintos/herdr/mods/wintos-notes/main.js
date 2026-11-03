@@ -2,8 +2,8 @@
 // plan from your daily journal. Read as markdown; ⌘E edits in place, ⌘⏎ saves, esc discards.
 
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, Editor, EditorState, TextView } from "gpui-base";
-import { focused, theme, settings, shared, setShared, nextCommand, run } from "herdr";
+import { v_flex, h_flex, Textarea, TextareaState, TextView } from "gpui-base";
+import { focused, spaces, theme, shared, setShared, nextCommand, run } from "herdr";
 import { PORT } from "./config.js";
 
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -37,7 +37,7 @@ export default class WintosNotes extends View {
 
     load(cx) {
         cx.spawn(async (cx) => {
-            const tab = focused()?.tab?.id ?? null;
+            const tab = focused()?.tab ?? null;
             try {
                 const state = await (await fetch(`${BASE}/state`)).json();
                 this.day = state.day ?? null;
@@ -64,9 +64,12 @@ export default class WintosNotes extends View {
     edit(view, cx) {
         if (this.editing) return;
         const text = view === "today" ? (this.day?.focus ?? "") : (this.mine?.text ?? "");
-        const editor = EditorState.new({ language: "markdown", value: text, line_numbers: false, folding: false, soft_wrap: true, font_family: settings().font_family });
+        const editor = TextareaState.new({ value: text });
+        editor.set_soft_wrap(true);
         this.editing = { view, tab: this.tab, base: view === "today" ? this.day?.mtime : this.mine?.mtime, editor };
         this.note = null;
+        editor.focus();
+        cx.timer.after(50, () => editor.focus());
         cx.notify();
     }
 
@@ -78,6 +81,7 @@ export default class WintosNotes extends View {
     // A save that finds the file changed since you began keeps your text and says so.
     async save(cx) {
         const e = this.editing;
+        if (!e?.tab && e?.view === "mine") return void (this.note = "No tab to save mine.md for.");
         if (!e) return;
         const text = e.editor.value();
         let r;
@@ -86,7 +90,8 @@ export default class WintosNotes extends View {
             r = await post(`/projects/${encodeURIComponent(e.tab)}/mine`, { text, baseMtime: e.base || undefined });
             // A tab no session has named yet has no project: it gets one, called as Herdr calls the tab.
             if (r.status === 404) {
-                await post(`/projects/${encodeURIComponent(e.tab)}/title`, { title: focused()?.tab?.name ?? "Untitled", manual: false });
+                const name = spaces().flatMap((s) => s.tabs).find((x) => x.id === e.tab)?.name ?? "Untitled";
+                await post(`/projects/${encodeURIComponent(e.tab)}/title`, { title: name, manual: false });
                 r = await post(`/projects/${encodeURIComponent(e.tab)}/mine`, { text });
             }
         }
@@ -100,7 +105,16 @@ export default class WintosNotes extends View {
         const view = this.editing?.view ?? this.view();
         const text = view === "today" ? (this.day?.focus ?? "") : (this.mine?.text ?? "");
         const empty = view === "today" ? (this.day ? "Nothing planned yet. ⇧⌘Y writes one to three things that matter today." : "No journal: set WINTOS_JOURNAL_DIR.") : "Nothing in mine.md yet. ⌘E writes it.";
-        return v_flex().id("wintos-notes").size_full().bg(t.chrome).text_size(13).text_color(t.foreground).border_l(1).border_color(t.border)
+        return v_flex().id("wintos-notes").size_full()
+            // ⌘⏎ and esc reach here from the textarea, whatever the key bindings say.
+            .on_key_down((e, cx) => {
+                if (!this.editing) return;
+                if (e.key === "enter" && e.modifiers.platform) void this.save(cx);
+                else if (e.key === "escape") this.stop();
+                else return;
+                cx.stop_propagation();
+                cx.notify();
+            }).bg(t.chrome).text_size(13).text_color(t.foreground).border_l(1).border_color(t.border)
             .child(h_flex().flex_none().gap(4).px(10).py(8).items_center()
                 .children(VIEWS.map((v) => h_flex().id(`view-${v.id}`).gap(5).px(8).py(3).rounded(6).items_center()
                     .when(v.id === view, (el) => el.bg(t.selected))
@@ -114,7 +128,7 @@ export default class WintosNotes extends View {
                     : btn(t, "edit", view === "today" ? "⇧⌘Y" : "⌘E", "edit", (cx) => this.edit(view, cx))))
             .when(!!this.note, (el) => el.child(div().px(12).pb(6).text_size(11.5).text_color(t.blocked).child(this.note)))
             .child(this.editing
-                ? div().flex_1().min_h(0).px(4).child(Editor.new(this.editing.editor).size_full())
+                ? div().flex_1().min_h(0).px(10).pb(10).child(Textarea.new(this.editing.editor).size_full().text_size(13))
                 : div().id("notes-read").flex_1().min_h(0).px(14).pb(12).overflow_y_scrollbar()
                     .child(text.trim() ? TextView.markdown(`notes-${view}-${this.tab}`, text) : div().text_color(t.muted).child(empty)));
     }

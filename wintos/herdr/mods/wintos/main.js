@@ -63,7 +63,12 @@ export default class WintOS extends View {
             this.typing.add(d.sessionId);
             try {
                 if (d.kind === "type") {
-                    const r = await exec("hc", ["send", "--if", "idle", d.blockId, d.text]);
+                    // Between turns is idle, or done: Herdr's word for a turn that ended while you
+                    // weren't looking. Never while it works, or blocked on a question.
+                    const g = await exec("hc", ["get", "--json", d.blockId]);
+                    const state = g.code === 0 ? JSON.parse(g.stdout).status?.state : null;
+                    if (state !== "idle" && state !== "done") continue;
+                    const r = await exec("hc", ["send", d.blockId, d.text]);
                     if (r.code === 0) await post(`/wakes/${encodeURIComponent(d.id)}/delivered`);
                 } else {
                     const pane = this.paneIn(d.tabId);

@@ -22,8 +22,16 @@ export function sidebar(state: WintosState, tabIds: string[], names: Record<stri
         running: a.running.map(row),
         quiet: [...a.quiet, ...a.quietMore, ...a.quietStale].map(row),
         // agent.next follows the sidebar: what waits on you in the projects you drive, then the rest.
+        prs: prCounts(state, now),
         order: [...a.driving.flatMap((d) => d.lines.filter((l) => l.state !== "running").map((l) => l.blockId)), ...[...a.needs, ...a.read].flatMap((r) => (a.targets[r.tabId] ? [a.targets[r.tabId].blockId] : []))],
     };
+}
+
+function prCounts(state: WintosState, now: number) {
+    const gh = ghPrs(state);
+    if (!gh) return { yours: 0, late: 0 };
+    const m = queueModel(gh.prs, gh.me, now, state.snoozes, gh.team);
+    return { yours: m.yours, late: m.pastSla };
 }
 
 // Every Herdr tab's due wakes: one window serves them all.

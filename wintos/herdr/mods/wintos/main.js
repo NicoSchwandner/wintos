@@ -104,7 +104,17 @@ export default class WintOS extends View {
         const m = sidebar(this.state, tabs.map((x) => x.id), names, Date.now(), here);
         setAgentOrder(m.order);
         const showQuiet = !!shared("wintos.quiet");
+        const queue = this.state.plugins?.["gh-prs"]?.data;
+        const driving = (this.state.driving ?? []).includes(here);
+        const snoozed = (this.state.projectSnoozes?.[here] ?? 0) > Date.now();
+        // The mouse's way to what the keys do: the PRs page, and this project's drive and snooze.
+        const bar = h_flex().gap(4).flex_wrap()
+            .child(btn(t, "prs", "⇧⌘G", queue ? `PRs · ${m.prs.yours}${m.prs.late ? ` · ${m.prs.late} late` : ""}` : "PRs", () => run("mod.open", { name: "wintos-prs" })))
+            .when(!!here, (el) => el
+                .child(btn(t, "drive", "⌥⌘D", driving ? "stop driving" : "drive", () => this.command("drive")))
+                .child(btn(t, "snooze", "⌥⌘Z", snoozed ? "wake" : "snooze", () => this.command("snooze"))));
         return root
+            .child(bar)
             .when(m.driving.length > 0, (el) => el.child(this.section(t, "Driving", t.foreground, m.driving.map((d) => this.drive(t, d, here)))))
             .when(m.needs.length > 0, (el) => el.child(this.section(t, "Your move", t.blocked, m.needs.map((r) => this.card(t, r, here, t.blocked)))))
             .when(m.read.length > 0, (el) => el.child(this.section(t, "To read", t.done, m.read.map((r) => this.card(t, r, here, t.done)))))
@@ -165,6 +175,15 @@ export default class WintOS extends View {
             .child(div().flex_1().truncate().child(r.view?.title ?? "Untitled"))
             .child(div().flex_none().max_w(140).truncate().text_size(11).text_color(r.view?.done ? t.working : t.dim).child(r.view?.done ? `✓ ${r.view.done}` : (r.view?.next ?? r.view?.reason ?? "")));
     }
+}
+
+// A button with its key beside it, as WintOS shows every action.
+function btn(t, id, key, label, onClick) {
+    return h_flex().id(`btn-${id}`).gap(5).px(7).py(2).rounded(6).items_center().border(1).border_color(t.border).bg(t.background)
+        .hover((s) => s.bg(t.hover))
+        .on_click((_e, cx) => { void onClick(); cx.notify(); })
+        .child(div().text_size(10.5).text_color(t.dim).child(key))
+        .child(div().text_size(11.5).text_color(t.foreground).child(label));
 }
 
 const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);

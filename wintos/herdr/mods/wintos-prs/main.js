@@ -2,8 +2,8 @@
 // o goes back to the session that made the PR, live or resumed, so it can work the feedback.
 
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, Scrollbar, VirtualListScrollHandle, v_virtual_list } from "gpui-base";
-import { spaces, run, theme, props, closeOverlay, exec } from "herdr";
+import { v_flex, h_flex } from "gpui-base";
+import { spaces, run, theme, props, closeOverlay, exec, settings } from "herdr";
 import { PORT } from "./config.js";
 import { prPage, prGo, nextWorkingDayStart } from "./model.js";
 
@@ -18,7 +18,9 @@ export default class WintosPrs extends View {
         this.at = 0;
         this.note = null;
         this.handle = cx.focus_handle();
-        this.scroll = VirtualListScrollHandle.new();
+        this.scroll = 0;
+        this.height = 500;
+        this.follow = false;
         this.handle.focus();
         cx.timer.after(300, () => this.handle.focus());
         this.load(cx);
@@ -85,9 +87,21 @@ export default class WintosPrs extends View {
         }
         this.at = Math.min(this.at, Math.max(0, rows.length - 1));
         const sel = items.find((x) => x.row && x.at === this.at)?.row;
+        // Laid out by hand, as Herdr's picker is: each item at its top, scrolled by j/k and the wheel.
+        const tops = [];
+        let y = 0;
+        for (const x of items) (tops.push(y), (y += x.head ? HEAD : ROW));
+        const maxScroll = Math.max(0, y - this.height);
+        const selTop = tops[items.findIndex((x) => x.row && x.at === this.at)] ?? 0;
+        if (this.follow) {
+            if (selTop < this.scroll) this.scroll = Math.max(0, selTop - HEAD);
+            if (selTop + ROW > this.scroll + this.height) this.scroll = selTop + ROW - this.height;
+            this.follow = false;
+        }
+        this.scroll = Math.max(0, Math.min(this.scroll, maxScroll));
         const move = (to) => {
             this.at = Math.max(0, Math.min(to, rows.length - 1));
-            this.scroll.scroll_to_item(items.findIndex((x) => x.row && x.at === this.at));
+            this.follow = true;
         };
         const act = {
             go: () => sel && void this.go(sel),
@@ -134,9 +148,10 @@ export default class WintosPrs extends View {
                 .child(btn(t, "refresh", "r", "refresh", act.refresh))
                 .child(btn(t, "close", "esc", "close", () => this.close())))
             .when(!page, (el) => el.child(div().text_color(t.muted).child(this.note ?? "loading…")))
-            .when(!!page, (el) => el.child(div().relative().flex_1().min_h(0)
-                .child(v_virtual_list("pr-list", items.length, items.map((x) => (x.head ? HEAD : ROW)), (i) => items[i].row?.url ?? `head-${i}`, (range) => items.slice(range.start, range.end).map((_x, j) => item(range.start + j))).track_scroll(this.scroll).size_full())
-                .child(Scrollbar.vertical("pr-list").viewport_from_layout().absolute().inset_0())));
+            .when(!!page, (el) => el.child(div().id("pr-list").relative().flex_1().min_h(0).w_full().overflow_hidden()
+                .on_size_change((size, cx) => { this.height = size.height / (settings().zoom ?? 1); cx.notify(); })
+                .on_scroll_wheel((e, cx) => { this.scroll = Math.max(0, Math.min(this.scroll - e.delta.y, maxScroll)); cx.notify(); })
+                .children(items.map((x, i) => (tops[i] + (x.head ? HEAD : ROW) > this.scroll && tops[i] < this.scroll + this.height ? div().absolute().left(0).right(0).top(tops[i] - this.scroll).h(x.head ? HEAD : ROW).child(item(i)) : null)).filter(Boolean))))
     }
 }
 

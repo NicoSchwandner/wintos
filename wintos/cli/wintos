@@ -18,6 +18,12 @@
 #                                      one account each, named explicitly
 set -eu
 PORT="${WINTOS_PORT:-7730}"
+# In a Herdr terminal the pane is the terminal, and Herdr has a wintosd of its own.
+if [ -z "${WAVETERM_BLOCKID:-}" ] && [ -n "${HC_TERMINAL_ID:-}" ]; then
+    WAVETERM_BLOCKID="$HC_TERMINAL_ID"
+    WAVETERM_TABID="$(hc get --json "$HC_TERMINAL_ID" 2>/dev/null | jq -r '.labels["herdr.tab"] // empty' 2>/dev/null || true)"
+    PORT="${WINTOS_HERDR_PORT:-7732}"
+fi
 # The session this runs in, so a pane running two (a fork in the background) never mixes them up.
 SESSION_Q="${CLAUDE_CODE_SESSION_ID:+?session=$CLAUDE_CODE_SESSION_ID}"
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"

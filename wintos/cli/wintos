@@ -13,6 +13,8 @@
 #   wintos status <line…>              what this session is doing now, shown on its pane (used by Claude)
 #   wintos lane <name> <step…>         the process this session follows; ?step is the developer's call (used by Claude)
 #   wintos step <step> [note…]         where in it the session is now (used by Claude)
+#   wintos unit <unit>…                the project's units of work (tickets, phases), in order (used by Claude)
+#   wintos unit start|done <unit>      the one worked on now, or one finished; by its name or its start
 #   wintos hooks install|uninstall [<claude config dir>]
 #                                      wire the hook into that Claude Code config (default ~/.claude);
 #                                      one account each, named explicitly
@@ -146,6 +148,21 @@ pr)
     link=$(jq -n --arg r "$1" --argjson own "$own" '{ref: $r, own: $own}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/pr$SESSION_Q") ||
         die "wintosd refused it: name the PR by its link or owner/repo#number, from a session's pane (port $PORT)"
     echo "pr: $link"
+    ;;
+unit)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos unit <unit>… | wintos unit start <unit> | wintos unit done <unit>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    if { [ "$1" = start ] || [ "$1" = done ]; } && [ $# -gt 1 ]; then
+        verb="$1"
+        shift
+        body=$(jq -n --arg v "$verb" --arg u "$*" '{($v): $u}')
+    else
+        body=$(jq -n '{items: $ARGS.positional}' --args "$@")
+    fi
+    list=$(printf '%s' "$body" | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/units$SESSION_Q") ||
+        die "wintosd refused it: no such unit (wintos unit <unit>… sets the list), a unit with | in it, a project without a title yet, or not reachable on port $PORT"
+    echo "units: $list"
     ;;
 todo)
     shift

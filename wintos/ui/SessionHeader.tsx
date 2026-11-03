@@ -30,6 +30,9 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     // In a session waiting on you: how many more wait, and the key to the next.
     const waiting = focused && state ? decisions(state, now, () => "") : [];
     const more = waiting.some((d) => d.sessionId === s.id) ? waiting.length - 1 : 0;
+    const units = state?.projects.find((p) => p.id === s.tabId)?.units ?? [];
+    const at = units.findIndex((u) => u.state === "current");
+    const unitAt = at >= 0 ? { i: at + 1, n: units.length, name: units[at].name } : undefined;
     return (
         <div data-wintos="session-header" style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", gap: 5, padding: "7px 10px 8px 12px", borderBottom: `1px solid ${T.border}`, fontFamily: T.ui, fontSize: 12, minWidth: 0 }}>
             {h.tone && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: h.tone === "brick" ? T.brick : T.apricot }} />}
@@ -51,9 +54,9 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                 {h.branch && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.branch}</span>}
             </div>
             <WhereWasI sessionId={s.id} focused={focused} />
-            {s.lane && (
+            {(s.lane || unitAt) && (
                 <div className="wintos-steps-row">
-                    <StepTrack lane={s.lane} />
+                    <StepTrack lane={s.lane} unit={unitAt} />
                 </div>
             )}
             {s.status && (
@@ -150,7 +153,10 @@ const Dot = ({ c, size = 7 }: { c: { dot: string; ring: string }; size?: number 
 
 // A narrow pane: the lane as one row. No room for every step, so it says how many are done,
 // the one now, and the next that is your call (else simply the next one). The note gives way first.
-function StepTrack({ lane }: { lane: Lane }) {
+// unit: which of the project's units this is (i of n), beside the lane.
+function StepTrack({ lane, unit }: { lane?: Lane; unit?: { i: number; n: number; name: string } }) {
+    const unitChip = unit && <span data-wintos="unit-of" title={unit.name} style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted, flexShrink: 0 }}>unit {unit.i}/{unit.n}</span>;
+    if (!lane) return <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 11 }}>{unitChip}<span style={{ color: T.secondary, overflow: "hidden", textOverflow: "ellipsis" }}>{unit!.name}</span></div>;
     const ahead = lane.steps.slice(lane.at + 1);
     const nextGate = ahead.findIndex(gate);
     const next = nextGate >= 0 ? lane.at + 1 + nextGate : ahead.length ? lane.at + 1 : -1;
@@ -166,6 +172,7 @@ function StepTrack({ lane }: { lane: Lane }) {
     };
     return (
         <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 11 }}>
+            {unitChip}
             <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted, border: `1px solid ${T.border}`, borderRadius: 4, padding: "0 5px", flexShrink: 0 }}>{lane.name}</span>
             {lane.at > 0 && <span style={{ color: T.faint, flexShrink: 0 }}>{lane.at}/{lane.steps.length}</span>}
             {step(lane.at, [lane.note, lane.todos && `${lane.todos.filter((t) => t.done).length}/${lane.todos.length}`].filter(Boolean).join(" · ") || undefined)}
@@ -175,13 +182,47 @@ function StepTrack({ lane }: { lane: Lane }) {
     );
 }
 
-// A wide pane: the lane as a column beside the terminal.
+// A wide pane: the project's units of work and the session's lane, as a column beside the
+// terminal. The unit being worked on holds the lane under it; done ones go quiet, the rest follow.
 export const SessionSteps = memo(({ blockId }: { blockId: string }) => {
     const { state } = useWintos();
-    const lane = state ? sessionHeader(state, blockId)?.session.lane : undefined;
-    if (!lane) return null;
+    const s = state ? sessionHeader(state, blockId)?.session : undefined;
+    const lane = s?.lane;
+    const units = (s && state?.projects.find((p) => p.id === s.tabId)?.units) ?? [];
+    if (!lane && !units.length) return null;
+    const current = units.findIndex((u) => u.state === "current");
     return (
         <div className="wintos-steps-side" data-wintos="session-steps" style={{ width: 210, flexShrink: 0, borderLeft: `1px solid ${T.border}`, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", fontFamily: T.ui }}>
+            {units.length > 0 ? (
+                <>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>UNITS · {units.filter((u) => u.state === "done").length}/{units.length}</span>
+                    <div data-wintos="project-units" style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                        {units.map((u, i) => (
+                            <div key={i} data-unit={u.state} style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                                <div style={{ display: "flex", gap: 8, fontSize: 12.5, lineHeight: 1.35, color: u.state === "current" ? T.emphasis : T.faint, fontWeight: u.state === "current" ? 600 : 400 }}>
+                                    <span style={{ fontFamily: T.mono, flexShrink: 0, width: 9, color: u.state === "done" ? T.moss : u.state === "current" ? T.moss : T.faint }}>{u.state === "done" ? "✓" : u.state === "current" ? "▸" : "○"}</span>
+                                    <span style={{ minWidth: 0, overflowWrap: "anywhere", textDecoration: u.state === "done" ? "line-through" : undefined }}>{u.name}</span>
+                                </div>
+                                {i === current && lane && (
+                                    <div style={{ marginLeft: 6, paddingLeft: 10, borderLeft: `1px solid ${T.border}` }}>
+                                        <LaneSteps lane={lane} />
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                    {current < 0 && lane && <LaneSteps lane={lane} />}
+                </>
+            ) : (
+                lane && <LaneSteps lane={lane} />
+            )}
+        </div>
+    );
+});
+// The lane's name and its steps; the step now carries its note, its to-dos and whether it is your call.
+function LaneSteps({ lane }: { lane: Lane }) {
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>{lane.name}</span>
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                 {lane.steps.map((step, i) => {
@@ -212,5 +253,5 @@ export const SessionSteps = memo(({ blockId }: { blockId: string }) => {
             </div>
         </div>
     );
-});
+}
 SessionSteps.displayName = "SessionSteps";

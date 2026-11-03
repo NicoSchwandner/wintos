@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { basename, join } from "path";
 import { lineDiff } from "./diff";
 import { parseProjectMd, ProjectMeta, serializeProjectMd, type Kind } from "./parse";
+import type { Unit } from "./units";
 import { slugify } from "./slug";
 
 export type Project = Partial<ProjectMeta> & { dir: string; mtime: number; mineMtime?: number; error?: string; body?: string };
@@ -64,6 +65,7 @@ export class ProjectStore {
             title,
             ...(existing?.next ? { next: existing.next } : {}),
             ...(existing?.kind ? { kind: existing.kind } : {}),
+            ...(existing?.units ? { units: existing.units } : {}),
         };
         writeFileSync(join(dir, "project.md"), serializeProjectMd(meta, existing?.body ?? ""));
         this.reload();
@@ -72,10 +74,25 @@ export class ProjectStore {
 
     // A kind already in the file stays: whoever wrote it knew better than a lane.
     setKindOnce(tabId: string, kind: Kind): void {
+        if (!this.byTab(tabId)?.kind) this.updateMeta(tabId, () => ({ kind }));
+    }
+
+    // `wintos unit`: change returns the new list, or undefined when it names no unit.
+    updateUnits(tabId: string, change: (units: Unit[]) => Unit[] | undefined): Unit[] | "no project" | "no such unit" {
         const p = this.byTab(tabId);
-        if (!p?.id || p.error || p.kind) return;
+        if (!p?.id || p.error) return "no project";
+        const units = change(p.units ?? []);
+        if (!units) return "no such unit";
+        this.updateMeta(tabId, () => ({ units }));
+        return units;
+    }
+
+    // Rewrites the front matter with some keys changed, the body and every other key as they are.
+    private updateMeta(tabId: string, keys: () => Partial<ProjectMeta>): void {
+        const p = this.byTab(tabId);
+        if (!p?.id || p.error) return;
         const { dir, mtime: _m, mineMtime: _mm, error: _e, body, ...meta } = p;
-        writeFileSync(join(dir, "project.md"), serializeProjectMd({ ...(meta as ProjectMeta), kind }, body ?? ""));
+        writeFileSync(join(dir, "project.md"), serializeProjectMd({ ...(meta as ProjectMeta), ...keys() }, body ?? ""));
         this.reload();
     }
 

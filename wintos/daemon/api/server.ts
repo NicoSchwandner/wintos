@@ -16,6 +16,7 @@ import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from
 import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
 import type { Kind } from "../projects/parse";
+import { doneUnit, serializeUnits, setUnits, startUnit, UNIT_MAX, UNITS_MAX } from "../projects/units";
 import { fixJob, fixPrompt, nextAction, type FixJob } from "../fixer/plan";
 import { reassignPrs, touchPrs } from "../prs/owners";
 import { groupOf, type DonePr, type PR } from "../prs/group";
@@ -888,6 +889,23 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 saveSessions();
                 broadcast();
                 return send(res, 200, link);
+            }
+            // `wintos unit`: the project's units of work, by the session in this pane.
+            const unit = /^\/blocks\/([^/]+)\/units$/.exec(url.pathname);
+            if (req.method === "POST" && unit) {
+                const blockId = decodeURIComponent(unit[1]);
+                const b = (await body(req)) as { items?: unknown; start?: unknown; done?: unknown };
+                const okName = (s: unknown): s is string => typeof s === "string" && !!s.trim() && isSafe(s) && !s.includes("|") && s.trim().length <= UNIT_MAX;
+                const items = Array.isArray(b?.items) ? b.items : undefined;
+                const okItems = !!items && items.length > 0 && items.length <= UNITS_MAX && items.every(okName);
+                if (!isSafe(blockId) || (!okItems && !okName(b?.start) && !okName(b?.done)))
+                    return send(res, 400, `need 1-${UNITS_MAX} units of one line up to ${UNIT_MAX} characters, without |; or the one to start or mark done`);
+                const live = liveIn(sessions, blockId, sid);
+                if (!live) return send(res, 409, "no session in this pane");
+                const r = store.updateUnits(live.tabId, (was) => (okItems ? setUnits(was, (items as string[]).map((s) => s.trim())) : okName(b.start) ? startUnit(was, b.start) : doneUnit(was, b.done as string)));
+                if (typeof r === "string") return send(res, r === "no project" ? 409 : 400, r === "no project" ? "this pane's project has no project.md yet; name it with wintos title first" : "no such unit; wintos unit <unit>… sets the list");
+                broadcast();
+                return send(res, 200, serializeUnits(r));
             }
             const todo = /^\/blocks\/([^/]+)\/todo$/.exec(url.pathname);
             if (req.method === "POST" && todo) {

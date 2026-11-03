@@ -423,6 +423,17 @@ describe("wintos lane and step", () => {
         await cli(["pr", "--own", "o/r#7"], d.port);
         expect(d.seen[0].body).toEqual({ ref: "o/r#7", own: true });
     });
+    test("unit sets the project's units, starts one, ticks one; it prints the list back", async () => {
+        const d = await fakeDaemon("[>] ABC-42 phase 1 | [ ] ABC-43");
+        expect((await cli(["unit", "ABC-42 phase 1", "ABC-43"], d.port)).trim()).toBe("units: [>] ABC-42 phase 1 | [ ] ABC-43");
+        await cli(["unit", "start", "ABC-42"], d.port);
+        await cli(["unit", "done", "ABC-42", "phase"], d.port);
+        expect(d.seen).toEqual([
+            { url: "/blocks/blk-1/units?session=s-1", body: { items: ["ABC-42 phase 1", "ABC-43"] } },
+            { url: "/blocks/blk-1/units?session=s-1", body: { start: "ABC-42" } },
+            { url: "/blocks/blk-1/units?session=s-1", body: { done: "ABC-42 phase" } },
+        ]);
+    });
     test("todo lists the step's to-dos; todo done ticks one", async () => {
         const d = await fakeDaemon("");
         expect((await cli(["todo", "Narrow list", "Name search"], d.port)).trim()).toBe("todo: Narrow list · Name search");

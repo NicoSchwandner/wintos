@@ -48,6 +48,16 @@ describe("parseProjectMd", () => {
     });
 });
 
+describe("units in the front matter", () => {
+    test("read from and written back to one line, beside the other keys", () => {
+        const raw = "---\nid: tab-1\ntitle: Ledger import\nunits: [x] ABC-41 fields check | [>] ABC-42 phase 1\n---\nbody\n";
+        const r = parseProjectMd(raw);
+        if ("error" in r) throw new Error(r.error);
+        expect(r.meta.units).toEqual([{ name: "ABC-41 fields check", state: "done" }, { name: "ABC-42 phase 1", state: "current" }]);
+        expect(serializeProjectMd(r.meta, r.body)).toBe(raw);
+    });
+});
+
 describe("slugify", () => {
     test("lowercases and dashes", () => expect(slugify("Invoice OCR: fallback!", new Set())).toBe("invoice-ocr-fallback"));
     test("clash gets a suffix", () => expect(slugify("A b", new Set(["a-b", "a-b-2"]))).toBe("a-b-3"));

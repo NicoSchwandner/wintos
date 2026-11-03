@@ -163,3 +163,17 @@ describe("a project's kind", () => {
         expect([s.byTab("tab-1")?.kind, readFileSync(join(dir, "project.md"), "utf8")]).toEqual(["support", expect.stringMatching(/^kind: support$/m)]);
     });
 });
+
+describe("a project's units", () => {
+    test("moved by the unit commands, kept by a later title, body untouched", () => {
+        const s = new ProjectStore(root);
+        const { dir } = s.setTitle("tab-1", "Ledger import", { manual: false });
+        writeFileSync(join(dir, "project.md"), readFileSync(join(dir, "project.md"), "utf8") + "## Goal\nImport it.\n");
+        s.reload();
+        s.updateUnits("tab-1", () => [{ name: "ABC-42", state: "current" }]);
+        expect(s.updateUnits("tab-1", () => undefined)).toBe("no such unit");
+        expect(s.updateUnits("tab-9", () => [])).toBe("no project");
+        s.setTitle("tab-1", "Ledger import v2", { manual: true });
+        expect([s.byTab("tab-1")?.units, readFileSync(join(dir, "project.md"), "utf8")]).toEqual([[{ name: "ABC-42", state: "current" }], expect.stringContaining("units: [>] ABC-42\n---\n## Goal\nImport it.\n")]);
+    });
+});

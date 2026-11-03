@@ -5,7 +5,7 @@ import { isSnoozed, nextWorkingDayStart, projectPrs, type PR, type ProjectPrs } 
 import type { Kind } from "../daemon/projects/parse";
 import type { Target } from "./sessions";
 import { ghPrs, prOwners, prRef, relTime, repoLabeler, type Owner, type RowView, type WintosState } from "./view";
-import { WOKE } from "./wakes";
+import { WOKE } from "./wakePlan";
 import { heldUntil } from "../daemon/rhythm/hold";
 
 // Which projects need you, why, and in what order: the one place that decides it. The sidebar,

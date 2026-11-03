@@ -1,12 +1,14 @@
 // WintOS's PRs page in Herdr (⇧⌘G): every PR that concerns you, grouped by what it asks of you.
 // o goes back to the session that made the PR, live or resumed, so it can work the feedback.
 
-import { View, div, list } from "gpui-kit";
-import { v_flex, h_flex, Scrollbar, VirtualListScrollHandle } from "gpui-base";
+import { View, div } from "gpui-kit";
+import { v_flex, h_flex, Scrollbar, VirtualListScrollHandle, v_virtual_list } from "gpui-base";
 import { spaces, run, theme, props, closeOverlay, exec } from "herdr";
 import { PORT } from "./config.js";
 import { prPage, prGo, nextWorkingDayStart } from "./model.js";
 
+const HEAD = 32;
+const ROW = 46;
 const BASE = `http://127.0.0.1:${PORT}`;
 const post = (path, body = {}) => fetch(BASE + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
@@ -95,10 +97,10 @@ export default class WintosPrs extends View {
         };
         const item = (i) => {
             const x = items[i];
-            if (x.head) return h_flex().gap(8).px(4).pt(i ? 12 : 0).pb(2).child(div().text_size(12).font_semibold().child(x.head)).child(div().text_size(11).text_color(t.dim).child(x.note));
+            if (x.head) return h_flex().w_full().h(HEAD).items_end().gap(8).px(4).pb(4).child(div().text_size(12).font_semibold().child(x.head)).child(div().text_size(11).text_color(t.dim).child(x.note));
             const r = x.row;
             const on = x.at === this.at;
-            return h_flex().id(`pr-${r.url}`).gap(10).px(10).py(6).rounded(8).items_center()
+            return h_flex().id(`pr-${r.url}`).w_full().h(ROW).gap(10).px(10).rounded(8).items_center()
                 .when(on, (el) => el.bg(t.selected))
                 .hover((s) => s.bg(t.hover))
                 .on_click((_e, cx) => { this.at = x.at; cx.notify(); })
@@ -133,8 +135,8 @@ export default class WintosPrs extends View {
                 .child(btn(t, "close", "esc", "close", () => this.close())))
             .when(!page, (el) => el.child(div().text_color(t.muted).child(this.note ?? "loading…")))
             .when(!!page, (el) => el.child(div().relative().flex_1().min_h(0)
-                .child(list("pr-list", items.length, (i) => items[i].row?.url ?? `head-${i}`, (i) => item(i)).track_scroll(this.scroll).size_full())
-                .child(Scrollbar.vertical("pr-list").absolute().inset_0())));
+                .child(v_virtual_list("pr-list", items.length, items.map((x) => (x.head ? HEAD : ROW)), (i) => items[i].row?.url ?? `head-${i}`, (range) => items.slice(range.start, range.end).map((_x, j) => item(range.start + j))).track_scroll(this.scroll).size_full())
+                .child(Scrollbar.vertical("pr-list").viewport_from_layout().absolute().inset_0())));
     }
 }
 

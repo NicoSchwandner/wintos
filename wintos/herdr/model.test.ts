@@ -39,6 +39,10 @@ describe("o on a PR: back to the session that made it", () => {
         expect(prGo(base({ shelf }), [], url)).toMatchObject({ kind: "resume", open: false });
     });
     test("no project knows it: a new one", () => expect(prGo(base({}), ["a"], url)).toEqual({ kind: "new", url }));
+    test("a PR assigned to you is yours to drive, its author named", () => {
+        const page = prPage({ ...base({}), plugins: { "gh-prs": { ok: true, at: 0, data: { me: "me", prs: [{ ...pr, author: "ana", assignedMe: true }] } } } } as unknown as WintosState, [], NOW)!;
+        expect(page.groups.flatMap((g) => g.rows.map((r) => [g.label, r.author]))).toEqual([["Waiting", "ana → you"]]);
+    });
     test("the page groups it and names its session", () => {
         const page = prPage(base({ sessions: [s("1", "a", { state: "idle", prs: [url], name: { text: "fix it", by: "session", at: 0 } })] }), ["a"], NOW)!;
         expect(page.groups.flatMap((g) => g.rows.map((r) => [g.label, r.number, r.owner, r.live]))).toEqual([["Waiting", 7, "fix it", true]]);

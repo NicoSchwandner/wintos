@@ -20,17 +20,11 @@ import { nextAction, type NextKind } from "../daemon/fixer/plan";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
+import { GROUP_HEADERS } from "./prGroups";
 import { ghPrs, prOwners, prProjectLists, prProjects, relTime, reopenFor, repoLabel } from "./view";
 
-export const HEADERS: Record<Group, { label: string; note: string; color: string }> = {
-    merge: { label: "Merge", note: "approved, green, waiting on the button", color: T.moss },
-    fix: { label: "Fix", note: "your PR, ball in your court", color: T.apricot },
-    review: { label: "Review", note: "someone asked you", color: T.title },
-    chase: { label: "Chase", note: "past the team's two working days with nobody on it", color: T.brick },
-    release: { label: "Release", note: "merged past two working days, not on main yet", color: T.brick },
-    waiting: { label: "Waiting", note: "yours, with someone else", color: T.muted },
-    team: { label: "The team's", note: "asked of your team: yours to review too", color: T.muted },
-};
+const COLORS: Record<Group, string> = { merge: T.moss, fix: T.apricot, review: T.title, chase: T.brick, release: T.brick, waiting: T.muted, team: T.muted };
+export const HEADERS = Object.fromEntries(Object.entries(GROUP_HEADERS).map(([g, h]) => [g, { ...h, color: COLORS[g as Group] }])) as Record<Group, { label: string; note: string; color: string }>;
 
 // The Inbox's PR list (⇧⌘G): every PR that concerns you, grouped by the action it asks of you.
 // A PR opens as an ordinary browser pane beside it, in the Inbox's own layout.

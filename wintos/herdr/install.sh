@@ -24,6 +24,6 @@ fi
 
 # ⌃⇥ goes to the next session waiting on you, in the sidebar's order, as in WintOS.
 tmp="$(mktemp)"
-jq '.global += {"ctrl-tab": "agent.next", "ctrl-shift-tab": "agent.prev", "cmd-alt-d": "wintos.drive", "cmd-alt-z": "wintos.snooze", "cmd-alt-s": "wintos.quiet"}' "$APP/keys.json" >"$tmp" && mv "$tmp" "$APP/keys.json"
+jq '.global += {"ctrl-tab": "agent.next", "ctrl-shift-tab": "agent.prev", "cmd-alt-d": "wintos.drive", "cmd-alt-z": "wintos.snooze", "cmd-alt-s": "wintos.quiet", "cmd-shift-g": "mod.open:wintos-prs"}' "$APP/keys.json" >"$tmp" && mv "$tmp" "$APP/keys.json"
 herdr-app do layout.switch --name wintos >/dev/null
 echo "WintOS mods installed in $APP"

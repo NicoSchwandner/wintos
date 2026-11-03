@@ -152,7 +152,7 @@ export default class WintOS extends View {
         return this.frame(t, `row-${r.tabId}`, r.tabId === here)
             .on_click(() => this.open(r.tabId, r.target))
             .child(this.title(t, r.view))
-            .when(!!r.view?.next, (el) => el.child(div().text_color(color).child(r.view.next)))
+            .when(!!r.view?.next, (el) => el.child(div().text_color(color).child(cut(r.view.next, 140))))
             .when(!!r.view?.done, (el) => el.child(div().text_color(t.working).child(`✓ ${r.view.done}`)));
     }
 
@@ -166,6 +166,8 @@ export default class WintOS extends View {
             .child(div().flex_none().max_w(140).truncate().text_size(11).text_color(r.view?.done ? t.working : t.dim).child(r.view?.done ? `✓ ${r.view.done}` : (r.view?.next ?? r.view?.reason ?? "")));
     }
 }
+
+const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
 function nextWorkingDay() {
     const d = new Date();

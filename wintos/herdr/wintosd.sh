@@ -1,12 +1,15 @@
 #!/bin/bash
 # The wintosd behind Herdr: built from this checkout into a folder of its own and run beside
 # WintOS's, on its own port and projects folder, so the two never share or fight over a file.
-# WintOS's settings (~/.config/wintos/env) apply, except what only one daemon may do: fixing
-# PRs by itself and syncing the journal stay with WintOS.
+# WintOS's settings (~/.config/wintos/env) apply, except what only one daemon may do: syncing the
+# journal stays with WintOS, and so does fixing PRs by itself (below).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 HOME_DIR="${WINTOS_HERDR_HOME:-$HOME/.local/share/wintos-herdr}"
-mkdir -p "$HOME_DIR/projects" "$HOME_DIR/dist/plugins"
+mkdir -p "$HOME_DIR/projects/.fixer" "$HOME_DIR/dist/plugins"
+# The conflict fixer has no off switch but this setting, and its default command is a real Claude:
+# off here, so only WintOS's daemon ever fixes a PR by itself.
+[ -f "$HOME_DIR/projects/.fixer/settings.json" ] || echo '{"conflicts":false}' >"$HOME_DIR/projects/.fixer/settings.json"
 
 for v in $(env | grep -oE '^(CLAUDE[A-Z_]*|WAVETERM[A-Z_]*)='); do unset "${v%=}"; done
 [ -r "$HOME/.config/wintos/env" ] && { set -a; . "$HOME/.config/wintos/env"; set +a; }

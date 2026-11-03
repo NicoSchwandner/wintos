@@ -18,6 +18,7 @@ export type PR = {
     requestedMe: boolean; // asked of me personally
     requestedTeam: boolean; // asked of one of my teams
     reviewedByMe: boolean;
+    assignedMe?: boolean; // someone else's PR handed to you to drive
     reviewers: string[]; // people and teams still asked, bots excluded
     changesRequestedBy?: string;
     changesRerequested?: boolean; // everyone who asked for changes has been asked to review again
@@ -87,10 +88,13 @@ export function isSnoozed(pr: PR, snoozes: Snoozes, now: number): boolean {
     return !!s && now < s.until && s.movedAt === lastMovement(pr);
 }
 
+// Yours to drive: written by you, or assigned to you by its author.
+export const isMine = (pr: PR, me: string) => pr.author === me || !!pr.assignedMe;
+
 export function groupOf(pr: PR, me: string, now: number): Group {
     // A ready release PR is your part done: the release is the reviewers' now.
     if (pr.mergedAt) return workingDaysBetween(pr.mergedAt, now) >= SLA_WORKING_DAYS && !(pr.releasePr && !pr.releasePr.draft) ? "release" : "waiting";
-    const mine = pr.author === me;
+    const mine = isMine(pr, me);
     const approved = pr.reviewDecision === "APPROVED";
     // No CI at all is green: a repo without checks must still reach Merge. BLOCKED is GitHub
     // saying no: an approval alone does not satisfy code owners. Approved and blocked with

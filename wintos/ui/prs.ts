@@ -1,5 +1,5 @@
 import type { FixRun } from "../daemon/fixer/runner";
-import { ageLabel, byUrgency, Group, GROUPS, groupOf, isSnoozed, isStacked, lastMovement, PR, qualifier, workingDaysBetween, type Snoozes } from "../daemon/prs/group";
+import { ageLabel, byUrgency, Group, GROUPS, groupOf, isMine, isSnoozed, isStacked, lastMovement, PR, qualifier, workingDaysBetween, type Snoozes } from "../daemon/prs/group";
 
 // children: PRs stacked on this one that only wait for it (spec: stacked PRs sit under their base).
 // counts: the PRs card number this row is in, yours or the team's; sla: it is also counted past SLA.
@@ -18,7 +18,7 @@ export type QueueModel = { groups: { group: Group; rows: QueueRow[] }[]; snoozed
 export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes = {}, ownTeam?: string[]): QueueModel {
     const toRow = (pr: PR): QueueRow => {
         const group = groupOf(pr, me, now);
-        return { pr, group, mine: pr.author === me, age: ageLabel(pr, now), qualifier: qualifier(pr, group, { reviewers: false }), total: pr.additions + pr.deletions, children: [] };
+        return { pr, group, mine: isMine(pr, me), age: ageLabel(pr, now), qualifier: qualifier(pr, group, { reviewers: false }), total: pr.additions + pr.deletions, children: [] };
     };
     const snoozed = prs.filter((p) => isSnoozed(p, snoozes, now)).map(toRow);
     // Someone else's draft asks nothing of your team yet, whoever is requested on it.
@@ -126,7 +126,7 @@ export function fixNote(run: FixRun | undefined, pr: PR, queued: string[]): { te
 // teammate by name only when they hold TEAM_NAMED or more.
 const TEAM_NAMED = 3;
 export function standupAsks(prs: PR[], me: string, now: number, team?: string[]): string | undefined {
-    const waiting = prs.filter((p) => p.author === me && !p.isDraft && !p.mergedAt && p.reviewDecision !== "APPROVED" && p.reviewers.length > 0 && workingDaysBetween(lastMovement(p), now) >= 1);
+    const waiting = prs.filter((p) => isMine(p, me) && !p.isDraft && !p.mergedAt && p.reviewDecision !== "APPROVED" && p.reviewers.length > 0 && workingDaysBetween(lastMovement(p), now) >= 1);
     if (!waiting.length) return undefined;
     if (team) {
         const ours = waiting.filter((p) => p.reviewers.some((r) => team.includes(r)));

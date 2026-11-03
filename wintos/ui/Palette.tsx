@@ -235,7 +235,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
         const tabs = prOf.get(pr.url) ?? [];
         out.push({
             id: `pr:${pr.url}`, kind: "pr", title: `#${pr.number} ${pr.title}`,
-            subtitle: [pr.repo, tabs.length ? tabs.map(title).join(" + ") : "no project", pr.author === gh!.me ? "yours" : `by ${pr.author}`].join(" · "),
+            subtitle: [pr.repo, tabs.length ? tabs.map(title).join(" + ") : "no project", pr.author === gh!.me ? "yours" : pr.assignedMe ? `by ${pr.author}, assigned to you` : `by ${pr.author}`].join(" · "),
             fields: [{ text: `${pr.repo}#${pr.number} ${pr.url} ${taskIds(pr.title, pr.branch)}`, weight: 50, ids: true }, { text: pr.branch, weight: 30, fuzzy: true }],
             run: () => runAction(`open-page:${pr.url}`),
         });

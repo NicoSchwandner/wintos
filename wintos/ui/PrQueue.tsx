@@ -319,7 +319,7 @@ function PrRow({ r, depth, project, repo, cursor, cols, fix, onOpen }: { r: Queu
                 <span style={{ width: 22, height: 22, borderRadius: "50%", background: r.mine ? T.borderActive : T.border, color: r.mine ? T.emphasis : T.secondary, fontFamily: T.mono, fontSize: 8.5, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {initials(pr.author)}
                 </span>
-                {!compact && <span style={{ fontSize: 12, color: r.mine ? T.title : T.quietTitle, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.mine ? "you" : pr.author}</span>}
+                {!compact && <span style={{ fontSize: 12, color: r.mine ? T.title : T.quietTitle, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pr.assignedMe ? `${pr.author} → you` : r.mine ? "you" : pr.author}</span>}
             </span>
             {cols.size && <span style={{ width: 104, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ display: "flex", gap: 2, width: 44 }}>

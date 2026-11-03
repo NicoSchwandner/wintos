@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { ageLabel, groupOf, isSnoozed, isStacked, nextWorkingDayStart, PR, projectPrs, prsForProject, qualifier, workingDaysBetween } from "./group";
+import { ageLabel, groupOf, isMine, isSnoozed, isStacked, nextWorkingDayStart, PR, projectPrs, prsForProject, qualifier, workingDaysBetween } from "./group";
 
 // Monday 2026-09-28 09:00 UTC
 const MON = Date.parse("2026-09-28T09:00:00Z");
@@ -13,6 +13,18 @@ describe("workingDaysBetween", () => {
     test("Friday to Monday is one working day", () => expect(workingDaysBetween("2026-09-25T09:00:00Z", MON)).toBe(1));
     test("same day is zero", () => expect(workingDaysBetween("2026-09-28T08:00:00Z", MON)).toBe(0));
     test("Monday a week earlier is five", () => expect(workingDaysBetween("2026-09-21T09:00:00Z", MON)).toBe(5));
+});
+
+describe("a PR assigned to you is yours to drive", () => {
+    test("someone else's PR assigned to you lands in your groups, not the team's", () => {
+        const theirs = (p: Partial<PR>) => pr({ author: "ana", assignedMe: true, ...p });
+        expect([
+            groupOf(theirs({ reviewDecision: "APPROVED", checks: "SUCCESS" }), "me", MON),
+            groupOf(theirs({ reviewDecision: "CHANGES_REQUESTED" }), "me", MON),
+            groupOf(pr({ author: "ana" }), "me", MON),
+        ]).toEqual(["merge", "fix", "team"]);
+        expect([isMine(theirs({}), "me"), isMine(pr({}), "me"), isMine(pr({ author: "ana" }), "me")]).toEqual([true, true, false]);
+    });
 });
 
 describe("groupOf (spec §4, first match wins)", () => {

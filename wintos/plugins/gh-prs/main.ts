@@ -25,6 +25,8 @@ const direct = search("user-review-requested:@me");
 const teams = search("review-requested:@me");
 // No age bound: your oldest open PRs are exactly the ones Chase is for.
 const mine = search("author:@me");
+// Someone else's PR handed to you to drive: yours, like your own.
+const assigned = search("assignee:@me");
 
 // Only repos that merge into another branch than main release later; one compare each lists
 // what main is still missing.
@@ -61,15 +63,17 @@ for (const n of unreleased(merged, ahead)) {
 
 const byUrl = new Map<string, ReturnType<typeof normalize>>();
 const directUrls = new Set(direct.map((n) => n.url));
-for (const n of [...unreleased(merged, ahead), ...mine, ...teams, ...direct]) {
-    const pr = normalize(n, me, { requestedMe: directUrls.has(n.url), requestedTeam: !directUrls.has(n.url) && teams.some((t) => t.url === n.url) });
+const assignedUrls = new Set(assigned.map((n) => n.url));
+for (const n of [...unreleased(merged, ahead), ...mine, ...assigned, ...teams, ...direct]) {
+    const normalized = normalize(n, me, { requestedMe: directUrls.has(n.url), requestedTeam: !directUrls.has(n.url) && teams.some((t) => t.url === n.url) });
+    const pr = assignedUrls.has(n.url) && normalized.author !== me ? { ...normalized, assignedMe: true } : normalized;
     const release = pr.mergedAt ? releases[pr.repo] : undefined;
     byUrl.set(n.url, release ? { ...pr, releasePr: release } : pr);
 }
 // Open threads only matter for your approved PRs GitHub blocks (the conversation rule); asking
 // for them in the search made it too heavy for GitHub (HTTP 502). Fail-open: a miss keeps it blocked.
 for (const pr of byUrl.values()) {
-    if (pr.author !== me || pr.reviewDecision !== "APPROVED" || pr.mergeState !== "BLOCKED") continue;
+    if ((pr.author !== me && !pr.assignedMe) || pr.reviewDecision !== "APPROVED" || pr.mergeState !== "BLOCKED") continue;
     const [owner, name] = pr.repo.split("/");
     try {
         const open = Number(gh(["api", "graphql", "-F", `n=${pr.number}`, "-f", `o=${owner}`, "-f", `r=${name}`, "-f",

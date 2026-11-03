@@ -61,7 +61,7 @@ export function prPage(state: WintosState, tabIds: string[], now: number) {
         const tabId = projects.get(r.pr.url);
         const owner = tabId ? prOwners(state, tabId).get(r.pr.url) : undefined;
         const project = tabId ? state.projects.find((p) => p.id === tabId)?.title : undefined;
-        return { url: r.pr.url, number: r.pr.number, title: r.pr.title, repo: r.pr.repo.split("/").pop()!, author: r.mine ? "you" : r.pr.author, age: r.age.text, late: !!r.age.late, why: r.qualifier?.text, owner: owner?.name, live: !!owner && "blockId" in owner, project, movedAt: lastMovement(r.pr) };
+        return { url: r.pr.url, number: r.pr.number, title: r.pr.title, repo: r.pr.repo.split("/").pop()!, author: r.mine ? "you" : r.pr.author, age: r.age.text, late: !!r.age.late, why: r.qualifier?.text, owner: owner?.name, live: !!owner && "blockId" in owner, project, movedAt: lastMovement(r.pr), added: r.pr.additions, removed: r.pr.deletions };
     };
     return {
         counts: { yours: m.yours, waiting: m.waiting, team: m.team },

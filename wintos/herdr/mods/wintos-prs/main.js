@@ -124,6 +124,7 @@ export default class WintosPrs extends View {
                 .child(v_flex().flex_1().min_w(0)
                     .child(div().truncate().text_color(r.snoozed ? t.dim : t.foreground).child(r.title))
                     .child(div().truncate().text_size(11).text_color(t.muted).child([r.author, r.why, r.owner ? `session: ${r.owner}${r.live ? "" : " (closed)"}` : r.project ? `project: ${r.project}` : ""].filter(Boolean).join(" · "))))
+                .child(size(t, r.added, r.removed))
                 .on_hover((hovered, cx) => { this.hovered = hovered ? r.url : this.hovered === r.url ? null : this.hovered; cx.notify(); })
                 .when(on || hovered, (el) => el.child(h_flex().flex_none().gap(4)
                     .child(btn(t, `go-${x.at}`, "o", r.owner ? "its session" : r.project ? "its project" : "new session", (cx) => act.go(cx, r)))
@@ -156,6 +157,19 @@ export default class WintosPrs extends View {
                 .on_scroll_wheel((e, cx) => { this.scroll = Math.max(0, Math.min(this.scroll - e.delta.y, maxScroll)); cx.notify(); })
                 .children(items.map((x, i) => (tops[i] + (x.head ? HEAD : ROW) > this.scroll && tops[i] < this.scroll + this.height ? div().absolute().left(0).right(0).top(tops[i] - this.scroll).h(x.head ? HEAD : ROW).child(item(i)) : null)).filter(Boolean))))
     }
+}
+
+// The PR's size: lines added and removed, and a bar split by their ratio.
+const BAR = 36;
+function size(t, added, removed) {
+    const all = added + removed;
+    const green = all ? Math.round((added / all) * BAR) : 0;
+    return v_flex().w(76).flex_none().items_end().gap(3)
+        .child(h_flex().gap(5).text_size(11)
+            .child(div().text_color(t.ansi2).child(`+${added}`))
+            .child(div().text_color(t.ansi1).child(`−${removed}`)))
+        .child(h_flex().w(BAR).h(3).rounded(2).overflow_hidden().bg(t.border)
+            .when(all > 0, (el) => el.child(div().w(green).h_full().bg(t.ansi2)).child(div().w(BAR - green).h_full().bg(t.ansi1))));
 }
 
 // A button with its key beside it, as WintOS shows every action.

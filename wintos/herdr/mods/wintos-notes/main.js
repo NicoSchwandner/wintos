@@ -66,6 +66,12 @@ export default class WintosNotes extends View {
         const text = view === "today" ? (this.day?.focus ?? "") : (this.mine?.text ?? "");
         const editor = TextareaState.new({ value: text });
         editor.set_soft_wrap(true);
+        // ⌘⏎ is the textarea's own submit (Enter alone is a new line), so it never reaches the panel.
+        editor.on("submit", (e, cx) => {
+            if (!e?.secondary) return;
+            void this.save(cx);
+            cx.notify();
+        });
         this.editing = { view, tab: this.tab, base: view === "today" ? this.day?.mtime : this.mine?.mtime, editor };
         this.note = null;
         editor.focus();

@@ -932,6 +932,23 @@ await scenario("45 · an epic's page shows its finished steps and last 8 workday
     await press(t, "y", { mods: ["meta", "shift"] });
 });
 
+await scenario("46 · on an epic's page s adds a planned step, and n offers it for a new session", async () => {
+    const t = await toProject();
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const id = await (await api("/epics", { title: "E2E roadmap" })).text();
+    await evalIn(t, `import("/wintos/ui/menu.ts").then((m) => m.openEpic("${id}"))`);
+    await until("its page", () => evalIn(t, `!!document.querySelector("[data-wintos=epic-page][data-epic='${id}']")`));
+    await press(t, "s");
+    await until("the step field", () => evalIn(t, `document.activeElement?.dataset.wintos === "epic-step-input"`));
+    await cdp(t, "Input.insertText", { text: "Cutover per group" });
+    await press(t, "Enter", { code: "Enter", keyCode: 13 });
+    await until("on the roadmap", () => evalIn(t, `document.querySelector("[data-wintos=epic-roadmap]")?.textContent.includes("Cutover per group") && !document.querySelector("[data-wintos=epic-step-input]")`));
+    await press(t, "n");
+    await until("the new-step view, this epic chosen, the step offered", () => evalIn(t, `!!document.querySelector("[data-wintos=new-step] [data-epic='${id}'][data-on]") && document.querySelector("#new-step-name")?.placeholder === "Cutover per group"`));
+    await press(t, "Escape", { code: "Escape", keyCode: 27 });
+    await press(t, "Escape", { code: "Escape", keyCode: 27 });
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

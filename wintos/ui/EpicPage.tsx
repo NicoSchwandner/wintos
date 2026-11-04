@@ -3,14 +3,15 @@ import { memo, useEffect, useState } from "react";
 import type { EpicTime } from "../daemon/epics/time";
 import { EpicAvatar } from "./EpicAvatar";
 import { lookOf, shortName } from "./epicLook";
+import { globalStore } from "@/app/store/jotaiStore";
 import { editMine, focusSession } from "./focus";
-import { runAction } from "./menu";
+import { runAction, runKey } from "./menu";
 import { offerStep } from "./newproject";
 import { Key } from "./Key";
 import { cursorKeys, startCursor } from "./itemCursor";
 import { Md } from "./notes/Md";
 import { Mine } from "./notes/Mine";
-import { openEpicAtom } from "./notes/state";
+import { newStepEpicAtom, openEpicAtom } from "./notes/state";
 import { useEpicMine } from "./notes/useNotes";
 import { shownState } from "./sessions";
 import { SESSION_DOT, T } from "./tokens";
@@ -67,8 +68,17 @@ export const EpicPage = memo(() => {
         offerStep({ epic: epic.id, step: `${shortName(epic)} agent`, agentOf: epic.id });
         runAction("project");
     };
+    // s: a planned step at the end of the roadmap; n: a new session for one, the epic chosen already.
+    const [adding, setAdding] = useState(false);
+    const [addError, setAddError] = useState("");
+    const stopAdding = () => (setAdding(false), setAddError(""), ref.current?.focus());
+    const addStep = (name: string) => {
+        if (!epic || !name.trim()) return stopAdding();
+        void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/roadmap`, { method: "POST", body: { add: name } }).then(async (r) => (r.ok ? stopAdding() : setAddError(await r.text())));
+    };
+    const newStep = () => epic && (globalStore.set(newStepEpicAtom, epic.id), runKey("new-step"));
     const togglePin = () => epic && void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/pin`, { method: "POST", body: { pinned: !epic.pinned } });
-    useZoneKeys(ref, { ...cursorKeys(() => ref.current), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true), a: () => (toAgent(), true) });
+    useZoneKeys(ref, { ...cursorKeys(() => ref.current), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true) });
     if (!epic) return <div ref={ref} tabIndex={0} data-zone="list" style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, outline: "none" }}>That epic is gone.</div>;
     const look = lookOf(epic);
     const roadmap = epic.steps;
@@ -108,7 +118,20 @@ export const EpicPage = memo(() => {
                     <Panel label="Plan" note={epic.plan ? "the epic agent keeps it, in epic.md" : "none yet: a starts the epic agent, which writes it"}>
                         {epic.plan && <Md text={epic.plan} size="full" />}
                     </Panel>
-                    <Panel label="Roadmap" note={roadmap.length ? `${roadmap.filter((u) => u.state === "done").length} of ${roadmap.length} done` : "none yet: wintos unit in a session sets it"}>
+                    <Panel
+                        label="Roadmap"
+                        note={roadmap.length ? `${roadmap.filter((u) => u.state === "done").length} of ${roadmap.length} done` : "none yet: s adds a step, or the epic agent sets it"}
+                        keys={
+                            <>
+                                <button type="button" data-wintos="epic-add-step" data-key="s" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => setAdding(true)} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                                    <Key k="s" label="add a step" />
+                                </button>
+                                <button type="button" data-wintos="epic-start-step" data-key="n" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={newStep} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                                    <Key k="n" label="start one" />
+                                </button>
+                            </>
+                        }
+                    >
                         <div data-wintos="epic-roadmap" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                             {roadmap.map((u) => (
                                 <div key={u.name} data-unit={u.state} style={{ display: "flex", alignItems: "baseline", gap: 10, fontSize: 13.5, color: u.state === "current" ? T.emphasis : u.state === "done" ? T.faint : T.secondary, fontWeight: u.state === "current" ? 600 : 400 }}>
@@ -116,6 +139,22 @@ export const EpicPage = memo(() => {
                                     <span style={{ textDecoration: u.state === "done" ? "line-through" : undefined }}>{u.name}</span>
                                 </div>
                             ))}
+                            {adding && (
+                                <input
+                                    autoFocus
+                                    data-wintos="epic-step-input"
+                                    aria-label="a planned step"
+                                    placeholder="a planned step, a few words · ⏎ adds it · esc cancels"
+                                    maxLength={80}
+                                    onKeyDown={(ev) => {
+                                        ev.stopPropagation();
+                                        if (ev.key === "Enter") ev.preventDefault(), addStep((ev.target as HTMLInputElement).value);
+                                        if (ev.key === "Escape") ev.preventDefault(), stopAdding();
+                                    }}
+                                    style={{ padding: "4px 8px", background: T.card, border: `1px solid ${T.borderActive}`, borderRadius: 6, outline: "none", color: T.text, fontFamily: T.ui, fontSize: 13.5 }}
+                                />
+                            )}
+                            {addError && <span style={{ fontSize: 12, color: T.apricot }}>{addError}</span>}
                         </div>
                     </Panel>
                     <Panel label="Finished steps" note={finished.length ? `${finished.length} · ${spent(finished.reduce((n, f) => n + f.ms, 0))} at them` : "none yet"}>

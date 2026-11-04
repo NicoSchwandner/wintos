@@ -87,6 +87,16 @@ describe("wintosd API", () => {
         expect((await post("/epics", { title: "a\nb" })).status).toBe(400);
     });
 
+    test("a planned step added from the epic page goes to the end of its roadmap, once", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        expect((await post(`/epics/${id}/roadmap`, { add: "Drafts mapping" })).status).toBe(200);
+        expect((await post(`/epics/${id}/roadmap`, { add: " Export " })).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).epics[0].steps).toEqual([{ name: "Drafts mapping", state: "todo" }, { name: "Export", state: "todo" }]);
+        expect((await post(`/epics/${id}/roadmap`, { add: "export" })).status).toBe(409);
+        expect((await post(`/epics/${id}/roadmap`, { add: "a | b" })).status).toBe(400);
+        expect((await post("/epics/nope/roadmap", { add: "x" })).status).toBe(404);
+    });
+
     test("an epic's mine.md is read and saved, and a save over a newer file is refused; done finishes it", async () => {
         const id = await (await post("/epics", { title: "Route" })).text();
         expect(await (await fetch(`${base}/epics/${id}/mine`)).json()).toEqual({ text: "", mtime: 0 });

@@ -695,6 +695,20 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, "");
             }
+            // A planned step, added on the epic's page; sessions start and finish it with wintos unit.
+            const roadmapAdd = /^\/epics\/([^/]+)\/roadmap$/.exec(url.pathname);
+            if (req.method === "POST" && roadmapAdd) {
+                const b = (await body(req)) as { add?: unknown };
+                const name = typeof b?.add === "string" ? b.add.trim() : "";
+                if (!name || !isSafe(name) || name.includes("|") || name.length > UNIT_MAX) return send(res, 400, `need add: one line up to ${UNIT_MAX} characters, without |`);
+                const epic = epics.byId(decodeURIComponent(roadmapAdd[1]));
+                if (!epic) return send(res, 404, "no such epic");
+                if (epic.steps.some((u) => u.name.toLowerCase() === name.toLowerCase())) return send(res, 409, "the roadmap has that step already");
+                if (epic.steps.length >= UNITS_MAX) return send(res, 409, `the roadmap holds ${UNITS_MAX} steps at most`);
+                epics.update(epic.id, (e) => ({ ...e, steps: [...e.steps, { name, state: "todo" }] }));
+                broadcast();
+                return send(res, 200, "");
+            }
             // The UI typed the first n reports into the agent.
             const reportsDone = /^\/agents\/([^/]+)\/reports\/delivered$/.exec(url.pathname);
             if (req.method === "POST" && reportsDone) {

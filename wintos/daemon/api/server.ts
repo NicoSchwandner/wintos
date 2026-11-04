@@ -56,7 +56,7 @@ export const DRIVING_MAX = 3;
 const CLOSED_KEEP_MS = 14 * 86_400_000;
 export type Closed = { tabId: string; title: string; kind?: Kind; at: number };
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; wipLimit?: number; termCols?: number }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
     const factsOf = (ids: string[], day: string) => {
@@ -292,7 +292,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
         seen,
         fixer: fixer.state(),
         update: { behind: update?.behind() ?? 0 },
-        wip: opts.wipLimit ?? 6,
         termCols: opts.termCols ?? 110,
         rhythm: { ...rhythm, everyMs: opts.moveEveryMs ?? 30 * 60_000 },
         ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),

@@ -272,15 +272,14 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
 });
 WintOSSidebar.displayName = "WintOSSidebar";
 
-// The sidebar's foot: the sessions in flight against your limit (WINTOS_WIP), green at work,
-// apricot waiting on you, and how long since your last break.
+// The sidebar's foot: the sessions in flight, green at work, apricot waiting on you, and how
+// long since your last break.
 function RhythmMeter({ state }: { state: WintosState }) {
     const now = useNow(60_000);
-    const limit = state.wip ?? 0;
     const n = inFlight(state.sessions, now);
     const total = n.working + n.waiting;
     const r = state.rhythm;
-    const marks = Array.from({ length: Math.min(12, Math.max(limit, total)) }, (_, i) => (i < n.working ? T.moss : i < total ? T.apricot : T.borderActive));
+    const marks = Array.from({ length: Math.min(12, total) }, (_, i) => (i < n.working ? T.moss : T.apricot));
     const since = r ? Math.round((now - r.stretchFrom) / 60_000) : 0;
     const rest = !r?.everyMs ? "" : r.onBreak ? "on a break" : r.breaks.length ? `last break ${since} min ago` : `no break yet · ${since} min at it`;
     if (!marks.length && !rest) return null;
@@ -291,7 +290,7 @@ function RhythmMeter({ state }: { state: WintosState }) {
                     {marks.map((c, i) => <span key={i} style={{ height: 4, borderRadius: 2, background: c }} />)}
                 </div>
             )}
-            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: total >= limit && limit ? T.apricot : T.faint }}>{[limit ? `${total} of ${limit} in flight` : "", rest].filter(Boolean).join(" · ")}</span>
+            {rest && <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{rest}</span>}
         </div>
     );
 }

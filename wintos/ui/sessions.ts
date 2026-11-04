@@ -51,7 +51,7 @@ export function atWork(sessions: Session[], now: number): { working: number; sub
 // The state a session shows as: one whose turn ended while its subagents still run is at work.
 export const shownState = (s: Session, now: number): Session["state"] => (s.state !== "ended" && liveSubagents(s, now) ? "working" : s.state);
 
-// The sessions in flight, for the limit on them (WINTOS_WIP): those at work and those waiting on
+// The sessions in flight, for the sidebar's meter: those at work and those waiting on
 // you. A parked one waits on a PR or CI, a done or idle one on nothing: neither is in your head.
 export function inFlight(sessions: Session[], now: number): { working: number; waiting: number } {
     const live = sessions.filter((s) => s.state !== "ended" && !s.background && !s.restored).map((s) => shownState(s, now));

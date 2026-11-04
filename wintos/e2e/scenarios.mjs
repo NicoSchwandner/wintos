@@ -399,18 +399,6 @@ await scenario("14b · a session that parks itself stays in To read with its las
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
 });
 
-await scenario("15 · carrying last workday's sub-item into today brings its parent and keeps the nesting", async () => {
-    const t = await toProject();
-    await press(t, "y", { mods: ["meta", "shift"] });
-    await until("the Today page", () => evalIn(t, `!!document.querySelector("[data-wintos=today]")`));
-    const carry = (text) => evalIn(t, `(() => { const row = [...document.querySelectorAll("[data-wintos=today] [data-item]")].find((el) => el.textContent.includes(${JSON.stringify(text)}) && el.querySelector("[data-key=c]")); row?.querySelector("[data-key=c]").click(); return !!row; })()`);
-    if (!(await carry("measure the threshold"))) throw new Error("no carry button on the sub-item");
-    const focus = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).day.focus;
-    await until("the item in today", async () => (await focus()).includes("measure the threshold"));
-    if ((await focus()) !== "- [ ] Fallback for low-confidence pages\n  - [ ] measure the threshold") throw new Error(`today is ${JSON.stringify(await focus())}`);
-    await press(t, "y", { mods: ["meta", "shift"] });
-});
-
 await scenario("16 · a shelved session owning a red PR: the project stays out of Needs you, its Sessions row shows the PR, and ⌥⌘1 resumes it", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
@@ -841,6 +829,24 @@ await scenario("40 · ⌥⌘T takes a session out into a view of its own: its pa
     await press(t, "t", { code: "KeyT", mods: ["meta", "alt"] });
     await until("a new tab resuming it", () => tabs() > before && sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j, db_block b where t.oid!='${tabId}' and b.oid=j.value and b.data->>'$.meta."cmd:initscript"' like '%e2e-move%'`) === "1", 20000);
     await until("its pane gone from here", () => sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j where t.oid='${tabId}' and j.value='${pane}'`) === "0");
+});
+
+await scenario("41 · ⇧⌘Y is the epics home: a card per epic, the one waiting on you first; ⏎ opens its page; the rail shows its mine.md", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const pane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const id = await (await api("/epics", { title: "E2E home", short: "Home" })).text();
+    await api(`/epics/${id}/mine`, { text: "- e2e epic note" });
+    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-home", hook_event_name: "UserPromptSubmit", prompt: "e2e home" } });
+    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-home", hook_event_name: "Stop" } });
+    await api("/sessions/e2e-home/epic", { epic: id });
+    await until("the epic's mine.md in the rail", () => evalIn(t, `document.querySelector("[data-wintos=mine-of][data-epic='${id}']")?.closest("[data-wintos=notes-rail]")?.innerText.includes("e2e epic note")`));
+    await press(t, "y", { mods: ["meta", "shift"] });
+    await until("its card first", () => evalIn(t, `document.querySelector("[data-wintos=today] [data-epic]")?.dataset.epic === "${id}"`));
+    await press(t, "Enter", { code: "Enter", keyCode: 13 });
+    await until("its page", () => evalIn(t, `document.querySelector("[data-wintos=epic-page]")?.dataset.epic === "${id}" && document.querySelector("[data-wintos=epic-page] [data-session='e2e-home']") !== null`));
+    await press(t, "Escape", { code: "Escape", keyCode: 27 });
 });
 
 await scenario("clean-up · the panes this run opened are closed", async () => {

@@ -8,10 +8,13 @@ import { T } from "../tokens";
 import { Mine } from "./Mine";
 import { Rich } from "./ProjectNotes";
 import { editingMineAtom } from "./state";
-import { useNotes } from "./useNotes";
+import { useEpicMine, useNotes } from "./useNotes";
 import { notesKeys, PrList } from "./PrList";
 import { daemonFetch, useWintos } from "../useWintos";
 import { editMine } from "../focus";
+import { getLayoutModelForStaticTab } from "@/layout/index";
+import { EpicAvatar } from "../EpicAvatar";
+import { lookOf, shortName } from "../epicLook";
 import { runKey } from "../menu";
 import { openPalette } from "../Palette";
 import { backgroundSessions, projectSessions, relTime, sessionName, type WintosState } from "../view";
@@ -22,9 +25,18 @@ import { PrChipButton } from "../SessionHeader";
 
 // The notes rail beside the terminal (MainC): heads-ups, mine.md, the sessions.
 export const NotesRail = memo(({ tabId }: { tabId: string }) => {
-    const { notes, save } = useNotes(tabId);
+    const { notes, save: saveProject } = useNotes(tabId);
     const editing = useAtomValue(editingMineAtom);
     const { state } = useWintos();
+    // A session in an epic reads the epic's mine.md, shared by all its sessions: the rail shows
+    // and edits that one. A session in no epic keeps the project's.
+    const focusedBlock = useAtomValue(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
+    const here = (state?.sessions ?? []).filter((s) => s.tabId === tabId && s.state !== "ended");
+    const epicId = (here.find((s) => s.blockId === focusedBlock) ?? here[0])?.epic;
+    const epic = epicId ? state?.epics?.find((e) => e.id === epicId) : undefined;
+    const { mine: epicMine, save: saveEpic } = useEpicMine(epic?.id);
+    const mine = epic ? epicMine : notes && { text: notes.mine, mtime: notes.mineMtime };
+    const save = epic ? saveEpic : saveProject;
     const ref = useRef<HTMLDivElement>(null);
     useZoneKeys(ref, { ...notesKeys(tabId, state, !editing && !!notes), ...cursorKeys(() => ref.current) });
     const [width, setWidth, saveWidth] = useRailWidth();
@@ -39,7 +51,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
     };
     // Folded, the notes are a slim drawer handle saying what is inside; heads-ups in apricot.
     if (collapsed) {
-        const open = (notes?.mine ?? "").split("\n").filter((l) => /^\s*[-*] \[ \]/.test(l)).length;
+        const open = (mine?.text ?? "").split("\n").filter((l) => /^\s*[-*] \[ \]/.test(l)).length;
         const sessions = (state?.sessions ?? []).filter((s) => s.tabId === tabId && s.state !== "ended" && !s.background).length;
         const heads = state?.headsUps?.[tabId]?.length ?? 0;
         const label: React.CSSProperties = { writingMode: "vertical-rl", fontSize: 12, letterSpacing: "0.04em", whiteSpace: "nowrap" };
@@ -70,7 +82,10 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
             <HeadsUps tabId={tabId} state={state} />
             <div style={{ padding: "12px 14px", background: T.sidebar, border: `1px solid ${editing ? T.borderActive : T.keycapBorder}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>mine.md</span>
+                    <span data-wintos="mine-of" data-epic={epic?.id ?? ""} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: T.mono, fontSize: 11, color: T.title, minWidth: 0 }}>
+                        {epic && <EpicAvatar look={lookOf(epic)} size={16} />}
+                        mine.md{epic ? ` · ${shortName(epic)}` : ""}
+                    </span>
                     {editing ? (
                         <Key k="⌘⏎" label="save · esc discard" always />
                     ) : (
@@ -79,7 +94,7 @@ export const NotesRail = memo(({ tabId }: { tabId: string }) => {
                         </button>
                     )}
                 </div>
-                <Mine text={notes?.mine ?? ""} mtime={notes?.mineMtime ?? 0} canEdit={!!notes} save={save} size="rail" draftKey={`mine:${tabId}`} />
+                <Mine text={mine?.text ?? ""} mtime={mine?.mtime ?? 0} canEdit={!!mine} save={save} size="rail" draftKey={epic ? `epic-mine:${epic.id}` : `mine:${tabId}`} />
             </div>
             <Sessions tabId={tabId} state={state} size="rail" />
         </div>

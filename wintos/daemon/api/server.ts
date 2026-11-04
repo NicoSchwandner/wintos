@@ -605,6 +605,34 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (r === "conflict") return send(res, 409, "mine.md changed on disk since you started editing");
                 return send(res, 200, "");
             }
+            // An epic's mine.md, the notes every session in it reads; its page and the rail edit it.
+            const epicMine = /^\/epics\/([^/]+)\/mine$/.exec(url.pathname);
+            if (epicMine) {
+                const id = decodeURIComponent(epicMine[1]);
+                if (req.method === "GET") {
+                    const m = epics.mine(id);
+                    return m ? json(res, m) : send(res, 404, "no such epic");
+                }
+                if (req.method === "POST") {
+                    const b = (await body(req)) as { text?: unknown; baseMtime?: unknown };
+                    if (typeof b?.text !== "string") return send(res, 400, "need text");
+                    const r = epics.saveMine(id, await formatMarkdown(b.text), typeof b.baseMtime === "number" ? b.baseMtime : undefined);
+                    if (r === "no epic") return send(res, 404, "no such epic");
+                    if (r === "conflict") return send(res, 409, "mine.md changed on disk since you started editing");
+                    broadcast();
+                    return send(res, 200, "");
+                }
+            }
+            // Finished (its page's x), or open again: a finished epic stays for the month's report.
+            const epicDone = /^\/epics\/([^/]+)\/done$/.exec(url.pathname);
+            if (req.method === "POST" && epicDone) {
+                const b = (await body(req)) as { done?: unknown };
+                if (typeof b?.done !== "boolean") return send(res, 400, "need done: true or false");
+                const e = epics.update(decodeURIComponent(epicDone[1]), ({ done: _, ...rest }) => (b.done ? { ...rest, done: localDay(Date.now()) } : rest));
+                if (!e) return send(res, 404, "no such epic");
+                broadcast();
+                return send(res, 200, "");
+            }
             if (req.method === "POST" && url.pathname === "/prs/snooze") {
                 const b = (await body(req)) as { url?: unknown; until?: unknown; movedAt?: unknown };
                 if (typeof b?.url !== "string" || !PR_URL.test(b.url)) return send(res, 400, "need a GitHub PR url");

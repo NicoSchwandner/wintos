@@ -29,6 +29,7 @@ import { StatusBar } from "./StatusBar";
 import { T } from "./tokens";
 import { ReflectionPage } from "./ReflectionPage";
 import { TodayPage } from "./TodayPage";
+import { EpicPage } from "./EpicPage";
 import { KeyboardPage } from "./KeyboardPage";
 
 // The project area: session strip over the terminals, the notes rail beside them, and the Today
@@ -50,6 +51,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
         <div className="flex flex-col flex-grow min-w-0" style={{ position: "relative" }}>
             {/* ⇧⌘Y's page covers a project and an Inbox tab alike; what is under it stays mounted. */}
             {view === "day" && <TodayPage />}
+            {view === "epic" && <EpicPage />}
             {view === "reflect" && <ReflectionPage />}
             {view === "keyboard" && <KeyboardPage />}
             <div className="flex flex-col flex-grow min-w-0" style={{ minHeight: 0, display: isPage(view) ? "none" : "flex" }}>

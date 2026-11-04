@@ -1,14 +1,15 @@
-import { useAtomValue } from "jotai";
 import { memo, useEffect, useMemo, useState } from "react";
-import { carryToToday, lastDayName, leftFromYesterday, markPlanned, saveFocus, yesterdayItems, yesterdayRows } from "./day";
-import { dayTimeline, DEFAULT_WORKDAY, focusList, parseSpan, type Block } from "./dayplan";
-import { editMine } from "./focus";
+import type { EpicTime } from "../daemon/epics/time";
+import type { Session } from "../daemon/sessions/reduce";
+import { dayTimeline, DEFAULT_WORKDAY, parseSpan, type Block } from "./dayplan";
+import { EpicAvatar } from "./EpicAvatar";
+import { lookOf, NO_EPIC, shortName } from "./epicLook";
 import { Key } from "./Key";
 import { meetingsFrom } from "./meetings";
-import { Mine } from "./notes/Mine";
-import { Box, Dot, More, Rich } from "./notes/ProjectNotes";
-import { editingMineAtom } from "./notes/state";
+import { openEpic } from "./menu";
+import { shownState } from "./sessions";
 import { T } from "./tokens";
+import { sessionName, type EpicView } from "./view";
 import { useFocusOnMount } from "./useFocusOnMount";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
@@ -22,85 +23,139 @@ const span = (ms: number) => {
     return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60}` : ""}`;
 };
 
-// ⇧⌘Y: the day as its own page. The day drawn to scale (meetings, lunch, the free time left),
-// what yesterday left open, and today's focus, edited like mine.md. In the morning, ⌘⏎ marks the
-// day planned and the sidebar card stops pulsing.
+// ⇧⌘Y: the epics home. The day drawn to scale (meetings, lunch, the free time left), what you
+// did on the last worked day for the daily, a card for each open epic (what waits on you there,
+// its sessions and planned steps, the first line of its mine.md) and the month's time by epic,
+// for the project report. ⏎ on a card opens the epic's page.
 export const TodayPage = memo(() => {
     const ref = useFocusOnMount<HTMLDivElement>();
     const { state } = useWintos();
     const now = useNow(30_000);
     const day = state?.day;
-    const editing = useAtomValue(editingMineAtom);
-    const left = day ? leftFromYesterday(day) : [];
-    // Once the day is planned, yesterday's list folds to its count; m shows it again.
-    const [showYesterday, setShowYesterday] = useState(false);
-    // The page opens on your first open item, so ⇧⌘Y x ticks it.
-    const hasDay = !!day;
+    const live = (state?.sessions ?? []).filter((s) => s.state !== "ended" && !s.background);
+    // What waits on you first, then what is at work, then the rest by how many sessions are open.
+    const weight = (id: string) => {
+        const here = live.filter((s) => s.epic === id);
+        return (here.some((s) => shownState(s, now) === "waiting") ? 1000 : 0) + (here.some((s) => shownState(s, now) === "working") ? 100 : 0) + here.length;
+    };
+    const epics = (state?.epics ?? []).filter((e) => !e.done).sort((a, b) => weight(b.id) - weight(a.id));
     useEffect(() => {
-        if (hasDay && ref.current) requestAnimationFrame(() => ref.current && startCursor(ref.current, (el) => el.dataset.item === "check" && !el.dataset.done));
-    }, [hasDay]);
-    useZoneKeys(ref, day ? {
+        if (ref.current) requestAnimationFrame(() => ref.current && startCursor(ref.current, (el) => el.dataset.item === "link"));
+    }, [epics.length > 0]);
+    useZoneKeys(ref, {
         ...cursorKeys(() => ref.current),
-        "Cmd:e": () => editMine(true),
         e: () => {
             const b = ref.current?.querySelector<HTMLElement>("[data-edit-daily]");
             b?.click();
             return !!b;
         },
-        "Cmd:Enter": () => void markPlanned(),
-    } : {});
-    if (!day) {
-        return (
-            <div ref={ref} tabIndex={0} data-zone="list" data-wintos="today" style={{ flexGrow: 1, padding: 26, fontFamily: T.ui, color: T.muted, outline: "none" }}>
-                No journal yet. Set WINTOS_JOURNAL_DIR in ~/.config/wintos/env to your journal's folder of daily files and restart WintOS.
-            </div>
-        );
-    }
-    const y = day.yesterday;
-    const yItems = y ? focusList(y.focus) : [];
-    const todayTexts = new Set(focusList(day.focus).map((i) => i.text));
-    const save = (text: string, base: number) => saveFocus(text, base).then((r) => (r === "ok" && !day.planned && text.trim() && void markPlanned(), r));
-    const date = new Date(`${day.date}T12:00:00`);
+        c: () => {
+            const b = ref.current?.querySelector<HTMLElement>("[data-wintos=month-copy]");
+            b?.click();
+            return !!b;
+        },
+    });
+    const date = new Date(now);
+    const today = day?.date ?? localIso(date);
+    // The daily's "Today" line: the steps under way, by epic.
+    const plan = epics.flatMap((e) => live.filter((s) => s.epic === e.id).map((s) => `- [ ] ${shortName(e)}: ${sessionName(s)}`)).join("\n");
     return (
         <div ref={ref} tabIndex={0} data-zone="list" data-wintos="today" style={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 0", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0 }}>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 30, fontWeight: 400, lineHeight: 1, color: T.emphasis }}>{date.toLocaleDateString("en-GB", { weekday: "long" })}</h1>
-                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{date.toLocaleDateString("en-GB", { day: "numeric", month: "long" })} · {day.exists ? "in your journal" : "the journal file is made when you write the plan"}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{date.toLocaleDateString("en-GB", { day: "numeric", month: "long" })} · {epics.length} epic{epics.length === 1 ? "" : "s"} open</span>
                 </div>
                 <Key k="esc" label="back" />
             </div>
-            <div style={{ flexGrow: 1, minHeight: 0, display: "grid", gridTemplateColumns: "clamp(220px, 26vw, 400px) minmax(0, 760px)", gap: 20, paddingBottom: 18 }}>
+            <div style={{ flexGrow: 1, minHeight: 0, display: "grid", gridTemplateColumns: "clamp(220px, 26vw, 400px) minmax(0, 820px)", gap: 20, paddingBottom: 18 }}>
                 <Timeline now={now} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflowY: "auto" }}>
-                    <Standup today={day.date} focus={day.focus} panel={(p) => <Panel {...p} />} />
-                    {y && (
-                        <Panel label={lastDayName(y.date, day.date)} note={day.planned ? `${yItems.filter((i) => i.done).length} done · ${yesterdayItems(day).filter((i) => i.carried).length} carried` : undefined} keys={!day.planned && yesterdayItems(day).some((i) => !i.carried) && <Key k="j k · c" label="carry" />}>
-                            {(!day.planned || showYesterday) && (
-                                <>
-                                    {yesterdayRows(day).map((i, k) => (
-                                        <Item key={`${k}:${i.text}`} text={i.text} depth={i.depth} done={i.done} note={i.note} carried={i.carried} carry={i.carried || i.note ? undefined : () => void carryToToday(day, i.chain)} />
-                                    ))}
-                                    {!yesterdayItems(day).length && <span style={{ fontSize: 12, color: T.faint }}>Nothing was planned.</span>}
-                                </>
-                            )}
-                            {day.planned && yItems.length > 0 && <More open={showYesterday} label={`Show the ${yItems.length} items`} onClick={() => setShowYesterday(!showYesterday)} />}
-                        </Panel>
-                    )}
-                    <Panel
-                        label="Today's focus"
-                        note={day.planned ? undefined : "not planned yet"}
-                        warn={!day.planned}
-                        keys={editing ? <><Key k="⌘⏎" label="save" /><Key k="esc" label="discard" /></> : <><Key k="⌘E" label="edit" />{!day.planned && <Key k="⌘⏎" label="plan done" />}</>}
-                    >
-                        <Mine text={day.focus} mtime={day.mtime} canEdit save={save} size="full" draftKey={`today:${day.date}`} file="today's journal file" empty={left.length ? `Nothing planned yet. ⌘E starts from the ${left.length} things yesterday left open.` : "Nothing planned yet. Press ⌘E and write one to three things that matter today."} start={left.map((t) => `- [ ] ${t}`).join("\n")} />
+                    {day && <Standup today={today} focus={plan} panel={(p) => <Panel {...p} />} />}
+                    <Panel label="Epics" note={epics.length ? undefined : "none yet: ⌥⌘E in a session starts one"} keys={epics.length > 0 && <Key k="j k · ⏎" label="open its page" />}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 10 }}>
+                            {epics.map((e) => <EpicCard key={e.id} epic={e} sessions={live.filter((s) => s.epic === e.id)} now={now} />)}
+                        </div>
                     </Panel>
+                    <MonthByEpic now={now} />
                 </div>
             </div>
         </div>
     );
 });
 TodayPage.displayName = "TodayPage";
+
+const localIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+function EpicCard({ epic, sessions, now }: { epic: EpicView; sessions: Session[]; now: number }) {
+    const look = lookOf(epic);
+    const waiting = sessions.filter((s) => shownState(s, now) === "waiting").length;
+    const working = sessions.filter((s) => shownState(s, now) === "working").length;
+    const state = waiting ? `${waiting} waiting on you` : working ? `${working} at work` : sessions.length ? "quiet" : "no session open";
+    const planned = epic.steps.filter((x) => x.state !== "done").map((x) => x.name);
+    return (
+        <div data-item="link" data-epic={epic.id} style={{ display: "flex", flexDirection: "column", gap: 8, padding: "11px 13px", borderRadius: 10, background: T.sidebar, border: `1px solid ${T.border}`, borderTop: `3px solid ${look.fg}` }}>
+            <button type="button" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openEpic(epic.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: 0, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui }}>
+                <EpicAvatar look={look} size={28} />
+                <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 600, color: T.emphasis, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(epic)}</span>
+                    <span style={{ fontSize: 12, color: waiting ? T.apricot : working ? T.moss : T.muted }}>{state}</span>
+                </span>
+            </button>
+            {[...sessions.map((s) => ({ key: s.id, mark: "▸", text: sessionName(s) })), ...planned.map((p) => ({ key: `p:${p}`, mark: "○", text: p }))].slice(0, 4).map((x) => (
+                <span key={x.key} style={{ fontSize: 12.5, color: T.secondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ fontFamily: T.mono, color: T.faint }}>{x.mark}</span> {x.text}
+                </span>
+            ))}
+        </div>
+    );
+}
+
+// The month so far by epic: the hours you were at its sessions (daemon/epics/time.ts). c copies
+// it as a table for the project report.
+function MonthByEpic({ now }: { now: number }) {
+    const { state } = useWintos();
+    const month = localIso(new Date(now)).slice(0, 7);
+    const [rows, setRows] = useState<EpicTime[] | undefined>();
+    const [copied, setCopied] = useState(false);
+    useEffect(() => {
+        let live = true;
+        daemonFetch(`/time/month?month=${month}`)
+            .then((r) => (r.ok ? r.json() : []))
+            .then((r) => live && setRows(r), () => live && setRows([]));
+        return () => void (live = false);
+    }, [month, Math.floor(now / 600_000)]);
+    const name = (id?: string) => (id ? (state?.epics?.find((e) => e.id === id)?.title ?? id) : "No epic");
+    const total = (rows ?? []).reduce((n, r) => n + r.ms, 0);
+    const copy = () => {
+        const table = (rows ?? []).map((r) => `${name(r.epic)}\t${(r.ms / 3_600_000).toFixed(1)}`).join("\n");
+        void navigator.clipboard.writeText(table).then(() => setCopied(true));
+    };
+    const label = new Date(now).toLocaleDateString("en-GB", { month: "long" });
+    return (
+        <Panel
+            label={`${label} by epic`}
+            note={rows?.length ? `${span(total)} at sessions` : "nothing logged yet"}
+            keys={rows && rows.length > 0 && (
+                <button type="button" data-wintos="month-copy" data-key="c" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={copy} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                    <Key k="c" label={copied ? "copied" : "copy as a table"} />
+                </button>
+            )}
+        >
+            {(rows ?? []).map((r) => {
+                const e = r.epic ? state?.epics?.find((x) => x.id === r.epic) : undefined;
+                return (
+                    <div key={r.epic ?? "none"} data-wintos="month-row" style={{ display: "grid", gridTemplateColumns: "22px minmax(0, 1fr) 80px 70px", gap: 10, alignItems: "center", fontSize: 13 }}>
+                        <EpicAvatar look={e ? lookOf(e) : NO_EPIC} size={20} />
+                        <span style={{ color: T.secondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name(r.epic)}</span>
+                        <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text, textAlign: "right" }}>{span(r.ms)}</span>
+                        <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted, textAlign: "right" }}>{r.sessions} session{r.sessions === 1 ? "" : "s"}</span>
+                    </div>
+                );
+            })}
+        </Panel>
+    );
+}
 
 // keys: the panel's own shortcuts, shown on it rather than in a footer.
 export function Panel({ label, note, warn, keys, children }: { label: string; note?: string; warn?: boolean; keys?: React.ReactNode; children: React.ReactNode }) {
@@ -114,21 +169,6 @@ export function Panel({ label, note, warn, keys, children }: { label: string; no
                 {keys && <span style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>{keys}</span>}
             </div>
             {children}
-        </div>
-    );
-}
-
-function Item({ text, depth, done, note, carried, carry }: { text: string; depth: number; done?: boolean; note?: boolean; carried?: boolean; carry?: () => void }) {
-    return (
-        <div data-item={carry ? "carry" : undefined} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "3px 6px", margin: "0 -6px", marginLeft: depth * 20 - 6, borderRadius: 6, fontSize: 13, lineHeight: 1.5, color: done ? T.muted : T.secondary, textDecoration: done ? "line-through" : undefined }}>
-            {note ? <Dot /> : <Box state={done ? "done" : "todo"} size="full" top={4} />}
-            <span style={{ flexGrow: 1, minWidth: 0, overflowWrap: "anywhere" }}><Rich text={text} size="full" /></span>
-            {carried && <span style={{ display: "inline-block", flexShrink: 0, fontFamily: T.mono, fontSize: 11.5, color: T.moss, textDecoration: "none" }}>carried</span>}
-            {carry && (
-                <button type="button" data-key="c" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={carry} title="Carry into today" style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
-                    <Key k="c" label="today" />
-                </button>
-            )}
         </div>
     );
 }

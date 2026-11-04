@@ -6,7 +6,7 @@ import { atoms, createBlock, createTab, getApi, getBlockComponentModel, isDev } 
 import { closeOverlay, editMine, enterProject, focusArea, focusSession, reopenProject, resumePane, takeReopen, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
 import { atWork, closeWarning, paneCloseWarns, shownState } from "./sessions";
 import { toggleInbox } from "./inbox";
-import { mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, tickModeAtom, updateArmedAtom, type MainView } from "./notes/state";
+import { mainViewAtom, openEpicAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, updateArmedAtom, type MainView } from "./notes/state";
 import { switchProject, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
@@ -75,7 +75,6 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Option:Cmd:c{KeyB}", "break-later"],
     ["Option:Cmd:c{KeyO}", "release"],
     ["Option:Cmd:c{KeyS}", "quiet"],
-    ["Option:Cmd:c{KeyX}", "tick"],
     ["Option:Cmd:c{KeyL}", "rail"],
     // ⌥ turns a digit into another character too, so these match the key's place.
     ...Array.from({ length: 9 }, (_, i): [string, string] => [`Option:Cmd:c{Digit${i + 1}}`, `session-${i + 1}`]),
@@ -236,7 +235,6 @@ export function runAction(action: string): void {
     if (action === "reflect") return toggleView("reflect");
     if (action === "keyboard") return toggleView("keyboard");
     if (action === "quiet") return void document.querySelector<HTMLElement>("[data-wintos=quiet-fold]")?.click();
-    if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));
     if (action === "restart-terminal") return restartTerminal();
     if (action === "update") return updateWintos();
     if (action === "break") return void (flog("break: started"), daemonFetch("/rhythm/break", { method: "POST", body: {} }));
@@ -482,6 +480,12 @@ export function toggleView(view: MainView): void {
 
 // A click on a card opens its page and never closes it: a second click on what is already open
 // does nothing. Only the key, pressed again, goes back.
+// An epic's page, from its card on the epics home.
+export function openEpic(id: string): void {
+    globalStore.set(openEpicAtom, id);
+    openView("epic");
+}
+
 export function openView(view: MainView): void {
     if (globalStore.get(mainViewAtom) === view) return;
     rememberReturn();

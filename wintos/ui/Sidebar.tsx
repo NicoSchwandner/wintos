@@ -14,7 +14,6 @@ import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
 import { closedWakes, useWakeDelivery, type ClosedWake } from "./wakes";
 import { useSchemeNotices } from "./schemeNotices";
-import { FocusRows, TodayCard } from "./TodayCard";
 import { meetingsFrom } from "./meetings";
 import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
@@ -22,9 +21,7 @@ import { editMine, enterProject, focusArea, focusSession, reopenProject, resumeP
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
 import { closeProjectTab, openView, registerWintosMenu } from "./menu";
-import { focusList } from "./dayplan";
-import type { Day } from "../daemon/journal/journal";
-import { isPage, mainViewAtom, renamingAtom, tickModeAtom, yourMoveAtom } from "./notes/state";
+import { isPage, mainViewAtom, renamingAtom, yourMoveAtom } from "./notes/state";
 import { inFlight, liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { attention } from "./attention";
@@ -86,7 +83,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const fullScreen = useAtomValue(atoms.isFullScreen);
     const mainView = useAtomValue(mainViewAtom);
     const [showAll, setShowAll] = useStoredFlag("wintos:quiet-unfolded");
-    const ticking = useAtomValue(tickModeAtom);
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
@@ -106,7 +102,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const allQuiet = model ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [];
     const quiet = expanded ? allQuiet : allQuiet.filter((r) => r.tabId === activeTabId);
     // The cards above the projects are walked too, in the order they show: PRs, On call, Today.
-    const cards = [...(state?.day ? ["card:today"] : []), ...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : [])];
+    const openEpics = (state?.epics ?? []).filter((e) => !e.done).length;
+    const epicsWaiting = new Set((state?.sessions ?? []).filter((x) => x.epic && x.state === "waiting").map((x) => x.epic)).size;
+    const cards = [...(state ? ["card:today"] : []), ...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : [])];
     const listed = model ? [...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale] : [];
     const switchOrder = model ? [...cards, ...wokeClosed.map((w) => `wake:${w.projectId}`), ...listed.map((r) => r.key)] : [];
     const tabOfRow = Object.fromEntries(listed.map((r) => [r.key, r.tabId]));
@@ -197,22 +195,12 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 data-wintos="sidebar-list"
                 style={{ flexGrow: 1, overflowY: "auto", padding: "4px 12px 12px", display: "flex", flexDirection: "column", gap: 18 }}
             >
-                {/* ⌥⌘X unfolds the Today card to tick items off; otherwise the day, the PRs and on call are three tiles. */}
-                {state?.day && ticking ? (
-                    <TodayCard day={state.day} active={mainView === "day" || mainView === "reflect"} cursor={switchTarget === "card:today"} walk={<WalkKeys />} />
-                ) : (
-                    state && (
-                        <div style={{ display: "grid", gridTemplateColumns: `repeat(${1 + (state.day ? 1 : 0) + Math.max(1, panels.length + loading.length)}, minmax(0, 1fr))`, gap: 6 }}>
-                            {state.day && <Tile label="Today" keys="⇧⌘Y" value={dayValue(state.day)} hot={!state.day.planned} active={mainView === "day" || mainView === "reflect"} cursor={switchTarget === "card:today"} onClick={() => openView("day")} />}
-                            <Tile label="PRs" keys="⇧⌘G" value={queue ? String(queue.yours) : "…"} note={queue && queue.pastSla ? `${queue.pastSla} late` : undefined} sub={queue?.team ? `${queue.team} team` : undefined} busy={running.has("gh-prs")} active={shows("prs")} cursor={switchTarget === "card:prs"} onClick={() => goToInbox("prs")} />
-                            {panels.map((p) => <Tile key={p.name} label={p.title} keys="⇧⌘O" value={cardValue(p.counts).map((c) => c.value).join(" · ")} broken={!!p.error || p.counts.some((x) => x.count == null)} busy={running.has(p.name)} active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
-                            {loading.map((p) => <Tile key={p.name} label={p.title} keys="⇧⌘O" value="…" active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
-                        </div>
-                    )
-                )}
-                {state?.day?.planned && !ticking && focusList(state.day.focus).some((i) => !i.done) && (
-                    <div data-wintos="today-focus" style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: -10, padding: "9px 11px", background: T.card, borderRadius: 9 }}>
-                        <FocusRows day={state.day} limit={FOCUS_SHOWN} />
+                {state && (
+                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${2 + Math.max(1, panels.length + loading.length)}, minmax(0, 1fr))`, gap: 6 }}>
+                        <Tile label="Epics" keys="⇧⌘Y" value={String(openEpics)} note={epicsWaiting ? `${epicsWaiting} waiting` : undefined} active={mainView === "day" || mainView === "reflect" || mainView === "epic"} cursor={switchTarget === "card:today"} onClick={() => openView("day")} />
+                        <Tile label="PRs" keys="⇧⌘G" value={queue ? String(queue.yours) : "…"} note={queue && queue.pastSla ? `${queue.pastSla} late` : undefined} sub={queue?.team ? `${queue.team} team` : undefined} busy={running.has("gh-prs")} active={shows("prs")} cursor={switchTarget === "card:prs"} onClick={() => goToInbox("prs")} />
+                        {panels.map((p) => <Tile key={p.name} label={p.title} keys="⇧⌘O" value={cardValue(p.counts).map((c) => c.value).join(" · ")} broken={!!p.error || p.counts.some((x) => x.count == null)} busy={running.has(p.name)} active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
+                        {loading.map((p) => <Tile key={p.name} label={p.title} keys="⇧⌘O" value="…" active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
                 {state?.day?.reflection && (
@@ -287,11 +275,6 @@ function RhythmMeter({ state }: { state: WintosState }) {
 }
 
 // The day as a tile: how much of the plan is done, or that it still needs one.
-const FOCUS_SHOWN = 5;
-const dayValue = (day: Day) => {
-    const items = focusList(day.focus).filter((i) => i.depth === 0);
-    return !day.planned ? "plan it" : items.length ? `${items.filter((i) => i.done).length} of ${items.length}` : "–";
-};
 
 // A small tile at the top of the sidebar: Today, PRs, On call. hot: it needs you (an unplanned
 // day); note: what is late, in brick; broken: its last run could not fetch everything.

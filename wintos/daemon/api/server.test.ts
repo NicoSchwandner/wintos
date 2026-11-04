@@ -87,6 +87,20 @@ describe("wintosd API", () => {
         expect((await post("/epics", { title: "a\nb" })).status).toBe(400);
     });
 
+    test("an epic's mine.md is read and saved, and a save over a newer file is refused; done finishes it", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        expect(await (await fetch(`${base}/epics/${id}/mine`)).json()).toEqual({ text: "", mtime: 0 });
+        expect((await post(`/epics/${id}/mine`, { text: "- cutover per group" })).status).toBe(200);
+        const { text, mtime } = await (await fetch(`${base}/epics/${id}/mine`)).json();
+        expect(text).toContain("cutover per group");
+        expect((await post(`/epics/${id}/mine`, { text: "x", baseMtime: mtime - 1 })).status).toBe(409);
+        expect((await post("/epics/nope/mine", { text: "x" })).status).toBe(404);
+        expect((await post(`/epics/${id}/done`, { done: true })).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).epics[0].done).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        await post(`/epics/${id}/done`, { done: false });
+        expect((await (await fetch(base + "/state")).json()).epics[0].done).toBeUndefined();
+    });
+
     test("a refused epic name lists the open ones", async () => {
         await event(prompt);
         await post("/epics", { title: "Reviews" });

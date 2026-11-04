@@ -12,6 +12,7 @@ import { RpcApi } from "../frontend/app/store/wshclientapi";
 import { getWebServerEndpoint } from "../frontend/util/endpoints";
 import * as keyutil from "../frontend/util/keyutil";
 import { fireAndForget, parseDataUrl } from "../frontend/util/util";
+import { openInWebApp } from "../wintos/webapps";
 import {
     incrementTermCommandsDurable,
     incrementTermCommandsRemote,
@@ -194,6 +195,8 @@ function saveImageFileWithNativeDialog(
 
 export function initIpcHandlers() {
     electron.ipcMain.on("open-external", (event, url) => {
+        // WintOS: a site installed as a Chrome web app opens there (wintos/webapps.ts).
+        if (url && typeof url === "string" && openInWebApp(url, electron.app.getPath("home"))) return;
         if (url && typeof url === "string") {
             fireAndForget(() =>
                 callWithOriginalXdgCurrentDesktopAsync(() =>

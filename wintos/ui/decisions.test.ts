@@ -32,7 +32,7 @@ describe("decisions: turns", () => {
         const [d] = decisions(state([s("a", { kind: "answer", text: "which?", by: "session" })]), NOW, title);
         expect(d.turn).toBe(`a:${NOW - 1000}`);
     });
-    test("a turn whose Claude isn't started yet (saved at the last quit) is in the batch, marked so", () => {
+    test("a turn whose Claude isn't started yet (saved at the last quit) is a decision, marked so", () => {
         const [d] = decisions(state([s("a", { kind: "answer", text: "which?", by: "session" }, { restored: true })]), NOW, title);
         expect(d).toMatchObject({ sessionId: "a", restored: true });
         expect(decisions(state([s("a", { kind: "answer", by: "guess" })]), NOW, title)[0].restored).toBeUndefined();

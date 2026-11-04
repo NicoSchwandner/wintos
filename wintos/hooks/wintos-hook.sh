@@ -56,7 +56,7 @@ fi
 
 # A question to the developer mid-turn (AskUserQuestion, ExitPlanMode) waits on them until it is
 # answered: its start and end go to the daemon, and for AskUserQuestion its first question and
-# options, so the decision batch can show them; nothing else of the call does.
+# options, so the decision card can show them; nothing else of the call does.
 case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.tool_name // "")' 2>/dev/null)" in
 PreToolUse:AskUserQuestion)
     payload="$(printf '%s' "$payload" | jq -c '{hook_event_name, session_id, cwd, tool_name}

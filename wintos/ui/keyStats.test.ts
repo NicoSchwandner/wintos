@@ -17,9 +17,9 @@ describe("badges", () => {
 });
 
 describe("neverUsed", () => {
-    const sections: [string, [string, string][]][] = [["Projects", [["⌘J / ⌘K", "walk"], ["⌥⌘Z", "snooze"], ["j / k", "rows"]]]];
+    const sections: [string, [string, string][]][] = [["Projects", [["⌘J / ⌘K", "walk"], ["⌥⌘P", "park"], ["j / k", "rows"]]]];
     test("rows of the key card none of whose keys were ever used", () =>
-        expect(neverUsed(sections, { ...emptyStats(), keys: { "⌘K": 1, j: 4 } })).toEqual([["⌥⌘Z", "snooze"]]));
+        expect(neverUsed(sections, { ...emptyStats(), keys: { "⌘K": 1, j: 4 } })).toEqual([["⌥⌘P", "park"]]));
 });
 
 describe("week", () => {

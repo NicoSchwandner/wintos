@@ -5,7 +5,7 @@
 #   wintos wake <event> <pr> <prompt…> park until a PR is green, merged, released, re-requested or commented on, then get the prompt (used by Claude)
 #   wintos wake cancel                 drop this session's wakes
 #   wintos ask <kind> [<what…>]       end this turn waiting on the developer: answer, decide, approve or unblock;
-#                                     with a card for the decision batch: --context "<what this is about>"
+#                                     with a card for the decision: --context "<what this is about>"
 #                                     --why "<why you ask>" --option "<label>: <what it leads to>" (2-4)
 #                                     --recommend <n> --final (it can't be undone)
 #                                     --pick-on / --pick "<finding>" (up to 8, on or off to start) to toggle before answering

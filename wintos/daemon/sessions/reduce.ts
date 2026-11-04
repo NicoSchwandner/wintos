@@ -8,7 +8,7 @@ export type SessionState = "idle" | "working" | "waiting" | "parked" | "done" | 
 // question tool, the session itself (`wintos ask`), or a reading of its last message.
 export const ASK_KINDS = ["answer", "decide", "approve", "unblock"] as const;
 export type AskKind = (typeof ASK_KINDS)[number];
-// The card a decision batch shows (⌥⌘O): context, a line on what it is about; why, the reason it
+// The card a decision shows: context, a line on what it is about; why, the reason it
 // asks; options with what each leads to, the recommended one by number from 1; final: it can't be
 // undone (a merge, a deploy, a delete).
 export type AskOption = { label: string; then?: string; q?: string }; // q: the question it answers, on a card that asks several
@@ -107,7 +107,7 @@ const TRANSITIONS: Record<string, SessionState> = {
 
 const ASKING_TOOLS: Record<string, AskKind> = { AskUserQuestion: "answer", ExitPlanMode: "approve" };
 
-// The question tool's first question and its options, as the hook passed them, for the batch card.
+// The question tool's first question and its options, as the hook passed them, for the decision card.
 function toolQuestion(q: { text?: unknown; options?: unknown } | undefined): Pick<Ask, "text" | "options"> {
     const line = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
     const text = line(q?.text, 240);

@@ -72,7 +72,7 @@ describe("wintos-hook.sh", () => {
 });
 
 describe("wintos-hook.sh and a question mid-turn", () => {
-    test("PreToolUse of AskUserQuestion carries its first question and options for the decision batch, nothing else of the call", async () => {
+    test("PreToolUse of AskUserQuestion carries its first question and options for the decision card, nothing else of the call", async () => {
         const d = await fakeDaemon("");
         const input = { questions: [{ question: "Which way?", options: [{ label: "Fast", description: "ships today" }, { label: "Safe", description: "a day later" }], multiSelect: false }, { question: "second" }], other: "x" };
         await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, JSON.stringify({ hook_event_name: "PreToolUse", session_id: "s", cwd: "/x", tool_name: "AskUserQuestion", tool_input: input }));

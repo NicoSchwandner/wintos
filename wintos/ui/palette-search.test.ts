@@ -5,7 +5,7 @@ const items: PaletteItem[] = [
     { id: "p1", kind: "project", title: "Invoice OCR fallback", subtitle: "needs you · schema question" },
     { id: "p2", kind: "project", title: "OCR vendor evaluation", subtitle: "out of the sidebar · last touched 5 weeks ago" },
     { id: "s1", kind: "session", title: "ocr-adapter", subtitle: "running · Invoice OCR fallback" },
-    { id: "a1", kind: "action", title: "New session in Invoice OCR fallback", hint: "⇧⌘T" },
+    { id: "a1", kind: "action", title: "New terminal in Invoice OCR fallback", hint: "⌘T" },
     { id: "a2", kind: "action", title: "PRs need attention", hint: "⇧⌘G" },
 ];
 const ids = (q: string, list = items) => searchPalette(list, q).map((h) => h.item.id);

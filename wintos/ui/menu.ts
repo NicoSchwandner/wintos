@@ -46,18 +46,6 @@ export function blockDefFor(action: string, widgets: Record<string, WidgetConfig
     return def ? { def, ephemeral: false } : null;
 }
 
-const shQuote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
-
-export function newSessionScript(cwd: string | undefined): string {
-    return cwd ? `cd ${shQuote(cwd)} && claude` : "claude";
-}
-
-// ⇧⌘T: another Claude session in this project, next to the focused one and in its directory.
-function newSession(): void {
-    const cwd = focusedSession()?.cwd;
-    createBlock({ meta: { view: "term", controller: "shell", "cmd:initscript": newSessionScript(cwd) } });
-}
-
 // Every WintOS key, bound in Wave's global key map so a focused terminal can't swallow it
 // first (Wave's own term handler once ate ⌘K). The menu repeats them for discoverability.
 export const WINTOS_KEYS: [string, string][] = [
@@ -66,7 +54,6 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Cmd:n", "project"],
     ["Cmd:r", "rename"],
     ["Cmd:t", "terminal"],
-    ["Shift:Cmd:t", "session"],
     ["Shift:Cmd:w", "close-project"],
     ["Option:Cmd:c{KeyZ}", "snooze-project"],
     ["Option:Cmd:c{KeyD}", "drive-project"],
@@ -233,10 +220,10 @@ export function runKey(action: string): boolean {
     return true;
 }
 
-// The Inbox holds pages and nothing else: a terminal or a Claude session started there would
-// belong to no project and never show in the sidebar, Needs you or ⌃⇥.
-const PANE_MAKERS = new Set(["session", "terminal", "browser", "files", "sysinfo", "processes", "open-page"]);
-const NOT_IN_INBOX = new Set(["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session", "snooze-project", "drive-project"]);
+// The Inbox holds pages and nothing else: a terminal started there would belong to no project
+// and never show in the sidebar, Needs you or ⌃⇥.
+const PANE_MAKERS = new Set(["terminal", "browser", "files", "sysinfo", "processes", "open-page"]);
+const NOT_IN_INBOX = new Set(["terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session", "snooze-project", "drive-project"]);
 export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
 
@@ -247,7 +234,6 @@ export function runAction(action: string): void {
     // A pane you create is where you want to be (from the notes too); in an Inbox tab a page
     // opened from the list leaves you in the list.
     if (!inInbox() && PANE_MAKERS.has(action.split(":")[0])) wantPane("new pane");
-    if (action === "session") return newSession();
     if (action === "switch-next" || action === "switch-prev") return switchProject(action === "switch-next" ? 1 : -1, false);
     if (action === "project") return void createTab();
     if (action === "close-project") return closeProject();

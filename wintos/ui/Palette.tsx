@@ -255,7 +255,6 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     const here = title(activeTab);
     // The key's own path (runKey), so an action does from here exactly what its key does.
     const action = (id: string, t: string, hint: string, a: string): PaletteItem => ({ id: `a:${id}`, kind: "action", title: t, hint, run: () => void runKey(a) });
-    out.push(action("session", `New Claude session in ${here}`, "⇧⌘T", "session"));
     out.push(action("terminal", `New terminal in ${here}`, "⌘T", "terminal"));
     out.push(action("project", "New project", "⌘N", "project"));
     out.push(action("drive-project", `Drive ${here}: pin it to the top of the sidebar, or unpin it`, "⌥⌘D", "drive-project"));

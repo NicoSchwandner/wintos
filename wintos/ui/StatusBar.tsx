@@ -13,7 +13,7 @@ import { useWintos } from "./useWintos";
 // the PRs card, ⌃⇥ in the sidebar) is not repeated here.
 // The full-page views (Today, Reflect) show their own keys. Typed by view, so a new one can't be missed.
 const KEYS: Record<MainView, readonly (readonly [string, string, string])[]> = {
-    terminal: [["⇧⌘P", "everything", "palette"], ["⇧⌘T", "new session", "session"], ["⌥⌘L", "notes", "rail"], ["⇧⌘K", "keys", "keymap"]],
+    terminal: [["⇧⌘P", "everything", "palette"], ["⌥⌘L", "notes", "rail"], ["⇧⌘K", "keys", "keymap"]],
     day: [],
     reflect: [],
     keyboard: [],

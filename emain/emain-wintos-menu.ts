@@ -48,7 +48,6 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         item("Pane Above", "pane-up", "Alt+Cmd+K"),
         { type: "separator" },
         item("New Terminal", "terminal", "Cmd+T"),
-        item("New Claude Session", "session", "Shift+Cmd+T"),
         item("New Browser", "browser", "Shift+Cmd+B"),
         item("Files", "files", "Shift+Cmd+F"),
         item("Notes", "notes", "Shift+Cmd+L"),

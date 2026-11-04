@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { allowedInInbox, blockDefFor, focusedPageUrl, newSessionScript, paneShowing, shelvable, WINTOS_KEYS } from "./menu";
+import { allowedInInbox, blockDefFor, focusedPageUrl, paneShowing, shelvable, WINTOS_KEYS } from "./menu";
 
 const widgets = {
     "defwidget@terminal": { blockdef: { meta: { view: "term", controller: "shell" } } },
@@ -23,16 +23,6 @@ describe("blockDefFor", () => {
 
     test("an unknown action opens nothing", () => {
         expect(blockDefFor("bogus", widgets)).toBeNull();
-    });
-});
-
-describe("newSessionScript", () => {
-    test("starts Claude in the focused session's directory, safely quoted", () => {
-        expect(newSessionScript("/Users/n/it's here")).toBe("cd '/Users/n/it'\\''s here' && claude");
-    });
-
-    test("with no session to copy from it just starts Claude", () => {
-        expect(newSessionScript(undefined)).toBe("claude");
     });
 });
 
@@ -63,9 +53,9 @@ describe("focusedPageUrl", () => {
 });
 
 describe("allowedInInbox", () => {
-    test("the Inbox opens pages and moves between them; it starts no terminals or Claude sessions", () => {
+    test("the Inbox opens pages and moves between them; it starts no terminals", () => {
         for (const a of ["palette", "keymap", "prs", "panel", "open-page:https://github.com/acme/api/pull/1", "switch-next", "project", "copy-url", "pane-next", "browser", "focus-left", "focus-right"]) expect([a, allowedInInbox(a)]).toEqual([a, true]);
-        for (const a of ["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine"]) expect([a, allowedInInbox(a)]).toEqual([a, false]);
+        for (const a of ["terminal", "files", "sysinfo", "processes", "rename", "edit-mine"]) expect([a, allowedInInbox(a)]).toEqual([a, false]);
     });
 });
 

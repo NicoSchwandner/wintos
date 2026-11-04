@@ -100,7 +100,6 @@ function EmptyProject({ tabId }: { tabId: string }) {
     const shelved = state?.shelf?.[tabId]?.length ?? 0;
     const keys: [string, string, () => void][] = [
         ...(shelved ? [["⌥⌘1", shelved > 1 ? `the newest of ${shelved} shelved sessions back (in the notes)` : "the shelved session back (in the notes)", () => runKey("session-1")] as [string, string, () => void]] : []),
-        ["⇧⌘T", "new Claude session", () => runKey("session")],
         ["⌘T", "new terminal", () => runKey("terminal")],
         ["⌘J ⌘K", "another project", () => runKey("switch-next")],
         ["⌘W", "close this project", () => closeProjectTab(tabId, false)],

@@ -1,5 +1,5 @@
 import type { PR } from "../daemon/prs/group";
-import type { AskOption, AskPick, Session } from "../daemon/sessions/reduce";
+import type { AskOption, AskPick } from "../daemon/sessions/reduce";
 import { shownState } from "./sessions";
 import { sessionName, type WintosState } from "./view";
 

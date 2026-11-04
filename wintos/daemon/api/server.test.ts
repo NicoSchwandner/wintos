@@ -70,6 +70,93 @@ describe("wintosd API", () => {
         expect(readFileSync(join(state.projects[0].dir, "project.md"), "utf8")).toContain("units: [x] ABC-41 fields check | [>] ABC-42 phase 1 | [ ] ABC-43 match log");
     });
 
+    test("epics: one is started, a session joins it by name or by id, and leaves it; /state shows both", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/epic", { epic: "route" })).status).toBe(404);
+        const id = await (await post("/epics", { title: "Route documents", short: "Route DO" })).text();
+        expect(id).toBe("route-documents");
+        const named = await post("/blocks/blk-1/epic", { epic: "route do" });
+        expect(await named.text()).toBe("Route documents");
+        let state = await (await fetch(base + "/state")).json();
+        expect(state.epics).toMatchObject([{ id, title: "Route documents", short: "Route DO" }]);
+        expect(state.sessions[0].epic).toBe(id);
+        expect((await post(`/sessions/${prompt.session_id}/epic`, { epic: null })).status).toBe(200);
+        state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].epic).toBeUndefined();
+        expect((await post(`/sessions/${prompt.session_id}/epic`, { epic: "route" })).status).toBe(404);
+        expect((await post("/epics", { title: "a\nb" })).status).toBe(400);
+    });
+
+    test("a refused epic name lists the open ones", async () => {
+        await event(prompt);
+        await post("/epics", { title: "Reviews" });
+        expect(await (await post("/blocks/blk-1/epic", { epic: "coder" })).text()).toBe("no epic matches coder; open epics: Reviews (reviews)");
+    });
+
+    test("a new session beside one in an epic joins it; a review lane joins the epic that claims it", async () => {
+        const route = await (await post("/epics", { title: "Route" })).text();
+        await post("/epics", { title: "Reviews", lane: "review" });
+        await event(prompt);
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: route });
+        await post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { ...prompt, session_id: "beside" } });
+        await post("/events", { tabId: "tab-9", blockId: "blk-9", payload: { ...prompt, session_id: "alone" } });
+        await post("/blocks/blk-9/lane?session=alone", { name: "review", steps: ["Read", "Submit"] });
+        const byId = Object.fromEntries((await (await fetch(base + "/state")).json()).sessions.map((s: { id: string; epic?: string }) => [s.id, s.epic]));
+        expect(byId).toMatchObject({ beside: route, alone: "reviews" });
+    });
+
+    test("a session keeps its epic through its next events, and through the shelf when it is resumed", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await event(prompt);
+        await post("/projects/tab-1/title", { title: "Ledger import", manual: true });
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+        await event({ ...prompt, hook_event_name: "Stop" });
+        const epicNow = async () => (await (await fetch(base + "/state")).json()).sessions.find((s: { id: string }) => s.id === prompt.session_id)?.epic;
+        expect(await epicNow()).toBe(id);
+        await post("/projects/tab-1/shelf", { script: `cd '/w' && claude --resume '${prompt.session_id}'`, label: "x" });
+        // A restart drops the ended session; only the shelf still knows its epic.
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect(await epicNow()).toBeUndefined();
+        await post("/events", { tabId: "tab-1", blockId: "blk-3", payload: { ...prompt, hook_event_name: "SessionStart" } });
+        expect(await epicNow()).toBe(id);
+    });
+
+    test("every prompt carries the session's epic and its mine.md; one without an epic is asked to name it", async () => {
+        const id = await (await post("/epics", { title: "Route documents" })).text();
+        const first = await (await event(prompt)).text();
+        expect(first).toContain("wintos epic <name>");
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+        writeFileSync(join(root, ".epics", id, "mine.md"), "cutover per group");
+        expect(await (await event(prompt)).text()).toContain("[WintOS epic: Route documents]");
+        expect(await (await event(prompt)).text()).toContain("cutover per group");
+    });
+
+    test("time counts for the focused session's epic on the idle tick while the Mac is in use", async () => {
+        vi.useFakeTimers({ now: new Date(2026, 10, 4, 10), toFake: ["Date"] });
+        try {
+            const id = await (await post("/epics", { title: "Route" })).text();
+            await event(prompt);
+            await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+            expect((await post("/focus", { sessionId: prompt.session_id })).status).toBe(200);
+            vi.setSystemTime(new Date(2026, 10, 4, 10, 0, 30));
+            await post("/rhythm/idle", { idleMs: 1000 });
+            vi.setSystemTime(new Date(2026, 10, 4, 10, 1, 0));
+            await post("/rhythm/idle", { idleMs: 10 * 60_000 }); // away: not counted
+            vi.setSystemTime(new Date(2026, 10, 4, 10, 1, 20));
+            await post("/rhythm/idle", { idleMs: 1000 });
+            vi.setSystemTime(new Date(2026, 10, 4, 10, 1, 30));
+            await post("/focus", { sessionId: null }); // the last 10 s, at the last idle reading
+            await post("/focus", { sessionId: null });
+            expect(await (await fetch(base + "/time/month?month=2026-11")).json()).toEqual([{ epic: id, ms: 60_000, sessions: 1, days: 1 }]);
+            expect((await fetch(base + "/time/month?month=nov")).status).toBe(400);
+            expect((await post("/focus", { sessionId: 7 })).status).toBe(400);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     test("`wintos status` sets the session's line, shown in /state", async () => {
         await event(prompt);
         expect((await post("/blocks/blk-1/status", { text: "Walking the test plan" })).status).toBe(200);

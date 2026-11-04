@@ -56,3 +56,18 @@ Do not rewrite it when nothing changed.
     parts.push(`project.md:\n${project.error ? `(unreadable: ${project.error})` : project.body ?? ""}`);
     return parts.join("\n\n");
 }
+
+// The epic a session is a step of, sent with every prompt beside the project's text. Without
+// one the session is asked to say which, once it knows the task. The epic's mine.md is the
+// developer's notes for the whole epic: every session in it reads the same file.
+export function epicInjection(epic: { id: string; title: string } | undefined, open: { id: string; title: string }[], mine?: { text: string; diff?: string }): string {
+    const list = open.map((e) => `${e.title} (${e.id})`).join(", ");
+    if (!epic)
+        return open.length
+            ? `[WintOS] This session belongs to no epic yet. Once you know what the work is for, run \`wintos epic <name>\` with one of: ${list}. Run \`wintos epic none\` if it belongs to none.`
+            : "";
+    const parts = [`[WintOS epic: ${epic.title}] This session is one step of that epic. If it belongs to another, run \`wintos epic <name>\`${open.length > 1 ? ` (${list})` : ""}.`];
+    if (mine?.diff) parts.push(`The epic's mine.md changed since your last prompt:\n${mine.diff}`);
+    if (mine?.text.trim()) parts.push(`The epic's mine.md (the developer's; read it, never write it):\n${mine.text}`);
+    return parts.join("\n\n");
+}

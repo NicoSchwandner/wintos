@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { injection } from "./inject";
+import { epicInjection, injection } from "./inject";
 
 describe("injection", () => {
     test("an unreadable note asks for a repair, never for a title (which would overwrite it)", () => {
@@ -34,4 +34,21 @@ describe("injection", () => {
     test("no project at all asks for a title", () => {
         expect(injection(undefined, { text: "mine.md is empty" })).toContain('wintos title "');
     });
+});
+
+describe("epicInjection", () => {
+    const open = [{ id: "route", title: "Route documents" }, { id: "reviews", title: "Reviews" }];
+    test("a session without an epic is asked which, from the open ones", () => {
+        const t = epicInjection(undefined, open);
+        expect(t).toContain("wintos epic <name>");
+        expect(t).toContain("Route documents (route), Reviews (reviews)");
+    });
+    test("with no epics at all, nothing is asked", () => expect(epicInjection(undefined, [])).toBe(""));
+    test("in an epic: its title, how to move, and its mine.md with what changed", () => {
+        const t = epicInjection(open[0], open, { text: "cutover per group", diff: "+ cutover per group" });
+        expect(t).toContain("[WintOS epic: Route documents]");
+        expect(t).toContain("changed since your last prompt:\n+ cutover per group");
+        expect(t).toContain("mine.md (the developer's; read it, never write it):\ncutover per group");
+    });
+    test("an empty mine.md is left out", () => expect(epicInjection(open[0], open, { text: "  " })).not.toContain("mine.md"));
 });

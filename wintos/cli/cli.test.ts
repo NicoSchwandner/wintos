@@ -434,6 +434,25 @@ describe("wintos lane and step", () => {
             { url: "/blocks/blk-1/units?session=s-1", body: { done: "ABC-42 phase" } },
         ]);
     });
+    test("epic puts the session in an epic by name, or in none; it prints the epic back", async () => {
+        const d = await fakeDaemon("Route documents");
+        expect((await cli(["epic", "route", "do"], d.port)).trim()).toBe("epic: Route documents");
+        await cli(["epic", "none"], d.port);
+        expect(d.seen).toEqual([
+            { url: "/blocks/blk-1/epic?session=s-1", body: { epic: "route do" } },
+            { url: "/blocks/blk-1/epic?session=s-1", body: { epic: null } },
+        ]);
+    });
+    test("epic says why when wintosd refuses it", async () => {
+        const seen: unknown[] = [];
+        const srv = require("http").createServer((req: any, res: any) => (seen.push(req.url), req.resume(), req.on("end", () => ((res.statusCode = 404), res.end("no epic matches coder; open epics: Route documents (route)")))));
+        await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+        const err = await new Promise<string>((resolve) =>
+            require("child_process").execFile(CLI, ["epic", "coder"], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(srv.address().port) } }, (_e: unknown, _so: string, se: string) => resolve(se))
+        );
+        srv.close();
+        expect(err.trim()).toBe("wintos: no epic matches coder; open epics: Route documents (route)");
+    });
     test("todo lists the step's to-dos; todo done ticks one", async () => {
         const d = await fakeDaemon("");
         expect((await cli(["todo", "Narrow list", "Name search"], d.port)).trim()).toBe("todo: Narrow list · Name search");

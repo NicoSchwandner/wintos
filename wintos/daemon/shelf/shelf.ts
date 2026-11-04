@@ -7,8 +7,9 @@ import type { SessionName } from "../sessions/reduce";
 // session's status line then), the gist of its last recap, label (its first prompt).
 // prs: the PRs it owned when shelved; it keeps them, whoever touches them later.
 // named: the session's own name when shelved (`wintos name`, ⌥⌘N), which comes back with it.
+// epic: the epic it was a step of, which it rejoins when resumed.
 // touched: PRs it worked on that another session owns ("also in").
-export type Shelved = { sessionId: string; script: string; label: string; title?: string; name?: string; named?: SessionName; gist?: string; prs?: string[]; touched?: string[]; at: number };
+export type Shelved = { sessionId: string; script: string; label: string; title?: string; name?: string; named?: SessionName; epic?: string; gist?: string; prs?: string[]; touched?: string[]; at: number };
 export const shelvedName = (s: Shelved) => s.named?.text ?? s.title ?? s.name ?? s.gist ?? s.label;
 
 export const withTitle = (shelf: Shelf, sessionId: string, title: string): Shelf =>

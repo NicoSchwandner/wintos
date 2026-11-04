@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { acceptSuggestedName, askSession, attachSession, readTurn, endSessions, finishSession, nameSession, renameSession, titleSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, liveSessionsIn } from "./reduce";
+import { acceptSuggestedName, askSession, attachSession, readTurn, endSessions, finishSession, nameSession, renameSession, titleSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setEpic, setLane, setStatus, setStep, setTodo, tickTodo, liveSessionsIn } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -434,5 +434,18 @@ describe("a pane attached to a session that runs in the background service", () 
         expect(attachSession(new Map(), "nobody", "t", "b").size).toBe(0);
         const ended = new Map([["x", { id: "x", tabId: "t", blockId: "b", state: "ended", since: 0, lastAt: 0 } as Session]]);
         expect(attachSession(ended, "x", "t", "c").get("x")?.blockId).toBe("b");
+    });
+});
+
+describe("setEpic", () => {
+    const one = new Map([["s1", { id: "s1", tabId: "t", blockId: "b", state: "idle", since: 0, lastAt: 0 } as Session]]);
+    test("puts the session in the epic, and out of it again", () => {
+        const set = setEpic(one, "s1", "route");
+        expect(set.get("s1")!.epic).toBe("route");
+        expect("epic" in setEpic(set, "s1", undefined).get("s1")!).toBe(false);
+    });
+    test("no such session, or no change: the same map", () => {
+        expect(setEpic(one, "nope", "route")).toBe(one);
+        expect(setEpic(one, "s1", undefined)).toBe(one);
     });
 });

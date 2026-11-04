@@ -4,7 +4,11 @@ import http from "http";
 import type { AddressInfo } from "net";
 import { basename, dirname, join } from "path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { injection } from "../inject";
+import { epicInjection, injection } from "../inject";
+import { EpicStore, EPIC_TITLE_MAX, findEpic, SHORT_MAX } from "../epics/epics";
+import { impliedEpic } from "../epics/assign";
+import { addTime, monthByEpic, type TimeLog } from "../epics/time";
+import { lineDiff } from "../projects/diff";
 import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
@@ -21,11 +25,11 @@ import { reassignPrs, touchPrs } from "../prs/owners";
 import { groupOf, type DonePr, type PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
-import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
+import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setEpic, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askCard, askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { trail } from "../sessions/trail";
 import { lastReply, reentry } from "../sessions/reentry";
-import { prompted, snooze, startBreak, tick, type Rhythm } from "../rhythm/rhythm";
+import { AWAY_MS, prompted, snooze, startBreak, tick, type Rhythm } from "../rhythm/rhythm";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
 import { fetchDone, unlisted } from "../prs/done";
@@ -52,8 +56,10 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
+    // Beside the projects in main.ts; a hidden folder in them by default, which the project store skips.
+    const epics = new EpicStore(opts.epicsRoot ?? join(opts.root, ".epics"));
     // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
     const factsOf = (ids: string[], day: string) => {
         const gh = ghData();
@@ -105,6 +111,39 @@ export async function startServer(opts: { root: string; port: number; host?: str
         for (const line of trail(logged, sessions, why, (t) => store.byTab(t)?.title, always)) console.log(`[wintosd] ${line}`);
         logged = sessions;
         writeFileSync(sessionFile, JSON.stringify([...sessions.values()]));
+    };
+    // Time at each epic (epics/time.ts): the session whose pane has focus in WintOS (POST /focus),
+    // counted on the idle tick while the Mac is in use.
+    const timeFile = join(opts.root, ".time.json");
+    let timeLog = readJson<TimeLog>(timeFile, {});
+    let focused: { sessionId: string; since: number } | undefined;
+    let lastIdleMs = 0;
+    const countTime = (now: number, idleMs: number) => {
+        if (!focused) return;
+        if (idleMs < AWAY_MS) timeLog = addTime(timeLog, localDay(now), focused.sessionId, sessions.get(focused.sessionId)?.epic, now - focused.since);
+        focused = { ...focused, since: now };
+        writeFileSync(timeFile, JSON.stringify(timeLog));
+    };
+    // A session nobody put in an epic takes the one beside it, or its lane's (epics/assign.ts).
+    const placeInEpic = (sessionId: string) => {
+        const s = sessions.get(sessionId);
+        const epic = s && !s.epic ? impliedEpic(s, [...sessions.values()], epics.list()) : undefined;
+        if (epic) sessions = setEpic(sessions, sessionId, epic);
+    };
+    const openEpics = () => epics.list().filter((e) => !e.done).map(({ id, title }) => ({ id, title }));
+    // Each session sees the epic's mine.md change once, as for a project's (ProjectStore.mineDiff).
+    const lastEpicMine = new Map<string, string>();
+    const epicMineDiff = (epicId: string, sessionId: string) => {
+        const text = epics.mine(epicId)?.text ?? "";
+        const key = `${epicId}\u0000${sessionId}`;
+        const before = lastEpicMine.get(key);
+        lastEpicMine.set(key, text);
+        return before === undefined || before === text ? { text } : { text, diff: lineDiff(before, text) };
+    };
+    const epicText = (sessionId: string) => {
+        const e = sessions.get(sessionId)?.epic;
+        const epic = e ? epics.byId(e) : undefined;
+        return epicInjection(epic && { id: epic.id, title: epic.title }, openEpics(), epic && epicMineDiff(epic.id, sessionId));
     };
     // When the developer last looked at each project: a reply after that is unread.
     const seenFile = join(opts.root, ".seen.json");
@@ -195,7 +234,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const owned = sessions.get(sessionId)?.prs;
         const given = sessions.get(sessionId)?.name;
         const touched = sessions.get(sessionId)?.touched;
-        const item: Shelved = { sessionId, script, label: label ?? gist ?? "session", ...(name ? { name } : {}), ...(given ? { named: given } : {}), ...(touched?.length ? { touched } : {}), gist, ...(owned?.length ? { prs: owned } : {}), at: Date.now() };
+        const epic = sessions.get(sessionId)?.epic;
+        const item: Shelved = { sessionId, script, label: label ?? gist ?? "session", ...(name ? { name } : {}), ...(given ? { named: given } : {}), ...(epic ? { epic } : {}), ...(touched?.length ? { touched } : {}), gist, ...(owned?.length ? { prs: owned } : {}), at: Date.now() };
         saveShelf(shelve(shelf, basename(p.dir), item, 14));
         titleShelved(item, p.title);
         return true;
@@ -274,6 +314,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         wakes,
         sessions: [...sessions.values()],
         projects: store.list().map(({ body: _body, ...p }) => p),
+        epics: epics.list().map(({ body: _body, ...e }) => e),
         plugins: runner.results,
         donePrs,
         pluginNames: runner.names,
@@ -418,6 +459,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 // Shelved before the reduce drops them, while their status and PRs are still on hand.
                 for (const l of left) shelveLive(l);
                 sessions = reduceSession(sessions, ev, Date.now());
+                placeInEpic(p.session_id);
                 const typed = typeof p.prompt === "string" ? ` (you sent ${p.prompt.length} characters)` : "";
                 const hook = `hook ${p.hook_event_name}${p.tool_name ? ` ${p.tool_name}` : ""}${p.kind === "bg" ? " from the background service" : ""}${typed}`;
                 // Running again: started or prompted. Closing its pane ends it (SessionEnd) on the way onto the shelf.
@@ -429,6 +471,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     // Its name comes back with it, as whoever gave it.
                     const back = sessions.get(p.session_id);
                     if (shelved.named && back && !back.name) sessions = new Map(sessions).set(back.id, { ...back, name: shelved.named });
+                    const home = sessions.get(p.session_id);
+                    if (shelved.epic && home && !home.epic) sessions = setEpic(sessions, home.id, shelved.epic);
                     const again = sessions.get(p.session_id);
                     const union = (a: string[] = [], b: string[] = []) => [...new Set([...a, ...b])];
                     if (again) sessions = new Map(sessions).set(again.id, { ...again, prs: union(again.prs, shelved.prs), touched: union(again.touched, shelved.touched) });
@@ -445,7 +489,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (p.hook_event_name === "UserPromptSubmit") markSeen(p.session_id); // you read it to answer it
                 if (p.hook_event_name === "UserPromptSubmit" && typeof p.prompt === "string" && p.kind !== "bg") setRhythm(prompted(rhythm, Date.now(), p.prompt.length));
                 const text =
-                    p.hook_event_name === "UserPromptSubmit" ? injection(store.byTab(ev.tabId), store.mineDiff(ev.tabId, p.session_id)) : "";
+                    p.hook_event_name === "UserPromptSubmit" ? [injection(store.byTab(ev.tabId), store.mineDiff(ev.tabId, p.session_id)), epicText(p.session_id)].filter(Boolean).join("\n\n") : "";
                 broadcast();
                 return send(res, 200, text);
             }
@@ -643,7 +687,52 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (typeof b?.idleMs !== "number" || !(b.idleMs >= 0)) return send(res, 400, "need idleMs, a number");
                 const now = Date.now();
                 setRhythm(tick(rhythm, b.idleMs, now, localDay(now)));
+                lastIdleMs = b.idleMs;
+                countTime(now, b.idleMs);
                 return send(res, 200, "");
+            }
+            // The UI, whenever the focused pane or the window's focus changes: the session you are at, or none.
+            if (req.method === "POST" && url.pathname === "/focus") {
+                const b = (await body(req)) as { sessionId?: unknown };
+                if (b?.sessionId !== null && !isSafe(b?.sessionId)) return send(res, 400, "need sessionId, a session's id or null");
+                // Each visible window reports every few seconds: the same session again changes nothing.
+                if (focused?.sessionId === b.sessionId || (!focused && b.sessionId === null)) return send(res, 200, "");
+                const now = Date.now();
+                if (focused) countTime(now, lastIdleMs);
+                focused = typeof b.sessionId === "string" ? { sessionId: b.sessionId, since: now } : undefined;
+                return send(res, 200, "");
+            }
+            if (req.method === "GET" && url.pathname === "/time/month") {
+                const month = url.searchParams.get("month") ?? "";
+                if (!/^\d{4}-\d{2}$/.test(month)) return send(res, 400, "need month=YYYY-MM");
+                return json(res, monthByEpic(timeLog, month));
+            }
+            if (req.method === "POST" && url.pathname === "/epics") {
+                const b = (await body(req)) as { title?: unknown; short?: unknown; lane?: unknown };
+                const title = typeof b?.title === "string" ? b.title.trim() : "";
+                const short = typeof b?.short === "string" ? b.short.trim() : "";
+                if (!title || !isSafe(title) || title.length > EPIC_TITLE_MAX || (short && (!isSafe(short) || short.length > SHORT_MAX)) || (b.lane !== undefined && !isSafe(b.lane)))
+                    return send(res, 400, `need a one-line title up to ${EPIC_TITLE_MAX} characters, and an optional short name up to ${SHORT_MAX}`);
+                const e = epics.create(title, { ...(short ? { short } : {}), ...(typeof b.lane === "string" ? { lane: b.lane } : {}) });
+                broadcast();
+                return send(res, 200, e.id);
+            }
+            // `wintos epic <name>` names it from inside its pane; the UI (⌥⌘E) by the session's id.
+            const epicOfBlock = /^\/blocks\/([^/]+)\/epic$/.exec(url.pathname);
+            const epicOfSession = /^\/sessions\/([^/]+)\/epic$/.exec(url.pathname);
+            if (req.method === "POST" && (epicOfBlock || epicOfSession)) {
+                const b = (await body(req)) as { epic?: unknown };
+                if (b?.epic !== null && (typeof b?.epic !== "string" || !b.epic.trim() || !isSafe(b.epic))) return send(res, 400, "need epic: a name, or null for none");
+                const s = epicOfBlock ? liveIn(sessions, decodeURIComponent(epicOfBlock[1]), sid) : sessions.get(decodeURIComponent(epicOfSession![1]));
+                if (!s) return send(res, 409, "no session in this pane");
+                const open = epics.list().filter((e) => !e.done);
+                const epic = b.epic === null ? undefined : epicOfBlock ? findEpic(open, b.epic as string) : open.find((e) => e.id === b.epic);
+                if (b.epic !== null && !epic)
+                    return send(res, 404, `no epic matches ${b.epic}; ${open.length ? `open epics: ${open.map((e) => `${e.title} (${e.id})`).join(", ")}` : "there are no epics yet"}`);
+                sessions = setEpic(sessions, s.id, epic?.id);
+                saveSessions();
+                broadcast();
+                return send(res, 200, epic?.title ?? "none");
             }
             if (req.method === "POST" && url.pathname === "/rhythm/break") return setRhythm(startBreak(rhythm, Date.now())), send(res, 200, "");
             if (req.method === "POST" && url.pathname === "/rhythm/snooze") {
@@ -754,6 +843,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const ok = isSafe(blockId) && isSafe(b?.name) && b.name.length <= MAX_STEP && steps.length > 0 && steps.length <= MAX_STEPS && steps.every((s) => s && isSafe(s) && s.length <= MAX_STEP);
                 if (!ok) return send(res, 400, `need a lane name and 1-${MAX_STEPS} one-line steps up to ${MAX_STEP} characters`);
                 sessions = setLane(sessions, blockId, b.name as string, steps, sid);
+                const laned = liveIn(sessions, blockId, sid);
+                if (laned) placeInEpic(laned.id);
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");

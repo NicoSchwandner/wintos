@@ -62,6 +62,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:c", "copy-url"],
     ["Option:Cmd:c{KeyP}", "park-session"],
     ["Option:Cmd:c{KeyN}", "name-session"],
+    ["Option:Cmd:c{KeyE}", "epic"],
     ["Option:Cmd:c{KeyG}", "open-pane-pr"],
     ["Shift:Cmd:j", "join-meeting"],
     ["Shift:Cmd:y", "day"],
@@ -167,7 +168,7 @@ export function runKey(action: string): boolean {
 // The Inbox holds pages and nothing else: a terminal started there would belong to no project
 // and never show in the sidebar, Needs you or ⌃⇥.
 const PANE_MAKERS = new Set(["terminal", "sysinfo", "processes", "open-page"]);
-const NOT_IN_INBOX = new Set(["terminal", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session"]);
+const NOT_IN_INBOX = new Set(["terminal", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session", "epic"]);
 export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
 
@@ -187,6 +188,7 @@ export function runAction(action: string): void {
     if (action === "rename") return globalStore.set(renamingAtom, globalStore.get(atoms.staticTabId));
     if (action === "palette" || action === "keymap") return toggleOverlay(action);
     if (action === "name-session") return focusedSession() ? toggleOverlay("name-session") : undefined;
+    if (action === "epic") return focusedSession() ? toggleOverlay("epic") : undefined;
     // The meeting on now, else the next one, in the system browser: a call wants the camera.
     if (action === "join-meeting") {
         const m = meetingToJoin(Date.now());

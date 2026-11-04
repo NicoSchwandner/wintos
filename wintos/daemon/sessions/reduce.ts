@@ -36,6 +36,7 @@ export type Session = {
     status?: { text: string; at: number }; // its own line on what it is doing (`wintos status`)
     name?: SessionName;
     lane?: Lane; // the process it follows and where it is in it (`wintos lane`, `wintos step`)
+    epic?: string; // the epic it is a step of (daemon/epics), by id
     turnEndedAt?: number; // the last Stop: a reply the developer may not have read yet
     outcome?: { text: string; at: number }; // how the last turn with text ended: its first line of prose
     promptAt?: number; // the last prompt: in a pane running two sessions, the one you talk to
@@ -163,6 +164,7 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     if (prev?.touched) session.touched = prev.touched;
     if (prev?.status) session.status = prev.status;
     if (prev?.name) session.name = prev.name;
+    if (prev?.epic) session.epic = prev.epic;
     const said = name === "Stop" ? outcomeOf(ev.payload.last_assistant_message) : undefined;
     const outcome = said ? { text: said, at: now } : prev?.outcome;
     if (outcome) session.outcome = outcome;
@@ -283,6 +285,14 @@ export function setLane(sessions: Map<string, Session>, blockId: string, name: s
     const live = liveIn(sessions, blockId, sessionId);
     if (!live) return sessions;
     return new Map(sessions).set(live.id, { ...live, lane: { name, steps, at: 0 } });
+}
+
+// epic undefined: the session belongs to no epic.
+export function setEpic(sessions: Map<string, Session>, sessionId: string, epic: string | undefined): Map<string, Session> {
+    const s = sessions.get(sessionId);
+    if (!s || s.epic === epic) return sessions;
+    const { epic: _, ...rest } = s;
+    return new Map(sessions).set(sessionId, epic ? { ...rest, epic } : rest);
 }
 
 // undefined: no such step in the session's lane, so the caller can say so.

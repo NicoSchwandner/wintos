@@ -770,6 +770,28 @@ await scenario("37 · wintos unit: the project's units in the side column, the c
     if (!(await evalIn(t, `document.querySelector("[data-wintos=unit-of]")?.innerText === "unit 2/3"`))) throw new Error("no unit 2/3 in the header");
 });
 
+await scenario("38 · epics: a session's epic heads its pane and marks its row; ⌥⌘E picks another by its digit", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    // A pane of its own: an earlier scenario's session may still sit in the first one.
+    const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    await press(t, "d", { mods: ["meta"] });
+    const pane = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
+    const a = await (await api("/epics", { title: "E2E archive", short: "Archive" })).text();
+    const b = await (await api("/epics", { title: "E2E release" })).text();
+    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-epic", hook_event_name: "UserPromptSubmit", prompt: "e2e epic" } });
+    await api("/sessions/e2e-epic/epic", { epic: a });
+    await until("the epic over the pane", () => evalIn(t, `document.querySelector("[data-wintos=session-header][data-epic='${a}']")?.innerText.includes("ARCHIVE")`));
+    await until("the avatar on its row", () => evalIn(t, `!!document.querySelector("[data-tabid='${tabId}'] [data-wintos=epic-avatar]")`));
+    await press(t, "e", { code: "KeyE", mods: ["meta", "alt"] });
+    await until("the epic picker", () => evalIn(t, `!!document.querySelector("[data-wintos=epic-picker]")`));
+    const digit = await evalIn(t, `document.querySelector("[data-wintos=epic-picker] [data-epic='${b}']")?.dataset.key`);
+    await press(t, digit, { code: `Digit${digit}` });
+    await until("the session in the other epic", async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((s) => s.id === "e2e-epic")?.epic === b);
+    await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(pane)}).id)`);
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

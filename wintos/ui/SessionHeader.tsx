@@ -13,6 +13,8 @@ import { wakesWhen } from "../daemon/wakes/wakes";
 import { liveSubagents, type Lane } from "../daemon/sessions/reduce";
 import { shownState } from "./sessions";
 import { WhereWasI } from "./WhereWasI";
+import { EpicAvatar } from "./EpicAvatar";
+import { lookOf, NO_EPIC, shortName } from "./epicLook";
 import { prRef, relTime, sessionHeader, sessionName, urgentPr, type PrChip, type PrStatus } from "./view";
 
 
@@ -33,8 +35,18 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     const units = state?.projects.find((p) => p.id === s.tabId)?.units ?? [];
     const at = units.findIndex((u) => u.state === "current");
     const unitAt = at >= 0 ? { i: at + 1, n: units.length, name: units[at].name } : undefined;
+    const epic = s.epic ? state?.epics?.find((e) => e.id === s.epic) : undefined;
+    const look = epic ? lookOf(epic) : NO_EPIC;
     return (
-        <div data-wintos="session-header" style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", gap: 5, padding: "7px 10px 8px 12px", borderBottom: `1px solid ${T.border}`, fontFamily: T.ui, fontSize: 12, minWidth: 0 }}>
+        <div data-wintos="session-header" data-epic={epic?.id ?? ""} style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", gap: 5, padding: "7px 10px 8px 12px", borderTop: epic ? `3px solid ${look.fg}` : undefined, borderBottom: `1px solid ${T.border}`, background: epic ? `linear-gradient(90deg, ${look.bg} 0%, transparent 60%)` : undefined, fontFamily: T.ui, fontSize: 12, minWidth: 0 }}>
+            <button type="button" data-wintos="session-epic" data-key="⌥⌘E" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("epic")} title={epic?.title ?? "put this session in an epic"} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, padding: 0, background: "transparent", border: "none", cursor: "pointer", minWidth: 0, maxWidth: "100%" }}>
+                <EpicAvatar look={look} size={18} />
+                {epic ? (
+                    <span style={{ fontFamily: T.mono, fontSize: 10.5, letterSpacing: "0.06em", textTransform: "uppercase", color: look.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(epic)}</span>
+                ) : (
+                    <Key k="⌥⌘E" label="no epic yet" />
+                )}
+            </button>
             {h.tone && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: h.tone === "brick" ? T.brick : T.apricot }} />}
             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, whiteSpace: "nowrap" }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: SESSION_DOT[shown] }}>

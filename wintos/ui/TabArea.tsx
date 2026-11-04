@@ -5,6 +5,8 @@ import { atom, useAtomValue } from "jotai";
 import { memo, useEffect, useMemo } from "react";
 import { ConfirmClose } from "./ConfirmClose";
 import { NameSession } from "./NameSession";
+import { EpicPicker } from "./EpicPicker";
+import { useFocusReport } from "./useFocusReport";
 import "./theme.css";
 import { Key } from "./Key";
 import { Keymap } from "./Keymap";
@@ -34,6 +36,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
     const overlay = useAtomValue(overlayAtom);
     const names = useTabNames();
     useSeenReporter(tabId);
+    useFocusReport();
     const tab = useAtomValue(useMemo(() => getWaveObjectAtom<Tab>(makeORef("tab", tabId)), [tabId]));
     // The last pane closing leaves blockids null, not [].
     const empty = !!tab && !tab.blockids?.length;
@@ -74,6 +77,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
             {overlay === "keymap" && <Keymap />}
             {overlay === "confirm-close" && <ConfirmClose />}
             {overlay === "name-session" && <NameSession />}
+            {overlay === "epic" && <EpicPicker />}
             <MoveNudge />
             <UndoToast />
             <KeyBadges />

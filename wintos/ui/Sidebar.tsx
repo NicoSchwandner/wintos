@@ -32,6 +32,8 @@ import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
+import { EpicAvatar } from "./EpicAvatar";
+import { lookOf, type Look } from "./epicLook";
 
 const BAND_STYLE = {
     needs: { label: "Your move", color: T.apricot },
@@ -146,8 +148,12 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     };
     const renderRow = (row: Row) => {
         const v = model!.views[row.tabId];
+        // The project's epic, until rows are sessions: its newest session that has one.
+        const epicId = [...row.sessions].sort((a, b) => b.lastAt - a.lastAt).find((s) => s.epic)?.epic;
+        const epic = epicId ? state?.epics?.find((e) => e.id === epicId) : undefined;
         const props = {
             key: row.tabId,
+            look: epic ? lookOf(epic) : undefined,
             tabId: row.tabId,
             v,
             active: row.tabId === activeTabId && !isPage(mainView),
@@ -322,6 +328,7 @@ type RowProps = {
     onMenu: (e: React.MouseEvent) => void;
     onRename: (title: string | null) => void;
     onClose?: () => void;
+    look?: Look;
 };
 
 function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming" | "onRename"> & { style: React.CSSProperties }) {
@@ -384,7 +391,8 @@ function CardRow(p: RowProps) {
             }}
         >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.005em", color: p.active ? T.emphasis : T.title, fontFamily: T.ui }} />
+                {p.look && <EpicAvatar look={p.look} size={22} />}
+                <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 14, fontWeight: 600, letterSpacing: "-0.005em", color: p.active ? T.emphasis : T.title, fontFamily: T.ui }} />
                 <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                     {p.active && <WalkKeys />}
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>{v.age}</span>
@@ -424,6 +432,7 @@ function QuietRow(p: RowProps & { dot?: string }) {
             }}
         >
             {/* The title gets the room; the note is capped and cut, so neither wraps. */}
+            {p.look && <EpicAvatar look={p.look} size={18} />}
             {p.dot && <span style={{ width: 6, height: 6, borderRadius: "50%", background: p.dot, flexShrink: 0, marginRight: -2 }} />}
             <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} />
             {p.active && <WalkKeys />}

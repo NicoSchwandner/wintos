@@ -4,6 +4,7 @@ import type { Day } from "../daemon/journal/journal";
 import type { KeyStats } from "../daemon/keyboard/keyboard";
 import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
+import type { EpicFile } from "../daemon/epics/epics";
 import { ageLabel, byUrgency, GROUPS, groupOf, isSnoozed, isStacked, projectPrs, qualifier, type DonePr, type Group, type PR, type Snoozes } from "../daemon/prs/group";
 import { fixNote } from "./prs";
 import { liveSessionIn, liveSessionsIn, type Session } from "../daemon/sessions/reduce";
@@ -11,7 +12,9 @@ import { shelvedName, type Shelved } from "../daemon/shelf/shelf";
 import type { FixerState } from "../daemon/fixer/runner";
 import type { HeadsUp } from "../daemon/headsups/headsups";
 
-export type WintosState = { now: number; sessions: Session[]; projects: Project[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]>; fixer?: FixerState; repoNames?: Record<string, string>; wakes?: Wakes; headsUps?: Record<string, HeadsUp[]>; headsUpProblem?: string; donePrs?: Record<string, DonePr>; update?: { behind: number }; rhythm?: Rhythm & { everyMs: number }; termCols?: number };
+// An epic as the UI sees it: epic.md's front matter and where its folder is.
+export type EpicView = Omit<EpicFile, "body">;
+export type WintosState = { now: number; sessions: Session[]; projects: Project[]; epics?: EpicView[]; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]>; fixer?: FixerState; repoNames?: Record<string, string>; wakes?: Wakes; headsUps?: Record<string, HeadsUp[]>; headsUpProblem?: string; donePrs?: Record<string, DonePr>; update?: { behind: number }; rhythm?: Rhythm & { everyMs: number }; termCols?: number };
 export type Tone = "apricot" | "blue" | "brick" | "secondary";
 // done: an errand past its finish line, what reached it ("PR up"); the row says ⇧⌘W closes it.
 export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string };

@@ -15,6 +15,7 @@
 #   wintos step <step> [note…]         where in it the session is now (used by Claude)
 #   wintos unit <unit>…                the project's units of work (tickets, phases), in order (used by Claude)
 #   wintos unit start|done <unit>      the one worked on now, or one finished; by its name or its start
+#   wintos epic <name> | none          the epic this session is a step of, by its id, title or their start (used by Claude)
 #   wintos hooks install|uninstall [<claude config dir>]
 #                                      wire the hook into that Claude Code config (default ~/.claude);
 #                                      one account each, named explicitly
@@ -163,6 +164,18 @@ unit)
     list=$(printf '%s' "$body" | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/units$SESSION_Q") ||
         die "wintosd refused it: no such unit (wintos unit <unit>… sets the list), a unit with | in it, a project without a title yet, or not reachable on port $PORT"
     echo "units: $list"
+    ;;
+epic)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos epic <name> | wintos epic none"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    if [ "$*" = none ]; then body='{"epic":null}'; else body=$(jq -n --arg e "$*" '{epic: $e}'); fi
+    out=$(printf '%s' "$body" | curl -s -m 2 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/epic$SESSION_Q") ||
+        die "wintosd not reachable on port $PORT"
+    code=$(printf '%s' "$out" | tail -n 1)
+    text=$(printf '%s' "$out" | sed '$d')
+    [ "$code" = 200 ] || die "$text"
+    echo "epic: $text"
     ;;
 todo)
     shift

@@ -585,7 +585,7 @@ await scenario("23 · a page that closes itself (a sign-in popup) closes its pan
     if (!(await evalIn(t, `!!document.querySelector("[data-wintos=sidebar-list]")`))) throw new Error("the window stopped rendering after the page closed itself");
 });
 
-await scenario("24 · a session proposes its name, ⌥⌘N renames it for good, and its next name waits as a suggestion", async () => {
+await scenario("24 · a session proposes its name, ⌘R renames it for good, and its next name waits as a suggestion", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const blockId = await until("a focused pane", () => evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`));
@@ -594,7 +594,7 @@ await scenario("24 · a session proposes its name, ⌥⌘N renames it for good, 
     await post("/events", { tabId, blockId, payload: { session_id: "e2e-name", hook_event_name: "UserPromptSubmit", prompt: "e2e name" } });
     await post(`/blocks/${blockId}/name?session=e2e-name`, { text: "Retention backfill review" });
     await until("the proposed name in its header, with its minute", () => evalIn(t, `[...document.querySelectorAll("[data-wintos=session-header]")].some((h) => h.innerText.includes("Retention backfill review") && h.innerText.includes("change the name"))`));
-    await press(t, "n", { code: "KeyN", keyCode: 78, mods: ["alt", "meta"] });
+    await press(t, "r", { code: "KeyR", keyCode: 82, mods: ["meta"] });
     await until("the name field", () => evalIn(t, `!!document.querySelector("[data-wintos=name-session] input")`));
     await cdpFocus(t, "[data-wintos=name-session] input");
     await evalIn(t, `document.querySelector("[data-wintos=name-session] input").select()`);
@@ -679,6 +679,8 @@ await scenario("28 · ⌃⇥ held walks to the sidebar's top project, and only t
     let t = await toProject();
     const from = active();
     await press(t, "n", { mods: ["meta"] });
+    await until("the new-step sheet", () => evalIn(t, `!!document.querySelector("[data-wintos=new-step]")`));
+    await press(t, "Enter", { code: "Enter", keyCode: 13 });
     await until("a new project in front", () => active() !== from);
     t = await visible();
     const here = active();
@@ -808,6 +810,37 @@ await scenario("39 · each session is a row of its own; two in one view share it
     await evalIn(t, `${row("e2e-row-a")}.click()`);
     await until("the first session's pane focused", async () => (await focused()) === first);
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(second)}).id)`);
+});
+
+await scenario("40 · ⌥⌘T takes a session out into a view of its own: its pane closes here and resumes in a new tab; at work, it stays", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    await press(t, "d", { mods: ["meta"] });
+    const pane = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
+    const resumable = () => sql(`select count(*) from db_block where data->>'$.meta."cmd:initscript"' like '%e2e-move%'`) === "1";
+    await until("a terminal", () => evalIn(t, `!!document.querySelector("[data-blockid='${pane}'] .xterm-helper-textarea")`));
+    await sleep(2500);
+    for (let i = 0; i < 4 && !resumable(); i++) {
+        await cdpFocus(t, `[data-blockid='${pane}'] .xterm-helper-textarea`);
+        await cdp(t, "Input.insertText", { text: `wsh setmeta -b this "cmd:initscript=cd '/tmp' && claude --resume 'e2e-move'"` });
+        await press(t, "Enter", { keyCode: 13 });
+        await until("the resume command on the pane", resumable, 4000).catch(() => {});
+    }
+    await until("the resume command on the pane", resumable, 1000);
+    const post = (hook_event_name) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId: pane, payload: { session_id: "e2e-move", hook_event_name, prompt: "e2e move" } }) });
+    await post("UserPromptSubmit");
+    await sleep(800);
+    await press(t, "t", { code: "KeyT", mods: ["meta", "alt"] });
+    await until("the refusal while it works", () => evalIn(t, `!!document.querySelector("[data-wintos=move-refused]")`));
+    await press(t, "Escape", { code: "Escape", keyCode: 27 });
+    await post("Stop");
+    await sleep(800);
+    const tabs = () => Number(sql(`select count(*) from db_tab`));
+    const before = tabs();
+    await press(t, "t", { code: "KeyT", mods: ["meta", "alt"] });
+    await until("a new tab resuming it", () => tabs() > before && sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j, db_block b where t.oid!='${tabId}' and b.oid=j.value and b.data->>'$.meta."cmd:initscript"' like '%e2e-move%'`) === "1", 20000);
+    await until("its pane gone from here", () => sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j where t.oid='${tabId}' and j.value='${pane}'`) === "0");
 });
 
 await scenario("clean-up · the panes this run opened are closed", async () => {

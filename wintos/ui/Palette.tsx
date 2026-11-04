@@ -255,7 +255,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     // The key's own path (runKey), so an action does from here exactly what its key does.
     const action = (id: string, t: string, hint: string, a: string): PaletteItem => ({ id: `a:${id}`, kind: "action", title: t, hint, run: () => void runKey(a) });
     out.push(action("terminal", `New terminal in ${here}`, "⌘T", "terminal"));
-    out.push(action("project", "New project", "⌘N", "project"));
+    out.push(action("project", "New step: its epic and name, in a view of its own", "⌘N", "new-step"));
     out.push(action("rename", `Rename ${here}`, "⌘R", "rename"));
     out.push(action("prs", "PRs need attention", "⇧⌘G", "prs"));
     for (const p of pluginPanels(state)) out.push(action(`panel:${p.name}`, p.title, "⇧⌘O", `panel:${p.name}`));
@@ -267,6 +267,8 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     out.push(action("mine", `Edit mine.md of ${here}`, "⌘E", "edit-mine"));
     out.push(action("park", "Park the waiting session: nothing for you", "⌥⌘P", "park-session"));
     out.push(action("epic", "Put this session in an epic, or start one", "⌥⌘E", "epic"));
+    out.push(action("move-session", "Move this session to another view", "⌥⌘M", "move-session"));
+    out.push(action("take-out", "Take this session out into a view of its own", "⌥⌘T", "take-out"));
     out.push(action("copy-url", "Copy the focused page's url", "⇧⌘C", "copy-url"));
     out.push(action("restart", "Restart the focused terminal", "⌥⌘R", "restart-terminal"));
     out.push(action("update", "Update WintOS: rebuild and restart it", "⌥⌘U", "update"));

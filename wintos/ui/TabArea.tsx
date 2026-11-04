@@ -6,6 +6,8 @@ import { memo, useEffect, useMemo } from "react";
 import { ConfirmClose } from "./ConfirmClose";
 import { NameSession } from "./NameSession";
 import { EpicPicker } from "./EpicPicker";
+import { NewStep } from "./NewStep";
+import { MoveSession } from "./MoveSession";
 import { useFocusReport } from "./useFocusReport";
 import "./theme.css";
 import { Key } from "./Key";
@@ -78,6 +80,8 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
             {overlay === "confirm-close" && <ConfirmClose />}
             {overlay === "name-session" && <NameSession />}
             {overlay === "epic" && <EpicPicker />}
+            {overlay === "new-step" && <NewStep />}
+            {overlay === "move-session" && <MoveSession />}
             <MoveNudge />
             <UndoToast />
             <KeyBadges />

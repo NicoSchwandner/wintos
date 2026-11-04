@@ -110,8 +110,8 @@ SessionHeader.displayName = "SessionHeader";
 const HEADER_CHIPS = 4;
 
 const NameButton = ({ label }: { label: string }) => (
-    <button type="button" data-key="⌥⌘N" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("name-session")} style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>
-        <Key k="⌥⌘N" label={label} />
+    <button type="button" data-key="⌘R" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("name-session")} style={{ flexShrink: 0, padding: 0, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>
+        <Key k="⌘R" label={label} />
     </button>
 );
 

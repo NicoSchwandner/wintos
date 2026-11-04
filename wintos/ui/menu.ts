@@ -3,8 +3,8 @@ import { atom } from "jotai";
 import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { atoms, createBlock, createTab, getApi, getBlockComponentModel, isDev } from "@/store/global";
-import { closeOverlay, editMine, enterProject, focusArea, focusSession, reopenProject, takeReopen, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
-import { atWork, closeWarning, paneCloseWarns } from "./sessions";
+import { closeOverlay, editMine, enterProject, focusArea, focusSession, reopenProject, resumePane, takeReopen, focusBlock, focusedSession, latestSessions, magnifyBlock, toggleOverlay } from "./focus";
+import { atWork, closeWarning, paneCloseWarns, shownState } from "./sessions";
 import { toggleInbox } from "./inbox";
 import { mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, tickModeAtom, updateArmedAtom, type MainView } from "./notes/state";
 import { switchProject, topProject } from "./switcher";
@@ -48,7 +48,7 @@ export function blockDefFor(action: string, widgets: Record<string, WidgetConfig
 export const WINTOS_KEYS: [string, string][] = [
     ["Cmd:j", "switch-next"],
     ["Cmd:k", "switch-prev"],
-    ["Cmd:n", "project"],
+    ["Cmd:n", "new-step"],
     ["Cmd:r", "rename"],
     ["Cmd:t", "terminal"],
     ["Shift:Cmd:w", "close-project"],
@@ -61,8 +61,9 @@ export const WINTOS_KEYS: [string, string][] = [
     // matches the key's place.
     ["Shift:Cmd:c", "copy-url"],
     ["Option:Cmd:c{KeyP}", "park-session"],
-    ["Option:Cmd:c{KeyN}", "name-session"],
     ["Option:Cmd:c{KeyE}", "epic"],
+    ["Option:Cmd:c{KeyM}", "move-session"],
+    ["Option:Cmd:c{KeyT}", "take-out"],
     ["Option:Cmd:c{KeyG}", "open-pane-pr"],
     ["Shift:Cmd:j", "join-meeting"],
     ["Shift:Cmd:y", "day"],
@@ -168,7 +169,7 @@ export function runKey(action: string): boolean {
 // The Inbox holds pages and nothing else: a terminal started there would belong to no project
 // and never show in the sidebar, Needs you or ⌃⇥.
 const PANE_MAKERS = new Set(["terminal", "sysinfo", "processes", "open-page"]);
-const NOT_IN_INBOX = new Set(["terminal", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session", "epic"]);
+const NOT_IN_INBOX = new Set(["terminal", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session", "epic", "move-session", "take-out"]);
 export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
 
@@ -180,15 +181,20 @@ export function runAction(action: string): void {
     if (!inInbox() && PANE_MAKERS.has(action.split(":")[0])) wantPane("new pane");
     if (action === "switch-next" || action === "switch-prev") return switchProject(action === "switch-next" ? 1 : -1, false);
     if (action === "project") return void createTab();
+    if (action === "new-step") return toggleOverlay("new-step");
     if (action === "close-project") return closeProject();
     if (action === "undo") return undo();
     if (action === "edit-mine") return editMine(true);
     // Wave's own new-terminal def: the focused terminal's directory and connection.
     if (action === "terminal") return void createBlock(getDefaultNewBlockDef());
-    if (action === "rename") return globalStore.set(renamingAtom, globalStore.get(atoms.staticTabId));
+    // ⌘R names the step the focused session is; with none focused, it renames the project.
+    if (action === "rename") return focusedSession() ? toggleOverlay("name-session") : globalStore.set(renamingAtom, globalStore.get(atoms.staticTabId));
     if (action === "palette" || action === "keymap") return toggleOverlay(action);
     if (action === "name-session") return focusedSession() ? toggleOverlay("name-session") : undefined;
     if (action === "epic") return focusedSession() ? toggleOverlay("epic") : undefined;
+    if (action === "move-session") return focusedSession() ? toggleOverlay("move-session") : undefined;
+    // Straight out to a view of its own; when it can't go, the move sheet says why.
+    if (action === "take-out") return focusedSession() ? void (moveSession("new") && toggleOverlay("move-session")) : undefined;
     // The meeting on now, else the next one, in the system browser: a call wants the camera.
     if (action === "join-meeting") {
         const m = meetingToJoin(Date.now());
@@ -317,6 +323,32 @@ export function shelvePane(blockId: string | undefined): void {
     const label = session ? session.label : undefined;
     void daemonFetch(`/projects/${encodeURIComponent(globalStore.get(atoms.staticTabId))}/shelf`, { method: "POST", body: { script, label } });
 }
+// ⌥⌘M / ⌥⌘T: the focused session moves to another view (a tab), or to a view of its own. Wave
+// can't carry a running pane between tabs, so it goes the way ⌘W and ⌥⌘1 do: onto the shelf,
+// then resumed where it is going, its epic and name with it. A turn at work would be cut
+// off, so it waits for the turn to end. Returns why it can't move, or undefined once on its way.
+export const MOVE_SETTLE_MS = 400;
+function movable() {
+    const lm = getLayoutModelForStaticTab();
+    const blockId = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
+    const meta = blockId ? globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId)))?.meta : undefined;
+    const session = blockId ? liveSessionIn(currentState()?.sessions ?? [], blockId) : undefined;
+    const script = shelvable(meta);
+    const why = !session || !script ? "only a Claude session that can be resumed moves; this pane has none" : shownState(session, Date.now()) === "working" ? "it is working: move it once its turn ends" : undefined;
+    return { lm, blockId, session, script, why };
+}
+export const moveRefusal = () => movable().why;
+export function moveSession(to: string | "new"): string | undefined {
+    const { lm, blockId, session, script, why } = movable();
+    if (why || !session || !script) return why;
+    shelvePane(blockId);
+    const node = lm.getNodeByBlockId(blockId!);
+    if (node) void lm.closeNode(node.id);
+    flog(`move ${session.id.slice(0, 8)} → ${to === "new" ? "a view of its own" : to.slice(0, 6)}`);
+    setTimeout(() => (to === "new" ? getApi().createTab({ first: resumePane(script) }) : focusSession({ tabId: to, blockId: "", resume: script })), MOVE_SETTLE_MS);
+    return undefined;
+}
+
 export const shelvable = (meta: MetaType | undefined): string | undefined => {
     const script = meta?.["cmd:initscript"];
     return typeof script === "string" && script.includes(" claude --resume ") ? script : undefined;

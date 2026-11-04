@@ -808,7 +808,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, "");
             }
-            // `wintos name`: the session names itself. ⌥⌘N: you rename it, or take its suggestion.
+            // `wintos name`: the session names itself. ⌘R: you rename it, or take its suggestion.
             const named = /^\/blocks\/([^/]+)\/name$/.exec(url.pathname);
             const renamed = /^\/sessions\/([^/]+)\/name(\/accept)?$/.exec(url.pathname);
             if (req.method === "POST" && (named || renamed)) {

@@ -7,7 +7,7 @@ export type MainView = "terminal" | "day" | "reflect" | "keyboard";
 export const isPage = (v: MainView) => v !== "terminal";
 export const mainViewAtom = atom<MainView>("terminal");
 export const editingMineAtom = atom(false);
-export type Overlay = "" | "palette" | "keymap" | "confirm-close" | "name-session" | "epic";
+export type Overlay = "" | "palette" | "keymap" | "confirm-close" | "name-session" | "epic" | "new-step" | "move-session";
 export const overlayAtom = atom<Overlay>("");
 export const renamingAtom = atom(null as string | null); // the tab whose title is being edited
 // Text the notes view scrolls to and marks once it shows (a palette hit in the notes).

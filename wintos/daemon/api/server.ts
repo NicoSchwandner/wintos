@@ -15,7 +15,6 @@ import { localDay, prFact, waitedFor } from "../recap/recap";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
-import type { Kind } from "../projects/parse";
 import { doneUnit, serializeUnits, setUnits, startUnit, UNIT_MAX, UNITS_MAX } from "../projects/units";
 import { fixJob, fixPrompt, nextAction, type FixJob } from "../fixer/plan";
 import { reassignPrs, touchPrs } from "../prs/owners";
@@ -52,8 +51,6 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
-const CLOSED_KEEP_MS = 14 * 86_400_000;
-export type Closed = { tabId: string; title: string; kind?: Kind; at: number };
 
 export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
@@ -100,8 +97,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // Saved on every change and restored at start, so a restart doesn't forget who waits on you.
     const sessionFile = join(opts.root, ".sessions.json");
     let sessions = restoreSessions(readJson<Session[]>(sessionFile, []), Date.now());
-    // Projects whose lane was sent before kinds existed get theirs.
-    for (const s of sessions.values()) if (s.lane?.name === "support" || s.lane?.name === "review") store.setKindOnce(s.tabId, s.lane.name);
     // Every change to a session leaves a line in the log, with what caused it: the request being
     // served (cause), or the reading that ran after one.
     let logged = sessions;
@@ -284,7 +279,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
         pluginNames: runner.names,
         pluginsRunning: runner.running,
         snoozes,
-        closed,
         activityToday: recapper.today(Date.now()),
         seen,
         fixer: fixer.state(),
@@ -314,9 +308,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // Kept next to the projects: a file there is not a project (those are folders).
     const snoozeFile = join(opts.root, ".snoozes.json");
     let snoozes = readJson<Snoozes>(snoozeFile, {});
-    // ⇧⌘W: what you closed, for the day's Closed list; a reopened project leaves it.
-    const closedFile = join(opts.root, ".closed.json");
-    let closed = readJson<Closed[]>(closedFile, []);
     const fixer = new Fixer(opts.root, () => broadcast(), opts.fixCmd, opts.fixCwd);
     const ghData = () => runner.results["gh-prs"]?.data as { me: string; prs: PR[] } | undefined;
     // Every PR refresh is a chance for the conflicts babysitter.
@@ -530,8 +521,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!isSafe(b?.tabId)) return send(res, 400, "need the new tab's id");
                 const r = store.reopen(decodeURIComponent(reopen[1]), b.tabId);
                 if (r !== "ok") return send(res, r === "taken" ? 409 : 404, r);
-                closed = closed.filter((c) => c.tabId !== decodeURIComponent(reopen[1]));
-                writeFileSync(closedFile, JSON.stringify(closed));
                 broadcast();
                 return send(res, 200, "");
             }
@@ -540,9 +529,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
             if (req.method === "POST" && shelveAll) {
                 const tabId = decodeURIComponent(shelveAll[1]);
                 if (!store.byTab(tabId)) return send(res, 404, "no project for this tab");
-                const p = store.byTab(tabId)!;
-                closed = [...closed.filter((c) => c.tabId !== tabId && Date.now() - c.at < CLOSED_KEEP_MS), { tabId, title: p.title ?? basename(p.dir), ...(p.kind ? { kind: p.kind } : {}), at: Date.now() }];
-                writeFileSync(closedFile, JSON.stringify(closed));
                 const closing = [...sessions.values()].filter((s) => s.tabId === tabId && s.state !== "ended");
                 for (const s of closing) shelveLive(s);
                 sessions = endSessions(sessions, closing.map((s) => s.id), Date.now());
@@ -769,8 +755,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const ok = isSafe(blockId) && isSafe(b?.name) && b.name.length <= MAX_STEP && steps.length > 0 && steps.length <= MAX_STEPS && steps.every((s) => s && isSafe(s) && s.length <= MAX_STEP);
                 if (!ok) return send(res, 400, `need a lane name and 1-${MAX_STEPS} one-line steps up to ${MAX_STEP} characters`);
                 sessions = setLane(sessions, blockId, b.name as string, steps, sid);
-                const laneOf = liveIn(sessions, blockId, sid);
-                if (laneOf && (b.name === "support" || b.name === "review")) store.setKindOnce(laneOf.tabId, b.name);
                 saveSessions();
                 broadcast();
                 return send(res, 200, "");

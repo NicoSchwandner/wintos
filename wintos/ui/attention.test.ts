@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
 import type { Session } from "../daemon/sessions/reduce";
 import type { WintosState } from "./view";
-import { attention, finishLine, prsByTab, rowView, sidebarModel } from "./attention";
+import { attention, prsByTab, rowView, sidebarModel } from "./attention";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -172,33 +172,6 @@ describe("attention", () => {
             sessions: [{ id: "1", tabId: "a", blockId: "x", state: "waiting", since: NOW - 1, lastAt: NOW - 1 }],
         }, {}, NOW);
         expect([a.needs.map((r) => r.tabId), a.quiet.map((r) => r.tabId), a.views.a.title, a.views.b.title]).toEqual([["a"], ["b"], "Alpha", "Beta"]);
-    });
-});
-
-describe("finishLine: when an errand is done", () => {
-    const lane = (name: string, steps: string[], at: number, o: Partial<Session> = {}) => ({ id: "s", tabId: "t", blockId: "b", state: "idle", since: 0, lastAt: 0, lane: { name, steps, at }, ...o }) as Session;
-    const pr = (o: object) => ({ url: "u", author: "me", reviewedByMe: false, requestedMe: false, ...o }) as never;
-    const support = ["Root cause", "Verdict", "Fix", "Draft PR", "?Your OK", "Ready"];
-    test("support: a PR of yours up or merged, or the lane past its Draft PR step", () => {
-        expect([
-            finishLine("support", [], [pr({})], "me"), finishLine("support", [], [pr({ mergedAt: "x" })], "me"), finishLine("support", [], [pr({ author: "ana" })], "me"),
-            finishLine("support", [lane("support", support, 4)], [], "me"), finishLine("support", [lane("support", support, 3)], [], "me"),
-        ]).toEqual(["PR up", "PR merged", undefined, "PR up", undefined]);
-    });
-    test("review: your review on someone else's PR, or the lane at Submit with its turn over", () => {
-        const steps = ["Your notes", "Propose", "?Your OK", "Submit"];
-        expect([
-            finishLine("review", [], [pr({ author: "ana", reviewedByMe: true })], "me"), finishLine("review", [], [pr({ author: "ana", reviewedByMe: true, requestedMe: true })], "me"),
-            finishLine("review", [lane("review", steps, 3)], [], "me"), finishLine("review", [lane("review", steps, 3, { state: "working" })], [], "me"), finishLine("review", [lane("review", steps, 2)], [], "me"),
-            finishLine("review", [lane("review", ["Propose", "?submit"], 1)], [], "me"),
-        ]).toEqual(["review posted", undefined, "review posted", undefined, undefined, undefined]);
-    });
-    test("a project without a kind, or a driving one, has no finish line", () => {
-        expect([finishLine(undefined, [], [pr({})], "me"), finishLine("drive", [], [pr({})], "me")]).toEqual([undefined, undefined]);
-    });
-    test("the row says so", () => {
-        const a = attention(["t"], { now: NOW, projects: [{ id: "t", title: "Heart case", dir: "/t", mtime: 0, kind: "support" } as never], sessions: [lane("support", support, 4)] } as WintosState, {}, NOW);
-        expect(a.views.t.done).toBe("PR up");
     });
 });
 

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { basename, join } from "path";
 import { lineDiff } from "./diff";
-import { parseProjectMd, ProjectMeta, serializeProjectMd, type Kind } from "./parse";
+import { parseProjectMd, ProjectMeta, serializeProjectMd } from "./parse";
 import type { Unit } from "./units";
 import { slugify } from "./slug";
 
@@ -64,17 +64,11 @@ export class ProjectStore {
             pr: existing?.pr ?? [],
             title,
             ...(existing?.next ? { next: existing.next } : {}),
-            ...(existing?.kind ? { kind: existing.kind } : {}),
             ...(existing?.units ? { units: existing.units } : {}),
         };
         writeFileSync(join(dir, "project.md"), serializeProjectMd(meta, existing?.body ?? ""));
         this.reload();
         return this.byTab(tabId)!;
-    }
-
-    // A kind already in the file stays: whoever wrote it knew better than a lane.
-    setKindOnce(tabId: string, kind: Kind): void {
-        if (!this.byTab(tabId)?.kind) this.updateMeta(tabId, () => ({ kind }));
     }
 
     // `wintos unit`: change returns the new list, or undefined when it names no unit.

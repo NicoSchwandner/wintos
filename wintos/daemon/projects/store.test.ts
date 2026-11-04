@@ -153,17 +153,6 @@ describe("mineDiff", () => {
     });
 });
 
-describe("a project's kind", () => {
-    test("set once, kept by a later title, never overwritten", () => {
-        const s = new ProjectStore(root);
-        const { dir } = s.setTitle("tab-1", "Heart case 1", { manual: false });
-        s.setKindOnce("tab-1", "support");
-        s.setKindOnce("tab-1", "review");
-        s.setTitle("tab-1", "Heart case 1: VAT", { manual: true });
-        expect([s.byTab("tab-1")?.kind, readFileSync(join(dir, "project.md"), "utf8")]).toEqual(["support", expect.stringMatching(/^kind: support$/m)]);
-    });
-});
-
 describe("a project's units", () => {
     test("moved by the unit commands, kept by a later title, body untouched", () => {
         const s = new ProjectStore(root);

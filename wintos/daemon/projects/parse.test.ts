@@ -36,6 +36,9 @@ describe("parseProjectMd", () => {
         expect(parseProjectMd("---\ntitle: x\n---\n")).toEqual({ error: "front matter has no id" });
     });
 
+    test("a kind line from an older WintOS is ignored", () =>
+        expect(parseProjectMd("---\nid: t\nkind: support\n---\n")).toEqual({ meta: { id: "t", titleLocked: false, pr: [] }, body: "" }));
+
     test("optional keys default", () => {
         const r = parseProjectMd("---\nid: t\n---\n");
         expect(r).toEqual({ meta: { id: "t", titleLocked: false, pr: [] }, body: "" });

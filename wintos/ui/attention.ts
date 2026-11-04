@@ -1,8 +1,7 @@
 import { isUnread, rank, type Ranking, type Row } from "../daemon/ranking/rank";
 import { liveSubagents, type Session } from "../daemon/sessions/reduce";
 import type { Project } from "../daemon/projects/store";
-import { isSnoozed, projectPrs, type PR, type ProjectPrs } from "../daemon/prs/group";
-import type { Kind } from "../daemon/projects/parse";
+import { isSnoozed, projectPrs, type ProjectPrs } from "../daemon/prs/group";
 import type { Target } from "./sessions";
 import { ghPrs, prOwners, prRef, relTime, repoLabeler, type Owner, type RowView, type WintosState } from "./view";
 import { WOKE } from "./wakePlan";
@@ -81,25 +80,6 @@ export function waking(split: Ranking, tabs: Record<string, string>): Ranking {
     return { ...split, needs: [...lifted, ...split.needs], read: kept(split.read), running: kept(split.running), quiet: kept(split.quiet), quietMore: kept(split.quietMore), quietStale: kept(split.quietStale) };
 }
 
-// When an errand is finished: a support errand once a PR of yours is up (the lane past its Draft
-// PR step says so before the PR list does), a review once it is posted (the lane at Submit with
-// its turn over; GitHub drops a reviewed PR from the requests, so the lane is often all there is).
-const AFTER_DRAFT = ["your ok", "ready", "test path"];
-export function finishLine(kind: Kind | undefined, sessions: Session[], prs: PR[], me: string | undefined): string | undefined {
-    const step = (s: Session) => s.lane?.steps[s.lane.at]?.replace(/^\?\s*/, "").toLowerCase();
-    if (kind === "support") {
-        const mine = prs.filter((p) => p.author === me);
-        if (mine.some((p) => p.mergedAt)) return "PR merged";
-        if (mine.length || sessions.some((s) => s.lane?.name === "support" && AFTER_DRAFT.includes(step(s) ?? ""))) return "PR up";
-    }
-    if (kind === "review") {
-        const posted = prs.some((p) => p.author !== me && p.reviewedByMe && !p.requestedMe);
-        // "?Submit" is your OK still to come; only a plain Submit step is the review going out.
-        if (posted || sessions.some((s) => s.lane?.name === "review" && s.lane.steps[s.lane.at]?.toLowerCase() === "submit" && s.state !== "working")) return "review posted";
-    }
-    return undefined;
-}
-
 // What the longest-waiting turn expects of you, ahead of what it said: "Decide · two bands or one".
 // A turn not read yet shows what it said.
 const ASK_LABEL = { answer: "Answer", decide: "Decide", approve: "Approve", unblock: "Unblock" } as const;
@@ -129,11 +109,6 @@ export function attention(tabIds: string[], state: WintosState, names: Record<st
     const label = repoLabeler(state);
     const views = Object.fromEntries(rows.map((r) => [r.tabId, lines[r.tabId] ? { ...rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label), next: lines[r.tabId], tone: "apricot" as const } : rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label)]));
     for (const tabId of held) views[tabId] = { ...views[tabId], reason: ["held until you are back", askLine(rows.find((r) => r.tabId === tabId)!.sessions)].filter(Boolean).join(" · ") };
-    const me = ghPrs(state)?.me;
-    for (const r of rows) {
-        const done = finishLine(project(r.tabId)?.kind, r.sessions, prs[r.tabId]?.items.map((i) => i.pr) ?? [], me);
-        if (done) views[r.tabId] = { ...views[r.tabId], done };
-    }
     const targets: Record<string, Target> = {};
     for (const r of [...split.needs, ...split.read]) {
         const waiting = r.sessions.filter((s) => s.state === "waiting").sort((a, b) => a.since - b.since)[0];

@@ -18,9 +18,10 @@ import { Panel } from "./TodayPage";
 import { useFocusOnMount } from "./useFocusOnMount";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
-import { relTime, sessionName } from "./view";
+import { ghPrs, prRef, relTime, sessionName } from "./view";
 import { useZoneKeys } from "./zones";
 
+type History = { days: { day: string; ms: number }[]; steps: { sessionId: string; ms: number; last: string; name: string; prs: string[]; live: boolean }[] };
 const spent = (ms: number) => (ms < 3_600_000 ? `${Math.round(ms / 60_000)} min` : `${(ms / 3_600_000).toFixed(1).replace(/\.0$/, "")} h`);
 
 // An epic's page, from its card on the epics home: its sessions (each a step; ⏎ goes to its
@@ -43,6 +44,14 @@ export const EpicPage = memo(() => {
             .then((r: EpicTime[]) => live && setMonth(r.find((x) => x.epic === id)), () => {});
         return () => void (live = false);
     }, [id, iso]);
+    const [history, setHistory] = useState<History | undefined>();
+    useEffect(() => {
+        let live = true;
+        daemonFetch(`/epics/${encodeURIComponent(id)}/history`)
+            .then((r) => (r.ok ? r.json() : undefined))
+            .then((h) => live && setHistory(h), () => {});
+        return () => void (live = false);
+    }, [id, Math.floor(now / 300_000)]);
     useEffect(() => {
         if (ref.current) requestAnimationFrame(() => ref.current && startCursor(ref.current, (el) => el.dataset.item === "link"));
     }, [id]);
@@ -63,6 +72,14 @@ export const EpicPage = memo(() => {
     if (!epic) return <div ref={ref} tabIndex={0} data-zone="list" style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, outline: "none" }}>That epic is gone.</div>;
     const look = lookOf(epic);
     const roadmap = epic.steps;
+    const finished = (history?.steps ?? []).filter((x) => !x.live);
+    const peak = Math.max(1, ...(history?.days ?? []).map((d) => d.ms));
+    const gh = state ? ghPrs(state) : undefined;
+    const prUrls = [...new Set([...sessions.flatMap((x) => x.prs ?? []), ...(history?.steps ?? []).flatMap((x) => x.prs)])];
+    const prs = prUrls.map((url) => {
+        const p = gh?.prs.find((x) => x.url === url);
+        return { url, ref: state ? prRef(state, url) : url, title: p?.title, state: p ? (p.mergedAt ? "merged" : p.isDraft ? "draft" : "open") : "closed or merged" };
+    });
     return (
         <div ref={ref} tabIndex={0} data-zone="list" data-wintos="epic-page" data-epic={epic.id} style={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 18px", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0, overflowY: "auto" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 16px", borderRadius: 12, background: `linear-gradient(90deg, ${look.bg} 0%, transparent 70%)`, borderTop: `3px solid ${look.fg}` }}>
@@ -101,6 +118,16 @@ export const EpicPage = memo(() => {
                             ))}
                         </div>
                     </Panel>
+                    <Panel label="Finished steps" note={finished.length ? `${finished.length} · ${spent(finished.reduce((n, f) => n + f.ms, 0))} at them` : "none yet"}>
+                        {finished.slice(0, 12).map((f) => (
+                            <div key={f.sessionId} data-wintos="finished-step" style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr) auto auto", gap: 10, alignItems: "baseline", fontSize: 13, color: T.secondary }}>
+                                <span style={{ fontFamily: T.mono, color: T.moss }}>✓</span>
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                                <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{f.prs.map((u) => (state ? prRef(state, u) : u)).join(" · ")}</span>
+                                <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{spent(f.ms)} · {f.last.slice(5)}</span>
+                            </div>
+                        ))}
+                    </Panel>
                     <Panel label="Sessions" note={`${shortName(epic)} · each a step`} keys={sessions.length > 0 && <Key k="j k · ⏎" label="its pane" />}>
                         {sessions.map((s) => {
                             const shown = shownState(s, now);
@@ -117,9 +144,29 @@ export const EpicPage = memo(() => {
                         {!sessions.length && <span style={{ fontSize: 12.5, color: T.faint }}>No session in it now. ⌘N starts the next step.</span>}
                     </Panel>
                 </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <Panel label="Last 8 workdays" note={history ? spent(history.days.reduce((n, d) => n + d.ms, 0)) : "…"}>
+                    <div data-wintos="epic-days" style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 90 }}>
+                        {(history?.days ?? []).map((d) => (
+                            <div key={d.day} title={`${d.day}: ${spent(d.ms)}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, height: "100%", justifyContent: "flex-end" }}>
+                                <span style={{ width: "100%", height: `${Math.max(2, (d.ms / peak) * 70)}px`, borderRadius: "3px 3px 0 0", background: d.day === history!.days.at(-1)!.day ? look.fg : look.ring }} />
+                                <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{d.day.slice(8)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </Panel>
+                <Panel label="PRs" note={prs.length ? undefined : "none yet"}>
+                    {prs.map((p) => (
+                        <a key={p.url} href={p.url} data-wintos="epic-pr" style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12.5, color: T.secondary, textDecoration: "none" }}>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.ref}{p.title ? ` · ${p.title}` : ""}</span>
+                            <span style={{ fontFamily: T.mono, fontSize: 11, color: p.state === "merged" ? T.moss : p.state === "draft" ? T.faint : T.blue, flexShrink: 0 }}>{p.state}</span>
+                        </a>
+                    ))}
+                </Panel>
                 <Panel label="mine.md" note="every session in the epic reads it" keys={<Key k="⌘E" label="edit" />}>
                     <Mine text={mine?.text ?? ""} mtime={mine?.mtime ?? 0} canEdit={!!mine} save={save} size="full" draftKey={`epic-mine:${epic.id}`} file={`${shortName(epic)}'s mine.md`} empty="Empty. Press ⌘E to write what every session in this epic must respect." />
                 </Panel>
+                </div>
             </div>
         </div>
     );

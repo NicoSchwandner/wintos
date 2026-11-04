@@ -15,7 +15,7 @@ import type { FixerState } from "../daemon/fixer/runner";
 import type { HeadsUp } from "../daemon/headsups/headsups";
 
 // An epic as the UI sees it: epic.md's front matter and where its folder is.
-export type EpicView = Omit<EpicFile, "body"> & { plan?: string };
+export type EpicView = Omit<EpicFile, "body"> & { plan?: string; mineFirst?: string };
 export type WintosState = { now: number; sessions: Session[]; projects: Project[]; epics?: EpicView[]; epicReports?: Reports; plugins?: Record<string, PluginResult>; pluginNames?: string[]; pluginsRunning?: string[]; snoozes?: Snoozes; seen?: Record<string, number>; day?: Day; lunch?: string; workday?: string; keyboard?: KeyStats; shelf?: Record<string, Shelved[]>; fixer?: FixerState; repoNames?: Record<string, string>; wakes?: Wakes; headsUps?: Record<string, HeadsUp[]>; headsUpProblem?: string; donePrs?: Record<string, DonePr>; update?: { behind: number }; rhythm?: Rhythm & { everyMs: number }; termCols?: number };
 export type Tone = "apricot" | "blue" | "brick" | "secondary";
 // done: an errand past its finish line, what reached it ("PR up"); the row says ⇧⌘W closes it.

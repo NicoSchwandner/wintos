@@ -908,6 +908,30 @@ await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sess
     await until("back by state", () => evalIn(t, `!document.querySelector("[data-wintos=epic-groups]")`));
 });
 
+await scenario("45 · an epic's page shows its finished steps and last 8 workdays; the month's hours on the home can be corrected", async () => {
+    const t = await toProject();
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const id = await (await api("/epics", { title: "E2E history" })).text();
+    const d = new Date();
+    const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+    await api("/time/backfill", { log: { [iso(d)]: { "e2e-old": { epic: id, ms: 3_600_000 } } } });
+    await evalIn(t, `import("/wintos/ui/menu.ts").then((m) => m.openEpic("${id}"))`);
+    await until("a finished step and eight days", () => evalIn(t, `document.querySelectorAll("[data-wintos=finished-step]").length === 1 && document.querySelectorAll("[data-wintos=epic-days] > div").length === 8`));
+    await press(t, "Escape", { code: "Escape", keyCode: 27 });
+    await press(t, "y", { mods: ["meta", "shift"] });
+    const row = `document.querySelector("[data-wintos=month-row][data-epic='${id}']")`;
+    await until("its row in the month", () => evalIn(t, `!!${row}`));
+    await evalIn(t, `${row}.querySelector("button[data-act]").click()`);
+    await until("the hours field", () => evalIn(t, `!!${row}.querySelector("input")`));
+    await cdpFocus(t, `[data-wintos=month-row][data-epic='${id}'] input`);
+    await evalIn(t, `${row}.querySelector("input").select()`);
+    await cdp(t, "Input.insertText", { text: "2.5" });
+    await press(t, "Enter", { code: "Enter", keyCode: 13 });
+    const month = iso(d).slice(0, 7);
+    await until("corrected to 2.5 h", async () => (await (await fetch(`http://127.0.0.1:7731/time/month?month=${month}`)).json()).find((r) => r.epic === id)?.ms === 9_000_000);
+    await press(t, "y", { mods: ["meta", "shift"] });
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

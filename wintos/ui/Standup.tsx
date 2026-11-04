@@ -8,7 +8,7 @@ import { MdEditor } from "./notes/MdEditor";
 import { More } from "./notes/ProjectNotes";
 import { standupAsks } from "./prs";
 import { daemonFetch, useWintos } from "./useWintos";
-import { ghPrs } from "./view";
+import { ghPrs, type WintosState } from "./view";
 
 type Recap = { date: string; items: ShownItem[] };
 
@@ -41,7 +41,10 @@ export function Standup({ today, focus, panel }: { today: string; focus: string;
             .then((r: Recap | undefined) => (r ? (setRecap(r), setOpen(true), "ok" as const) : ("error" as const)), () => "error" as const);
     const label = recap ? `What you did ${lastDayName(recap.date, today).replace(/^(Yesterday|Last)/, (w) => w.toLowerCase())}` : "What you did";
     const dropped = recap ? recap.items.filter((i) => i.dropped).length : 0;
-    const read = recap && [itemsMarkdown(recap.items), asks && `- Asks: ${asks}`, plan.length > 0 && `- Today: ${plan.join("; ")}`].filter(Boolean).join("\n");
+    // What you read is grouped by epic: each item's project named by the epic its sessions are
+    // in, so the daily reads epic by epic. Editing still works on the items as they were written.
+    const shown = recap && state ? byEpic(recap.items, state) : recap?.items;
+    const read = recap && [itemsMarkdown(shown ?? []), asks && `- Asks: ${asks}`, plan.length > 0 && `- Today: ${plan.join("; ")}`].filter(Boolean).join("\n");
     const keys = editing ? (
         <>
             <Key k="⌘⏎" label="save: it writes like this next time" />
@@ -72,4 +75,18 @@ export function Standup({ today, focus, panel }: { today: string; focus: string;
             })}
         </div>
     );
+}
+
+// An item's project as its epic's short name, when that project's sessions are in one epic;
+// items in the same epic then sit together, epics in the order they first come.
+export function byEpic<I extends { project: string }>(items: I[], state: WintosState): I[] {
+    const epicOfProject = (title: string) => {
+        const tab = state.projects.find((p) => p.title === title)?.id;
+        const ids = [...new Set(state.sessions.filter((x) => x.tabId === tab && x.epic).map((x) => x.epic!))];
+        const e = ids.length === 1 ? state.epics?.find((x) => x.id === ids[0]) : undefined;
+        return e ? (e.short ?? e.title) : undefined;
+    };
+    const named = items.map((i) => ({ ...i, project: epicOfProject(i.project) ?? i.project }));
+    const order = [...new Set(named.map((i) => i.project))];
+    return order.flatMap((p) => named.filter((i) => i.project === p));
 }

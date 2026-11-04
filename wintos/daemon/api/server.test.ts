@@ -174,9 +174,27 @@ describe("wintosd API", () => {
         expect(await epicNow()).toBe(id);
     });
 
+    test("an epic's history: its sessions with time and PRs; a correction changes the month", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        const today = new Date();
+        const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        await event(prompt);
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+        await post(`/sessions/${prompt.session_id}/name`, { text: "Drafts mapping" });
+        await post("/time/backfill", { log: { [day]: { [prompt.session_id]: { epic: id, ms: 600_000 } } } });
+        const h = await (await fetch(`${base}/epics/${id}/history`)).json();
+        expect(h.steps).toEqual([{ sessionId: prompt.session_id, ms: 600_000, last: day, name: "Drafts mapping", prs: [], live: true }]);
+        expect(h.days.length).toBe(8);
+        const month = day.slice(0, 7);
+        expect((await post("/time/adjust", { month, epic: id, ms: 3_000_000 })).status).toBe(200);
+        const row = (await (await fetch(`${base}/time/month?month=${month}`)).json())[0];
+        expect([row.ms, row.adjusted, row.prs]).toEqual([3_600_000, 3_000_000, 0]);
+        expect((await post("/time/adjust", { month: "nov", epic: id, ms: 1 })).status).toBe(400);
+    });
+
     test("a backfill adds estimated past days to the month, and a malformed one is refused", async () => {
         expect((await post("/time/backfill", { log: { "2026-10-21": { s1: { epic: "route", ms: 3_600_000 } } } })).status).toBe(200);
-        expect(await (await fetch(base + "/time/month?month=2026-10")).json()).toEqual([{ epic: "route", ms: 3_600_000, sessions: 1, days: 1 }]);
+        expect(await (await fetch(base + "/time/month?month=2026-10")).json()).toEqual([{ epic: "route", ms: 3_600_000, sessions: 1, days: 1, prs: 0, adjusted: 0 }]);
         expect((await post("/time/backfill", { log: { oct: {} } })).status).toBe(400);
     });
 
@@ -206,7 +224,7 @@ describe("wintosd API", () => {
             vi.setSystemTime(new Date(2026, 10, 4, 10, 1, 30));
             await post("/focus", { sessionId: null }); // the last 10 s, at the last idle reading
             await post("/focus", { sessionId: null });
-            expect(await (await fetch(base + "/time/month?month=2026-11")).json()).toEqual([{ epic: id, ms: 60_000, sessions: 1, days: 1 }]);
+            expect(await (await fetch(base + "/time/month?month=2026-11")).json()).toEqual([{ epic: id, ms: 60_000, sessions: 1, days: 1, prs: 0, adjusted: 0 }]);
             expect((await fetch(base + "/time/month?month=nov")).status).toBe(400);
             expect((await post("/focus", { sessionId: 7 })).status).toBe(400);
         } finally {

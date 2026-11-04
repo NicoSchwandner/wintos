@@ -110,6 +110,7 @@ function EpicCard({ epic, sessions, now }: { epic: EpicView; sessions: Session[]
                     <span style={{ fontFamily: T.mono, color: T.faint }}>{x.mark}</span> {x.text}
                 </span>
             ))}
+            {epic.mineFirst && <span data-wintos="card-mine" style={{ fontSize: 11.5, color: T.faint, borderTop: `1px solid ${T.border}`, paddingTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>mine.md · {epic.mineFirst}</span>}
         </div>
     );
 }
@@ -117,23 +118,32 @@ function EpicCard({ epic, sessions, now }: { epic: EpicView; sessions: Session[]
 // The month so far by epic: the hours you were at its sessions (daemon/epics/time.ts). c copies
 // it as a table for the project report.
 // [ and ] step to the month before and back; the report is due for the month just past.
+type MonthRow = EpicTime & { prs: number; adjusted: number };
 function MonthByEpic({ now, back }: { now: number; back: number }) {
     const { state } = useWintos();
     const first = new Date(new Date(now).getFullYear(), new Date(now).getMonth() - back, 1);
     const month = localIso(first).slice(0, 7);
-    const [rows, setRows] = useState<EpicTime[] | undefined>();
+    const [rows, setRows] = useState<MonthRow[] | undefined>();
     const [copied, setCopied] = useState(false);
+    // The row being corrected (⏎ on it): its hours as you say they were.
+    const [editing, setEditing] = useState<string | undefined>();
+    const [reload, setReload] = useState(0);
     useEffect(() => {
         let live = true;
         daemonFetch(`/time/month?month=${month}`)
             .then((r) => (r.ok ? r.json() : []))
             .then((r) => live && setRows(r), () => live && setRows([]));
         return () => void (live = false);
-    }, [month, Math.floor(now / 600_000)]);
+    }, [month, Math.floor(now / 600_000), reload]);
+    const correct = (r: MonthRow, hours: number) => {
+        const logged = r.ms - r.adjusted;
+        void daemonFetch("/time/adjust", { method: "POST", body: { month, epic: r.epic ?? null, ms: Math.round(hours * 3_600_000) - logged } }).then(() => setReload((n) => n + 1));
+        setEditing(undefined);
+    };
     const name = (id?: string) => (id ? (state?.epics?.find((e) => e.id === id)?.title ?? id) : "No epic");
     const total = (rows ?? []).reduce((n, r) => n + r.ms, 0);
     const copy = () => {
-        const table = (rows ?? []).map((r) => `${name(r.epic)}\t${(r.ms / 3_600_000).toFixed(1)}`).join("\n");
+        const table = ["Epic\tHours\tSessions\tPRs", ...(rows ?? []).map((r) => `${name(r.epic)}\t${(r.ms / 3_600_000).toFixed(1)}\t${r.sessions}\t${r.prs}`)].join("\n");
         void navigator.clipboard.writeText(table).then(() => setCopied(true));
     };
     const label = first.toLocaleDateString("en-GB", { month: "long", ...(first.getFullYear() !== new Date(now).getFullYear() ? { year: "numeric" } : {}) });
@@ -144,6 +154,7 @@ function MonthByEpic({ now, back }: { now: number; back: number }) {
             keys={
                 <>
                     <Key k="[ ]" label="month" />
+                    <Key k="j k · ⏎" label="correct the hours" />
                     {rows && rows.length > 0 && (
                         <button type="button" data-wintos="month-copy" data-key="c" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={copy} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                             <Key k="c" label={copied ? "copied" : "copy as a table"} />
@@ -155,11 +166,29 @@ function MonthByEpic({ now, back }: { now: number; back: number }) {
             {(rows ?? []).map((r) => {
                 const e = r.epic ? state?.epics?.find((x) => x.id === r.epic) : undefined;
                 return (
-                    <div key={r.epic ?? "none"} data-wintos="month-row" style={{ display: "grid", gridTemplateColumns: "22px minmax(0, 1fr) 80px 70px", gap: 10, alignItems: "center", fontSize: 13 }}>
+                    <div key={r.epic ?? "none"} data-wintos="month-row" data-item="link" data-epic={r.epic ?? ""} style={{ display: "grid", gridTemplateColumns: "22px minmax(0, 1fr) 90px 80px 50px", gap: 10, alignItems: "center", fontSize: 13 }}>
                         <EpicAvatar look={e ? lookOf(e) : NO_EPIC} size={20} />
                         <span style={{ color: T.secondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name(r.epic)}</span>
-                        <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text, textAlign: "right" }}>{span(r.ms)}</span>
+                        {editing === (r.epic ?? "none") ? (
+                            <input
+                                autoFocus
+                                aria-label="hours"
+                                defaultValue={(r.ms / 3_600_000).toFixed(1)}
+                                onKeyDown={(ev) => {
+                                    ev.stopPropagation();
+                                    const h = Number((ev.target as HTMLInputElement).value.replace(",", "."));
+                                    if (ev.key === "Enter" && Number.isFinite(h) && h >= 0) ev.preventDefault(), correct(r, h);
+                                    if (ev.key === "Escape") ev.preventDefault(), setEditing(undefined);
+                                }}
+                                style={{ width: 70, justifySelf: "end", padding: "2px 6px", background: T.card, border: `1px solid ${T.borderActive}`, borderRadius: 6, color: T.text, fontFamily: T.mono, fontSize: 12, textAlign: "right" }}
+                            />
+                        ) : (
+                            <button type="button" data-act tabIndex={-1} onMouseDown={(ev) => ev.preventDefault()} onClick={() => setEditing(r.epic ?? "none")} title={r.adjusted ? `logged ${span(r.ms - r.adjusted)}, corrected by you` : "⏎ corrects it"} style={{ justifySelf: "end", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 12, color: T.text }}>
+                                {span(r.ms)}{r.adjusted ? " *" : ""}
+                            </button>
+                        )}
                         <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted, textAlign: "right" }}>{r.sessions} session{r.sessions === 1 ? "" : "s"}</span>
+                        <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted, textAlign: "right" }}>{r.prs} PR{r.prs === 1 ? "" : "s"}</span>
                     </div>
                 );
             })}

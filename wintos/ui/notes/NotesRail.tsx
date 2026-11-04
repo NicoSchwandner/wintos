@@ -109,6 +109,11 @@ function HeadsUps({ tabId, state }: { tabId: string; state?: WintosState }) {
     const list = [...(state?.headsUps?.[tabId] ?? [])].sort((a, b) => b.at - a.at);
     const problem = state?.headsUpProblem;
     if (!list.length && !problem) return null;
+    // A heads-up names its session's epic first, so you know which epic it is about.
+    const epicOf = (id: string) => {
+        const e = state?.sessions.find((x) => x.id === id)?.epic ?? state?.shelf?.[tabId]?.find((i) => i.sessionId === id)?.epic;
+        return e ? state?.epics?.find((x) => x.id === e) : undefined;
+    };
     const nameOf = (id: string) => {
         const live = state?.sessions.find((s) => s.id === id);
         const shelved = state?.shelf?.[tabId]?.find((i) => i.sessionId === id);
@@ -125,7 +130,10 @@ function HeadsUps({ tabId, state }: { tabId: string; state?: WintosState }) {
                 <div key={h.id} data-item="headsup" title={h.explanation} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "1px 4px", margin: "0 -4px", borderRadius: 4 }}>
                     <span style={{ minWidth: 0, flexGrow: 1, display: "flex", flexDirection: "column", gap: 2 }}>
                         <span style={{ fontSize: 12.5, lineHeight: 1.5, color: T.secondary }}><Rich text={h.text} size="rail" /></span>
-                        <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}>{[nameOf(h.sessionId), relTime(Date.now() - h.at)].filter(Boolean).join(" · ")}</span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontFamily: T.mono, fontSize: 11, color: T.faint }}>
+                            {epicOf(h.sessionId) && <EpicAvatar look={lookOf(epicOf(h.sessionId)!)} size={14} />}
+                            {[epicOf(h.sessionId) && shortName(epicOf(h.sessionId)!), nameOf(h.sessionId), relTime(Date.now() - h.at)].filter(Boolean).join(" · ")}
+                        </span>
                     </span>
                     <button type="button" data-act data-key="x" tabIndex={-1} aria-label="Close this heads-up" title="Close (x)" onMouseDown={(e) => e.preventDefault()} onClick={() => void daemonFetch(`/headsups/${encodeURIComponent(h.id)}/dismiss`, { method: "POST", body: {} })} style={{ flexShrink: 0, padding: "0 2px", background: "transparent", border: "none", cursor: "pointer", color: T.faint, fontSize: 13, lineHeight: 1.4 }}>
                         ×

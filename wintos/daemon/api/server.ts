@@ -7,7 +7,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { epicAgentInjection, epicInjection, injection } from "../inject";
 import { EpicStore, EPIC_TITLE_MAX, findEpic, SHORT_MAX } from "../epics/epics";
 import { impliedEpic } from "../epics/assign";
-import { addTime, mergeBackfill, monthByEpic, type TimeLog } from "../epics/time";
+import { addTime, adjustMonth, epicHistory, lastWorkdays, mergeBackfill, monthByEpic, type TimeLog } from "../epics/time";
 import { lineDiff } from "../projects/diff";
 import { workedFocus } from "../epics/worked";
 import { addReport, delivered as reportsDelivered, reportLine, type Reports } from "../epics/reports";
@@ -356,7 +356,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         sessions: [...sessions.values()],
         projects: store.list().map(({ body: _body, ...p }) => p),
         // plan: epic.md's body, which the epic agent keeps (goal, milestones, open issues, blockers).
-        epics: epics.list().map(({ body, ...e }) => ({ ...e, plan: body.trim() })),
+        // mineFirst: mine.md's first line, for the epic's card on the home.
+        epics: epics.list().map(({ body, ...e }) => ({ ...e, plan: body.trim(), mineFirst: (epics.mine(e.id)?.text ?? "").split("\n").map((l) => l.replace(/^[-*#\s]+/, "").trim()).find(Boolean) })),
         epicReports: reports,
         plugins: runner.results,
         donePrs,
@@ -830,10 +831,41 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 writeFileSync(timeFile, JSON.stringify(timeLog));
                 return send(res, 200, "");
             }
+            // Your own correction of one epic's time in a month (the report's ⏎), never the log itself.
+            if (req.method === "POST" && url.pathname === "/time/adjust") {
+                const b = (await body(req)) as { month?: unknown; epic?: unknown; ms?: unknown };
+                if (typeof b?.month !== "string" || !/^\d{4}-\d{2}$/.test(b.month) || typeof b.ms !== "number" || !Number.isFinite(b.ms) || (b.epic !== null && !isSafe(b.epic)))
+                    return send(res, 400, "need month YYYY-MM, epic (or null) and ms");
+                timeLog = adjustMonth(timeLog, b.month, typeof b.epic === "string" ? b.epic : undefined, Math.round(b.ms));
+                writeFileSync(timeFile, JSON.stringify(timeLog));
+                return send(res, 200, "");
+            }
+            // An epic's page: its time over the last eight workdays, and every session that worked in
+            // it, live or not, with its name, time and PRs.
+            const epicHist = /^\/epics\/([^/]+)\/history$/.exec(url.pathname);
+            if (req.method === "GET" && epicHist) {
+                const id = decodeURIComponent(epicHist[1]);
+                const h = epicHistory(timeLog, id, lastWorkdays(new Date(), 8));
+                const shelved = Object.values(shelf).flat();
+                const steps = h.sessions.filter((x) => !x.sessionId.startsWith("adjust:")).map((x) => {
+                    const live = sessions.get(x.sessionId);
+                    const item = shelved.find((i) => i.sessionId === x.sessionId);
+                    return { ...x, name: live?.name?.text ?? item?.named?.text ?? live?.label ?? item?.label ?? recapper.gistOf(x.sessionId) ?? "a session", prs: live?.prs ?? item?.prs ?? [], live: !!live && live.state !== "ended" };
+                });
+                return json(res, { days: h.days, steps });
+            }
             if (req.method === "GET" && url.pathname === "/time/month") {
                 const month = url.searchParams.get("month") ?? "";
                 if (!/^\d{4}-\d{2}$/.test(month)) return send(res, 400, "need month=YYYY-MM");
-                return json(res, monthByEpic(timeLog, month));
+                // Beside each epic's time: the PRs its sessions own (live or shelved), and your correction.
+                const shelved = Object.values(shelf).flat();
+                const prsOf = (sid: string) => sessions.get(sid)?.prs ?? shelved.find((i) => i.sessionId === sid)?.prs ?? [];
+                const inMonth = Object.entries(timeLog).filter(([d]) => d.startsWith(`${month}-`));
+                return json(res, monthByEpic(timeLog, month).map((r) => {
+                    const sids = inMonth.flatMap(([, ss]) => Object.entries(ss).filter(([, e]) => e.epic === r.epic).map(([sid]) => sid));
+                    const adjusted = timeLog[`${month}-01`]?.[`adjust:${r.epic ?? "none"}`]?.ms ?? 0;
+                    return { ...r, prs: new Set(sids.flatMap(prsOf)).size, adjusted };
+                }));
             }
             if (req.method === "POST" && url.pathname === "/epics") {
                 const b = (await body(req)) as { title?: unknown; short?: unknown; lane?: unknown };

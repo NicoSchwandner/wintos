@@ -66,11 +66,6 @@ export function parkBlock(blockId: string): Promise<Response> {
     return daemonFetch(`/blocks/${encodeURIComponent(blockId)}/wait`, { method: "POST", body: { reason: "parked by you" } });
 }
 
-// until: when it comes back by itself; null wakes it now.
-export function setProjectSnoozed(tabId: string, until: number | null): Promise<Response> {
-    return daemonFetch(`/projects/${encodeURIComponent(tabId)}/snooze`, { method: "POST", body: { until } });
-}
-
 export function setProjectTitle(tabId: string, title: string, manual: boolean): Promise<Response> {
     return daemonFetch(`/projects/${encodeURIComponent(tabId)}/title`, { method: "POST", body: { title, manual } });
 }

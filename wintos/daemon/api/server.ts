@@ -284,7 +284,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
         pluginNames: runner.names,
         pluginsRunning: runner.running,
         snoozes,
-        projectSnoozes,
         closed,
         activityToday: recapper.today(Date.now()),
         seen,
@@ -315,9 +314,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // Kept next to the projects: a file there is not a project (those are folders).
     const snoozeFile = join(opts.root, ".snoozes.json");
     let snoozes = readJson<Snoozes>(snoozeFile, {});
-    // ⌥⌘Z: tab id → until when the project stays out of the sidebar.
-    const projectSnoozeFile = join(opts.root, ".project-snoozes.json");
-    let projectSnoozes = readJson<Record<string, number>>(projectSnoozeFile, {});
     // ⇧⌘W: what you closed, for the day's Closed list; a reopened project leaves it.
     const closedFile = join(opts.root, ".closed.json");
     let closed = readJson<Closed[]>(closedFile, []);
@@ -362,7 +358,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         }
     };
     try {
-        // The daemon's own files (.sessions.json, .snoozes.json, .project-snoozes.json, .bindings.json) are not notes.
+        // The daemon's own files (.sessions.json, .snoozes.json, .bindings.json) are not notes.
         watcher = watch(opts.root, { recursive: true }, (_e, file) => {
             if (file && !file.includes("/") && file.startsWith(".")) return;
             clearTimeout(pending);
@@ -578,18 +574,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const r = store.saveMine(decodeURIComponent(mine[1]), await formatMarkdown(b.text), typeof b.baseMtime === "number" ? b.baseMtime : undefined);
                 if (r === "no project") return send(res, 404, "no project for this tab");
                 if (r === "conflict") return send(res, 409, "mine.md changed on disk since you started editing");
-                return send(res, 200, "");
-            }
-            const snoozeTab = /^\/projects\/([^/]+)\/snooze$/.exec(url.pathname);
-            if (req.method === "POST" && snoozeTab) {
-                const b = (await body(req)) as { until?: unknown };
-                if (b?.until !== null && typeof b?.until !== "number") return send(res, 400, "need until: a time, or null");
-                const tabId = decodeURIComponent(snoozeTab[1]);
-                const now = Date.now();
-                const { [tabId]: _old, ...rest } = projectSnoozes;
-                projectSnoozes = Object.fromEntries(Object.entries(b.until === null ? rest : { ...rest, [tabId]: b.until as number }).filter(([, t]) => t > now));
-                writeFileSync(projectSnoozeFile, JSON.stringify(projectSnoozes));
-                broadcast();
                 return send(res, 200, "");
             }
             if (req.method === "POST" && url.pathname === "/prs/snooze") {

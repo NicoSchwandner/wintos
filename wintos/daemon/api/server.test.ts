@@ -1216,18 +1216,3 @@ describe("update", () => {
     });
 });
 
-test("⌥⌘Z: a project snoozes until a time, kept across a restart, gone once that passes", async () => {
-    const snoozed = async () => (await (await fetch(`${base}/state`)).json()).projectSnoozes;
-    expect(await snoozed()).toEqual({});
-    expect((await post("/projects/tab-1/snooze", { until: "tomorrow" })).status).toBe(400);
-    const until = Date.now() + 3_600_000;
-    await post("/projects/tab-1/snooze", { until });
-    await post("/projects/tab-2/snooze", { until: Date.now() - 1 });
-    expect(await snoozed()).toEqual({ "tab-1": until });
-    srv.close();
-    srv = await startServer({ root, port: 0, token: "t0ken" });
-    base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
-    expect(await snoozed()).toEqual({ "tab-1": until });
-    await post("/projects/tab-1/snooze", { until: null });
-    expect(await snoozed()).toEqual({});
-});

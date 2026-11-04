@@ -20,12 +20,12 @@ import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, reopenProject, resumePane, setLatestSessions } from "./focus";
 import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
-import { closeProjectTab, openView, registerWintosMenu, snoozeProject } from "./menu";
+import { closeProjectTab, openView, registerWintosMenu } from "./menu";
 import { focusList } from "./dayplan";
 import type { Day } from "../daemon/journal/journal";
 import { isPage, mainViewAtom, renamingAtom, tickModeAtom, yourMoveAtom } from "./notes/state";
 import { inFlight, liveSessions } from "./sessions";
-import { instance, setProjectSnoozed, setProjectTitle, useWintos } from "./useWintos";
+import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { attention } from "./attention";
 import { ghPrs, inboxKind, isInboxTab, type InboxList, prRef, projectTabIds, relTime, RowView, type WintosState } from "./view";
 import { queueModel } from "./prs";
@@ -114,8 +114,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEffect(() => {
         if (state) setLatestSessions(state.sessions, model?.targets ?? {});
     }, [state, tabIds.join(",")]);
-    // A snoozed project waiting on you is back for good, not only while it waits.
-    useEffect(() => model?.wake.forEach((id) => void setProjectSnoozed(id, null)), [model?.wake.join(",")]);
     const yourMove = model ? model.needs.length + wokeClosed.length : 0;
     useEffect(() => void globalStore.set(yourMoveAtom, yourMove), [yourMove]);
 
@@ -141,7 +139,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     click: () => editMine(true),
                 },
                 { type: "separator" },
-                { label: tabId === activeTabId && state?.projectSnoozes?.[tabId] && state.projectSnoozes[tabId] > Date.now() ? "Wake (⌥⌘Z)" : "Snooze until the next working day (⌥⌘Z)", click: () => snoozeProject(tabId) },
                 { label: "Close tab", click: () => closeProjectTab(tabId, true) },
             ],
             e

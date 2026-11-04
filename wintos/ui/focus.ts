@@ -5,8 +5,7 @@ import type { Session } from "../daemon/sessions/reduce";
 import { Target } from "./sessions";
 import { editingMineAtom, isPage, mainViewAtom, overlayAtom, type Overlay } from "./notes/state";
 import { rememberReturn, returnFocus, wantPane } from "./focusOwner";
-import { currentState, daemonFetch, setProjectSnoozed } from "./useWintos";
-import { isSnoozedProject } from "./attention";
+import { currentState, daemonFetch } from "./useWintos";
 import { flog, where } from "./focusLog";
 import { inboxKind } from "./view";
 import { noteResume } from "./resuming";
@@ -110,10 +109,8 @@ async function layoutSettled(tabId: string): Promise<boolean> {
     return false;
 }
 
-// Going to a snoozed project, from the palette, a PR, a wake or ⌥⌘O, wakes it.
 export function focusSession(t: Target): void {
     if (t.tabId === globalStore.get(atoms.staticTabId)) return landOn(t);
-    if (isSnoozedProject(currentState()?.projectSnoozes, t.tabId, Date.now())) void setProjectSnoozed(t.tabId, null);
     localStorage.setItem(HANDOFF, JSON.stringify({ ...t, at: Date.now() }));
     getApi().setActiveTab(t.tabId);
 }

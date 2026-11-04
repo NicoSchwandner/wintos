@@ -11,7 +11,7 @@ import { T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { useZoneKeys } from "./zones";
-import { attention, day } from "./attention";
+import { attention } from "./attention";
 import { ghPrs, prProjectLists, prRef, projectTabIds, relTime, sessionName, type WintosState, projectTouched, sessionTouched } from "./view";
 import { closedWakes } from "./wakes";
 import { shelvedName } from "../daemon/shelf/shelf";
@@ -192,7 +192,6 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     for (const r of model.running) band[r.tabId] = "running";
     for (const r of [...model.quiet, ...model.quietMore]) band[r.tabId] = "quiet";
     for (const r of model.quietStale) band[r.tabId] = `out of the sidebar · last touched ${relTime(now - r.lastAt)} ago`;
-    for (const id of model.snoozed) band[id] = `snoozed until ${day(state.projectSnoozes![id])} · opening it wakes it`;
     const gh = ghPrs(state);
     const prOf = prProjectLists(tabIds, state);
     const sessionsOf = (id: string) => state.sessions.filter((s) => s.tabId === id && s.state !== "ended");

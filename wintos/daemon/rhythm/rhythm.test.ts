@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { AWAY_MS, closeDay, nudge, prompted, startBreak, snooze, tick, type Rhythm } from "./rhythm";
+import { AWAY_MS, nudge, prompted, startBreak, snooze, tick, type Rhythm } from "./rhythm";
 
 const MIN = 60_000;
 const T0 = 1_000 * MIN;
@@ -73,23 +73,5 @@ describe("nudge", () => {
         expect(nudge(r, { ...calm, now: at(13, 5), lunch, today: day })).toEqual({ kind: "lunch", minutes: 15 });
         expect(nudge({ ...r, breaks: [{ start: at(12, 0), end: at(12, 25) }] }, { ...calm, now: at(13, 5), lunch, today: day })).toBeUndefined();
         expect(nudge(r, { ...calm, now: at(12, 55), lunch, today: day })).toBeUndefined();
-    });
-});
-
-describe("closing the day", () => {
-    const at = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m).getTime();
-    test("past the workday's end, closing it is asked, Your move or not", () => {
-        const r: Rhythm = { day: "d", stretchFrom: at(30, 16), breaks: [] };
-        const c = { ...calm, needs: 2, workday: [8 * 60, 17 * 60] as [number, number], today: new Date(2026, 9, 30) };
-        expect(nudge(r, { ...c, now: at(30, 16, 59) })).toBeUndefined();
-        expect(nudge(r, { ...c, now: at(30, 17, 5) })).toMatchObject({ kind: "wrap" });
-    });
-    test("closed: quiet until 06:00 the next workday, a Friday's until Monday, and no nudges meanwhile", () => {
-        const fri = closeDay({ day: "d", stretchFrom: 0, breaks: [] }, new Date(2026, 9, 30, 17, 10));
-        expect(fri.closed).toEqual({ day: "d", until: at(33, 6) });
-        expect(closeDay({ day: "d", stretchFrom: 0, breaks: [] }, new Date(2026, 9, 28, 17, 10)).closed?.until).toBe(at(29, 6));
-        expect(nudge(fri, { ...calm, now: at(30, 18), workday: [480, 1020], today: new Date(2026, 9, 30) })).toBeUndefined();
-        expect(tick(fri, 0, at(31, 9), "d2").closed).toEqual(fri.closed);
-        expect(tick(fri, 0, at(33, 9), "d3").closed).toBeUndefined();
     });
 });

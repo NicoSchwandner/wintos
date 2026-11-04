@@ -276,7 +276,6 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     out.push(action("break", "Take a break now", "⌥⌘B", "break"));
     out.push(action("break-later", "Move nudge: ask again in 10 minutes", "⇧⌥⌘B", "break-later"));
     out.push(action("release", "Decisions: the turns waiting on you, one card at a time", "⌥⌘O", "release"));
-    out.push(action("wrapup", "Close the day: give each loose end a place", "⇧⌘E", "wrapup"));
     out.push(action("keys", "Keyboard shortcuts", "⇧⌘K", "keymap"));
     return out;
 }

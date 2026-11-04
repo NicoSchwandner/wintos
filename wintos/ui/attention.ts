@@ -6,7 +6,7 @@ import type { Kind } from "../daemon/projects/parse";
 import type { Target } from "./sessions";
 import { ghPrs, prOwners, prRef, relTime, repoLabeler, type Owner, type RowView, type WintosState } from "./view";
 import { WOKE } from "./wakePlan";
-import { heldUntil } from "../daemon/rhythm/hold";
+import { isHeld } from "../daemon/rhythm/hold";
 
 // Which projects need you, why, and in what order: the one place that decides it. The sidebar,
 // the palette and ⌃⇥ read it; it is given live sessions (those whose pane still exists).
@@ -158,14 +158,14 @@ export type Attention = Ranking & { views: Record<string, RowView>; prs: Record<
 export function attention(tabIds: string[], state: WintosState, names: Record<string, string | undefined>, now: number, here?: string): Attention {
     const prs = prsByTab(tabIds, state);
     const lines = wakingTabs(state, tabIds);
-    const { split: unsnoozed, held } = holding(waking(sidebarModel(tabIds, state), lines), state, now, here, lines);
+    const { split: unsnoozed, held } = holding(waking(sidebarModel(tabIds, state), lines), state, here, lines);
     const { split: undriven, driving } = drivingSplit(unsnoozed, state.driving ?? [], state.seen ?? {}, now);
     const { split, snoozed, wake } = snoozing(undriven, state.projectSnoozes ?? {}, now, here);
     const rows = [...driving.map((d) => d.row), ...split.needs, ...split.read, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale];
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const label = repoLabeler(state);
     const views = Object.fromEntries(rows.map((r) => [r.tabId, lines[r.tabId] ? { ...rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label), next: lines[r.tabId], tone: "apricot" as const } : rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label)]));
-    for (const [tabId, until] of held.rows) views[tabId] = { ...views[tabId], reason: [`held ${until === Infinity ? "until you are back" : `until ${clock(until)}: the day is closed`}`, askLine(rows.find((r) => r.tabId === tabId)!.sessions)].filter(Boolean).join(" · ") };
+    for (const tabId of held) views[tabId] = { ...views[tabId], reason: ["held until you are back", askLine(rows.find((r) => r.tabId === tabId)!.sessions)].filter(Boolean).join(" · ") };
     const me = ghPrs(state)?.me;
     for (const r of rows) {
         const done = finishLine(project(r.tabId)?.kind, r.sessions, prs[r.tabId]?.items.map((i) => i.pr) ?? [], me);
@@ -188,21 +188,16 @@ export function attention(tabIds: string[], state: WintosState, names: Record<st
 }
 
 export const day = (t: number) => new Date(t).toLocaleDateString("en-GB", { weekday: "long" });
-const clock = (t: number) => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 const QUICK = new Set(["approve"]);
 
-// Your move without what the hold keeps back, which waits at the top of Quiet saying until when;
-// what is left, the quick asks (an approval) first. A due wake is never held.
-function holding(split: Ranking, state: WintosState, now: number, here: string | undefined, waking: Record<string, string>): { split: Ranking; held: { rows: Map<string, number> } } {
+// Your move without what the hold keeps back, which waits at the top of Quiet saying so; what is
+// left, the quick asks (an approval) first. A due wake is never held.
+function holding(split: Ranking, state: WintosState, here: string | undefined, waking: Record<string, string>): { split: Ranking; held: Set<string> } {
     const r = state.rhythm;
-    const rows = new Map<string, number>();
-    const ctx = r && { now, breakFrom: r.onBreak ?? r.awayFrom, here, quietUntil: r.closed?.until };
-    for (const row of split.needs) {
-        const until = ctx && row.waitingSince !== undefined && !waking[row.tabId] ? heldUntil({ tabId: row.tabId, waitingSince: row.waitingSince }, ctx) : undefined;
-        if (until !== undefined) rows.set(row.tabId, until);
-    }
+    const ctx = r && { breakFrom: r.onBreak ?? r.awayFrom, here };
+    const rows = new Set(split.needs.filter((row) => ctx && row.waitingSince !== undefined && !waking[row.tabId] && isHeld({ tabId: row.tabId, waitingSince: row.waitingSince }, ctx)).map((row) => row.tabId));
     const quick = (row: Row) => (row.sessions.some((s) => s.state === "waiting" && QUICK.has(s.ask?.kind ?? "")) ? 0 : 1);
     const needs = split.needs.filter((x) => !rows.has(x.tabId)).sort((a, b) => quick(a) - quick(b));
     const kept = split.needs.filter((x) => rows.has(x.tabId)).map((x) => ({ ...x, band: "quiet" as const }));
-    return { split: { ...split, needs, quiet: [...kept, ...split.quiet] }, held: { rows } };
+    return { split: { ...split, needs, quiet: [...kept, ...split.quiet] }, held: rows };
 }

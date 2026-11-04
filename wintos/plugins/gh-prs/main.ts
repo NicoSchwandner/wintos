@@ -11,14 +11,25 @@ const FIELDS = `number title url isDraft createdAt author{login} repository{name
   reviewRequests(first:10){nodes{requestedReviewer{__typename ... on User{login} ... on Team{name} ... on Bot{login}}}}
   latestReviews(first:20){nodes{author{login} state submittedAt}}
   pending:reviews(states:PENDING,first:1){nodes{comments{totalCount}}}`;
-const query = (fields: string) => `query($q:String!){search(query:$q,type:ISSUE,first:100){nodes{... on PullRequest{${fields}}}}}`;
+// Twenty at a time: a page of a hundred with these fields is more than GitHub allows one query
+// ("Resource limits for this query exceeded") once a search finds sixty or so.
+const PAGE = 20;
+const query = (fields: string) => `query($q:String!,$after:String){search(query:$q,type:ISSUE,first:${PAGE},after:$after){pageInfo{hasNextPage endCursor} nodes{... on PullRequest{${fields}}}}}`;
 // Merged PRs need little, and the full field set over a month of merges makes GitHub time out.
 const MERGED_FIELDS = `number title url isDraft createdAt author{login} repository{nameWithOwner defaultBranchRef{name}} headRefName baseRefName additions deletions mergedAt mergeCommit{oid}`;
 
 const gh = (args: string[]) => execFileSync("gh", args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024, timeout: 30_000 });
 const orgs = orgQualifier(process.env.WINTOS_GH_ORGS);
-const search = (q: string, state = "is:open", fields = FIELDS): Node[] =>
-    JSON.parse(gh(["api", "graphql", "-f", `query=${query(fields)}`, "-f", `q=is:pr ${state} archived:false ${orgs} ${q}`])).data.search.nodes.filter(Boolean);
+function search(q: string, state = "is:open", fields = FIELDS): Node[] {
+    const out: Node[] = [];
+    let after: string | undefined;
+    do {
+        const r = JSON.parse(gh(["api", "graphql", "-f", `query=${query(fields)}`, "-f", `q=is:pr ${state} archived:false ${orgs} ${q}`, ...(after ? ["-f", `after=${after}`] : [])])).data.search;
+        out.push(...r.nodes.filter(Boolean));
+        after = r.pageInfo.hasNextPage ? r.pageInfo.endCursor : undefined;
+    } while (after && out.length < 200);
+    return out;
+}
 
 const me = gh(["api", "user", "--jq", ".login"]).trim();
 const direct = search("user-review-requested:@me");

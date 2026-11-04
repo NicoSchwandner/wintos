@@ -18,16 +18,15 @@ import { FocusRows, TodayCard } from "./TodayCard";
 import { meetingsFrom } from "./meetings";
 import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
-import { editMine, enterProject, focusArea, focusSession, reopenProject, resumePane, setLatestSessions } from "./focus";
+import { editMine, enterProject, focusArea, reopenProject, resumePane, setLatestSessions } from "./focus";
 import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
-import { closeProjectTab, driveProject, openView, registerWintosMenu, snoozeProject } from "./menu";
+import { closeProjectTab, openView, registerWintosMenu, snoozeProject } from "./menu";
 import { focusList } from "./dayplan";
 import type { Day } from "../daemon/journal/journal";
 import { isPage, mainViewAtom, renamingAtom, tickModeAtom, yourMoveAtom } from "./notes/state";
 import { inFlight, liveSessions } from "./sessions";
 import { instance, setProjectSnoozed, setProjectTitle, useWintos } from "./useWintos";
-import { attention, type Drive, type DriveLine } from "./attention";
-import { driveDay, driveDayLine } from "./driveDay";
+import { attention } from "./attention";
 import { ghPrs, inboxKind, isInboxTab, type InboxList, prRef, projectTabIds, relTime, RowView, type WintosState } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
@@ -35,7 +34,6 @@ import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 
 const BAND_STYLE = {
-    driving: { label: "Driving", color: T.emphasis },
     needs: { label: "Your move", color: T.apricot },
     read: { label: "To read", color: T.blue },
     running: { label: "Running", color: T.moss },
@@ -104,7 +102,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const quiet = expanded ? allQuiet : allQuiet.filter((r) => r.tabId === activeTabId);
     // The cards above the projects are walked too, in the order they show: PRs, On call, Today.
     const cards = [...(state?.day ? ["card:today"] : []), ...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : [])];
-    const switchOrder = model ? [...cards, ...wokeClosed.map((w) => `wake:${w.projectId}`), ...[...model.driving.map((d) => d.row), ...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId)] : [];
+    const switchOrder = model ? [...cards, ...wokeClosed.map((w) => `wake:${w.projectId}`), ...[...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId)] : [];
 
     useEffect(registerWintosMenu, []);
 
@@ -143,25 +141,10 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     click: () => editMine(true),
                 },
                 { type: "separator" },
-                { label: state?.driving?.includes(tabId) ? "Stop driving (⌥⌘D)" : "Drive: pin to the top (⌥⌘D)", enabled: !!state?.driving?.includes(tabId) || (state?.driving?.length ?? 0) < 3, click: () => driveProject(tabId) },
                 { label: tabId === activeTabId && state?.projectSnoozes?.[tabId] && state.projectSnoozes[tabId] > Date.now() ? "Wake (⌥⌘Z)" : "Snooze until the next working day (⌥⌘Z)", click: () => snoozeProject(tabId) },
                 { label: "Close tab", click: () => closeProjectTab(tabId, true) },
             ],
             e
-        );
-    };
-    // A driving project's line under its title: what waits on you there, and for how long.
-    const renderDrive = (d: Drive) => {
-        const waiting = d.lines.filter((l) => l.state === "waiting");
-        const v = model!.views[d.row.tabId];
-        const next = waiting.length ? `${waiting.length} waiting on you · ${relTime(now - Math.min(...waiting.map((l) => l.since)))}` : undefined;
-        return (
-            <CardRow key={d.row.tabId} tabId={d.row.tabId} v={{ ...v, next, tone: "apricot", meta: undefined }} active={d.row.tabId === activeTabId && !isPage(mainView)} cursor={switchTarget === d.row.tabId} renaming={renaming === d.row.tabId}
-                onOpen={() => open(d.row.tabId)} onMenu={(e) => menu(e, d.row.tabId)} onClose={() => closeProjectTab(d.row.tabId, true)}
-                onRename={(title) => (setRenaming(null), focusArea("terminal"), title?.trim() && fireAndForget(() => setProjectTitle(d.row.tabId, title.trim(), true)))}>
-                <DriveLines tabId={d.row.tabId} lines={d.lines} now={now} />
-                <div style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>today · {driveDayLine(driveDay(state?.activityToday?.[d.row.tabId], model!.prs[d.row.tabId]?.items.map((i) => i.pr) ?? [], gh?.me, now))}</div>
-            </CardRow>
         );
     };
     const renderRow = (row: Row) => {
@@ -237,7 +220,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     </div>
                 ) : (
                     <>
-                        <Band kind="driving" count={model.driving.length}>{model.driving.map(renderDrive)}</Band>
                         <Band kind="needs" count={model.needs.length + wokeClosed.length}>
                             {wokeClosed.map((w) => (
                                 <CardRow key={`wake:${w.sessionId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌃⇥ or ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
@@ -389,7 +371,7 @@ const Done = ({ p }: { p: RowProps }) => (
     </button>
 );
 
-function CardRow(p: RowProps & { children?: React.ReactNode }) {
+function CardRow(p: RowProps) {
     const { v } = p;
     const tone = { apricot: T.apricot, blue: T.blue, brick: T.brick, secondary: T.secondary }[v.tone ?? "secondary"];
     return (
@@ -424,27 +406,7 @@ function CardRow(p: RowProps & { children?: React.ReactNode }) {
             </div>
             {v.next && <div style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty" } as React.CSSProperties}><Rich text={v.next} size="rail" links={false} /></div>}
             {v.done && <Done p={p} />}
-            {p.children}
             {v.meta && <div title={v.meta} style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.meta}</div>}
-        </div>
-    );
-}
-
-const LINE_STATE = { waiting: { text: "your move", color: T.apricot }, reply: { text: "to read", color: T.blue }, running: { text: "running", color: T.moss } } as const;
-
-// A driving project's sessions that are waiting on you or at work; a click goes to that session.
-function DriveLines({ tabId, lines, now }: { tabId: string; lines: DriveLine[]; now: number }) {
-    if (!lines.length) return <div style={{ fontSize: 12, color: T.muted }}>nothing waiting or running</div>;
-    return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {lines.map((l) => (
-                <button key={l.sessionId} type="button" data-key="" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={(e) => (e.stopPropagation(), focusSession({ tabId, blockId: l.blockId }))}
-                    style={{ display: "flex", alignItems: "baseline", gap: 8, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, textAlign: "left", minWidth: 0 }}>
-                    <span style={{ flexShrink: 0, width: 6, height: 6, borderRadius: 3, background: LINE_STATE[l.state].color, transform: "translateY(-1px)" }} />
-                    <span style={{ flexGrow: 1, minWidth: 0, fontSize: 12.5, color: T.secondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</span>
-                    <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: LINE_STATE[l.state].color }}>{LINE_STATE[l.state].text}{l.state === "running" ? "" : ` · ${relTime(now - l.since)}`}</span>
-                </button>
-            ))}
         </div>
     );
 }

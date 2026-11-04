@@ -14,7 +14,6 @@ import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { Standup } from "./Standup";
 import { useZoneKeys } from "./zones";
-import { DriveBoard } from "./DriveBoard";
 import { cursorKeys, startCursor } from "./itemCursor";
 
 const hm = (t: number) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -74,7 +73,6 @@ export const TodayPage = memo(() => {
             <div style={{ flexGrow: 1, minHeight: 0, display: "grid", gridTemplateColumns: "clamp(220px, 26vw, 400px) minmax(0, 760px)", gap: 20, paddingBottom: 18 }}>
                 <Timeline now={now} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflowY: "auto" }}>
-                    <DriveBoard />
                     <Standup today={day.date} focus={day.focus} panel={(p) => <Panel {...p} />} />
                     {y && (
                         <Panel label={lastDayName(y.date, day.date)} note={day.planned ? `${yItems.filter((i) => i.done).length} done · ${yesterdayItems(day).filter((i) => i.carried).length} carried` : undefined} keys={!day.planned && yesterdayItems(day).some((i) => !i.carried) && <Key k="j k · c" label="carry" />}>

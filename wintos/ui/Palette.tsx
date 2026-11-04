@@ -257,7 +257,6 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     const action = (id: string, t: string, hint: string, a: string): PaletteItem => ({ id: `a:${id}`, kind: "action", title: t, hint, run: () => void runKey(a) });
     out.push(action("terminal", `New terminal in ${here}`, "⌘T", "terminal"));
     out.push(action("project", "New project", "⌘N", "project"));
-    out.push(action("drive-project", `Drive ${here}: pin it to the top of the sidebar, or unpin it`, "⌥⌘D", "drive-project"));
     out.push(action("rename", `Rename ${here}`, "⌘R", "rename"));
     out.push(action("prs", "PRs need attention", "⇧⌘G", "prs"));
     for (const p of pluginPanels(state)) out.push(action(`panel:${p.name}`, p.title, "⇧⌘O", `panel:${p.name}`));

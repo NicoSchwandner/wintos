@@ -1,7 +1,6 @@
 // What the Herdr mods compute from wintosd's state: WintOS's own logic, bundled for Herdr, where
 // a project is a Herdr tab and a session's pane is its terminal.
 import { attention } from "../ui/attention";
-import { driveDay, driveDayLine } from "../ui/driveDay";
 import { ghPrs, prOwners, prProjects, reopenFor, relTime, type WintosState } from "../ui/view";
 import { GROUP_HEADERS } from "../ui/prGroups";
 import { queueModel } from "../ui/prs";
@@ -14,18 +13,15 @@ export { toggleCheckbox } from "../ui/notes/checkbox";
 
 export function sidebar(state: WintosState, tabIds: string[], names: Record<string, string>, now: number, here?: string) {
     const a = attention(tabIds, state, names, now, here);
-    const me = ghPrs(state)?.me;
-    const today = (tabId: string) => driveDayLine(driveDay(state.activityToday?.[tabId], a.prs[tabId]?.items.map((i) => i.pr) ?? [], me, now));
     const row = (r: { tabId: string; sessions: { blockId: string; state: string }[] }) => ({ tabId: r.tabId, view: a.views[r.tabId], target: a.targets[r.tabId] });
     return {
-        driving: a.driving.map((d) => ({ ...row(d.row), lines: d.lines, today: today(d.row.tabId) })),
         needs: a.needs.map(row),
         read: a.read.map(row),
         running: a.running.map(row),
         quiet: [...a.quiet, ...a.quietMore, ...a.quietStale].map(row),
-        // agent.next follows the sidebar: what waits on you in the projects you drive, then the rest.
+        // agent.next follows the sidebar: what waits on you, Your move then To read.
         prs: prCounts(state, now),
-        order: [...a.driving.flatMap((d) => d.lines.filter((l) => l.state !== "running").map((l) => l.blockId)), ...[...a.needs, ...a.read].flatMap((r) => (a.targets[r.tabId] ? [a.targets[r.tabId].blockId] : []))],
+        order: [...a.needs, ...a.read].flatMap((r) => (a.targets[r.tabId] ? [a.targets[r.tabId].blockId] : [])),
     };
 }
 

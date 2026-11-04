@@ -1216,20 +1216,6 @@ describe("update", () => {
     });
 });
 
-test("⌥⌘D: up to three projects driven, in the order pinned, kept across a restart", async () => {
-    const driving = async () => (await (await fetch(`${base}/state`)).json()).driving;
-    expect(await driving()).toEqual([]);
-    expect((await post("/projects/t1/drive", { on: "yes" })).status).toBe(400);
-    for (const t of ["t2", "t1", "t3", "t1"]) await post(`/projects/${t}/drive`, { on: true });
-    expect((await post("/projects/t4/drive", { on: true })).status).toBe(409);
-    expect(await driving()).toEqual(["t2", "t1", "t3"]);
-    srv.close();
-    srv = await startServer({ root, port: 0, token: "t0ken" });
-    base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
-    await post("/projects/t1/drive", { on: false });
-    expect(await driving()).toEqual(["t2", "t3"]);
-});
-
 test("⌥⌘Z: a project snoozes until a time, kept across a restart, gone once that passes", async () => {
     const snoozed = async () => (await (await fetch(`${base}/state`)).json()).projectSnoozes;
     expect(await snoozed()).toEqual({});

@@ -71,9 +71,7 @@ export function decisions(state: WintosState, now: number, titleOf: (tabId: stri
                 ...(s.restored ? { restored: true as const } : {}),
             };
         });
-    // A driving project's turns come first: those projects are the day's work.
-    const drives = (d: Decision) => Number(!state.driving?.includes(d.tabId));
-    return out.sort((a, b) => drives(a) - drives(b) || Number(a.final) - Number(b.final) || (KIND_ORDER[a.kind] ?? 1) - (KIND_ORDER[b.kind] ?? 1) || a.since - b.since);
+    return out.sort((a, b) => Number(a.final) - Number(b.final) || (KIND_ORDER[a.kind] ?? 1) - (KIND_ORDER[b.kind] ?? 1) || a.since - b.since);
 }
 
 // ⌥⌘O: the next turn waiting on you, after the one you are in, round the list; none when the one

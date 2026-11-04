@@ -8,13 +8,13 @@ const s = (id: string, tabId: string, o: Partial<Session>) => ({ id, tabId, bloc
 const projects = ["a", "b", "c"].map((id) => ({ id, title: id.toUpperCase(), dir: `/${id}`, mtime: 0 }) as never);
 
 describe("the Herdr sidebar", () => {
-    const state = { now: NOW, projects, driving: ["c"], sessions: [s("1", "a", { state: "waiting" }), s("2", "b", { state: "working" }), s("3", "c", { state: "waiting", since: NOW - 50 }), s("4", "c", { state: "working" })] } as WintosState;
+    const state = { now: NOW, projects, sessions: [s("1", "a", { state: "waiting" }), s("2", "b", { state: "working" }), s("3", "c", { state: "waiting", since: NOW - 50 }), s("4", "c", { state: "working" })] } as WintosState;
     const m = sidebar(state, ["a", "b", "c"], {}, NOW);
-    test("driving first, then the bands, each row with its view and where a click lands", () => {
-        expect([m.driving.map((d) => d.tabId), m.needs.map((r) => [r.tabId, r.view.title, r.target?.blockId]), m.running.map((r) => r.tabId)]).toEqual([["c"], [["a", "A", "t-1"]], ["b"]]);
+    test("the bands, each row with its view and where a click lands", () => {
+        expect([m.needs.map((r) => [r.tabId, r.view.title, r.target?.blockId]), m.running.map((r) => r.tabId)]).toEqual([[["a", "A", "t-1"], ["c", "C", "t-3"]], ["b"]]);
     });
-    test("agent.next goes to what waits in the driving projects, then to Your move; nothing running", () => {
-        expect(m.order).toEqual(["t-3", "t-1"]);
+    test("agent.next goes to what waits in Your move; nothing running", () => {
+        expect(m.order).toEqual(["t-1", "t-3"]);
     });
 });
 

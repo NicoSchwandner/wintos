@@ -1,4 +1,6 @@
+import { globalStore } from "@/app/store/jotaiStore";
 import { memo, useState } from "react";
+import { newStepEpicAtom } from "./notes/state";
 import { EpicAvatar } from "./EpicAvatar";
 import { lookOf, NO_EPIC } from "./epicLook";
 import { closeOverlay, focusedSession } from "./focus";
@@ -16,7 +18,11 @@ export const NewStep = memo(() => {
     const ref = useFocusOnMount<HTMLInputElement>();
     const { state } = useWintos();
     const open = (state?.epics ?? []).filter((e) => !e.done);
-    const [epic, setEpic] = useState<string | undefined>(() => open.find((e) => e.id === focusedSession()?.epic)?.id);
+    const [epic, setEpic] = useState<string | undefined>(() => {
+        const asked = globalStore.get(newStepEpicAtom);
+        globalStore.set(newStepEpicAtom, "");
+        return open.find((e) => e.id === (asked || focusedSession()?.epic))?.id;
+    });
     const [step, setStep] = useState("");
     const planned = open.find((e) => e.id === epic)?.steps.filter((x) => x.state !== "done").map((x) => x.name) ?? [];
     const start = () => {

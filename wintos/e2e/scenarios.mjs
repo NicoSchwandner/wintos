@@ -889,6 +889,25 @@ await scenario("43 · a worker's turn end reaches its epic's agent: typed into t
     await until("typed into the agent and off the queue", async () => !(await st()).epicReports?.["e2e-ag"], 120_000);
 });
 
+await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sessions; + new step opens ⌘N's sheet on that epic; ⌥⌘V again goes back", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const pane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const id = await (await api("/epics", { title: "E2E grouped" })).text();
+    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-grouped", hook_event_name: "UserPromptSubmit", prompt: "e2e grouped" } });
+    await api("/sessions/e2e-grouped/epic", { epic: id });
+    await evalIn(t, `localStorage.setItem("wintos:sidebar-by-epic", "0"); window.dispatchEvent(new StorageEvent("storage"))`);
+    await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
+    const group = `document.querySelector("[data-wintos=epic-groups] [data-epic-group='${id}']")`;
+    await until("its group with its session", () => evalIn(t, `!!${group}?.querySelector("[data-row='s:e2e-grouped']")`));
+    await evalIn(t, `${group}.querySelector("[data-wintos=epic-new-step]").click()`);
+    await until("the sheet on that epic", () => evalIn(t, `!!document.querySelector("[data-wintos=new-step] [data-epic='${id}'][data-on]")`));
+    await press(t, "Escape", { code: "Escape", keyCode: 27 });
+    await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
+    await until("back by state", () => evalIn(t, `!document.querySelector("[data-wintos=epic-groups]")`));
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

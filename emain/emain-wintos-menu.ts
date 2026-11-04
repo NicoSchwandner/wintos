@@ -27,6 +27,7 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         item("Park Session (nothing for me)", "park-session", "Alt+Cmd+P"),
         item("Session's Epic…", "epic", "Alt+Cmd+E"),
         item("Epic's Page", "epic-page", "Shift+Alt+Cmd+E"),
+        item("Sidebar by Epic / by State", "sidebar-view", "Alt+Cmd+V"),
         item("Move Session…", "move-session", "Alt+Cmd+M"),
         item("Take Session Out", "take-out", "Alt+Cmd+T"),
         item("Join Meeting", "join-meeting", "Shift+Cmd+J"),

@@ -4,6 +4,8 @@ import { atom } from "jotai";
 export type MainView = "terminal" | "day" | "reflect" | "keyboard" | "epic";
 // The epic the epic page shows (openEpic).
 export const openEpicAtom = atom("");
+// The epic ⌘N's sheet starts on when opened from an epic's "+ new step" in the sidebar.
+export const newStepEpicAtom = atom("");
 // A page that is not the tab's own (Today, Reflect, Keyboard): it covers the tab, which then isn't
 // "where you are" — not marked in the sidebar, not where a walk starts.
 export const isPage = (v: MainView) => v !== "terminal";

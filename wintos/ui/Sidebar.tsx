@@ -20,8 +20,8 @@ import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, focusSession, reopenProject, resumePane, setLatestSessions } from "./focus";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
-import { closeProjectTab, openView, registerWintosMenu } from "./menu";
-import { isPage, mainViewAtom, renamingAtom, yourMoveAtom } from "./notes/state";
+import { closeProjectTab, openView, registerWintosMenu, runKey, SIDEBAR_BY_EPIC } from "./menu";
+import { isPage, mainViewAtom, newStepEpicAtom, renamingAtom, yourMoveAtom } from "./notes/state";
 import { inFlight, liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { attention } from "./attention";
@@ -32,6 +32,7 @@ import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 import { EpicAvatar } from "./EpicAvatar";
 import { PinnedEpics } from "./PinnedEpics";
+import { EpicGroups, groupByEpic } from "./EpicGroups";
 import { useEpicReports } from "./epicReports";
 import { lookOf, NO_EPIC, type Look } from "./epicLook";
 
@@ -87,6 +88,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const fullScreen = useAtomValue(atoms.isFullScreen);
     const mainView = useAtomValue(mainViewAtom);
     const [showAll, setShowAll] = useStoredFlag("wintos:quiet-unfolded");
+    const [byEpic] = useStoredFlag(SIDEBAR_BY_EPIC);
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
@@ -110,8 +112,11 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const epicsWaiting = new Set((state?.sessions ?? []).filter((x) => x.epic && x.state === "waiting").map((x) => x.epic)).size;
     const pinned = (state?.epics ?? []).filter((e) => e.pinned && !e.done);
     const cards = [...(state ? ["card:today"] : []), ...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : [])];
-    const listed = model ? [...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale] : [];
-    const switchOrder = model ? [...cards, ...pinned.map((e) => `epic:${e.id}`), ...wokeClosed.map((w) => `wake:${w.projectId}`), ...listed.map((r) => r.key)] : [];
+    const byState = model ? [...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale] : [];
+    const groups = byEpic ? groupByEpic(byState, state?.epics ?? []) : [];
+    const listed = byEpic ? groups.flatMap((g) => g.rows) : byState;
+    const stops = byEpic ? groups.flatMap((g) => [...(g.epic ? [`epic:${g.epic.id}`] : []), ...g.rows.map((r) => r.key)]) : [...pinned.map((e) => `epic:${e.id}`), ...listed.map((r) => r.key)];
+    const switchOrder = model ? [...cards, ...wokeClosed.map((w) => `wake:${w.projectId}`), ...stops] : [];
     const tabOfRow = Object.fromEntries(listed.map((r) => [r.key, r.tabId]));
 
     useEffect(registerWintosMenu, []);
@@ -209,7 +214,12 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         {loading.map((p) => <Tile key={p.name} label={p.title} keys="⇧⌘O" value="…" active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
-                {state && <PinnedEpics epics={pinned} sessions={state.sessions.filter((x) => x.state !== "ended" && !x.background)} now={now} cursor={switchTarget} />}
+                {state && (
+                    <button type="button" data-wintos="sidebar-view" data-key="⌥⌘V" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("sidebar-view")} style={{ alignSelf: "flex-start", margin: "-8px 4px -6px", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 11.5, color: T.faint }}>
+                        {byEpic ? "by epic · show by state" : "by state · show by epic"}
+                    </button>
+                )}
+                {state && !byEpic && <PinnedEpics epics={pinned} sessions={state.sessions.filter((x) => x.state !== "ended" && !x.background)} now={now} cursor={switchTarget} />}
                 {state?.day?.reflection && (
                     <button type="button" data-wintos="reflect-nudge" data-key="⌥⌘Y" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openView("reflect")} style={{ display: "flex", justifyContent: "space-between", gap: 8, margin: "-8px 2px 0", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12.5, color: T.apricot, textAlign: "left" }}>
                         Write your {state.day.reflection.level} reflection
@@ -224,12 +234,16 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     </div>
                 ) : (
                     <>
-                        <Band kind="needs" count={model.needs.length + wokeClosed.length}>
+                        <Band kind="needs" count={(byEpic ? 0 : model.needs.length) + wokeClosed.length}>
                             {wokeClosed.map((w) => (
                                 <CardRow key={`wake:${w.sessionId}`} rowKey={`wake:${w.projectId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌃⇥ or ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
                             ))}
-                            {model.needs.map(renderRow)}
+                            {!byEpic && model.needs.map(renderRow)}
                         </Band>
+                        {byEpic ? (
+                            <EpicGroups groups={groups} renderRow={renderRow} cursor={switchTarget} newStep={(epic) => (globalStore.set(newStepEpicAtom, epic), runKey("new-step"))} />
+                        ) : (
+                        <>
                         <Band kind="read" count={model.read.length}>{model.read.map(renderRow)}</Band>
                         <Band kind="running" count={model.running.length}>{model.running.map(renderRow)}</Band>
                         <Band kind="quiet" count={model.quiet.length + model.quietMore.length} shown={quiet.length}>
@@ -249,6 +263,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                                 </button>
                             ) : null}
                         </Band>
+                        </>
+                        )}
                     </>
                 )}
             </div>

@@ -34,8 +34,6 @@ import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 
-const BATCH_WORTH = 2;
-
 const BAND_STYLE = {
     driving: { label: "Driving", color: T.emphasis },
     needs: { label: "Your move", color: T.apricot },
@@ -252,18 +250,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                             </button>
                         )}
                         <Band kind="driving" count={model.driving.length}>{model.driving.map(renderDrive)}</Band>
-                        <Band kind="needs" count={model.needs.length + wokeClosed.length} note={model.held ? (
-                            <button type="button" data-wintos="held" data-key="⌥⌘O" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("release")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "0 4px", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 11.5, color: T.muted, textAlign: "left" }}>
-                                <span>{model.held.count} held · {model.held.until === Infinity ? "until you are back" : `opens ${new Date(model.held.until).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`}</span>
-                                <Key k="⌥⌘O" label="open now" />
-                            </button>
-                        ) : model.needs.length >= BATCH_WORTH && (
-                            // Enough waiting to be worth a sitting: say where the batch is.
-                            <button type="button" data-wintos="batch-ready" data-key="⌥⌘O" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("release")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "0 4px", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 11.5, color: T.muted, textAlign: "left" }}>
-                                <span>{model.needs.length} to decide in one go</span>
-                                <Key k="⌥⌘O" label="go through them" />
-                            </button>
-                        )}>
+                        <Band kind="needs" count={model.needs.length + wokeClosed.length}>
                             {wokeClosed.map((w) => (
                                 <CardRow key={`wake:${w.sessionId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌃⇥ or ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
                             ))}
@@ -283,7 +270,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                                     onClick={() => setShowAll(!showAll)}
                                     style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "2px 4px 0", padding: "5px 0", background: "transparent", border: "none", textAlign: "left", fontFamily: T.ui, fontSize: 12.5, color: T.faint, cursor: "pointer" }}
                                 >
-                                    <span>{showAll ? "Fold the quiet ones" : `${allQuiet.length - quiet.length} quiet${model.held ? ` · ${model.held.count} held for the batch` : ""}`}</span>
+                                    <span>{showAll ? "Fold the quiet ones" : `${allQuiet.length - quiet.length} quiet`}</span>
                                     <Key k="⌥⌘S" label="" />
                                 </button>
                             ) : null}
@@ -348,16 +335,14 @@ function Tile({ label, keys, value, note, sub, hot, broken, busy, active, cursor
     );
 }
 
-// note: a line under the header, shown even when the band has no rows (Your move's held items).
-function Band({ kind, count, shown, note, children }: { kind: keyof typeof BAND_STYLE; count: number; shown?: number; note?: React.ReactNode; children: React.ReactNode }) {
-    if (!count && !note) return null;
+function Band({ kind, count, shown, children }: { kind: keyof typeof BAND_STYLE; count: number; shown?: number; children: React.ReactNode }) {
+    if (!count) return null;
     const s = BAND_STYLE[kind];
     return (
         <div data-band-group={kind} style={{ display: "flex", flexDirection: "column", gap: kind === "quiet" ? 3 : 7 }}>
             <span style={{ padding: "0 4px", fontSize: 12, fontWeight: 600, letterSpacing: "0.03em", color: kind === "quiet" ? T.faint : kind === "running" ? T.quietTitle : s.color }}>
                 {s.label} · {shown !== undefined && shown < count ? `${shown} of ${count}` : count}
             </span>
-            {note}
             {children}
         </div>
     );

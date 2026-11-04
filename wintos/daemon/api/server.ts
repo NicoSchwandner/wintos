@@ -26,7 +26,7 @@ import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, re
 import { askCard, askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { trail } from "../sessions/trail";
 import { lastReply, reentry } from "../sessions/reentry";
-import { closeDay, later, prompted, release, snooze, startBreak, tick, toggleFocus, type Rhythm } from "../rhythm/rhythm";
+import { closeDay, prompted, snooze, startBreak, tick, toggleFocus, type Rhythm } from "../rhythm/rhythm";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
 import { fetchDone, unlisted } from "../prs/done";
@@ -56,7 +56,7 @@ export const DRIVING_MAX = 3;
 const CLOSED_KEEP_MS = 14 * 86_400_000;
 export type Closed = { tabId: string; title: string; kind?: Kind; at: number };
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; batchEveryMs?: number; wipLimit?: number; termCols?: number }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; wipLimit?: number; termCols?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // The standup's facts: what the PRs a day's sessions own, live or shelved, did that day.
     const factsOf = (ids: string[], day: string) => {
@@ -294,7 +294,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         update: { behind: update?.behind() ?? 0 },
         wip: opts.wipLimit ?? 6,
         termCols: opts.termCols ?? 110,
-        rhythm: { ...rhythm, everyMs: opts.moveEveryMs ?? 30 * 60_000, batchEveryMs: opts.batchEveryMs ?? 20 * 60_000 },
+        rhythm: { ...rhythm, everyMs: opts.moveEveryMs ?? 30 * 60_000 },
         ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
         keyboard,
         headsUps: Object.fromEntries(store.list().flatMap((p) => {
@@ -702,12 +702,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
             }
             if (req.method === "POST" && url.pathname === "/rhythm/break") return setRhythm(startBreak(rhythm, Date.now())), send(res, 200, "");
             if (req.method === "POST" && url.pathname === "/rhythm/close") return setRhythm(closeDay(rhythm, new Date())), send(res, 200, "");
-            if (req.method === "POST" && url.pathname === "/rhythm/release") return setRhythm(release(rhythm, Date.now())), send(res, 200, "");
-            if (req.method === "POST" && url.pathname === "/rhythm/later") {
-                const b = (await body(req)) as { sessionId?: unknown; since?: unknown };
-                if (!isSafe(b?.sessionId) || !Number.isFinite(b?.since)) return send(res, 400, "need the sessionId and since of the turn to leave for the next batch");
-                return setRhythm(later(rhythm, b.sessionId as string, b.since as number, Date.now(), opts.batchEveryMs ?? 20 * 60_000)), send(res, 200, "");
-            }
             if (req.method === "POST" && url.pathname === "/rhythm/focus") {
                 const b = (await body(req)) as { tabId?: unknown };
                 if (!isSafe(b?.tabId)) return send(res, 400, "need the tabId of the project to focus on");

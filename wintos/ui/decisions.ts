@@ -39,17 +39,12 @@ const factsOf = (prs: PR[]): string | undefined => {
     return [`#${pr.number}`, `+${pr.additions} −${pr.deletions}`, ci, review].filter(Boolean).join(" · ");
 };
 
-const leftForLater = (s: Session, state: WintosState, now: number) => {
-    const l = state.rhythm?.later?.[s.id];
-    return !!l && l.since === s.since && l.until > now;
-};
-
 // The turns waiting on you, quick ones first: approvals, then answers, then choices; what can't
 // be undone last; the longest waiting first among equals.
 export function decisions(state: WintosState, now: number, titleOf: (tabId: string) => string): Decision[] {
     const prs = (state.plugins?.["gh-prs"]?.data as { prs?: PR[] } | undefined)?.prs ?? [];
     const out = state.sessions
-        .filter((s) => !s.background && shownState(s, now) === "waiting" && !leftForLater(s, state, now))
+        .filter((s) => !s.background && shownState(s, now) === "waiting")
         .map((s): Decision => {
             // Not read yet (the daemon reads an ended turn a moment later): a plain turn of yours.
             const a = s.ask ?? { kind: "answer" as const, by: "guess" as const };

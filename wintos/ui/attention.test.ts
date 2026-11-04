@@ -243,39 +243,31 @@ describe("finishLine: when an errand is done", () => {
     });
 });
 
-describe("the hold: batches, breaks and focus blocks", () => {
-    const P = 20 * 60_000;
-    const T = Math.ceil(NOW / P) * P;
+describe("the hold: breaks and focus blocks", () => {
+    const T = NOW;
     const st = (rhythm: object, waitingSince: number): WintosState => ({
         now: T + 6 * 60_000,
         projects: [{ id: "a", title: "Alpha", dir: "/a", mtime: 0 } as never, { id: "b", title: "Beta", dir: "/b", mtime: 0 } as never],
         sessions: [{ id: "1", tabId: "a", blockId: "x", state: "waiting", since: waitingSince, lastAt: waitingSince, ask: { kind: "approve", text: "ship it?", by: "session" } }],
-        rhythm: { day: "d", stretchFrom: 0, breaks: [], everyMs: 0, batchEveryMs: P, ...rhythm },
+        rhythm: { day: "d", stretchFrom: 0, breaks: [], everyMs: 0, ...rhythm },
     }) as WintosState;
 
-    test("a turn that came in since the boundary waits in Quiet for the next batch, saying when", () => {
-        const a = attention(["a", "b"], st({}, T + 5 * 60_000), {}, T + 6 * 60_000, "b");
-        expect([a.needs.map((r) => r.tabId), a.quiet.map((r) => r.tabId)[0], a.held]).toEqual([[], "a", { count: 1, until: T + P }]);
-        expect(a.views.a.reason).toMatch(/^held for the \d\d:\d\d batch · Approve · ship it\?$/);
+    test("a turn that came in during a break waits in Quiet until you are back", () => {
+        const a = attention(["a", "b"], st({ onBreak: T + 2 * 60_000 }, T + 5 * 60_000), {}, T + 6 * 60_000, "b");
+        expect([a.needs.map((r) => r.tabId), a.quiet.map((r) => r.tabId)[0], a.held]).toEqual([[], "a", { count: 1, until: Infinity }]);
+        expect(a.views.a.reason).toBe("held until you are back · Approve · ship it?");
+        expect(attention(["a", "b"], st({}, T + 5 * 60_000), {}, T + 6 * 60_000, "b").needs.map((r) => r.tabId)).toEqual(["a"]);
     });
 
-    test("the project you are in is never held, and ⌥⌘O opens the batch", () => {
-        expect(attention(["a", "b"], st({}, T + 5 * 60_000), {}, T + 6 * 60_000, "a").needs.map((r) => r.tabId)).toEqual(["a"]);
-        expect(attention(["a", "b"], st({ releasedAt: T + 5.5 * 60_000 }, T + 5 * 60_000), {}, T + 6 * 60_000, "b").needs.map((r) => r.tabId)).toEqual(["a"]);
-    });
-
-    test("a turn left for the next batch (s) stays held after ⌥⌘O, even in the project you are in; its next turn does not", () => {
-        const left = { releasedAt: T + 5.5 * 60_000, later: { "1": { since: T + 5 * 60_000, until: T + P } } };
-        expect(attention(["a", "b"], st(left, T + 5 * 60_000), {}, T + 6 * 60_000, "a").held).toEqual({ count: 1, until: T + P });
-        expect(attention(["a", "b"], st(left, T + 5.2 * 60_000), {}, T + 6 * 60_000, "b").needs.map((r) => r.tabId)).toEqual(["a"]);
-    });
+    test("the project you are in is never held", () =>
+        expect(attention(["a", "b"], st({ onBreak: T + 2 * 60_000 }, T + 5 * 60_000), {}, T + 6 * 60_000, "a").needs.map((r) => r.tabId)).toEqual(["a"]));
 
     test("approvals lead Your move: the quick ones first", () => {
-        const state = { ...st({ batchEveryMs: 0 }, T), sessions: [
+        const state = { ...st({}, T), sessions: [
             { id: "1", tabId: "a", blockId: "x", state: "waiting", since: T - 60_000, lastAt: T, ask: { kind: "decide", by: "model" } },
             { id: "2", tabId: "b", blockId: "y", state: "waiting", since: T - 9 * 60_000, lastAt: T, ask: { kind: "approve", by: "model" } },
         ] } as WintosState;
-        expect(attention(["a", "b"], { ...state, rhythm: { ...state.rhythm!, batchEveryMs: 0 } }, {}, T).needs.map((r) => r.tabId)).toEqual(["b", "a"]);
+        expect(attention(["a", "b"], state, {}, T).needs.map((r) => r.tabId)).toEqual(["b", "a"]);
     });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { AWAY_MS, closeDay, FOCUS_MS, later, nudge, prompted, release, startBreak, snooze, tick, toggleFocus, type Rhythm } from "./rhythm";
+import { AWAY_MS, closeDay, FOCUS_MS, nudge, prompted, startBreak, snooze, tick, toggleFocus, type Rhythm } from "./rhythm";
 
 const MIN = 60_000;
 const T0 = 1_000 * MIN;
@@ -100,19 +100,4 @@ describe("closing the day", () => {
         expect(tick(fri, 0, at(31, 9), "d2").closed).toEqual(fri.closed);
         expect(tick(fri, 0, at(33, 9), "d3").closed).toBeUndefined();
     });
-    test("opening the batch (⌥⌘O) ends the quiet: you are working", () => {
-        const fri = closeDay({ day: "d", stretchFrom: 0, breaks: [] }, new Date(2026, 9, 30, 17, 10));
-        expect(release(fri, at(33, 5)).closed).toBeUndefined();
-    });
-});
-
-describe("later: a turn left for the next batch", () => {
-    const P = 20 * MIN;
-    const B = Math.ceil(T0 / P) * P;
-    test.each([
-        ["mid-batch: the next boundary", B + 5 * MIN, P, B + P],
-        ["on a boundary: the one after", B, P, B + P],
-        ["no batches: twenty minutes", B + 5 * MIN, 0, B + 25 * MIN],
-    ])("%s", (_, now, every, until) => expect(later(fresh, "s1", 42, now, every).later).toEqual({ s1: { since: 42, until } }));
-    test("what is past drops out", () => expect(later({ ...fresh, later: { old: { since: 1, until: B } } }, "s1", 42, B + MIN, P).later).toEqual({ s1: { since: 42, until: B + P } }));
 });

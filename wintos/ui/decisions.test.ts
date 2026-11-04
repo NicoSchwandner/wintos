@@ -35,7 +35,7 @@ describe("decisions: a driving project's turns first", () => {
     });
 });
 
-describe("decisions: turns, and the ones left for later", () => {
+describe("decisions: turns", () => {
     test("each turn its own key, so a session that asks again comes back as a new card", () => {
         const [d] = decisions(state([s("a", { kind: "answer", text: "which?", by: "session" })]), NOW, title);
         expect(d.turn).toBe(`a:${NOW - 1000}`);
@@ -44,12 +44,6 @@ describe("decisions: turns, and the ones left for later", () => {
         const [d] = decisions(state([s("a", { kind: "answer", text: "which?", by: "session" }, { restored: true })]), NOW, title);
         expect(d).toMatchObject({ sessionId: "a", restored: true });
         expect(decisions(state([s("a", { kind: "answer", by: "guess" })]), NOW, title)[0].restored).toBeUndefined();
-    });
-    test("a turn left for the next batch stays out until then; its session's next turn does not", () => {
-        const st = (since: number) => ({ ...state([s("a", { kind: "answer", by: "guess" }, { since })]), rhythm: { later: { a: { since: NOW - 1000, until: NOW + 1 } } } }) as unknown as WintosState;
-        expect(decisions(st(NOW - 1000), NOW, title)).toEqual([]);
-        expect(decisions(st(NOW - 500), NOW, title)).toHaveLength(1);
-        expect(decisions(st(NOW - 1000), NOW + 1, title)).toHaveLength(1);
     });
 });
 

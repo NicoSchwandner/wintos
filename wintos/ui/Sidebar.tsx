@@ -20,7 +20,7 @@ import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, focusSession, reopenProject, resumePane, setLatestSessions } from "./focus";
 import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
-import { closeProjectTab, driveProject, openView, registerWintosMenu, runKey, snoozeProject } from "./menu";
+import { closeProjectTab, driveProject, openView, registerWintosMenu, snoozeProject } from "./menu";
 import { focusList } from "./dayplan";
 import type { Day } from "../daemon/journal/journal";
 import { isPage, mainViewAtom, renamingAtom, tickModeAtom, yourMoveAtom } from "./notes/state";
@@ -90,7 +90,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
     const model = state ? attention(tabIds, state, names, now, activeTabId) : null;
-    const focus = state?.rhythm?.focus && now < state.rhythm.focus.until ? state.rhythm.focus : undefined;
     const gh = state ? ghPrs(state) : undefined;
     const queue = gh ? queueModel(gh.prs, gh.me, now, state?.snoozes, gh.team) : null;
     const panels = state ? pluginPanels(state) : [];
@@ -183,9 +182,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 if (title?.trim()) fireAndForget(() => setProjectTitle(row.tabId, title.trim(), true));
             },
         };
-        const el = row.band === "quiet" ? <QuietRow {...props} /> : row.band === "running" ? <QuietRow {...props} v={{ ...v, reason: v.next }} dot={T.moss} /> : <CardRow {...props} />;
-        // A focus block dims the other projects: they wait for it to end.
-        return focus && row.tabId !== focus.tabId ? <div key={row.tabId} style={{ opacity: 0.45 }}>{el}</div> : el;
+        return row.band === "quiet" ? <QuietRow {...props} /> : row.band === "running" ? <QuietRow {...props} v={{ ...v, reason: v.next }} dot={T.moss} /> : <CardRow {...props} />;
     };
 
     return (
@@ -240,15 +237,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     </div>
                 ) : (
                     <>
-                        {focus && (
-                            <button type="button" data-wintos="focus-block" data-key="⌥⌘F" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("focus")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 12px", background: T.card, border: `1px solid ${T.moss}`, borderRadius: 10, cursor: "pointer", fontFamily: T.ui, textAlign: "left" }}>
-                                <span style={{ fontSize: 12.5, color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Focus · {state?.projects.find((p) => p.id === focus.tabId)?.title ?? names[focus.tabId] ?? "this project"}</span>
-                                <span style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.moss }}>{Math.ceil((focus.until - now) / 60_000)} min left{model.held ? ` · ${model.held.count} held` : ""}</span>
-                                    <Key k="⌥⌘F" label="" />
-                                </span>
-                            </button>
-                        )}
                         <Band kind="driving" count={model.driving.length}>{model.driving.map(renderDrive)}</Band>
                         <Band kind="needs" count={model.needs.length + wokeClosed.length}>
                             {wokeClosed.map((w) => (

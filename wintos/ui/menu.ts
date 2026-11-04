@@ -110,7 +110,6 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:c{KeyO}", "release"],
     ["Shift:Cmd:e", "wrapup"],
     ["Option:Cmd:c{KeyS}", "quiet"],
-    ["Option:Cmd:c{KeyF}", "focus"],
     ["Option:Cmd:c{KeyX}", "tick"],
     ["Option:Cmd:c{KeyL}", "rail"],
     ["Ctrl:Cmd:c{KeyH}", "carry-left"],
@@ -325,7 +324,6 @@ export function runAction(action: string): void {
     if (action === "break") return void (flog("break: started"), daemonFetch("/rhythm/break", { method: "POST", body: {} }));
     // ⌥⌘O: the next session waiting on you, in its own pane.
     if (action === "release") return void walkDecisions();
-    if (action === "focus") return void (flog("focus block: toggled"), daemonFetch("/rhythm/focus", { method: "POST", body: { tabId: globalStore.get(atoms.staticTabId) } }));
     if (action === "break-later") return void (flog("break: in 10 min"), daemonFetch("/rhythm/snooze", { method: "POST", body: { minutes: 10 } }));
     if (action.startsWith("session-")) return toSession(Number(action.slice("session-".length)));
     if (action === "rail") return toggleRail();

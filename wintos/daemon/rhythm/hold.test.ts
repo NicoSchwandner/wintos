@@ -16,13 +16,6 @@ describe("heldUntil", () => {
         expect(heldUntil(row(T + MIN), { now: T + 6 * MIN, breakFrom: T + 2 * MIN })).toBeUndefined();
     });
 
-    test("a focus block holds the other projects until it ends", () => {
-        const focus = { tabId: "f", from: T, until: T + 45 * MIN };
-        expect(heldUntil(row(T + 5 * MIN, "other"), { now: T + 6 * MIN, focus })).toBe(T + 45 * MIN);
-        expect(heldUntil(row(T + 5 * MIN, "f"), { now: T + 6 * MIN, focus })).toBeUndefined();
-        expect(heldUntil(row(T + 5 * MIN, "other"), { now: T + 46 * MIN, focus })).toBeUndefined();
-    });
-
     test("a closed day holds everything until the workday starts", () =>
         expect(heldUntil(row(T - 60 * MIN), { now: T, quietUntil: T + 600 * MIN })).toBe(T + 600 * MIN));
 });

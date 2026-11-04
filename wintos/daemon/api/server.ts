@@ -26,7 +26,7 @@ import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, re
 import { askCard, askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { trail } from "../sessions/trail";
 import { lastReply, reentry } from "../sessions/reentry";
-import { closeDay, prompted, snooze, startBreak, tick, toggleFocus, type Rhythm } from "../rhythm/rhythm";
+import { closeDay, prompted, snooze, startBreak, tick, type Rhythm } from "../rhythm/rhythm";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
 import { fetchDone, unlisted } from "../prs/done";
@@ -702,12 +702,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
             }
             if (req.method === "POST" && url.pathname === "/rhythm/break") return setRhythm(startBreak(rhythm, Date.now())), send(res, 200, "");
             if (req.method === "POST" && url.pathname === "/rhythm/close") return setRhythm(closeDay(rhythm, new Date())), send(res, 200, "");
-            if (req.method === "POST" && url.pathname === "/rhythm/focus") {
-                const b = (await body(req)) as { tabId?: unknown };
-                if (!isSafe(b?.tabId)) return send(res, 400, "need the tabId of the project to focus on");
-                setRhythm(toggleFocus(rhythm, b.tabId as string, Date.now()));
-                return send(res, 200, "");
-            }
             if (req.method === "POST" && url.pathname === "/rhythm/snooze") {
                 const b = (await body(req)) as { minutes?: unknown };
                 if (typeof b?.minutes !== "number" || !(b.minutes > 0 && b.minutes <= 240)) return send(res, 400, "need minutes, 1 to 240");

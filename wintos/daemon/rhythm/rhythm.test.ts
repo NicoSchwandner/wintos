@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { AWAY_MS, closeDay, FOCUS_MS, nudge, prompted, startBreak, snooze, tick, toggleFocus, type Rhythm } from "./rhythm";
+import { AWAY_MS, closeDay, nudge, prompted, startBreak, snooze, tick, type Rhythm } from "./rhythm";
 
 const MIN = 60_000;
 const T0 = 1_000 * MIN;
@@ -74,14 +74,6 @@ describe("nudge", () => {
         expect(nudge({ ...r, breaks: [{ start: at(12, 0), end: at(12, 25) }] }, { ...calm, now: at(13, 5), lunch, today: day })).toBeUndefined();
         expect(nudge(r, { ...calm, now: at(12, 55), lunch, today: day })).toBeUndefined();
     });
-});
-
-test("⌥⌘F starts a 45-minute focus block on the project, again ends it, elsewhere moves it", () => {
-    const r = toggleFocus(fresh, "a", T0);
-    expect(r.focus).toEqual({ tabId: "a", from: T0, until: T0 + FOCUS_MS });
-    expect(toggleFocus(r, "a", T0 + MIN).focus).toBeUndefined();
-    expect(toggleFocus(r, "b", T0 + MIN).focus).toMatchObject({ tabId: "b", from: T0 + MIN });
-    expect(toggleFocus(r, "a", T0 + FOCUS_MS + MIN).focus).toMatchObject({ tabId: "a", from: T0 + FOCUS_MS + MIN });
 });
 
 describe("closing the day", () => {

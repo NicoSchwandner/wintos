@@ -147,15 +147,14 @@ const lastSaid = (sessions: Session[]) => sessions.filter((s) => s.outcome).sort
 // each row's text and each project's PRs. `now` ticks the ages.
 // targets: where opening a project in Your move or To read lands: the session waiting longest,
 // else the latest reply.
-// held: what the hold keeps out of Your move for now (hold.ts), and when the first of it shows.
-// here: the project you are in, never held.
+// here: the project you are in, never held (hold.ts).
 // snoozed: out of the bands until their time (⌥⌘Z). wake: snoozed but waiting on you or with a
 // reply, so back in the bands and to be woken for good.
 // driving: the projects pinned with ⌥⌘D, out of the bands and in their own section, each with the
 // sessions that are waiting on you or at work.
 export type DriveLine = { sessionId: string; blockId: string; name: string; state: "waiting" | "reply" | "running"; since: number };
 export type Drive = { row: Row; lines: DriveLine[] };
-export type Attention = Ranking & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target>; held?: { count: number; until: number }; snoozed: string[]; wake: string[]; driving: Drive[] };
+export type Attention = Ranking & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target>; snoozed: string[]; wake: string[]; driving: Drive[] };
 export function attention(tabIds: string[], state: WintosState, names: Record<string, string | undefined>, now: number, here?: string): Attention {
     const prs = prsByTab(tabIds, state);
     const lines = wakingTabs(state, tabIds);
@@ -166,7 +165,7 @@ export function attention(tabIds: string[], state: WintosState, names: Record<st
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const label = repoLabeler(state);
     const views = Object.fromEntries(rows.map((r) => [r.tabId, lines[r.tabId] ? { ...rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label), next: lines[r.tabId], tone: "apricot" as const } : rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label)]));
-    for (const [tabId, until] of held.rows) views[tabId] = { ...views[tabId], reason: [`held ${until === Infinity ? "until you are back" : until === state.rhythm?.closed?.until ? `until ${clock(until)}: the day is closed` : `until ${clock(until)}`}`, askLine(rows.find((r) => r.tabId === tabId)!.sessions)].filter(Boolean).join(" · ") };
+    for (const [tabId, until] of held.rows) views[tabId] = { ...views[tabId], reason: [`held ${until === Infinity ? "until you are back" : `until ${clock(until)}: the day is closed`}`, askLine(rows.find((r) => r.tabId === tabId)!.sessions)].filter(Boolean).join(" · ") };
     const me = ghPrs(state)?.me;
     for (const r of rows) {
         const done = finishLine(project(r.tabId)?.kind, r.sessions, prs[r.tabId]?.items.map((i) => i.pr) ?? [], me);
@@ -185,7 +184,7 @@ export function attention(tabIds: string[], state: WintosState, names: Record<st
         const to = waiting ?? reply;
         if (to) targets[r.tabId] = { tabId: r.tabId, blockId: to.blockId };
     }
-    return { ...split, views, prs, targets, snoozed, wake, driving, ...(held.rows.size ? { held: { count: held.rows.size, until: Math.min(...held.rows.values()) } } : {}) };
+    return { ...split, views, prs, targets, snoozed, wake, driving };
 }
 
 export const day = (t: number) => new Date(t).toLocaleDateString("en-GB", { weekday: "long" });
@@ -197,7 +196,7 @@ const QUICK = new Set(["approve"]);
 function holding(split: Ranking, state: WintosState, now: number, here: string | undefined, waking: Record<string, string>): { split: Ranking; held: { rows: Map<string, number> } } {
     const r = state.rhythm;
     const rows = new Map<string, number>();
-    const ctx = r && { now, breakFrom: r.onBreak ?? r.awayFrom, focus: r.focus, here, quietUntil: r.closed?.until };
+    const ctx = r && { now, breakFrom: r.onBreak ?? r.awayFrom, here, quietUntil: r.closed?.until };
     for (const row of split.needs) {
         const until = ctx && row.waitingSince !== undefined && !waking[row.tabId] ? heldUntil({ tabId: row.tabId, waitingSince: row.waitingSince }, ctx) : undefined;
         if (until !== undefined) rows.set(row.tabId, until);

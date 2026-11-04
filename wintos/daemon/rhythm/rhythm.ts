@@ -5,9 +5,8 @@ export type Break = { start: number; end: number };
 // stretchFrom: your first input after the last break. awayFrom: your last input before an idle
 // run that is long enough to be a break. onBreak: when ⌥⌘B started one.
 // lastPrompt: the last prompt you sent, by its length only.
-// focus: a focus block (⌥⌘F) on one project (hold.ts). closed: the day you closed (⇧⌘E), quiet
-// until 06:00 the next workday.
-export type Rhythm = { day: string; stretchFrom: number; breaks: Break[]; awayFrom?: number; onBreak?: number; snoozedUntil?: number; lastPrompt?: { at: number; chars: number }; focus?: { tabId: string; from: number; until: number }; closed?: { day: string; until: number } };
+// closed: the day you closed (⇧⌘E), quiet until 06:00 the next workday.
+export type Rhythm = { day: string; stretchFrom: number; breaks: Break[]; awayFrom?: number; onBreak?: number; snoozedUntil?: number; lastPrompt?: { at: number; chars: number }; closed?: { day: string; until: number } };
 export type Nudge = { kind: "move" | "dispatch" | "lunch" | "wrap"; minutes: number };
 
 export const AWAY_MS = 2 * 60_000;
@@ -32,13 +31,6 @@ export function tick(r: Rhythm, idleMs: number, now: number, day: string): Rhyth
 
 export const startBreak = (r: Rhythm, now: number): Rhythm => ({ ...r, onBreak: now });
 export const snooze = (r: Rhythm, now: number, minutes: number): Rhythm => ({ ...r, snoozedUntil: now + minutes * 60_000 });
-export const FOCUS_MS = 45 * 60_000;
-// ⌥⌘F on the project it is on starts a block, again ends it; on another project it moves there.
-export function toggleFocus(r: Rhythm, tabId: string, now: number): Rhythm {
-    const { focus, ...rest } = r;
-    if (focus && focus.tabId === tabId && now < focus.until) return rest;
-    return { ...rest, focus: { tabId, from: now, until: now + FOCUS_MS } };
-}
 // The quiet after a closed day ends well before the workday does, so an early start isn't held.
 const OPENS_AT = 6 * 60;
 // ⇧⌘E then ⌘⏎: the day is done, quiet until the next workday's morning (a Friday's until Monday's).

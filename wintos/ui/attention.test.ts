@@ -243,7 +243,7 @@ describe("finishLine: when an errand is done", () => {
     });
 });
 
-describe("the hold: breaks and focus blocks", () => {
+describe("the hold: breaks", () => {
     const T = NOW;
     const st = (rhythm: object, waitingSince: number): WintosState => ({
         now: T + 6 * 60_000,
@@ -254,7 +254,7 @@ describe("the hold: breaks and focus blocks", () => {
 
     test("a turn that came in during a break waits in Quiet until you are back", () => {
         const a = attention(["a", "b"], st({ onBreak: T + 2 * 60_000 }, T + 5 * 60_000), {}, T + 6 * 60_000, "b");
-        expect([a.needs.map((r) => r.tabId), a.quiet.map((r) => r.tabId)[0], a.held]).toEqual([[], "a", { count: 1, until: Infinity }]);
+        expect([a.needs.map((r) => r.tabId), a.quiet.map((r) => r.tabId)[0]]).toEqual([[], "a"]);
         expect(a.views.a.reason).toBe("held until you are back · Approve · ship it?");
         expect(attention(["a", "b"], st({}, T + 5 * 60_000), {}, T + 6 * 60_000, "b").needs.map((r) => r.tabId)).toEqual(["a"]);
     });

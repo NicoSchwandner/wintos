@@ -66,6 +66,11 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                 {h.branch && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.branch}</span>}
             </div>
             <WhereWasI sessionId={s.id} focused={focused} />
+            {(state?.epicReports?.[s.id]?.length ?? 0) > 0 && (
+                <div data-wintos="reports-waiting" style={{ fontSize: 11.5, color: T.muted }}>
+                    {state!.epicReports![s.id].length} report{state!.epicReports![s.id].length === 1 ? "" : "s"} from the epic's sessions wait until you leave this pane
+                </div>
+            )}
             {(s.lane || unitAt) && (
                 <div className="wintos-steps-row">
                     <StepTrack lane={s.lane} unit={unitAt} />

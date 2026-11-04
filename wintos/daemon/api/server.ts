@@ -10,6 +10,7 @@ import { impliedEpic } from "../epics/assign";
 import { addTime, mergeBackfill, monthByEpic, type TimeLog } from "../epics/time";
 import { lineDiff } from "../projects/diff";
 import { workedFocus } from "../epics/worked";
+import { addReport, delivered as reportsDelivered, reportLine, type Reports } from "../epics/reports";
 import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
@@ -151,6 +152,16 @@ export async function startServer(opts: { root: string; port: number; host?: str
             return epicAgentInjection({ title: epic.title, dir: epic.dir, steps: serializeUnits(epic.steps) }, workers);
         }
         return epicInjection(epic && { id: epic.id, title: epic.title }, openEpics(), epic && epicMineDiff(epic.id, sessionId));
+    };
+    // What the epics' sessions did, queued for each epic's agent (epics/reports.ts).
+    const reportsFile = join(opts.root, ".epic-reports.json");
+    let reports = readJson<Reports>(reportsFile, {});
+    const reportUp = (sessionId: string) => {
+        const s = sessions.get(sessionId);
+        const agent = s?.epic ? epics.byId(s.epic)?.agent : undefined;
+        if (!s || !agent || agent === s.id) return;
+        reports = addReport(reports, agent, reportLine(s), Date.now());
+        writeFileSync(reportsFile, JSON.stringify(reports));
     };
     // The steps you prompted today, by session, for the journal's "Today's focus" (epics/worked.ts).
     const workedFile = join(opts.root, ".worked.json");
@@ -346,6 +357,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         projects: store.list().map(({ body: _body, ...p }) => p),
         // plan: epic.md's body, which the epic agent keeps (goal, milestones, open issues, blockers).
         epics: epics.list().map(({ body, ...e }) => ({ ...e, plan: body.trim() })),
+        epicReports: reports,
         plugins: runner.results,
         donePrs,
         pluginNames: runner.names,
@@ -519,6 +531,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now(), p.hook_event_name === "UserPromptSubmit" ? waitedFor(before, Date.now()) : 0);
                 if (p.hook_event_name === "UserPromptSubmit") markSeen(p.session_id); // you read it to answer it
                 if (p.hook_event_name === "UserPromptSubmit" && p.kind !== "bg") writeWorked(p.session_id);
+                if (p.hook_event_name === "Stop" && p.kind !== "bg") reportUp(p.session_id);
                 if (p.hook_event_name === "UserPromptSubmit" && typeof p.prompt === "string" && p.kind !== "bg") setRhythm(prompted(rhythm, Date.now(), p.prompt.length));
                 const text =
                     p.hook_event_name === "UserPromptSubmit" ? [injection(store.byTab(ev.tabId), store.mineDiff(ev.tabId, p.session_id)), epicText(p.session_id)].filter(Boolean).join("\n\n") : "";
@@ -662,6 +675,16 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (typeof b?.pinned !== "boolean") return send(res, 400, "need pinned: true or false");
                 const e = epics.update(decodeURIComponent(epicPin[1]), ({ pinned: _, ...rest }) => (b.pinned ? { ...rest, pinned: true } : rest));
                 if (!e) return send(res, 404, "no such epic");
+                broadcast();
+                return send(res, 200, "");
+            }
+            // The UI typed the first n reports into the agent.
+            const reportsDone = /^\/agents\/([^/]+)\/reports\/delivered$/.exec(url.pathname);
+            if (req.method === "POST" && reportsDone) {
+                const b = (await body(req)) as { n?: unknown };
+                if (typeof b?.n !== "number" || !(b.n >= 0)) return send(res, 400, "need n, how many were typed in");
+                reports = reportsDelivered(reports, decodeURIComponent(reportsDone[1]), b.n);
+                writeFileSync(reportsFile, JSON.stringify(reports));
                 broadcast();
                 return send(res, 200, "");
             }

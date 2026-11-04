@@ -32,6 +32,7 @@ import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 import { EpicAvatar } from "./EpicAvatar";
 import { PinnedEpics } from "./PinnedEpics";
+import { useEpicReports } from "./epicReports";
 import { lookOf, NO_EPIC, type Look } from "./epicLook";
 
 const BAND_STYLE = {
@@ -76,6 +77,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const names = Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.name]));
     const { state: raw, offline } = useWintos();
     useWakeDelivery(raw?.wakes, raw?.sessions, raw?.shelf?.[activeTabId], activeTabId);
+    const lookingAt = useAtomValue(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
+    useEpicReports(raw?.epicReports, raw?.sessions, activeTabId, useNow(15_000), typeof document !== "undefined" && document.hasFocus() ? lookingAt : undefined);
     useSchemeNotices(raw?.sessions, activeTabId);
     const wokeClosed = raw ? closedWakes(raw.wakes ?? {}, raw.shelf ?? {}, raw.projects, tabIds, (u) => prRef(raw, u)) : [];
     useFreshPaneLists(raw?.sessions, tabs);

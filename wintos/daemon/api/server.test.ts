@@ -122,6 +122,22 @@ describe("wintosd API", () => {
         expect((await post(`/epics/${id}/agent`, { sessionId: 3 })).status).toBe(400);
     });
 
+    test("a worker's turn end is queued for its epic's agent, and delivered ones leave the queue", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } });
+        await post(`/epics/${id}/agent`, { sessionId: "agent" });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } });
+        await post("/sessions/worker/epic", { epic: id });
+        await post("/sessions/worker/name", { text: "Drafts mapping" });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker", hook_event_name: "Stop", last_assistant_message: "Pushed the fix." } });
+        await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent", hook_event_name: "Stop" } });
+        let state = await (await fetch(base + "/state")).json();
+        expect(state.epicReports.agent.map((r: { text: string }) => r.text)).toEqual(["Drafts mapping Pushed the fix."]);
+        expect((await post("/agents/agent/reports/delivered", { n: 1 })).status).toBe(200);
+        state = await (await fetch(base + "/state")).json();
+        expect(state.epicReports).toEqual({});
+    });
+
     test("a refused epic name lists the open ones", async () => {
         await event(prompt);
         await post("/epics", { title: "Reviews" });

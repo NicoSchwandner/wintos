@@ -65,6 +65,7 @@ describe("epicAgentInjection", () => {
         expect(t).toContain("now: [x] Intake | [>] Drafts");
         expect(t).toContain("- Drafts mapping: waiting, at Build · tests green · asks: Use DraftId? · acme/api#42");
         expect(t).toContain("- Export check: working");
+        expect(t).toContain("[WintOS report]");
     });
     test("with no sessions open, it says so", () => expect(epicAgentInjection({ title: "R", dir: "/e", steps: "" }, [])).toContain("- none open"));
 });

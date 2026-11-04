@@ -870,6 +870,25 @@ await scenario("42 · a on an epic's page starts its agent in a view of its own;
     await until("the session is the epic's agent", async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).epics.find((e) => e.id === id)?.agent === "e2e-agent", 20000);
 });
 
+await scenario("43 · a worker's turn end reaches its epic's agent: typed into the agent's pane once it is free, then gone from the queue", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const pane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const st = async () => (await fetch("http://127.0.0.1:7731/state")).json();
+    const id = await (await api("/epics", { title: "E2E reports" })).text();
+    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-ag", hook_event_name: "SessionStart" } });
+    await api(`/epics/${id}/agent`, { sessionId: "e2e-ag" });
+    // Reports wait while you are in the agent's pane: look at another one.
+    await press(t, "d", { mods: ["meta"] });
+    await until("another pane focused", async () => (await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`)) !== pane);
+    await api("/events", { tabId: "e2e-elsewhere", blockId: "e2e-wb", payload: { session_id: "e2e-wk", hook_event_name: "UserPromptSubmit", prompt: "e2e worker" } });
+    await api("/sessions/e2e-wk/epic", { epic: id });
+    await api("/events", { tabId: "e2e-elsewhere", blockId: "e2e-wb", payload: { session_id: "e2e-wk", hook_event_name: "Stop", last_assistant_message: "Pushed the e2e fix." } });
+    await until("the report queued", async () => ((await st()).epicReports?.["e2e-ag"] ?? []).length === 1);
+    await until("typed into the agent and off the queue", async () => !(await st()).epicReports?.["e2e-ag"], 120_000);
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

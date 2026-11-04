@@ -122,7 +122,7 @@ export default class WintOS extends View {
         return root
             .child(bar)
             .when(!!this.state.day, (el) => el.child(this.today(t, this.state.day)))
-            .when(m.driving.length > 0, (el) => el.child(this.section(t, "Driving", t.foreground, m.driving.map((d) => this.drive(t, d, here)))))
+            .when((m.driving ?? []).length > 0, (el) => el.child(this.section(t, "Driving", t.foreground, m.driving.map((d) => this.drive(t, d, here)))))
             .when(m.needs.length > 0, (el) => el.child(this.section(t, "Your move", t.blocked, m.needs.map((r) => this.card(t, r, here, t.blocked)))))
             .when(m.read.length > 0, (el) => el.child(this.section(t, "To read", t.done, m.read.map((r) => this.card(t, r, here, t.done)))))
             .when(m.running.length > 0, (el) => el.child(this.section(t, "Running", t.working, m.running.map((r) => this.quiet(t, r, here, t.working)))))

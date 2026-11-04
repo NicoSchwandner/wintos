@@ -54,3 +54,22 @@
         --w-epic-stone-ring: #cfc8bb;
     }
 }
+
+/* A pane holding a session of an epic wears the epic's colour on its frame: the ring at rest;
+   focused, the focus ring (focusRing.ts) draws in the colour itself. */
+.block:has([data-wintos="session-header"][data-epic-color="rose"]) .block-mask { border-color: var(--w-epic-rose-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="rose"]) { --w-pane-accent: var(--w-epic-rose); }
+.block:has([data-wintos="session-header"][data-epic-color="teal"]) .block-mask { border-color: var(--w-epic-teal-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="teal"]) { --w-pane-accent: var(--w-epic-teal); }
+.block:has([data-wintos="session-header"][data-epic-color="amber"]) .block-mask { border-color: var(--w-epic-amber-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="amber"]) { --w-pane-accent: var(--w-epic-amber); }
+.block:has([data-wintos="session-header"][data-epic-color="coral"]) .block-mask { border-color: var(--w-epic-coral-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="coral"]) { --w-pane-accent: var(--w-epic-coral); }
+.block:has([data-wintos="session-header"][data-epic-color="violet"]) .block-mask { border-color: var(--w-epic-violet-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="violet"]) { --w-pane-accent: var(--w-epic-violet); }
+.block:has([data-wintos="session-header"][data-epic-color="green"]) .block-mask { border-color: var(--w-epic-green-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="green"]) { --w-pane-accent: var(--w-epic-green); }
+.block:has([data-wintos="session-header"][data-epic-color="blue"]) .block-mask { border-color: var(--w-epic-blue-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="blue"]) { --w-pane-accent: var(--w-epic-blue); }
+.block:has([data-wintos="session-header"][data-epic-color="stone"]) .block-mask { border-color: var(--w-epic-stone-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="stone"]) { --w-pane-accent: var(--w-epic-stone); }

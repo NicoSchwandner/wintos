@@ -30,6 +30,12 @@ export function topProject(closing: string): string | undefined {
     return undefined;
 }
 
+// ⌥⌘1-9: the sidebar's rows, top to bottom; the cards above them are no rows.
+export function toRow(n: number): void {
+    const target = order.filter((k) => !k.startsWith("card:"))[n - 1];
+    if (target) go(target);
+}
+
 // Where a walk starts: the focused session's row when it has one, else what is showing.
 function here(): string {
     const where = whereYouAre();

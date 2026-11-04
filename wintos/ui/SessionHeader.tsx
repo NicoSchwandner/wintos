@@ -38,7 +38,7 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     const epic = s.epic ? state?.epics?.find((e) => e.id === s.epic) : undefined;
     const look = epic ? lookOf(epic) : NO_EPIC;
     return (
-        <div data-wintos="session-header" data-epic={epic?.id ?? ""} style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", gap: 5, padding: "7px 10px 8px 12px", borderTop: epic ? `3px solid ${look.fg}` : undefined, borderBottom: `1px solid ${T.border}`, background: epic ? `linear-gradient(90deg, ${look.bg} 0%, transparent 60%)` : undefined, fontFamily: T.ui, fontSize: 12, minWidth: 0 }}>
+        <div data-wintos="session-header" data-epic={epic?.id ?? ""} data-epic-color={epic ? look.color : undefined} style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", gap: 5, padding: "7px 10px 8px 12px", borderTop: epic ? `3px solid ${look.fg}` : undefined, borderBottom: `1px solid ${T.border}`, background: epic ? `linear-gradient(90deg, ${look.bg} 0%, transparent 60%)` : undefined, fontFamily: T.ui, fontSize: 12, minWidth: 0 }}>
             <button type="button" data-wintos="session-epic" data-key="⌥⌘E" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("epic")} title={epic?.title ?? "put this session in an epic"} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, padding: 0, background: "transparent", border: "none", cursor: "pointer", minWidth: 0, maxWidth: "100%" }}>
                 <EpicAvatar look={look} size={18} />
                 {epic ? (

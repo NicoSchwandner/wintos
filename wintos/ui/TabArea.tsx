@@ -7,6 +7,7 @@ import { ConfirmClose } from "./ConfirmClose";
 import { NameSession } from "./NameSession";
 import { EpicPicker } from "./EpicPicker";
 import { NewStep } from "./NewStep";
+import { EpicStrip } from "./EpicStrip";
 import { MoveSession } from "./MoveSession";
 import { useFocusReport } from "./useFocusReport";
 import "./theme.css";
@@ -67,6 +68,7 @@ export const WintosTabArea = memo(({ tabId, children }: { tabId: string; childre
                         className="flex flex-col flex-grow min-w-0"
                         style={{ display: view === "terminal" ? "flex" : "none" }}
                     >
+                        <EpicStrip tabId={tabId} />
                         <PaneStrip tabId={tabId} />
                         {empty ? <EmptyProject tabId={tabId} /> : children}
                     </div>

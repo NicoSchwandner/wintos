@@ -7,7 +7,7 @@ import { closeOverlay, editMine, enterProject, focusArea, focusSession, reopenPr
 import { atWork, closeWarning, paneCloseWarns, shownState } from "./sessions";
 import { toggleInbox } from "./inbox";
 import { mainViewAtom, openEpicAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, updateArmedAtom, type MainView } from "./notes/state";
-import { switchProject, topProject } from "./switcher";
+import { switchProject, toRow, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
 import { isInboxTab, projectSessions, sessionHeader, sessionName, urgentPr } from "./view";
@@ -62,6 +62,7 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:c", "copy-url"],
     ["Option:Cmd:c{KeyP}", "park-session"],
     ["Option:Cmd:c{KeyE}", "epic"],
+    ["Shift:Option:Cmd:c{KeyE}", "epic-page"],
     ["Option:Cmd:c{KeyM}", "move-session"],
     ["Option:Cmd:c{KeyT}", "take-out"],
     ["Option:Cmd:c{KeyG}", "open-pane-pr"],
@@ -191,6 +192,10 @@ export function runAction(action: string): void {
     if (action === "palette" || action === "keymap") return toggleOverlay(action);
     if (action === "name-session") return focusedSession() ? toggleOverlay("name-session") : undefined;
     if (action === "epic") return focusedSession() ? toggleOverlay("epic") : undefined;
+    if (action === "epic-page") {
+        const epic = focusedSession()?.epic;
+        return epic ? openEpic(epic) : undefined;
+    }
     if (action === "move-session") return focusedSession() ? toggleOverlay("move-session") : undefined;
     // Straight out to a view of its own; when it can't go, the move sheet says why.
     if (action === "take-out") return focusedSession() ? void (moveSession("new") && toggleOverlay("move-session")) : undefined;
@@ -241,7 +246,7 @@ export function runAction(action: string): void {
     // ⌥⌘O: the next session waiting on you, in its own pane.
     if (action === "release") return void walkDecisions();
     if (action === "break-later") return void (flog("break: in 10 min"), daemonFetch("/rhythm/snooze", { method: "POST", body: { minutes: 10 } }));
-    if (action.startsWith("session-")) return toSession(Number(action.slice("session-".length)));
+    if (action.startsWith("session-")) return toRow(Number(action.slice("session-".length)));
     if (action === "rail") return toggleRail();
     const b = blockDefFor(action, globalStore.get(atoms.fullConfigAtom)?.widgets);
     if (b) createBlock(b.def, false, b.ephemeral);
@@ -300,7 +305,8 @@ export function confirmPaneClose(blockId: string | undefined): boolean {
 }
 
 // ⌥⌘1–9: the project's sessions as its notes list them: a live one's pane, a shelved one resumed.
-function toSession(n: number): void {
+// The rail's sessions (live, then shelved): back to its pane, or resumed.
+export function toSession(n: number): void {
     const tabId = globalStore.get(atoms.staticTabId);
     const state = currentState();
     const blockIds = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.blockids ?? [];

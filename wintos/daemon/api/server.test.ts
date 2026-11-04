@@ -137,6 +137,12 @@ describe("wintosd API", () => {
         expect(await epicNow()).toBe(id);
     });
 
+    test("a backfill adds estimated past days to the month, and a malformed one is refused", async () => {
+        expect((await post("/time/backfill", { log: { "2026-10-21": { s1: { epic: "route", ms: 3_600_000 } } } })).status).toBe(200);
+        expect(await (await fetch(base + "/time/month?month=2026-10")).json()).toEqual([{ epic: "route", ms: 3_600_000, sessions: 1, days: 1 }]);
+        expect((await post("/time/backfill", { log: { oct: {} } })).status).toBe(400);
+    });
+
     test("every prompt carries the session's epic and its mine.md; one without an epic is asked to name it", async () => {
         const id = await (await post("/epics", { title: "Route documents" })).text();
         const first = await (await event(prompt)).text();
@@ -415,6 +421,18 @@ describe("the day", () => {
         srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")), lunch: "11:30-13:00" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
     };
+
+    test("today's focus is written from the steps you prompted, under their epics, and follows a rename", async () => {
+        await withJournal();
+        const id = await (await post("/epics", { title: "Route documents", short: "Route DO" })).text();
+        await event(prompt);
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+        await post(`/sessions/${prompt.session_id}/name`, { text: "Drafts mapping" });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "other" } });
+        await post("/sessions/other/name", { text: "Fix the export" });
+        const focus = async () => ((await (await fetch(base + "/state")).json()) as { day: { focus: string } }).day.focus;
+        expect(await focus()).toBe("- Route DO\n  - Drafts mapping\n- Outside the epics\n  - Fix the export");
+    });
 
     test("the state carries today's plan and the lunch break; saving and planning update it", async () => {
         await withJournal();

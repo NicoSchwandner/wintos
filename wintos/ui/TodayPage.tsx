@@ -42,8 +42,11 @@ export const TodayPage = memo(() => {
     useEffect(() => {
         if (ref.current) requestAnimationFrame(() => ref.current && startCursor(ref.current, (el) => el.dataset.item === "link"));
     }, [epics.length > 0]);
+    const [back, setBack] = useState(0);
     useZoneKeys(ref, {
         ...cursorKeys(() => ref.current),
+        "[": () => (setBack((b) => b + 1), true),
+        "]": () => (setBack((b) => Math.max(0, b - 1)), true),
         e: () => {
             const b = ref.current?.querySelector<HTMLElement>("[data-edit-daily]");
             b?.click();
@@ -77,7 +80,7 @@ export const TodayPage = memo(() => {
                             {epics.map((e) => <EpicCard key={e.id} epic={e} sessions={live.filter((s) => s.epic === e.id)} now={now} />)}
                         </div>
                     </Panel>
-                    <MonthByEpic now={now} />
+                    <MonthByEpic now={now} back={back} />
                 </div>
             </div>
         </div>
@@ -113,9 +116,11 @@ function EpicCard({ epic, sessions, now }: { epic: EpicView; sessions: Session[]
 
 // The month so far by epic: the hours you were at its sessions (daemon/epics/time.ts). c copies
 // it as a table for the project report.
-function MonthByEpic({ now }: { now: number }) {
+// [ and ] step to the month before and back; the report is due for the month just past.
+function MonthByEpic({ now, back }: { now: number; back: number }) {
     const { state } = useWintos();
-    const month = localIso(new Date(now)).slice(0, 7);
+    const first = new Date(new Date(now).getFullYear(), new Date(now).getMonth() - back, 1);
+    const month = localIso(first).slice(0, 7);
     const [rows, setRows] = useState<EpicTime[] | undefined>();
     const [copied, setCopied] = useState(false);
     useEffect(() => {
@@ -131,16 +136,21 @@ function MonthByEpic({ now }: { now: number }) {
         const table = (rows ?? []).map((r) => `${name(r.epic)}\t${(r.ms / 3_600_000).toFixed(1)}`).join("\n");
         void navigator.clipboard.writeText(table).then(() => setCopied(true));
     };
-    const label = new Date(now).toLocaleDateString("en-GB", { month: "long" });
+    const label = first.toLocaleDateString("en-GB", { month: "long", ...(first.getFullYear() !== new Date(now).getFullYear() ? { year: "numeric" } : {}) });
     return (
         <Panel
             label={`${label} by epic`}
-            note={rows?.length ? `${span(total)} at sessions` : "nothing logged yet"}
-            keys={rows && rows.length > 0 && (
-                <button type="button" data-wintos="month-copy" data-key="c" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={copy} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
-                    <Key k="c" label={copied ? "copied" : "copy as a table"} />
-                </button>
-            )}
+            note={rows?.length ? `${span(total)} at sessions` : "nothing logged"}
+            keys={
+                <>
+                    <Key k="[ ]" label="month" />
+                    {rows && rows.length > 0 && (
+                        <button type="button" data-wintos="month-copy" data-key="c" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={copy} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                            <Key k="c" label={copied ? "copied" : "copy as a table"} />
+                        </button>
+                    )}
+                </>
+            }
         >
             {(rows ?? []).map((r) => {
                 const e = r.epic ? state?.epics?.find((x) => x.id === r.epic) : undefined;

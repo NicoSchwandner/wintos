@@ -7,8 +7,9 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { epicInjection, injection } from "../inject";
 import { EpicStore, EPIC_TITLE_MAX, findEpic, SHORT_MAX } from "../epics/epics";
 import { impliedEpic } from "../epics/assign";
-import { addTime, monthByEpic, type TimeLog } from "../epics/time";
+import { addTime, mergeBackfill, monthByEpic, type TimeLog } from "../epics/time";
 import { lineDiff } from "../projects/diff";
+import { workedFocus } from "../epics/worked";
 import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
@@ -144,6 +145,29 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const e = sessions.get(sessionId)?.epic;
         const epic = e ? epics.byId(e) : undefined;
         return epicInjection(epic && { id: epic.id, title: epic.title }, openEpics(), epic && epicMineDiff(epic.id, sessionId));
+    };
+    // The steps you prompted today, by session, for the journal's "Today's focus" (epics/worked.ts).
+    const workedFile = join(opts.root, ".worked.json");
+    let worked = readJson<{ day: string; ids: string[] }>(workedFile, { day: "", ids: [] });
+    let lastFocus = "";
+    const writeWorked = (prompted?: string) => {
+        if (!opts.journal) return;
+        const day = localDay(Date.now());
+        if (worked.day !== day) worked = { day, ids: [] };
+        if (prompted && !worked.ids.includes(prompted)) {
+            worked = { day, ids: [...worked.ids, prompted] };
+            writeFileSync(workedFile, JSON.stringify(worked));
+        }
+        const steps = worked.ids.flatMap((id) => {
+            const s = sessions.get(id);
+            if (!s) return [];
+            const e = s.epic ? epics.byId(s.epic) : undefined;
+            return [{ epic: e && (e.short ?? e.title), step: s.name?.text ?? s.label ?? "a session" }];
+        });
+        const text = workedFocus(steps);
+        if (!text || text === lastFocus) return;
+        lastFocus = text;
+        opts.journal.saveFocus(new Date(), text);
     };
     // When the developer last looked at each project: a reply after that is unread.
     const seenFile = join(opts.root, ".seen.json");
@@ -487,6 +511,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (p.hook_event_name === "Stop" && typeof p.last_assistant_message === "string" && p.last_assistant_message.trim()) readEndedTurn(p.session_id, p.last_assistant_message);
                 recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now(), p.hook_event_name === "UserPromptSubmit" ? waitedFor(before, Date.now()) : 0);
                 if (p.hook_event_name === "UserPromptSubmit") markSeen(p.session_id); // you read it to answer it
+                if (p.hook_event_name === "UserPromptSubmit" && p.kind !== "bg") writeWorked(p.session_id);
                 if (p.hook_event_name === "UserPromptSubmit" && typeof p.prompt === "string" && p.kind !== "bg") setRhythm(prompted(rhythm, Date.now(), p.prompt.length));
                 const text =
                     p.hook_event_name === "UserPromptSubmit" ? [injection(store.byTab(ev.tabId), store.mineDiff(ev.tabId, p.session_id)), epicText(p.session_id)].filter(Boolean).join("\n\n") : "";
@@ -730,6 +755,15 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 focused = typeof b.sessionId === "string" ? { sessionId: b.sessionId, since: now } : undefined;
                 return send(res, 200, "");
             }
+            // Estimated time for the days before logging began; what the log already has stays.
+            if (req.method === "POST" && url.pathname === "/time/backfill") {
+                const b = (await body(req)) as { log?: unknown };
+                const ok = b?.log && typeof b.log === "object" && Object.entries(b.log as object).every(([day, ss]) => /^\d{4}-\d{2}-\d{2}$/.test(day) && ss && typeof ss === "object" && Object.values(ss as object).every((e) => typeof e?.ms === "number" && (e.epic === undefined || isSafe(e.epic))));
+                if (!ok) return send(res, 400, "need log: { YYYY-MM-DD: { sessionId: { epic?, ms } } }");
+                timeLog = mergeBackfill(timeLog, b.log as TimeLog);
+                writeFileSync(timeFile, JSON.stringify(timeLog));
+                return send(res, 200, "");
+            }
             if (req.method === "GET" && url.pathname === "/time/month") {
                 const month = url.searchParams.get("month") ?? "";
                 if (!/^\d{4}-\d{2}$/.test(month)) return send(res, 400, "need month=YYYY-MM");
@@ -759,6 +793,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     return send(res, 404, `no epic matches ${b.epic}; ${open.length ? `open epics: ${open.map((e) => `${e.title} (${e.id})`).join(", ")}` : "there are no epics yet"}`);
                 sessions = setEpic(sessions, s.id, epic?.id);
                 saveSessions();
+                writeWorked();
                 broadcast();
                 return send(res, 200, epic?.title ?? "none");
             }
@@ -848,6 +883,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (named) sessions = nameSession(sessions, decodeURIComponent(named[1]), text, now, sid);
                 else sessions = accept ? acceptSuggestedName(sessions, decodeURIComponent(renamed![1]), now) : renameSession(sessions, decodeURIComponent(renamed![1]), text, now);
                 saveSessions();
+                writeWorked();
                 broadcast();
                 return send(res, 200, "");
             }

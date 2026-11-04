@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { addTime, monthByEpic, TICK_CAP_MS } from "./time";
+import { addTime, mergeBackfill, monthByEpic, TICK_CAP_MS } from "./time";
 
 describe("addTime", () => {
     test("adds to the session's day", () => {
@@ -27,4 +27,12 @@ describe("monthByEpic", () => {
             { epic: undefined, ms: 10_000, sessions: 1, days: 1 },
         ]));
     test("a month with nothing logged is empty", () => expect(monthByEpic(log, "2026-12")).toEqual([]));
+});
+
+describe("mergeBackfill", () => {
+    test("adds the estimated sessions; one already logged keeps its own time", () =>
+        expect(mergeBackfill({ d1: { s1: { epic: "a", ms: 5 } } }, { d1: { s1: { epic: "b", ms: 99 }, s2: { ms: 7 } }, d0: { s3: { epic: "a", ms: 3 } } })).toEqual({
+            d1: { s1: { epic: "a", ms: 5 }, s2: { ms: 7 } },
+            d0: { s3: { epic: "a", ms: 3 } },
+        }));
 });

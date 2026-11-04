@@ -32,3 +32,12 @@ export function monthByEpic(log: TimeLog, month: string): EpicTime[] {
     }
     return [...by].map(([epic, e]) => ({ epic, ms: e.ms, sessions: e.sessions.size, days: e.days.size })).sort((a, b) => b.ms - a.ms);
 }
+
+// Time estimated for days before logging began (from the session transcripts): a session the
+// log already has keeps what was counted, so a backfill never doubles or overrides it.
+export function mergeBackfill(log: TimeLog, backfill: TimeLog): TimeLog {
+    const out: TimeLog = { ...log };
+    for (const [day, sessions] of Object.entries(backfill))
+        for (const [sid, entry] of Object.entries(sessions)) if (!out[day]?.[sid] && entry.ms > 0) out[day] = { ...out[day], [sid]: entry };
+    return out;
+}

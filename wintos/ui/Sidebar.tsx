@@ -158,6 +158,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
         const props = {
             key: row.key,
             rowKey: row.key,
+            rowNo: listed.indexOf(row) + 1,
             look: own ? (epic ? lookOf(epic) : NO_EPIC) : undefined,
             tabId: row.tabId,
             v,
@@ -320,6 +321,7 @@ type RowProps = {
     onClose?: () => void;
     look?: Look;
     rowKey: string;
+    rowNo?: number;
 };
 
 function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming" | "onRename"> & { style: React.CSSProperties }) {
@@ -366,7 +368,7 @@ function CardRow(p: RowProps) {
             data-band="card"
             className="w-row"
             data-on={p.active || undefined}
-            data-key="⌘J / ⌘K"
+            data-key={p.rowNo && p.rowNo <= 9 ? `⌥⌘${p.rowNo}` : "⌘J / ⌘K"}
             data-nobadge
             onClick={p.onOpen}
             onContextMenu={p.onMenu}
@@ -407,7 +409,7 @@ function QuietRow(p: RowProps & { dot?: string }) {
             data-band="quiet"
             className="w-row"
             data-on={p.active || undefined}
-            data-key="⌘J / ⌘K"
+            data-key={p.rowNo && p.rowNo <= 9 ? `⌥⌘${p.rowNo}` : "⌘J / ⌘K"}
             data-nobadge
             onClick={p.onOpen}
             onContextMenu={p.onMenu}

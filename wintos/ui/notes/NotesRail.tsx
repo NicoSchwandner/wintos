@@ -15,7 +15,7 @@ import { editMine } from "../focus";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { EpicAvatar } from "../EpicAvatar";
 import { lookOf, shortName } from "../epicLook";
-import { runKey } from "../menu";
+import { toSession } from "../menu";
 import { openPalette } from "../Palette";
 import { backgroundSessions, projectSessions, relTime, sessionName, type WintosState } from "../view";
 import { shelvedName } from "../../daemon/shelf/shelf";
@@ -136,8 +136,8 @@ function HeadsUps({ tabId, state }: { tabId: string; state?: WintosState }) {
     );
 }
 
-// This project's sessions: the live ones, then the shelved ones, each with its PRs, ⌥⌘1–9 back to
-// its pane or resumed; then the project's PRs no session owns.
+// This project's sessions: the live ones, then the shelved ones, each with its PRs, ⏎ (j/k in
+// the notes) back to its pane or resumed; then the project's PRs no session owns.
 export function Sessions({ tabId, state, size }: { tabId: string; state?: WintosState; size: "rail" | "full" }) {
     const blockIds = useAtomValue(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.blockids ?? [];
     const list = state ? projectSessions(state, tabId, blockIds) : [];
@@ -149,16 +149,15 @@ export function Sessions({ tabId, state, size }: { tabId: string; state?: Wintos
                 const live = x.kind === "live";
                 const id = live ? x.session.id : x.item.sessionId;
                 return (
-                    <div key={id} data-wintos={live ? "session-row" : "shelf-dock"} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                        <button type="button" data-key={`⌥⌘${i + 1}`} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey(`session-${i + 1}`)} style={{ display: "flex", alignItems: "center", gap: 9, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: size === "rail" ? 12.5 : 13, lineHeight: 1.55, color: live ? T.title : T.quietTitle, textAlign: "left" }}>
-                            <Key k={`⌥⌘${i + 1}`} label="" />
+                    <div key={id} data-wintos={live ? "session-row" : "shelf-dock"} data-item="link" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <button type="button" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => toSession(i + 1)} style={{ display: "flex", alignItems: "center", gap: 9, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: size === "rail" ? 12.5 : 13, lineHeight: 1.55, color: live ? T.title : T.quietTitle, textAlign: "left" }}>
                             <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: "50%", boxSizing: "border-box", background: live ? SESSION_DOT[x.session.state] : "transparent", border: live ? "none" : `1.5px solid ${T.faint}` }} />
                             <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</span>
                             <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: T.faint }}>{live ? x.session.state : `shelved ${relTime(Date.now() - x.item.at)}`}</span>
                         </button>
-                        {x.kind === "live" && x.session.status && <span style={{ paddingLeft: 54, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.session.status.text}</span>}
+                        {x.kind === "live" && x.session.status && <span style={{ paddingLeft: 16, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.session.status.text}</span>}
                         {(x.prs.length > 0 || x.alsoIn.length > 0) && (
-                            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 5, paddingLeft: 54 }}>
+                            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 5, paddingLeft: 16 }}>
                                 {x.prs.map((c) => <PrChipButton key={c.url} chip={c} small />)}
                                 {/* Quiet: PRs another session owns that this one worked on too. */}
                                 {x.alsoIn.map((c) => (

@@ -4,7 +4,7 @@ import http from "http";
 import type { AddressInfo } from "net";
 import { basename, dirname, join } from "path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { epicInjection, injection } from "../inject";
+import { epicAgentInjection, epicInjection, injection } from "../inject";
 import { EpicStore, EPIC_TITLE_MAX, findEpic, SHORT_MAX } from "../epics/epics";
 import { impliedEpic } from "../epics/assign";
 import { addTime, mergeBackfill, monthByEpic, type TimeLog } from "../epics/time";
@@ -144,6 +144,12 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const epicText = (sessionId: string) => {
         const e = sessions.get(sessionId)?.epic;
         const epic = e ? epics.byId(e) : undefined;
+        if (epic && epic.agent === sessionId) {
+            const workers = [...sessions.values()]
+                .filter((w) => w.epic === epic.id && w.id !== sessionId && w.state !== "ended" && !w.background)
+                .map((w) => ({ name: w.name?.text ?? w.label ?? "a session", state: w.state, step: w.lane?.steps[w.lane.at], status: w.status?.text, prs: w.prs ?? [], ask: w.state === "waiting" ? (w.ask?.text ?? w.outcome?.text) : undefined }));
+            return epicAgentInjection({ title: epic.title, dir: epic.dir, steps: serializeUnits(epic.steps) }, workers);
+        }
         return epicInjection(epic && { id: epic.id, title: epic.title }, openEpics(), epic && epicMineDiff(epic.id, sessionId));
     };
     // The steps you prompted today, by session, for the journal's "Today's focus" (epics/worked.ts).
@@ -338,7 +344,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         wakes,
         sessions: [...sessions.values()],
         projects: store.list().map(({ body: _body, ...p }) => p),
-        epics: epics.list().map(({ body: _body, ...e }) => e),
+        // plan: epic.md's body, which the epic agent keeps (goal, milestones, open issues, blockers).
+        epics: epics.list().map(({ body, ...e }) => ({ ...e, plan: body.trim() })),
         plugins: runner.results,
         donePrs,
         pluginNames: runner.names,
@@ -655,6 +662,19 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (typeof b?.pinned !== "boolean") return send(res, 400, "need pinned: true or false");
                 const e = epics.update(decodeURIComponent(epicPin[1]), ({ pinned: _, ...rest }) => (b.pinned ? { ...rest, pinned: true } : rest));
                 if (!e) return send(res, 404, "no such epic");
+                broadcast();
+                return send(res, 200, "");
+            }
+            // The session that is the epic's agent (its page's a starts one), or none.
+            const epicAgent = /^\/epics\/([^/]+)\/agent$/.exec(url.pathname);
+            if (req.method === "POST" && epicAgent) {
+                const b = (await body(req)) as { sessionId?: unknown };
+                if (b?.sessionId !== null && !isSafe(b?.sessionId)) return send(res, 400, "need sessionId, a session's id or null");
+                const id = decodeURIComponent(epicAgent[1]);
+                const e = epics.update(id, ({ agent: _, ...rest }) => (typeof b.sessionId === "string" ? { ...rest, agent: b.sessionId } : rest));
+                if (!e) return send(res, 404, "no such epic");
+                if (typeof b.sessionId === "string") sessions = setEpic(sessions, b.sessionId, id);
+                saveSessions();
                 broadcast();
                 return send(res, 200, "");
             }

@@ -4,8 +4,11 @@ import type { EpicTime } from "../daemon/epics/time";
 import { EpicAvatar } from "./EpicAvatar";
 import { lookOf, shortName } from "./epicLook";
 import { editMine, focusSession } from "./focus";
+import { runAction } from "./menu";
+import { offerStep } from "./newproject";
 import { Key } from "./Key";
 import { cursorKeys, startCursor } from "./itemCursor";
+import { Md } from "./notes/Md";
 import { Mine } from "./notes/Mine";
 import { openEpicAtom } from "./notes/state";
 import { useEpicMine } from "./notes/useNotes";
@@ -44,8 +47,19 @@ export const EpicPage = memo(() => {
         if (ref.current) requestAnimationFrame(() => ref.current && startCursor(ref.current, (el) => el.dataset.item === "link"));
     }, [id]);
     const toggleDone = () => epic && void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/done`, { method: "POST", body: { done: !epic.done } });
+    // a: to the epic agent's pane; resumed from the shelf when its pane was closed; else a new
+    // one in a view of its own, which knows from its first prompt that it is the epic's agent.
+    const toAgent = () => {
+        if (!epic) return;
+        const live = epic.agent ? state?.sessions.find((s) => s.id === epic.agent && s.state !== "ended") : undefined;
+        if (live) return focusSession({ tabId: live.tabId, blockId: live.blockId });
+        const shelved = epic.agent ? Object.entries(state?.shelf ?? {}).flatMap(([tabId, items]) => items.filter((i) => i.sessionId === epic.agent).map((i) => ({ tabId, script: i.script })))[0] : undefined;
+        if (shelved) return focusSession({ tabId: shelved.tabId, blockId: "", resume: shelved.script });
+        offerStep({ epic: epic.id, step: `${shortName(epic)} agent`, agentOf: epic.id });
+        runAction("project");
+    };
     const togglePin = () => epic && void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/pin`, { method: "POST", body: { pinned: !epic.pinned } });
-    useZoneKeys(ref, { ...cursorKeys(() => ref.current), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true) });
+    useZoneKeys(ref, { ...cursorKeys(() => ref.current), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true), a: () => (toAgent(), true) });
     if (!epic) return <div ref={ref} tabIndex={0} data-zone="list" style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, outline: "none" }}>That epic is gone.</div>;
     const look = lookOf(epic);
     const roadmap = epic.steps;
@@ -60,6 +74,9 @@ export const EpicPage = memo(() => {
                     </span>
                 </div>
                 <span style={{ display: "flex", gap: 14 }}>
+                    <button type="button" data-wintos="epic-agent" data-key="a" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={toAgent} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                        <Key k="a" label={epic.agent ? "the epic agent" : "start the epic agent"} />
+                    </button>
                     <button type="button" data-wintos="epic-pin" data-key="p" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={togglePin} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                         <Key k="p" label={epic.pinned ? "unpin from the sidebar" : "pin to the sidebar"} />
                     </button>
@@ -71,6 +88,9 @@ export const EpicPage = memo(() => {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 360px)", gap: 20, alignItems: "start" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    <Panel label="Plan" note={epic.plan ? "the epic agent keeps it, in epic.md" : "none yet: a starts the epic agent, which writes it"}>
+                        {epic.plan && <Md text={epic.plan} size="full" />}
+                    </Panel>
                     <Panel label="Roadmap" note={roadmap.length ? `${roadmap.filter((u) => u.state === "done").length} of ${roadmap.length} done` : "none yet: wintos unit in a session sets it"}>
                         <div data-wintos="epic-roadmap" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                             {roadmap.map((u) => (

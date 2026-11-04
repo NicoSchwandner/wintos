@@ -71,3 +71,21 @@ export function epicInjection(epic: { id: string; title: string } | undefined, o
     if (mine?.text.trim()) parts.push(`The epic's mine.md (the developer's; read it, never write it):\n${mine.text}`);
     return parts.join("\n\n");
 }
+
+// The epic agent: the one session per epic you talk to about the whole epic. It does no
+// feature work itself; it keeps the plan and the roadmap true, from what you tell it, the
+// meeting notes you paste, and what its sessions are doing (the digest, fresh on every prompt).
+export type WorkerLine = { name: string; state: string; step?: string; status?: string; prs: string[]; ask?: string };
+export function epicAgentInjection(epic: { title: string; dir: string; steps: string }, workers: WorkerLine[]): string {
+    const digest = workers.length
+        ? workers.map((w) => `- ${w.name}: ${w.state}${w.step ? `, at ${w.step}` : ""}${w.status ? ` · ${w.status}` : ""}${w.ask ? ` · asks: ${w.ask}` : ""}${w.prs.length ? ` · ${w.prs.join(", ")}` : ""}`).join("\n")
+        : "- none open";
+    return `[WintOS epic agent: ${epic.title}]
+You are this epic's agent: the developer's single place to see the whole epic and get it unstuck. You do no feature work yourself; the epic's sessions do, and the developer talks to them directly too.
+- The plan lives in the body of ${epic.dir}/epic.md, in this shape: ## Goal (two sentences), ## Milestones (one bullet each, ✓ when reached), ## Open issues, ## Blockers (who or what it waits on). Keep it true; leave the front matter as it is.
+- The roadmap is the list of steps (now: ${epic.steps || "empty"}); set and move it with \`wintos unit\`.
+- When the developer pastes meeting notes, save them as ${epic.dir}/notes/<YYYY-MM-DD>-<topic>.md, then update the plan and roadmap with what they change.
+- To reach one of the sessions, send it a message by its name (SendMessage); suggest next steps, but start nothing and change no code without the developer's OK.
+The epic's sessions now:
+${digest}`;
+}

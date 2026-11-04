@@ -104,6 +104,24 @@ describe("wintosd API", () => {
         expect((await (await fetch(base + "/state")).json()).epics[0].done).toBeUndefined();
     });
 
+    test("the epic's agent gets its job and a digest of the epic's sessions on every prompt", async () => {
+        const id = await (await post("/epics", { title: "Route documents" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } });
+        await post("/sessions/worker/epic", { epic: id });
+        await post("/sessions/worker/name", { text: "Drafts mapping" });
+        expect((await post(`/epics/${id}/agent`, { sessionId: "agent" })).status).toBe(200);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.epics[0].agent).toBe("agent");
+        expect(state.sessions.find((s: { id: string }) => s.id === "agent").epic).toBe(id);
+        const told = await (await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } })).text();
+        expect(told).toContain("[WintOS epic agent: Route documents]");
+        expect(told).toContain("- Drafts mapping: working");
+        const worker = await (await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } })).text();
+        expect(worker).not.toContain("epic agent");
+        expect((await post(`/epics/${id}/agent`, { sessionId: 3 })).status).toBe(400);
+    });
+
     test("a refused epic name lists the open ones", async () => {
         await event(prompt);
         await post("/epics", { title: "Reviews" });

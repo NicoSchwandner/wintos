@@ -33,6 +33,7 @@ describe("takePendingStep (⌘N's sheet)", () => {
         expect(takePendingStep(ls, 5000)).toEqual({ epic: "route", step: "Drafts mapping" });
         expect(takePendingStep(ls, 5000)).toBeUndefined();
     });
+    test("a new epic agent says whose", () => expect(takePendingStep(of({ epic: "route", step: "Route agent", agentOf: "route", at: 1000 }), 5000)).toEqual({ epic: "route", step: "Route agent", agentOf: "route" }));
     test("no epic chosen, no step typed: nothing to set", () => expect(takePendingStep(of({ at: 1000 }), 5000)).toEqual({}));
     test("a stale one is dropped", () => expect(takePendingStep(of({ epic: "route", at: 1000 }), 1000 + 60_000)).toBeUndefined());
 });

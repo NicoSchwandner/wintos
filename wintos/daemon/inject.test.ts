@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { epicInjection, injection } from "./inject";
+import { epicAgentInjection, epicInjection, injection } from "./inject";
 
 describe("injection", () => {
     test("an unreadable note asks for a repair, never for a title (which would overwrite it)", () => {
@@ -51,4 +51,20 @@ describe("epicInjection", () => {
         expect(t).toContain("mine.md (the developer's; read it, never write it):\ncutover per group");
     });
     test("an empty mine.md is left out", () => expect(epicInjection(open[0], open, { text: "  " })).not.toContain("mine.md"));
+});
+
+describe("epicAgentInjection", () => {
+    test("tells the agent its job, where the plan and notes go, and what each session is doing", () => {
+        const t = epicAgentInjection({ title: "Route documents", dir: "/e/route", steps: "[x] Intake | [>] Drafts" }, [
+            { name: "Drafts mapping", state: "waiting", step: "Build", status: "tests green", prs: ["acme/api#42"], ask: "Use DraftId?" },
+            { name: "Export check", state: "working", prs: [] },
+        ]);
+        expect(t).toContain("[WintOS epic agent: Route documents]");
+        expect(t).toContain("/e/route/epic.md");
+        expect(t).toContain("/e/route/notes/<YYYY-MM-DD>-<topic>.md");
+        expect(t).toContain("now: [x] Intake | [>] Drafts");
+        expect(t).toContain("- Drafts mapping: waiting, at Build · tests green · asks: Use DraftId? · acme/api#42");
+        expect(t).toContain("- Export check: working");
+    });
+    test("with no sessions open, it says so", () => expect(epicAgentInjection({ title: "R", dir: "/e", steps: "" }, [])).toContain("- none open"));
 });

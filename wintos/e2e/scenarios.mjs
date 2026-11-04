@@ -852,6 +852,24 @@ await scenario("41 · ⇧⌘Y is the epics home: a card per epic, the one waitin
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
 });
 
+await scenario("42 · a on an epic's page starts its agent in a view of its own; its first session becomes the agent", async () => {
+    const t = await toProject();
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const id = await (await api("/epics", { title: "E2E agent", short: "Agent" })).text();
+    const active = () => sql(`select data->>'activetabid' from db_workspace limit 1`);
+    await press(t, "y", { mods: ["meta", "shift"] });
+    await until("its card", () => evalIn(t, `!!document.querySelector("[data-wintos=today] [data-epic='${id}'] button")`));
+    await evalIn(t, `document.querySelector("[data-wintos=today] [data-epic='${id}'] button").click()`);
+    await until("its page", () => evalIn(t, `document.querySelector("[data-wintos=epic-page]")?.dataset.epic === "${id}"`));
+    const from = active();
+    await press(t, "a", { code: "KeyA" });
+    await until("a new view in front", () => active() !== from);
+    const tab = active();
+    const first = await until("its first pane", () => sql(`select json_extract(data, '$.blockids[0]') from db_tab where oid='${tab}'`) || false);
+    await api("/events", { tabId: tab, blockId: first, payload: { session_id: "e2e-agent", hook_event_name: "SessionStart" } });
+    await until("the session is the epic's agent", async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).epics.find((e) => e.id === id)?.agent === "e2e-agent", 20000);
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

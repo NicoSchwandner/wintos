@@ -279,7 +279,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
         pluginNames: runner.names,
         pluginsRunning: runner.running,
         snoozes,
-        activityToday: recapper.today(Date.now()),
         seen,
         fixer: fixer.state(),
         update: { behind: update?.behind() ?? 0 },

@@ -761,12 +761,12 @@ describe("the daily recap", () => {
         expect(activity[iso(new Date())]["tab-1"]).toMatchObject({ prompts: 1, sessions: { [prompt.session_id]: "/t/s.jsonl" } });
     });
 
-    test("a prompt counts how long its session waited for it, in today's numbers per project", async () => {
+    test("a prompt counts how long its session waited for it, in the day's activity per project", async () => {
         await event({ ...prompt, transcript_path: "/t/s.jsonl" });
         await event({ ...prompt, hook_event_name: "Stop", transcript_path: "/t/s.jsonl", last_assistant_message: "Which one?" });
         await new Promise((r) => setTimeout(r, 30));
         await event({ ...prompt, transcript_path: "/t/s.jsonl" });
-        const today = (await (await fetch(`${base}/state`)).json()).activityToday["tab-1"];
+        const today = JSON.parse(readFileSync(join(root, ".activity.json"), "utf8"))[iso(new Date())]["tab-1"];
         expect([today.prompts, today.waitedMs >= 30]).toEqual([2, true]);
     });
 

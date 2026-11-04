@@ -125,10 +125,7 @@ export function dayRecapper(root: string, cmd?: string, extra?: string, factsOf:
         return last ? gist(last) : undefined;
     };
 
-    // Today's prompts and waits per tab, for the drive board.
-    const today = (now: number): Record<string, { prompts: number; waitedMs: number }> =>
-        Object.fromEntries(Object.entries(activity[isoDay(now)] ?? {}).map(([tab, a]) => [tab, { prompts: a.prompts, waitedMs: a.waitedMs ?? 0 }]));
-    return { record, today, recap, editList, readOut, gistOf, transcriptOf, numbersOf };
+    return { record, recap, editList, readOut, gistOf, transcriptOf, numbersOf };
 }
 
 function safeText(file: string): string {

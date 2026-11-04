@@ -1,7 +1,7 @@
 import { getApi } from "@/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { atom } from "jotai";
-import { enterProject, focusArea, whereYouAre } from "./focus";
+import { enterProject, focusArea, focusedSession, whereYouAre } from "./focus";
 import { goToInbox } from "./inbox";
 import { openView } from "./menu";
 import type { InboxList } from "./view";
@@ -13,14 +13,30 @@ import { flog } from "./focusLog";
 // its own renderer).
 export const switchTargetAtom = atom(null as string | null);
 
+// The sidebar's rows top to bottom: tabs, "s:<session>" rows (tabOf says whose tab), cards.
 let order: string[] = [];
-export const setSwitchOrder = (tabIds: string[]) => (order = tabIds);
+let tabOf: Record<string, string> = {};
+export const setSwitchOrder = (keys: string[], tabs: Record<string, string> = {}) => ((order = keys), (tabOf = tabs));
 // "wake:<project>" stops: a closed project's due wake, which opening reopens on its session.
 let wakeStops: Record<string, () => void> = {};
 export const setWakeStops = (stops: Record<string, () => void>) => (wakeStops = stops);
 // Where closing a project lands: the uppermost project in the sidebar. The walk's other stops
 // (card:…, wake:…) sit above the projects and are no tab.
-export const topProject = (closing: string) => order.find((id) => id !== closing && !id.includes(":"));
+export function topProject(closing: string): string | undefined {
+    for (const key of order) {
+        const tab = key.startsWith("s:") ? tabOf[key] : key.includes(":") ? undefined : key;
+        if (tab && tab !== closing) return tab;
+    }
+    return undefined;
+}
+
+// Where a walk starts: the focused session's row when it has one, else what is showing.
+function here(): string {
+    const where = whereYouAre();
+    const s = focusedSession();
+    const key = s && s.tabId === where ? `s:${s.id}` : undefined;
+    return key && order.includes(key) ? key : where;
+}
 
 export function stepProject(order: string[], current: string, delta: 1 | -1): string | undefined {
     if (!order.length) return undefined;
@@ -37,9 +53,9 @@ export function switchProject(delta: 1 | -1, held: boolean, from: "here" | "top"
     if (!walking()) hold = from === "top" ? "Control" : "Meta";
     const stops = from === "top" ? order.filter((id) => !id.startsWith("card:")) : order;
     const at = globalStore.get(switchTargetAtom);
-    let next = stepProject(stops, at ?? (from === "top" ? "" : whereYouAre()), delta);
+    let next = stepProject(stops, at ?? (from === "top" ? "" : here()), delta);
     // Starting from the top in the topmost project already: the first tap is the one after it.
-    if (from === "top" && at == null && next === whereYouAre() && stops.length > 1) next = stepProject(stops, next, delta);
+    if (from === "top" && at == null && next === here() && stops.length > 1) next = stepProject(stops, next, delta);
     if (!next) return;
     globalStore.set(switchTargetAtom, next);
     if (!held) return commit("menu");
@@ -59,7 +75,7 @@ function go(target: string | null): void {
 
 function commit(why = `${hold === "Meta" ? "⌘" : "⌃"} released`): void {
     const target = globalStore.get(switchTargetAtom);
-    const from = whereYouAre();
+    const from = here();
     end(why);
     try {
         if (target && target !== from) localStorage.setItem(UNDO, JSON.stringify({ from, at: Date.now() }));

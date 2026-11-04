@@ -5,7 +5,7 @@ import type { WintosState } from "./view";
 import { attention, prsByTab, rowView, sidebarModel } from "./attention";
 
 const NOW = 1_000_000_000;
-const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
+const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ key: extra.tabId ?? "t", tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
 
 describe("rowView", () => {
     test("running behind an ended turn says what it waits for", () => {
@@ -124,7 +124,7 @@ describe("prsByTab with snoozes", () => {
 
 describe("rowView after a restart", () => {
     test("a project whose sessions haven't started again says so", () => {
-        const r: Row = { tabId: "t", band: "needs", lastAt: 1, waitingSince: 1, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "waiting", since: 1, lastAt: 1, restored: true }] };
+        const r: Row = { key: "t", tabId: "t", band: "needs", lastAt: 1, waitingSince: 1, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "waiting", since: 1, lastAt: 1, restored: true }] };
         expect(rowView(r, { dir: "/p", mtime: 0, title: "X", pr: ["Core#1"] }, "T", 10).meta).toBe("Core#1 · not started, opens with the project");
         expect(rowView({ ...r, sessions: [{ ...r.sessions[0], restored: undefined }] }, { dir: "/p", mtime: 0, title: "X", pr: ["Core#1"] }, "T", 10).meta).toBe("Core#1");
     });
@@ -132,7 +132,7 @@ describe("rowView after a restart", () => {
 
 describe("rowView of an unread reply", () => {
     test("a done session's reply that said nothing falls back to the project's next action", () => {
-        const r: Row = { tabId: "t", band: "read", lastAt: 5, waitingSince: 5, unread: true, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "done", since: 5, lastAt: 5, turnEndedAt: 5 }] };
+        const r: Row = { key: "t", tabId: "t", band: "read", lastAt: 5, waitingSince: 5, unread: true, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "done", since: 5, lastAt: 5, turnEndedAt: 5 }] };
         expect(rowView(r, { dir: "/p", mtime: 0, title: "X", next: "Ship it", pr: [] }, "T", 10)).toMatchObject({ next: "Ship it", tone: "blue" });
     });
 });
@@ -140,18 +140,18 @@ describe("rowView of an unread reply", () => {
 describe("a row says how the last turn ended", () => {
     const sess = (state: Session["state"], extra: Partial<Session> = {}): Session => ({ id: "s", tabId: "t", blockId: "b", state, since: 5, lastAt: 5, turnEndedAt: 5, outcome: { text: "Fixed the walk", at: 5 }, ...extra });
     test("to read: what it said, in blue", () => {
-        const r: Row = { tabId: "t", band: "read", lastAt: 5, waitingSince: 5, unread: true, sessions: [sess("parked", { parkedOn: "CI" })] };
+        const r: Row = { key: "t", tabId: "t", band: "read", lastAt: 5, waitingSince: 5, unread: true, sessions: [sess("parked", { parkedOn: "CI" })] };
         expect(rowView(r, { dir: "/p", mtime: 0, title: "X", next: "Ship it", pr: [] }, "T", 10)).toMatchObject({ next: "Fixed the walk", tone: "blue" });
     });
     test("your move: what the turn expects of you, then what about", () => {
-        const move = (ask: Session["ask"], outcome = true) => rowView({ tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, sessions: [sess("waiting", { ask, ...(outcome ? {} : { outcome: undefined }) })] }, undefined, "T", 10).next;
+        const move = (ask: Session["ask"], outcome = true) => rowView({ key: "t", tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, sessions: [sess("waiting", { ask, ...(outcome ? {} : { outcome: undefined }) })] }, undefined, "T", 10).next;
         expect(move({ kind: "decide", text: "two bands or one", by: "session" })).toBe("Decide · two bands or one");
         expect(move({ kind: "unblock", by: "model" })).toBe("Unblock · Fixed the walk");
         expect(move({ kind: "unblock", by: "model" }, false)).toBe("Unblock");
         expect(move(undefined)).toBe("Fixed the walk");
     });
     test("a question mid-turn points at the pane, not at the last turn's outcome", () => {
-        const move = (kind: "answer" | "approve") => rowView({ tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, sessions: [sess("waiting", { ask: { kind, by: "tool" } })] }, undefined, "T", 10).next;
+        const move = (kind: "answer" | "approve") => rowView({ key: "t", tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, sessions: [sess("waiting", { ask: { kind, by: "tool" } })] }, undefined, "T", 10).next;
         expect([move("answer"), move("approve")]).toEqual(["Answer · its question", "Approve · its plan"]);
     });
     test("quiet: what it waits on, else what it said", () => {
@@ -228,4 +228,29 @@ describe("a due wake on its way", () => {
         const a = attention(["t1"], st({ wakes: { s1: { ...wake, due: undefined } }, shelf: { t1: [{ sessionId: "s1", script: "x", label: "l", at: 0 }] } }), {}, NOW);
         expect(a.needs).toEqual([]);
     });
+});
+
+describe("attention by session (the sidebar)", () => {
+    const sessions = [
+        { id: "w", tabId: "t1", blockId: "b-w", state: "waiting", since: 5, lastAt: 5, name: { text: "Drafts mapping", by: "you", at: 0 } },
+        { id: "r", tabId: "t1", blockId: "b-r", state: "working", since: 5, lastAt: 5, label: "export check" },
+        { id: "q", tabId: "t2", blockId: "b-q", state: "idle", since: 1, lastAt: 1, label: "alone" },
+    ];
+    const state = { now: 10, sessions, projects: [{ id: "t1", title: "Route docs", titleLocked: false, pr: [], dir: "/d", mtime: 0 }], seen: {} } as unknown as WintosState;
+    const a = attention(["t1", "t2", "t3"], state, {}, 10, undefined, true);
+    test("each session is a row named after it; a tab with none keeps its own", () => {
+        expect(a.needs.map((r) => r.key)).toEqual(["s:w"]);
+        expect(a.running.map((r) => r.key)).toEqual(["s:r"]);
+        expect([...a.quiet, ...a.quietMore].map((r) => r.key).sort()).toEqual(["s:q", "t3"]);
+        expect([a.views["s:w"].title, a.views["s:r"].title]).toEqual(["Drafts mapping", "export check"]);
+    });
+    test("sessions sharing a tab say which view; one alone in its tab doesn't", () => {
+        expect(a.views["s:w"].view).toBe("⧉ Route docs");
+        expect(a.views["s:q"].view).toBeUndefined();
+    });
+    test("every session row lands on its own pane; its tab still lands on what waits on you", () => {
+        expect(a.targets["s:r"]).toEqual({ tabId: "t1", blockId: "b-r" });
+        expect(a.targets["t1"]).toEqual({ tabId: "t1", blockId: "b-w" });
+    });
+    test("by project, as the palette and Herdr ask, a tab is one row as before", () => expect(attention(["t1"], state, {}, 10).needs.map((r) => r.key)).toEqual(["t1"]));
 });

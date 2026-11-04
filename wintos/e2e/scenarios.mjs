@@ -792,6 +792,24 @@ await scenario("38 · epics: a session's epic heads its pane and marks its row; 
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(pane)}).id)`);
 });
 
+await scenario("39 · each session is a row of its own; two in one view share its mark, and a click lands on that session's pane", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const focused = () => evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const first = await focused();
+    await press(t, "d", { mods: ["meta"] });
+    const second = await until("a new pane focused", async () => { const b = await focused(); return b !== first && b; });
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    await api("/events", { tabId, blockId: first, payload: { session_id: "e2e-row-a", hook_event_name: "UserPromptSubmit", prompt: "e2e row a" } });
+    await api("/events", { tabId, blockId: second, payload: { session_id: "e2e-row-b", hook_event_name: "UserPromptSubmit", prompt: "e2e row b" } });
+    const row = (id) => `document.querySelector("[data-wintos=sidebar-list] [data-row='s:${id}']")`;
+    await until("a row for each session", () => evalIn(t, `!!${row("e2e-row-a")} && !!${row("e2e-row-b")}`));
+    if (!(await evalIn(t, `${row("e2e-row-a")}.innerText.includes("⧉") || !!${row("e2e-row-a")}.querySelector("[data-wintos=row-view]")`))) throw new Error("no view mark on a row sharing its view");
+    await evalIn(t, `${row("e2e-row-a")}.click()`);
+    await until("the first session's pane focused", async () => (await focused()) === first);
+    await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(second)}).id)`);
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

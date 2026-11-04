@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import { globalStore } from "@/app/store/jotaiStore";
 vi.mock("./focusLog", () => ({ flog: vi.fn() }));
-const here = { tab: "a" };
-vi.mock("./focus", () => ({ enterProject: vi.fn(), focusArea: vi.fn(), whereYouAre: () => here.tab }));
+const here = { tab: "a", session: undefined as { id: string; tabId: string } | undefined };
+vi.mock("./focus", () => ({ enterProject: vi.fn(), focusArea: vi.fn(), whereYouAre: () => here.tab, focusedSession: () => here.session }));
 import { enterProject } from "./focus";
 import { setSwitchOrder, stepProject, switchProject, switchTargetAtom, topProject, undoWalkKey, walkKey, walking } from "./switcher";
 
@@ -61,6 +61,18 @@ describe("walkKey", () => {
     });
 });
 
+describe("a walk among session rows", () => {
+    test("starts from the focused session's row, and steps to the next session", () => {
+        setSwitchOrder(["s:1", "s:2", "b"], { "s:1": "a", "s:2": "a" });
+        here.tab = "a";
+        here.session = { id: "2", tabId: "a" };
+        vi.mocked(enterProject).mockClear();
+        switchProject(1, false);
+        expect(enterProject).toHaveBeenCalledWith("b");
+        here.session = undefined;
+    });
+});
+
 describe("topProject", () => {
     test("the uppermost project in the sidebar, other than the one closing", () => {
         setSwitchOrder(["a", "b", "c"]);
@@ -75,6 +87,11 @@ describe("topProject", () => {
     test("none left: undefined", () => {
         setSwitchOrder(["a"]);
         expect(topProject("a")).toBeUndefined();
+    });
+
+    test("a session's row lands on its tab; the closing tab's sessions are skipped", () => {
+        setSwitchOrder(["card:prs", "s:1", "s:2", "c"], { "s:1": "a", "s:2": "b" });
+        expect([topProject("a"), topProject("b")]).toEqual(["b", "a"]);
     });
 });
 

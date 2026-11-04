@@ -18,7 +18,8 @@ import { FocusRows, TodayCard } from "./TodayCard";
 import { meetingsFrom } from "./meetings";
 import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
-import { editMine, enterProject, focusArea, reopenProject, resumePane, setLatestSessions } from "./focus";
+import { editMine, enterProject, focusArea, focusSession, reopenProject, resumePane, setLatestSessions } from "./focus";
+import { getLayoutModelForStaticTab } from "@/layout/index";
 import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
 import { closeProjectTab, openView, registerWintosMenu } from "./menu";
 import { focusList } from "./dayplan";
@@ -33,7 +34,7 @@ import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 import { EpicAvatar } from "./EpicAvatar";
-import { lookOf, type Look } from "./epicLook";
+import { lookOf, NO_EPIC, type Look } from "./epicLook";
 
 const BAND_STYLE = {
     needs: { label: "Your move", color: T.apricot },
@@ -89,7 +90,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
-    const model = state ? attention(tabIds, state, names, now, activeTabId) : null;
+    const model = state ? attention(tabIds, state, names, now, activeTabId, true) : null;
+    // Which session row is the one you are in: the focused pane's, in this renderer's tab.
+    const focusedBlock = useAtomValue(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
     const gh = state ? ghPrs(state) : undefined;
     const queue = gh ? queueModel(gh.prs, gh.me, now, state?.snoozes, gh.team) : null;
     const panels = state ? pluginPanels(state) : [];
@@ -104,14 +107,16 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const quiet = expanded ? allQuiet : allQuiet.filter((r) => r.tabId === activeTabId);
     // The cards above the projects are walked too, in the order they show: PRs, On call, Today.
     const cards = [...(state?.day ? ["card:today"] : []), ...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : [])];
-    const switchOrder = model ? [...cards, ...wokeClosed.map((w) => `wake:${w.projectId}`), ...[...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map((r) => r.tabId)] : [];
+    const listed = model ? [...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale] : [];
+    const switchOrder = model ? [...cards, ...wokeClosed.map((w) => `wake:${w.projectId}`), ...listed.map((r) => r.key)] : [];
+    const tabOfRow = Object.fromEntries(listed.map((r) => [r.key, r.tabId]));
 
     useEffect(registerWintosMenu, []);
 
-    useEffect(() => void setSwitchOrder(switchOrder), [switchOrder.join(",")]);
+    useEffect(() => void setSwitchOrder(switchOrder, tabOfRow), [switchOrder.join(",")]);
     const reopenWoke = (w: ClosedWake) => reopenProject(w.projectId, [resumePane(w.script)]);
     useEffect(() => void setWakeStops(Object.fromEntries(wokeClosed.map((w) => [`wake:${w.projectId}`, () => reopenWoke(w)]))), [wokeClosed.map((w) => w.sessionId).join(",")]);
-    useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-tabid="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
+    useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-row="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
 
     useEffect(() => {
         if (state) setLatestSessions(state.sessions, model?.targets ?? {});
@@ -147,21 +152,23 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
         );
     };
     const renderRow = (row: Row) => {
-        const v = model!.views[row.tabId];
-        // The project's epic, until rows are sessions: its newest session that has one.
-        const epicId = [...row.sessions].sort((a, b) => b.lastAt - a.lastAt).find((s) => s.epic)?.epic;
-        const epic = epicId ? state?.epics?.find((e) => e.id === epicId) : undefined;
+        const v = model!.views[row.key];
+        const own = row.key !== row.tabId ? row.sessions[0] : undefined;
+        const epic = own?.epic ? state?.epics?.find((e) => e.id === own.epic) : undefined;
+        // In its tab, the row of the focused pane's session; a tab's own row when it has no session.
+        const here = row.tabId === activeTabId && !isPage(mainView) && (!own || own.blockId === focusedBlock || !listed.some((r) => r.tabId === row.tabId && r.sessions[0]?.blockId === focusedBlock));
         const props = {
-            key: row.tabId,
-            look: epic ? lookOf(epic) : undefined,
+            key: row.key,
+            rowKey: row.key,
+            look: own ? (epic ? lookOf(epic) : NO_EPIC) : undefined,
             tabId: row.tabId,
             v,
-            active: row.tabId === activeTabId && !isPage(mainView),
-            cursor: switchTarget === row.tabId,
-            renaming: renaming === row.tabId,
-            onOpen: () => open(row.tabId),
+            active: here,
+            cursor: switchTarget === row.key,
+            renaming: !own && renaming === row.tabId,
+            onOpen: () => (own ? focusSession(model!.targets[row.key] ?? { tabId: row.tabId, blockId: own.blockId }) : open(row.tabId)),
             onMenu: (e: React.MouseEvent) => menu(e, row.tabId),
-            onClose: () => closeProjectTab(row.tabId, true),
+            onClose: own ? undefined : () => closeProjectTab(row.tabId, true),
             onRename: (title: string | null) => {
                 setRenaming(null);
                 focusArea("terminal");
@@ -224,7 +231,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     <>
                         <Band kind="needs" count={model.needs.length + wokeClosed.length}>
                             {wokeClosed.map((w) => (
-                                <CardRow key={`wake:${w.sessionId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌃⇥ or ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
+                                <CardRow key={`wake:${w.sessionId}`} rowKey={`wake:${w.projectId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌃⇥ or ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
                             ))}
                             {model.needs.map(renderRow)}
                         </Band>
@@ -329,6 +336,7 @@ type RowProps = {
     onRename: (title: string | null) => void;
     onClose?: () => void;
     look?: Look;
+    rowKey: string;
 };
 
 function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming" | "onRename"> & { style: React.CSSProperties }) {
@@ -371,6 +379,7 @@ function CardRow(p: RowProps) {
     return (
         <div
             data-tabid={p.tabId}
+            data-row={p.rowKey}
             data-band="card"
             className="w-row"
             data-on={p.active || undefined}
@@ -411,6 +420,7 @@ function QuietRow(p: RowProps & { dot?: string }) {
     return (
         <div
             data-tabid={p.tabId}
+            data-row={p.rowKey}
             data-band="quiet"
             className="w-row"
             data-on={p.active || undefined}
@@ -435,6 +445,7 @@ function QuietRow(p: RowProps & { dot?: string }) {
             {p.look && <EpicAvatar look={p.look} size={18} />}
             {p.dot && <span style={{ width: 6, height: 6, borderRadius: "50%", background: p.dot, flexShrink: 0, marginRight: -2 }} />}
             <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} />
+            {v.view && <span data-wintos="row-view" title="shares its view with the other sessions marked so" style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>⧉</span>}
             {p.active && <WalkKeys />}
             <span title={v.reason} style={{ maxWidth: "48%", fontSize: 11.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>
             <RowClose p={p} />

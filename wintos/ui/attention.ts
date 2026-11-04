@@ -1,9 +1,9 @@
-import { isUnread, rank, type Ranking, type Row } from "../daemon/ranking/rank";
+import { isUnread, rank, rankSessions, type Ranking, type Row } from "../daemon/ranking/rank";
 import { liveSubagents, type Session } from "../daemon/sessions/reduce";
 import type { Project } from "../daemon/projects/store";
 import { isSnoozed, projectPrs, type ProjectPrs } from "../daemon/prs/group";
 import type { Target } from "./sessions";
-import { ghPrs, prOwners, prRef, relTime, repoLabeler, type Owner, type RowView, type WintosState } from "./view";
+import { ghPrs, prOwners, prRef, relTime, repoLabeler, sessionName, type Owner, type RowView, type WintosState } from "./view";
 import { WOKE } from "./wakePlan";
 import { isHeld } from "../daemon/rhythm/hold";
 
@@ -30,9 +30,10 @@ export function prsByTab(tabIds: string[], state: WintosState): Record<string, A
     return out;
 }
 
-export function sidebarModel(tabIds: string[], state: WintosState): Ranking {
+// bySession: a row for each session (the sidebar), else one per project (the palette, Herdr).
+export function sidebarModel(tabIds: string[], state: WintosState, bySession = false): Ranking {
     const touched = Object.fromEntries(state.projects.filter((p) => p.id).map((p) => [p.id!, p.mtime]));
-    return rank(tabIds, state.sessions, state.now, touched, state.seen);
+    return (bySession ? rankSessions : rank)(tabIds, state.sessions, state.now, touched, state.seen);
 }
 
 export function rowView(row: Row, project: Project | undefined, tabName: string | undefined, now: number, prs?: ProjectPrs, label: (repo: string) => string = (r) => r.split("/").pop()!): RowView {
@@ -100,22 +101,36 @@ const lastSaid = (sessions: Session[]) => sessions.filter((s) => s.outcome).sort
 // else the latest reply.
 // here: the project you are in, never held (hold.ts).
 export type Attention = Ranking & { views: Record<string, RowView>; prs: Record<string, AttentionPrs>; targets: Record<string, Target> };
-export function attention(tabIds: string[], state: WintosState, names: Record<string, string | undefined>, now: number, here?: string): Attention {
+// Views and targets are keyed by row (Row.key): the tab, or "s:<session>" with bySession.
+// A session's row is named after the session; when its tab holds others too, its line says
+// which view (⧉ and the tab's title) they share.
+export function attention(tabIds: string[], state: WintosState, names: Record<string, string | undefined>, now: number, here?: string, bySession = false): Attention {
     const prs = prsByTab(tabIds, state);
     const lines = wakingTabs(state, tabIds);
-    const { split, held } = holding(waking(sidebarModel(tabIds, state), lines), state, here, lines);
+    const { split, held } = holding(waking(sidebarModel(tabIds, state, bySession), lines), state, here, lines);
     const rows = [...split.needs, ...split.read, ...split.running, ...split.quiet, ...split.quietMore, ...split.quietStale];
     const project = (id: string) => state.projects.find((p) => p.id === id);
     const label = repoLabeler(state);
-    const views = Object.fromEntries(rows.map((r) => [r.tabId, lines[r.tabId] ? { ...rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label), next: lines[r.tabId], tone: "apricot" as const } : rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label)]));
-    for (const tabId of held) views[tabId] = { ...views[tabId], reason: ["held until you are back", askLine(rows.find((r) => r.tabId === tabId)!.sessions)].filter(Boolean).join(" · ") };
+    const perTab = new Map<string, number>();
+    for (const r of rows) if (r.key !== r.tabId) perTab.set(r.tabId, (perTab.get(r.tabId) ?? 0) + 1);
+    const viewOf = (r: Row): RowView => {
+        const v = rowView(r, project(r.tabId), names[r.tabId], now, prs[r.tabId], label);
+        const own = r.key !== r.tabId ? r.sessions[0] : undefined;
+        const shared = own && (perTab.get(r.tabId) ?? 0) > 1 ? `⧉ ${project(r.tabId)?.title ?? names[r.tabId] ?? "view"}` : undefined;
+        const named = own ? { ...v, title: sessionName(own), ...(shared ? { meta: [shared, v.meta].filter(Boolean).join(" · "), view: shared } : {}) } : v;
+        return lines[r.tabId] ? { ...named, next: lines[r.tabId], tone: "apricot" as const } : named;
+    };
+    const views = Object.fromEntries(rows.map((r) => [r.key, viewOf(r)]));
+    for (const key of held) views[key] = { ...views[key], reason: ["held until you are back", askLine(rows.find((r) => r.key === key)!.sessions)].filter(Boolean).join(" · ") };
     const targets: Record<string, Target> = {};
-    for (const r of [...split.needs, ...split.read]) {
+    for (const r of bySession ? rows : [...split.needs, ...split.read]) {
         const waiting = r.sessions.filter((s) => s.state === "waiting").sort((a, b) => a.since - b.since)[0];
         const reply = r.sessions.filter((s) => isUnread(s, state.seen ?? {})).sort((a, b) => b.turnEndedAt! - a.turnEndedAt!)[0];
-        const to = waiting ?? reply;
-        if (to) targets[r.tabId] = { tabId: r.tabId, blockId: to.blockId };
+        const to = waiting ?? reply ?? (r.key !== r.tabId ? r.sessions[0] : undefined);
+        if (to) targets[r.key] = { tabId: r.tabId, blockId: to.blockId };
     }
+    // Opening a project by its tab (the palette, ⌥⌘O) still lands on what needs you there.
+    if (bySession) for (const r of [...split.needs, ...split.read]) targets[r.tabId] ??= targets[r.key];
     return { ...split, views, prs, targets };
 }
 
@@ -126,9 +141,9 @@ const QUICK = new Set(["approve"]);
 function holding(split: Ranking, state: WintosState, here: string | undefined, waking: Record<string, string>): { split: Ranking; held: Set<string> } {
     const r = state.rhythm;
     const ctx = r && { breakFrom: r.onBreak ?? r.awayFrom, here };
-    const rows = new Set(split.needs.filter((row) => ctx && row.waitingSince !== undefined && !waking[row.tabId] && isHeld({ tabId: row.tabId, waitingSince: row.waitingSince }, ctx)).map((row) => row.tabId));
+    const rows = new Set(split.needs.filter((row) => ctx && row.waitingSince !== undefined && !waking[row.tabId] && isHeld({ tabId: row.tabId, waitingSince: row.waitingSince }, ctx)).map((row) => row.key));
     const quick = (row: Row) => (row.sessions.some((s) => s.state === "waiting" && QUICK.has(s.ask?.kind ?? "")) ? 0 : 1);
-    const needs = split.needs.filter((x) => !rows.has(x.tabId)).sort((a, b) => quick(a) - quick(b));
-    const kept = split.needs.filter((x) => rows.has(x.tabId)).map((x) => ({ ...x, band: "quiet" as const }));
+    const needs = split.needs.filter((x) => !rows.has(x.key)).sort((a, b) => quick(a) - quick(b));
+    const kept = split.needs.filter((x) => rows.has(x.key)).map((x) => ({ ...x, band: "quiet" as const }));
     return { split: { ...split, needs, quiet: [...kept, ...split.quiet] }, held: rows };
 }

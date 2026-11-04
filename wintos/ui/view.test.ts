@@ -3,7 +3,7 @@ import type { Row } from "../daemon/ranking/rank";
 import { backgroundSessions, reopenFor, repoLabel, inboxKind, inboxTabId, isInboxTab, prProjectLists, prProjects, projectSessions, projectTabIds, projectPrList, projectTouched, relTime, sessionHeader, sessionTouched, urgentPr, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
-const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
+const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ key: extra.tabId ?? "t", tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
 
 describe("relTime", () => {
     test.each([

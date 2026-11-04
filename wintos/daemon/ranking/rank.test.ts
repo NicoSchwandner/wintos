@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../sessions/reduce";
-import { QUIET_CAP, rank, STALE_MS } from "./rank";
+import { QUIET_CAP, rank, rankSessions, STALE_MS } from "./rank";
 
 const DAY = 86_400_000;
 const NOW = 100 * DAY;
@@ -63,7 +63,7 @@ describe("rank", () => {
 
     test("a tab nothing is known about is quiet and visible, never stale", () => {
         const r = rank(["fresh"], [], NOW);
-        expect(r.quiet).toEqual([{ tabId: "fresh", band: "quiet", lastAt: 0, sessions: [] }]);
+        expect(r.quiet).toEqual([{ key: "fresh", tabId: "fresh", band: "quiet", lastAt: 0, sessions: [] }]);
         expect(r.quietStale).toEqual([]);
     });
 
@@ -122,5 +122,19 @@ describe("unread", () => {
     test("never seen at all counts as unread; an ended session's last reply does not", () => {
         expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW).read[0]?.unread).toBe(true);
         expect(rank(["t"], [ended("t", "ended", NOW - 50)], NOW).read).toEqual([]);
+    });
+});
+
+describe("rankSessions", () => {
+    const s = (id: string, tabId: string, state: Session["state"], more: Partial<Session> = {}): Session => ({ id, tabId, blockId: `b-${id}`, state, since: NOW - 1000, lastAt: NOW - 1000, ...more }) as Session;
+    test("each session is a row of its own, in the band its state puts it, keyed by the session", () => {
+        const r = rankSessions(["t1"], [s("a", "t1", "waiting"), s("b", "t1", "working"), s("c", "t1", "idle")], NOW);
+        expect(r.needs.map((x) => x.key)).toEqual(["s:a"]);
+        expect(r.running.map((x) => x.key)).toEqual(["s:b"]);
+        expect(r.quiet.map((x) => [x.key, x.tabId])).toEqual([["s:c", "t1"]]);
+    });
+    test("a tab with no session keeps a row of its own; an ended session has none", () => {
+        const r = rankSessions(["t1", "t2"], [s("a", "t1", "ended")], NOW);
+        expect(r.quiet.map((x) => x.key).sort()).toEqual(["t1", "t2"]);
     });
 });

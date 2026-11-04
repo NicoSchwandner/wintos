@@ -82,7 +82,10 @@ export class EpicStore {
     }
 
     // Rewrites the front matter with some keys changed, the body and every other key as they are.
+    // Read afresh first: the epic agent writes the plan into epic.md itself, and writing back what
+    // was read earlier would undo that.
     update(id: string, change: (e: Epic) => Epic): EpicFile | undefined {
+        this.reload();
         const e = this.byId(id);
         if (!e) return undefined;
         const { dir, mtime: _m, mineMtime: _mm, body, ...epic } = e;

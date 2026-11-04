@@ -60,6 +60,14 @@ describe("EpicStore", () => {
         expect(s.byId(e.id)).toMatchObject({ done: "2026-11-04", body: "notes\n" });
         expect(s.update("missing", (x) => x)).toBeUndefined();
     });
+    test("an update keeps a plan written into epic.md since it was read", () => {
+        const s = fresh();
+        const e = s.create("A");
+        writeFileSync(join(e.dir, "epic.md"), readFileSync(join(e.dir, "epic.md"), "utf8") + "## Goal\nShip it.\n");
+        s.update(e.id, (x) => ({ ...x, pinned: true }));
+        expect(readFileSync(join(e.dir, "epic.md"), "utf8")).toContain("## Goal\nShip it.");
+        expect(s.byId(e.id)?.pinned).toBe(true);
+    });
     test("a folder without epic.md, or a hidden one, is not an epic", () => {
         const root = mkdtempSync(join(tmpdir(), "epics-"));
         mkdirSync(join(root, "stray"));

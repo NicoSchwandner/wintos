@@ -426,6 +426,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const reload = () => {
         try {
             store.reload();
+            epics.reload();
             broadcast();
         } catch (e) {
             console.error(`[wintosd] reload failed, keeping the last good state: ${e}`);
@@ -441,6 +442,18 @@ export async function startServer(opts: { root: string; port: number; host?: str
         watcher.on("error", (e) => console.error(`[wintosd] watcher error, note edits will not show until restart: ${e}`));
     } catch (e) {
         console.error(`[wintosd] cannot watch ${opts.root}: ${e}`);
+    }
+    // epic.md and an epic's mine.md are edited outside WintOS too: by the epic agent (the plan) and
+    // in your editor. A change there is read and pushed like a note edit.
+    let epicsWatcher: FSWatcher | undefined;
+    try {
+        epicsWatcher = watch(epics.root, { recursive: true }, () => {
+            clearTimeout(pending);
+            pending = setTimeout(reload, 100);
+        });
+        epicsWatcher.on("error", (e) => console.error(`[wintosd] epics watcher error: ${e}`));
+    } catch (e) {
+        console.error(`[wintosd] cannot watch ${epics.root}: ${e}`);
     }
     // The journal is edited outside WintOS too (your editor, the journal's own command): a change
     // there is pushed like a note edit, not only seen by the next request.
@@ -1122,6 +1135,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         http: server,
         close: () => {
             watcher?.close();
+            epicsWatcher?.close();
             journalWatcher?.close();
             for (const w of storeWatchers.values()) w.close();
             clearInterval(warmRecap);

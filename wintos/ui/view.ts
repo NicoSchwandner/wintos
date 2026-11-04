@@ -5,6 +5,7 @@ import type { KeyStats } from "../daemon/keyboard/keyboard";
 import type { PluginResult } from "../daemon/plugins/runner";
 import type { Project } from "../daemon/projects/store";
 import type { EpicFile } from "../daemon/epics/epics";
+import type { Unit } from "../daemon/projects/units";
 import { ageLabel, byUrgency, GROUPS, groupOf, isSnoozed, isStacked, projectPrs, qualifier, type DonePr, type Group, type PR, type Snoozes } from "../daemon/prs/group";
 import { fixNote } from "./prs";
 import { liveSessionIn, liveSessionsIn, type Session } from "../daemon/sessions/reduce";
@@ -198,6 +199,13 @@ function chipText(pr: PR, group: Group, state: WintosState): string {
 export const urgentPr = (h: SessionHeader | undefined) => h?.prs[0];
 
 // What a live session is called: its name, else its first prompt. The status line is never the name.
+// The roadmap a session works through: its epic's, which all the epic's sessions share, else its
+// project's units.
+export function roadmapOf(state: WintosState, s: Session): { units: Unit[]; epic?: EpicView } {
+    const epic = s.epic ? state.epics?.find((e) => e.id === s.epic) : undefined;
+    return epic ? { units: epic.steps, epic } : { units: state.projects.find((p) => p.id === s.tabId)?.units ?? [] };
+}
+
 export const sessionName = (s: Session) => s.name?.text ?? s.label ?? "session";
 
 // A project's sessions, as its notes list them and ⌥⌘1–9 counts them: the live ones in pane

@@ -15,7 +15,7 @@ import { shownState } from "./sessions";
 import { WhereWasI } from "./WhereWasI";
 import { EpicAvatar } from "./EpicAvatar";
 import { lookOf, NO_EPIC, shortName } from "./epicLook";
-import { prRef, relTime, sessionHeader, sessionName, urgentPr, type PrChip, type PrStatus } from "./view";
+import { prRef, relTime, roadmapOf, sessionHeader, sessionName, urgentPr, type PrChip, type PrStatus } from "./view";
 
 
 // Above a Claude pane: its state, what it works on, its own status line and its PRs' verdicts.
@@ -32,7 +32,7 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     // In a session waiting on you: how many more wait, and the key to the next.
     const waiting = focused && state ? decisions(state, now, () => "") : [];
     const more = waiting.some((d) => d.sessionId === s.id) ? waiting.length - 1 : 0;
-    const units = state?.projects.find((p) => p.id === s.tabId)?.units ?? [];
+    const units = state ? roadmapOf(state, s).units : [];
     const at = units.findIndex((u) => u.state === "current");
     const unitAt = at >= 0 ? { i: at + 1, n: units.length, name: units[at].name } : undefined;
     const epic = s.epic ? state?.epics?.find((e) => e.id === s.epic) : undefined;
@@ -194,20 +194,20 @@ function StepTrack({ lane, unit }: { lane?: Lane; unit?: { i: number; n: number;
     );
 }
 
-// A wide pane: the project's units of work and the session's lane, as a column beside the
+// A wide pane: the roadmap (the epic's, else the project's units of work) and the session's lane, as a column beside the
 // terminal. The unit being worked on holds the lane under it; done ones go quiet, the rest follow.
 export const SessionSteps = memo(({ blockId }: { blockId: string }) => {
     const { state } = useWintos();
     const s = state ? sessionHeader(state, blockId)?.session : undefined;
     const lane = s?.lane;
-    const units = (s && state?.projects.find((p) => p.id === s.tabId)?.units) ?? [];
+    const { units, epic } = s && state ? roadmapOf(state, s) : { units: [], epic: undefined };
     if (!lane && !units.length) return null;
     const current = units.findIndex((u) => u.state === "current");
     return (
         <div className="wintos-steps-side" data-wintos="session-steps" style={{ width: 210, flexShrink: 0, borderLeft: `1px solid ${T.border}`, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", fontFamily: T.ui }}>
             {units.length > 0 ? (
                 <>
-                    <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>UNITS · {units.filter((u) => u.state === "done").length}/{units.length}</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>{epic ? `ROADMAP · ${shortName(epic).toUpperCase()}` : "UNITS"} · {units.filter((u) => u.state === "done").length}/{units.length}</span>
                     <div data-wintos="project-units" style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                         {units.map((u, i) => (
                             <div key={i} data-unit={u.state} style={{ display: "flex", flexDirection: "column", gap: 7 }}>

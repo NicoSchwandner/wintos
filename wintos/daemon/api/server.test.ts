@@ -180,6 +180,20 @@ describe("wintosd API", () => {
         }
     });
 
+    test("`wintos unit` in a session of an epic moves the epic's roadmap, which the project keeps out of", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await event(prompt);
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+        const set = await post("/blocks/blk-1/units", { items: ["ABC-41 fields check", "ABC-42 phase 1"] });
+        expect(await set.text()).toBe("[ ] ABC-41 fields check | [ ] ABC-42 phase 1");
+        await post("/blocks/blk-1/units", { done: "ABC-41" });
+        await post("/blocks/blk-1/units", { start: "ABC-42" });
+        expect((await post("/blocks/blk-1/units", { start: "ABC-9" })).status).toBe(400);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.epics[0].steps.map((u: { state: string }) => u.state)).toEqual(["done", "current"]);
+        expect(state.projects).toEqual([]);
+    });
+
     test("`wintos status` sets the session's line, shown in /state", async () => {
         await event(prompt);
         expect((await post("/blocks/blk-1/status", { text: "Walking the test plan" })).status).toBe(200);

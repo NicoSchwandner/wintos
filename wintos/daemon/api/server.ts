@@ -20,7 +20,7 @@ import { localDay, prFact, waitedFor } from "../recap/recap";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
-import { doneUnit, serializeUnits, setUnits, startUnit, UNIT_MAX, UNITS_MAX } from "../projects/units";
+import { doneUnit, serializeUnits, setUnits, startUnit, UNIT_MAX, UNITS_MAX, type Unit } from "../projects/units";
 import { fixJob, fixPrompt, nextAction, type FixJob } from "../fixer/plan";
 import { reassignPrs, touchPrs } from "../prs/owners";
 import { groupOf, type DonePr, type PR } from "../prs/group";
@@ -997,7 +997,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     return send(res, 400, `need 1-${UNITS_MAX} units of one line up to ${UNIT_MAX} characters, without |; or the one to start or mark done`);
                 const live = liveIn(sessions, blockId, sid);
                 if (!live) return send(res, 409, "no session in this pane");
-                const r = store.updateUnits(live.tabId, (was) => (okItems ? setUnits(was, (items as string[]).map((s) => s.trim())) : okName(b.start) ? startUnit(was, b.start) : doneUnit(was, b.done as string)));
+                const change = (was: Unit[]) => (okItems ? setUnits(was, (items as string[]).map((s) => s.trim())) : okName(b.start) ? startUnit(was, b.start) : doneUnit(was, b.done as string));
+                // A session in an epic moves the epic's roadmap, which every session in it shares.
+                const epic = live.epic ? epics.byId(live.epic) : undefined;
+                if (epic) {
+                    const next = change(epic.steps);
+                    if (!next) return send(res, 400, "no such step in the epic's roadmap; wintos unit <unit>… sets it");
+                    epics.update(epic.id, (e) => ({ ...e, steps: next }));
+                    broadcast();
+                    return send(res, 200, serializeUnits(next));
+                }
+                const r = store.updateUnits(live.tabId, change);
                 if (typeof r === "string") return send(res, r === "no project" ? 409 : 400, r === "no project" ? "this pane's project has no project.md yet; name it with wintos title first" : "no such unit; wintos unit <unit>… sets the list");
                 broadcast();
                 return send(res, 200, serializeUnits(r));

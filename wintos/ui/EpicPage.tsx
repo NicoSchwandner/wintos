@@ -21,7 +21,7 @@ import { useZoneKeys } from "./zones";
 const spent = (ms: number) => (ms < 3_600_000 ? `${Math.round(ms / 60_000)} min` : `${(ms / 3_600_000).toFixed(1).replace(/\.0$/, "")} h`);
 
 // An epic's page, from its card on the epics home: its sessions (each a step; ⏎ goes to its
-// pane), the steps planned but not started, its mine.md (⌘E edits it) and its time this month.
+// pane), its roadmap (the units its sessions set with wintos unit), its mine.md (⌘E edits it) and its time this month.
 // p pins it to the top of the sidebar, to keep it in sight; x marks the epic done, or open again: a done epic leaves the sidebar's picks and stays in the report.
 export const EpicPage = memo(() => {
     const ref = useFocusOnMount<HTMLDivElement>();
@@ -48,7 +48,7 @@ export const EpicPage = memo(() => {
     useZoneKeys(ref, { ...cursorKeys(() => ref.current), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true) });
     if (!epic) return <div ref={ref} tabIndex={0} data-zone="list" style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, outline: "none" }}>That epic is gone.</div>;
     const look = lookOf(epic);
-    const planned = epic.steps.filter((x) => x.state !== "done");
+    const roadmap = epic.steps;
     return (
         <div ref={ref} tabIndex={0} data-zone="list" data-wintos="epic-page" data-epic={epic.id} style={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 18px", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0, overflowY: "auto" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 16px", borderRadius: 12, background: `linear-gradient(90deg, ${look.bg} 0%, transparent 70%)`, borderTop: `3px solid ${look.fg}` }}>
@@ -71,7 +71,17 @@ export const EpicPage = memo(() => {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 360px)", gap: 20, alignItems: "start" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                    <Panel label="Steps" note={`${shortName(epic)} · each a session`} keys={sessions.length > 0 && <Key k="j k · ⏎" label="its pane" />}>
+                    <Panel label="Roadmap" note={roadmap.length ? `${roadmap.filter((u) => u.state === "done").length} of ${roadmap.length} done` : "none yet: wintos unit in a session sets it"}>
+                        <div data-wintos="epic-roadmap" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {roadmap.map((u) => (
+                                <div key={u.name} data-unit={u.state} style={{ display: "flex", alignItems: "baseline", gap: 10, fontSize: 13.5, color: u.state === "current" ? T.emphasis : u.state === "done" ? T.faint : T.secondary, fontWeight: u.state === "current" ? 600 : 400 }}>
+                                    <span style={{ width: 10, flexShrink: 0, fontFamily: T.mono, color: u.state === "todo" ? T.faint : T.moss }}>{u.state === "done" ? "✓" : u.state === "current" ? "▸" : "○"}</span>
+                                    <span style={{ textDecoration: u.state === "done" ? "line-through" : undefined }}>{u.name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </Panel>
+                    <Panel label="Sessions" note={`${shortName(epic)} · each a step`} keys={sessions.length > 0 && <Key k="j k · ⏎" label="its pane" />}>
                         {sessions.map((s) => {
                             const shown = shownState(s, now);
                             return (
@@ -84,14 +94,7 @@ export const EpicPage = memo(() => {
                                 </div>
                             );
                         })}
-                        {planned.map((p) => (
-                            <div key={p.name} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: T.secondary }}>
-                                <span style={{ width: 7, flexShrink: 0, fontFamily: T.mono, color: T.faint }}>○</span>
-                                <span>{p.name}</span>
-                                <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>planned · ⌘N starts it</span>
-                            </div>
-                        ))}
-                        {!sessions.length && !planned.length && <span style={{ fontSize: 12.5, color: T.faint }}>No session in it now. ⌘N starts the next step.</span>}
+                        {!sessions.length && <span style={{ fontSize: 12.5, color: T.faint }}>No session in it now. ⌘N starts the next step.</span>}
                     </Panel>
                 </div>
                 <Panel label="mine.md" note="every session in the epic reads it" keys={<Key k="⌘E" label="edit" />}>

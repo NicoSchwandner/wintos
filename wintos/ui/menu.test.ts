@@ -3,14 +3,12 @@ import { allowedInInbox, blockDefFor, focusedPageUrl, paneShowing, shelvable, WI
 
 const widgets = {
     "defwidget@terminal": { blockdef: { meta: { view: "term", controller: "shell" } } },
-    "defwidget@web": { blockdef: { meta: { view: "web" } } },
-    "defwidget@files": { blockdef: { meta: { view: "preview", file: "~" } } },
+    "defwidget@sysinfo": { blockdef: { meta: { view: "sysinfo" } } },
 } as unknown as Record<string, WidgetConfigType>;
 
 describe("blockDefFor", () => {
     test("menu actions open the same blocks the widget bar did", () => {
-        expect(blockDefFor("browser", widgets)).toEqual({ def: { meta: { view: "web" } }, ephemeral: false });
-        expect(blockDefFor("files", widgets)).toEqual({ def: { meta: { view: "preview", file: "~" } }, ephemeral: false });
+        expect(blockDefFor("sysinfo", widgets)).toEqual({ def: { meta: { view: "sysinfo" } }, ephemeral: false });
     });
 
     test("settings opens the config view as a transient block", () => {
@@ -54,8 +52,8 @@ describe("focusedPageUrl", () => {
 
 describe("allowedInInbox", () => {
     test("the Inbox opens pages and moves between them; it starts no terminals", () => {
-        for (const a of ["palette", "keymap", "prs", "panel", "open-page:https://github.com/acme/api/pull/1", "switch-next", "project", "copy-url", "pane-next", "browser", "focus-left", "focus-right"]) expect([a, allowedInInbox(a)]).toEqual([a, true]);
-        for (const a of ["terminal", "files", "sysinfo", "processes", "rename", "edit-mine"]) expect([a, allowedInInbox(a)]).toEqual([a, false]);
+        for (const a of ["palette", "keymap", "prs", "panel", "open-page:https://github.com/acme/api/pull/1", "switch-next", "project", "copy-url", "focus-left", "focus-right"]) expect([a, allowedInInbox(a)]).toEqual([a, true]);
+        for (const a of ["terminal", "sysinfo", "processes", "rename", "edit-mine"]) expect([a, allowedInInbox(a)]).toEqual([a, false]);
     });
 });
 

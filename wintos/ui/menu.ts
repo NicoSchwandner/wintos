@@ -7,8 +7,8 @@ import { closeOverlay, editMine, enterProject, focusArea, focusSession, reopenPr
 import { atWork, closeWarning, paneCloseWarns } from "./sessions";
 import { toggleInbox } from "./inbox";
 import { mainViewAtom, overlayAtom, renamingAtom, restartArmedAtom, closeArmedAtom, tickModeAtom, updateArmedAtom, type MainView } from "./notes/state";
-import { stepProject, switchProject, topProject } from "./switcher";
-import { getLayoutModelForStaticTab, LayoutTreeActionType, NavigateDirection, type LayoutTreeSwapNodeAction } from "@/layout/index";
+import { switchProject, topProject } from "./switcher";
+import { getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
 import { isInboxTab, projectSessions, sessionHeader, sessionName, urgentPr } from "./view";
 import { decisions, nextDecision } from "./decisions";
@@ -33,8 +33,6 @@ import { installFocusOwner, paneWanted, rememberReturn, returnFocus, wantPane } 
 // defines, so a user's widgets.json overrides still apply.
 const WIDGET_FOR: Record<string, string> = {
     terminal: "defwidget@terminal",
-    browser: "defwidget@web",
-    files: "defwidget@files",
     sysinfo: "defwidget@sysinfo",
     processes: "defwidget@processviewer",
 };
@@ -59,12 +57,8 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:k", "keymap"],
     ["Shift:Cmd:g", "prs"],
     ["Shift:Cmd:o", "panel"],
-    ["Shift:Cmd:b", "browser"],
-    ["Shift:Cmd:f", "files"],
     // ⌥ turns a letter into another character on macOS (⌥J is º, ⌥G is ©), so every ⌥⌘ letter
     // matches the key's place.
-    ["Option:Cmd:c{KeyJ}", "pane-down"],
-    ["Option:Cmd:c{KeyK}", "pane-up"],
     ["Shift:Cmd:c", "copy-url"],
     ["Option:Cmd:c{KeyP}", "park-session"],
     ["Option:Cmd:c{KeyN}", "name-session"],
@@ -73,7 +67,6 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:y", "day"],
     ["Option:Cmd:c{KeyY}", "reflect"],
     ["Shift:Cmd:i", "keyboard"],
-    ["Shift:Cmd:u", "open-external"],
     ["Option:Cmd:c{KeyR}", "restart-terminal"],
     ["Option:Cmd:c{KeyU}", "update"],
     ["Option:Cmd:c{KeyB}", "break"],
@@ -82,10 +75,6 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:c{KeyS}", "quiet"],
     ["Option:Cmd:c{KeyX}", "tick"],
     ["Option:Cmd:c{KeyL}", "rail"],
-    ["Ctrl:Cmd:c{KeyH}", "carry-left"],
-    ["Ctrl:Cmd:c{KeyJ}", "carry-down"],
-    ["Ctrl:Cmd:c{KeyK}", "carry-up"],
-    ["Ctrl:Cmd:c{KeyL}", "carry-right"],
     // ⌥ turns a digit into another character too, so these match the key's place.
     ...Array.from({ length: 9 }, (_, i): [string, string] => [`Option:Cmd:c{Digit${i + 1}}`, `session-${i + 1}`]),
     ["Cmd:h", "focus-left"],
@@ -121,32 +110,6 @@ function stepShown(right: boolean): boolean {
     return true;
 }
 
-// ⌥⌘J/K: the pane below / above, in a split stacked with ⇧⌘D. Where one pane shows at a time (an
-// Inbox tab, a magnified pane) they step to the next / previous pane in strip order instead.
-function movePane(dir: NavigateDirection): boolean {
-    const lm = getLayoutModelForStaticTab();
-    if (inInbox() || globalStore.get(lm.magnifiedNodeIdAtom)) return stepPane(dir === NavigateDirection.Left || dir === NavigateDirection.Up ? -1 : 1);
-    wantPane("⌥⌘J/K");
-    lm.switchNodeFocusInDirection(dir, false); // at the edge nothing moves
-    return true;
-}
-
-// ⌃⌘H/J/K/L: the focused pane trades places with its neighbour that way and keeps the focus;
-// at the edge nothing moves.
-function carryPane(dir: NavigateDirection): boolean {
-    const lm = getLayoutModelForStaticTab();
-    if (inInbox() || globalStore.get(lm.magnifiedNodeIdAtom)) return false;
-    const from = globalStore.get(lm.focusedNode)?.id;
-    if (!from) return false;
-    lm.switchNodeFocusInDirection(dir, false);
-    const to = globalStore.get(lm.focusedNode)?.id;
-    if (to && to !== from) {
-        lm.treeReducer({ type: LayoutTreeActionType.Swap, node1Id: from, node2Id: to } as LayoutTreeSwapNodeAction);
-        lm.focusNode(from);
-    }
-    return true;
-}
-
 // ⌘H / ⌘L: one step left or right in what you see. In a project from pane to pane, and past the
 // rightmost pane into the notes (opening the rail if it is folded away). In an Inbox tab the
 // list, then its pages in strip order, each brought to the front: list ← page ← page.
@@ -176,18 +139,6 @@ function toggleRail(): void {
     if (document.activeElement?.closest("[data-wintos=notes-rail]")) focusArea("terminal");
 }
 
-// The previous/next pane of this tab, in layout order, wrapping.
-function stepPane(delta: 1 | -1): boolean {
-    const lm = getLayoutModelForStaticTab();
-    const ids = paneOrder(globalStore.get(lm.leafOrder), globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId))))?.blockids ?? []);
-    wantPane("⌥⌘J/K");
-    const next = stepProject(ids, globalStore.get(lm.focusedNode)?.data?.blockId ?? "", delta);
-    // The Inbox reads one page at a time, and a magnified pane stays magnified; a split in a
-    // project stays side by side and only the focus moves.
-    if (next) inInbox() || globalStore.get(lm.magnifiedNodeIdAtom) ? magnifyBlock(next) : focusBlock(next);
-    return true;
-}
-
 // ⇧⌘C copies the focused browser pane's address, through emain: navigator.clipboard refuses
 // while focus is inside the page. Anywhere else ⇧⌘C stays what it was.
 export const copiedAtAtom = atom(0); // the strip's "copied" flash
@@ -202,10 +153,6 @@ function copyUrl(): boolean {
 }
 
 export function runKey(action: string): boolean {
-    const dir = { "pane-up": NavigateDirection.Up, "pane-down": NavigateDirection.Down }[action];
-    if (dir !== undefined) return movePane(dir);
-    const carry = { "carry-left": NavigateDirection.Left, "carry-right": NavigateDirection.Right, "carry-up": NavigateDirection.Up, "carry-down": NavigateDirection.Down }[action];
-    if (carry !== undefined) return carryPane(carry);
     if (action === "copy-url") return copyUrl();
     // ⌘R in a browser pane stays its reload.
     if (action === "rename" && document.activeElement?.tagName === "WEBVIEW") return false;
@@ -219,14 +166,13 @@ export function runKey(action: string): boolean {
 
 // The Inbox holds pages and nothing else: a terminal started there would belong to no project
 // and never show in the sidebar, Needs you or ⌃⇥.
-const PANE_MAKERS = new Set(["terminal", "browser", "files", "sysinfo", "processes", "open-page"]);
-const NOT_IN_INBOX = new Set(["terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session"]);
+const PANE_MAKERS = new Set(["terminal", "sysinfo", "processes", "open-page"]);
+const NOT_IN_INBOX = new Set(["terminal", "sysinfo", "processes", "rename", "edit-mine", "park-session", "name-session"]);
 export const allowedInInbox = (action: string) => !NOT_IN_INBOX.has(action);
 const inInbox = () => isInboxTab(globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", globalStore.get(atoms.staticTabId)))));
 
 export function runAction(action: string): void {
     flog(`action ${action}`);
-    if (action.startsWith("pane-")) return void runKey(action); // from the app menu
     if (!allowedInInbox(action) && inInbox()) return;
     // A pane you create is where you want to be (from the notes too); in an Inbox tab a page
     // opened from the list leaves you in the list.
@@ -282,7 +228,6 @@ export function runAction(action: string): void {
     if (action === "reflect") return toggleView("reflect");
     if (action === "keyboard") return toggleView("keyboard");
     if (action === "quiet") return void document.querySelector<HTMLElement>("[data-wintos=quiet-fold]")?.click();
-    if (action === "open-external") return openExternal();
     if (action === "tick") return void (rememberReturn(), globalStore.set(tickModeAtom, true));
     if (action === "restart-terminal") return restartTerminal();
     if (action === "update") return updateWintos();
@@ -462,13 +407,6 @@ export function closeProjectTab(tabId: string, confirm: boolean, land = true): v
     // Its sessions go on the shelf first: the resume commands live on the panes the close takes.
     const close = () => void getApi().closeTab(globalStore.get(atoms.workspace).oid, tabId, confirm);
     daemonFetch(`/projects/${encodeURIComponent(tabId)}/shelve-all`, { method: "POST", body: {} }).then(close, close);
-}
-
-// ⇧⌘U: the focused page in the system browser (a sign-in, a call that wants the camera).
-function openExternal(): void {
-    const blockId = globalStore.get(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
-    const url = blockId && focusedPageUrl(globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId))));
-    if (url) getApi().openExternal(url);
 }
 
 // ⌥⌘U: WintOS rebuilt and restarted from its checkout, once that has commits the running one

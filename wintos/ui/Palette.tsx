@@ -267,7 +267,6 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     out.push(action("mine", `Edit mine.md of ${here}`, "⌘E", "edit-mine"));
     out.push(action("park", "Park the waiting session: nothing for you", "⌥⌘P", "park-session"));
     out.push(action("copy-url", "Copy the focused page's url", "⇧⌘C", "copy-url"));
-    out.push(action("external", "Open the focused page in your browser", "⇧⌘U", "open-external"));
     out.push(action("restart", "Restart the focused terminal", "⌥⌘R", "restart-terminal"));
     out.push(action("update", "Update WintOS: rebuild and restart it", "⌥⌘U", "update"));
     out.push(action("break", "Take a break now", "⌥⌘B", "break"));

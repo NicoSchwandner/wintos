@@ -354,24 +354,6 @@ await scenario("12 · ⌘W on a working session warns first, then shelves it int
     await until("a new pane resuming it", () => sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j, db_block b where t.oid='${tabId}' and b.oid=j.value and b.data->>'$.meta."cmd:initscript"' like '%e2e-shelf%'`) === "1");
 });
 
-await scenario("13 · ⌃⌘H carries the focused pane one place left and it keeps the focus", async () => {
-    const t = await toProject();
-    const order = () => evalIn(t, `JSON.stringify(window.wintosLayout().getter(window.wintosLayout().leafOrder).map((l) => l.blockid))`);
-    const focused = () => evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
-    // An empty project gets its first pane from the first ⌘D, so split until there are two.
-    for (let n = JSON.parse(await order()).length; n < 2; n++) {
-        await press(t, "d", { mods: ["meta"] });
-        await until("a split", async () => JSON.parse(await order()).length === n + 1);
-    }
-    const split = JSON.parse(await order());
-    const mine = await focused();
-    if (split.indexOf(mine) < 1) throw new Error(`the new pane is not right of another: ${split}`);
-    await press(t, "h", { mods: ["meta", "ctrl"] });
-    await until("the pane one place left", async () => JSON.parse(await order()).indexOf(mine) === split.indexOf(mine) - 1);
-    if ((await focused()) !== mine) throw new Error("the focus stayed behind");
-    await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(mine)}).id)`);
-});
-
 await scenario("14 · ⌥⌘P parks the session waiting in a pane just opened", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
@@ -507,18 +489,6 @@ await scenario("18 · ⇧⌘W shelves the project's sessions, and ⇧⌘P reopen
     await sleep(1000);
     const panes = (id) => Number(sql(`select coalesce(json_array_length(data->'blockids'), 0) from db_tab where oid='${id}'`));
     if (panes(back) !== 1 || ghostLeaves(back)) throw new Error(`the reopened project has ${panes(back)} panes and ${ghostLeaves(back)} empty leaves, want 1 and 0`);
-});
-
-await scenario("19 · an empty project closes when you leave it (⇧⌘G here), and keeps its folder", async () => {
-    const t = await toProject();
-    const tabId = await evalIn(t, "window.wintosTabId()");
-    await evalIn(t, `(async () => { const lm = window.wintosLayout(); for (const el of document.querySelectorAll("[data-blockid]")) { const n = lm.getNodeByBlockId(el.dataset.blockid); if (n) await lm.closeNode(n.id); } })()`);
-    await until("the project empty", () => evalIn(t, `document.body.innerText.includes("Nothing open in this project")`));
-    await sleep(500);
-    if (sql(`select count(*) from db_tab where oid='${tabId}'`) !== "1") throw new Error("the empty project closed before you left it");
-    await press(t, "g", { mods: ["meta", "shift"] });
-    await until(`its tab closed (active: ${sql(`select data->>'activetabid' from db_workspace limit 1`).slice(0, 8)}, it: ${tabId.slice(0, 8)})`, () => sql(`select count(*) from db_tab where oid='${tabId}'`) === "0");
-    if (!(await (await fetch("http://127.0.0.1:7731/state")).json()).projects.some((p) => p.id === tabId)) throw new Error("its project is gone");
 });
 
 // The app menu's Undo item hands ⌘Z to the window; CDP keys skip the menu, so the action is run.

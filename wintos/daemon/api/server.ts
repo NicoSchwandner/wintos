@@ -648,6 +648,16 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     return send(res, 200, "");
                 }
             }
+            // Pinned (its page's p): kept in sight at the top of the sidebar, or not.
+            const epicPin = /^\/epics\/([^/]+)\/pin$/.exec(url.pathname);
+            if (req.method === "POST" && epicPin) {
+                const b = (await body(req)) as { pinned?: unknown };
+                if (typeof b?.pinned !== "boolean") return send(res, 400, "need pinned: true or false");
+                const e = epics.update(decodeURIComponent(epicPin[1]), ({ pinned: _, ...rest }) => (b.pinned ? { ...rest, pinned: true } : rest));
+                if (!e) return send(res, 404, "no such epic");
+                broadcast();
+                return send(res, 200, "");
+            }
             // Finished (its page's x), or open again: a finished epic stays for the month's report.
             const epicDone = /^\/epics\/([^/]+)\/done$/.exec(url.pathname);
             if (req.method === "POST" && epicDone) {

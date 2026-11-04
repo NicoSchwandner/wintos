@@ -95,6 +95,9 @@ describe("wintosd API", () => {
         expect(text).toContain("cutover per group");
         expect((await post(`/epics/${id}/mine`, { text: "x", baseMtime: mtime - 1 })).status).toBe(409);
         expect((await post("/epics/nope/mine", { text: "x" })).status).toBe(404);
+        expect((await post(`/epics/${id}/pin`, { pinned: true })).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).epics[0].pinned).toBe(true);
+        expect((await post(`/epics/${id}/pin`, { pinned: "yes" })).status).toBe(400);
         expect((await post(`/epics/${id}/done`, { done: true })).status).toBe(200);
         expect((await (await fetch(base + "/state")).json()).epics[0].done).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         await post(`/epics/${id}/done`, { done: false });

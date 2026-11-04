@@ -31,6 +31,7 @@ import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 import { EpicAvatar } from "./EpicAvatar";
+import { PinnedEpics } from "./PinnedEpics";
 import { lookOf, NO_EPIC, type Look } from "./epicLook";
 
 const BAND_STYLE = {
@@ -104,9 +105,10 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     // The cards above the projects are walked too, in the order they show: PRs, On call, Today.
     const openEpics = (state?.epics ?? []).filter((e) => !e.done).length;
     const epicsWaiting = new Set((state?.sessions ?? []).filter((x) => x.epic && x.state === "waiting").map((x) => x.epic)).size;
+    const pinned = (state?.epics ?? []).filter((e) => e.pinned && !e.done);
     const cards = [...(state ? ["card:today"] : []), ...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : [])];
     const listed = model ? [...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale] : [];
-    const switchOrder = model ? [...cards, ...wokeClosed.map((w) => `wake:${w.projectId}`), ...listed.map((r) => r.key)] : [];
+    const switchOrder = model ? [...cards, ...pinned.map((e) => `epic:${e.id}`), ...wokeClosed.map((w) => `wake:${w.projectId}`), ...listed.map((r) => r.key)] : [];
     const tabOfRow = Object.fromEntries(listed.map((r) => [r.key, r.tabId]));
 
     useEffect(registerWintosMenu, []);
@@ -204,6 +206,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         {loading.map((p) => <Tile key={p.name} label={p.title} keys="⇧⌘O" value="…" active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
+                {state && <PinnedEpics epics={pinned} sessions={state.sessions.filter((x) => x.state !== "ended" && !x.background)} now={now} cursor={switchTarget} />}
                 {state?.day?.reflection && (
                     <button type="button" data-wintos="reflect-nudge" data-key="⌥⌘Y" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openView("reflect")} style={{ display: "flex", justifyContent: "space-between", gap: 8, margin: "-8px 2px 0", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12.5, color: T.apricot, textAlign: "left" }}>
                         Write your {state.day.reflection.level} reflection

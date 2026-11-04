@@ -22,7 +22,7 @@ const spent = (ms: number) => (ms < 3_600_000 ? `${Math.round(ms / 60_000)} min`
 
 // An epic's page, from its card on the epics home: its sessions (each a step; ⏎ goes to its
 // pane), the steps planned but not started, its mine.md (⌘E edits it) and its time this month.
-// x marks the epic done, or open again: a done epic leaves the sidebar's picks and stays in the report.
+// p pins it to the top of the sidebar, to keep it in sight; x marks the epic done, or open again: a done epic leaves the sidebar's picks and stays in the report.
 export const EpicPage = memo(() => {
     const ref = useFocusOnMount<HTMLDivElement>();
     const { state } = useWintos();
@@ -44,7 +44,8 @@ export const EpicPage = memo(() => {
         if (ref.current) requestAnimationFrame(() => ref.current && startCursor(ref.current, (el) => el.dataset.item === "link"));
     }, [id]);
     const toggleDone = () => epic && void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/done`, { method: "POST", body: { done: !epic.done } });
-    useZoneKeys(ref, { ...cursorKeys(() => ref.current), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true) });
+    const togglePin = () => epic && void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/pin`, { method: "POST", body: { pinned: !epic.pinned } });
+    useZoneKeys(ref, { ...cursorKeys(() => ref.current), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true) });
     if (!epic) return <div ref={ref} tabIndex={0} data-zone="list" style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, outline: "none" }}>That epic is gone.</div>;
     const look = lookOf(epic);
     const planned = epic.steps.filter((x) => x.state !== "done");
@@ -59,6 +60,9 @@ export const EpicPage = memo(() => {
                     </span>
                 </div>
                 <span style={{ display: "flex", gap: 14 }}>
+                    <button type="button" data-wintos="epic-pin" data-key="p" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={togglePin} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                        <Key k="p" label={epic.pinned ? "unpin from the sidebar" : "pin to the sidebar"} />
+                    </button>
                     <button type="button" data-wintos="epic-done" data-key="x" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={toggleDone} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                         <Key k="x" label={epic.done ? "open it again" : "epic done ✓"} />
                     </button>

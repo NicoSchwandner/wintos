@@ -845,6 +845,10 @@ await scenario("41 · ⇧⌘Y is the epics home: a card per epic, the one waitin
     await until("its card first", () => evalIn(t, `document.querySelector("[data-wintos=today] [data-epic]")?.dataset.epic === "${id}"`));
     await press(t, "Enter", { code: "Enter", keyCode: 13 });
     await until("its page", () => evalIn(t, `document.querySelector("[data-wintos=epic-page]")?.dataset.epic === "${id}" && document.querySelector("[data-wintos=epic-page] [data-session='e2e-home']") !== null`));
+    await press(t, "p", { code: "KeyP" });
+    await until("pinned at the top of the sidebar, saying what waits", () => evalIn(t, `document.querySelector("[data-wintos=pinned-epics] [data-epic='${id}']")?.innerText.includes("waits on you")`));
+    await press(t, "p", { code: "KeyP" });
+    await until("unpinned", () => evalIn(t, `!document.querySelector("[data-wintos=pinned-epics] [data-epic='${id}']")`));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
 });
 

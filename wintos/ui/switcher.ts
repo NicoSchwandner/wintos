@@ -3,7 +3,7 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { atom } from "jotai";
 import { enterProject, focusArea, focusedSession, whereYouAre } from "./focus";
 import { goToInbox } from "./inbox";
-import { openView } from "./menu";
+import { openEpic, openView } from "./menu";
 import type { InboxList } from "./view";
 import { flog } from "./focusLog";
 
@@ -32,7 +32,7 @@ export function topProject(closing: string): string | undefined {
 
 // ⌥⌘1-9: the sidebar's rows, top to bottom; the cards above them are no rows.
 export function toRow(n: number): void {
-    const target = order.filter((k) => !k.startsWith("card:"))[n - 1];
+    const target = order.filter((k) => !k.startsWith("card:") && !k.startsWith("epic:"))[n - 1];
     if (target) go(target);
 }
 
@@ -75,6 +75,7 @@ function go(target: string | null): void {
     if (target === "card:prs" || target === "card:oncall") goToInbox(target.slice(5) as InboxList);
     else if (target === "card:today") openView("day");
     else if (target?.startsWith("wake:")) wakeStops[target]?.();
+    else if (target?.startsWith("epic:")) openEpic(target.slice(5));
     else if (target) enterProject(target);
     else focusArea("terminal");
 }

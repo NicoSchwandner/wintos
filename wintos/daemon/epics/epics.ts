@@ -7,8 +7,9 @@ import { parseUnits, serializeUnits, type Unit } from "../projects/units";
 // beside the projects, holding epic.md (its front matter) and mine.md, the notes all its sessions
 // share. look: the face it shows (ui/epicLook.ts), picked from the id when the file names none.
 // lane: sessions in this lane land here when nothing else says where (a review lane → Reviews).
-// steps: planned steps no session has taken yet. done: the day it was finished.
-export type Epic = { id: string; title: string; short?: string; glyph?: string; color?: string; lane?: string; steps: Unit[]; done?: string };
+// steps: planned steps no session has taken yet. done: the day it was finished. pinned: one you
+// drive, kept in sight at the top of the sidebar.
+export type Epic = { id: string; title: string; short?: string; glyph?: string; color?: string; lane?: string; steps: Unit[]; done?: string; pinned?: boolean };
 export type EpicFile = Epic & { dir: string; mtime: number; mineMtime: number; body: string };
 
 export const EPIC_TITLE_MAX = 80;
@@ -25,12 +26,14 @@ export function parseEpicMd(raw: string): { epic: Epic; body: string } | undefin
     if (!kv.id || !kv.title) return undefined;
     const epic: Epic = { id: kv.id, title: kv.title, steps: kv.steps ? parseUnits(kv.steps) : [] };
     for (const k of ["short", "glyph", "color", "lane", "done"] as const) if (kv[k]) epic[k] = kv[k];
+    if (kv.pinned === "true") epic.pinned = true;
     return { epic, body: m[2] };
 }
 
 export function serializeEpicMd(e: Epic, body: string): string {
     const lines = [`id: ${e.id}`, `title: ${e.title}`];
     for (const k of ["short", "glyph", "color", "lane", "done"] as const) if (e[k]) lines.push(`${k}: ${e[k]}`);
+    if (e.pinned) lines.push("pinned: true");
     if (e.steps.length) lines.push(`steps: ${serializeUnits(e.steps)}`);
     return `---\n${lines.join("\n")}\n---\n${body}`;
 }

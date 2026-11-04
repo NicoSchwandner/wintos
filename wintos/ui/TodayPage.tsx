@@ -128,6 +128,16 @@ function MonthByEpic({ now, back }: { now: number; back: number }) {
     // The row being corrected (⏎ on it): its hours as you say they were.
     const [editing, setEditing] = useState<string | undefined>();
     const [reload, setReload] = useState(0);
+    // The month's accepted meetings from the calendar; absent when no calendar is set.
+    const [meetings, setMeetings] = useState<number | undefined>();
+    useEffect(() => {
+        let live = true;
+        setMeetings(undefined);
+        daemonFetch(`/time/meetings?month=${month}`)
+            .then((r) => (r.ok ? r.json() : undefined))
+            .then((r) => live && setMeetings(r?.ms), () => undefined);
+        return () => void (live = false);
+    }, [month]);
     useEffect(() => {
         let live = true;
         daemonFetch(`/time/month?month=${month}`)
@@ -143,7 +153,7 @@ function MonthByEpic({ now, back }: { now: number; back: number }) {
     const name = (id?: string) => (id ? (state?.epics?.find((e) => e.id === id)?.title ?? id) : "No epic");
     const total = (rows ?? []).reduce((n, r) => n + r.ms, 0);
     const copy = () => {
-        const table = ["Epic\tHours\tSessions\tPRs", ...(rows ?? []).map((r) => `${name(r.epic)}\t${(r.ms / 3_600_000).toFixed(1)}\t${r.sessions}\t${r.prs}`)].join("\n");
+        const table = ["Epic\tHours\tSessions\tPRs", ...(rows ?? []).map((r) => `${name(r.epic)}\t${(r.ms / 3_600_000).toFixed(1)}\t${r.sessions}\t${r.prs}`), ...(meetings !== undefined ? [`Meetings (calendar)\t${(meetings / 3_600_000).toFixed(1)}\t\t`] : [])].join("\n");
         void navigator.clipboard.writeText(table).then(() => setCopied(true));
     };
     const label = first.toLocaleDateString("en-GB", { month: "long", ...(first.getFullYear() !== new Date(now).getFullYear() ? { year: "numeric" } : {}) });
@@ -192,6 +202,13 @@ function MonthByEpic({ now, back }: { now: number; back: number }) {
                     </div>
                 );
             })}
+            {meetings !== undefined && (
+                <div data-wintos="month-meetings" style={{ display: "grid", gridTemplateColumns: "22px minmax(0, 1fr) 90px 80px 50px", gap: 10, alignItems: "center", fontSize: 13 }}>
+                    <span />
+                    <span style={{ color: T.muted }}>Meetings (calendar)</span>
+                    <span style={{ justifySelf: "end", fontFamily: T.mono, fontSize: 12, color: T.muted }}>{span(meetings)}</span>
+                </div>
+            )}
         </Panel>
     );
 }

@@ -10,6 +10,8 @@ import { impliedEpic } from "../epics/assign";
 import { addTime, adjustMonth, epicHistory, lastWorkdays, mergeBackfill, monthByEpic, type TimeLog } from "../epics/time";
 import { lineDiff } from "../projects/diff";
 import { workedFocus } from "../epics/worked";
+import { icsToMeetings } from "../../plugins/calendar/parse";
+import { meetingMs } from "../../plugins/calendar/hours";
 import { addReport, delivered as reportsDelivered, reportLine, type Reports } from "../epics/reports";
 import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
@@ -58,7 +60,7 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // dev server is http://localhost:5173 too.
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // Beside the projects in main.ts; a hidden folder in them by default, which the project store skips.
     const epics = new EpicStore(opts.epicsRoot ?? join(opts.root, ".epics"));
@@ -120,6 +122,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
     let timeLog = readJson<TimeLog>(timeFile, {});
     let focused: { sessionId: string; since: number } | undefined;
     let lastIdleMs = 0;
+    const meetingCache = new Map<string, { ms: number; at: number }>();
     const countTime = (now: number, idleMs: number) => {
         if (!focused) return;
         if (idleMs < AWAY_MS) timeLog = addTime(timeLog, localDay(now), focused.sessionId, sessions.get(focused.sessionId)?.epic, now - focused.since);
@@ -853,6 +856,25 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     return { ...x, name: live?.name?.text ?? item?.named?.text ?? live?.label ?? item?.label ?? recapper.gistOf(x.sessionId) ?? "a session", prs: live?.prs ?? item?.prs ?? [], live: !!live && live.state !== "ended" };
                 });
                 return json(res, { days: h.days, steps });
+            }
+            // The month's meeting time from your calendar, for the report. The calendar's address is a
+            // secret: it is never printed, not even in an error. Read at most every ten minutes.
+            if (req.method === "GET" && url.pathname === "/time/meetings") {
+                const month = url.searchParams.get("month") ?? "";
+                if (!/^\d{4}-\d{2}$/.test(month)) return send(res, 400, "need month=YYYY-MM");
+                if (!opts.calendarIcs) return send(res, 404, "no calendar: set WINTOS_CALENDAR_ICS");
+                const cached = meetingCache.get(month);
+                if (cached && Date.now() - cached.at < 600_000) return json(res, { ms: cached.ms });
+                try {
+                    const r = await fetch(opts.calendarIcs, { signal: AbortSignal.timeout(30_000) });
+                    if (!r.ok) return send(res, 502, `the calendar answered ${r.status}`);
+                    const [y, m] = month.split("-").map(Number);
+                    const ms = meetingMs(icsToMeetings(await r.text(), new Date(y, m - 1, 1).getTime(), new Date(y, m, 1).getTime()));
+                    meetingCache.set(month, { ms, at: Date.now() });
+                    return json(res, { ms });
+                } catch {
+                    return send(res, 502, "could not read the calendar");
+                }
             }
             if (req.method === "GET" && url.pathname === "/time/month") {
                 const month = url.searchParams.get("month") ?? "";

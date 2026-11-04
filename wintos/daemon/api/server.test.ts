@@ -192,6 +192,19 @@ describe("wintosd API", () => {
         expect((await post("/time/adjust", { month: "nov", epic: id, ms: 1 })).status).toBe(400);
     });
 
+    test("the month's meeting time comes from the calendar; without one it says so", async () => {
+        expect((await fetch(base + "/time/meetings?month=2026-11")).status).toBe(404);
+        const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "BEGIN:VEVENT", "UID:a", "SUMMARY:Sync", "DTSTART:20261103T090000Z", "DTEND:20261103T100000Z", "END:VEVENT", "BEGIN:VEVENT", "UID:b", "SUMMARY:October", "DTSTART:20261030T090000Z", "DTEND:20261030T100000Z", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+        const cal = (await import("http")).createServer((_q, r) => r.end(ics));
+        await new Promise<void>((r) => cal.listen(0, "127.0.0.1", r));
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", calendarIcs: `http://127.0.0.1:${(cal.address() as AddressInfo).port}/secret.ics` });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect(await (await fetch(base + "/time/meetings?month=2026-11")).json()).toEqual({ ms: 3_600_000 });
+        expect((await fetch(base + "/time/meetings?month=nov")).status).toBe(400);
+        cal.close();
+    });
+
     test("a backfill adds estimated past days to the month, and a malformed one is refused", async () => {
         expect((await post("/time/backfill", { log: { "2026-10-21": { s1: { epic: "route", ms: 3_600_000 } } } })).status).toBe(200);
         expect(await (await fetch(base + "/time/month?month=2026-10")).json()).toEqual([{ epic: "route", ms: 3_600_000, sessions: 1, days: 1, prs: 0, adjusted: 0 }]);

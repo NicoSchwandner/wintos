@@ -25,7 +25,8 @@ Touches `daemon/sessions/reduce.ts` (reasons replace `ask`), `daemon/ranking/ran
 ### One header per pane
 
 Three bands sit over a pane today: the epic strip, the view's title row and the session header.
-The epic and session names show two or three times, and clicking them does different things.
+The session header no longer repeats the epic in a view of one epic, but the session's name
+still shows in the strip and the header, and clicking them does different things.
 Merge them into one band: the epic's face and name once, the session's name once, its state in
 the sidebar's words, and one reason line ("Your move: it asks …", "Quiet: paused on CI") that
 says why the session sits where it does.

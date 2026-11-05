@@ -785,7 +785,11 @@ await scenario("38 · epics: a session's epic heads its pane and marks its row; 
     const b = await (await api("/epics", { title: "E2E release" })).text();
     await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-epic", hook_event_name: "UserPromptSubmit", prompt: "e2e epic" } });
     await api("/sessions/e2e-epic/epic", { epic: a });
-    await until("the epic over the pane", () => evalIn(t, `document.querySelector("[data-wintos=session-header][data-epic='${a}']")?.innerText.includes("ARCHIVE")`));
+    // One header names the epic: the strip over the view, as a session of it (its own pane header
+    // repeats it only in a view mixing epics).
+    await until("the epic over the pane, as a session of it", () => evalIn(t, `(() => { const st = document.querySelector("[data-wintos=epic-strip][data-epic='${a}']"); return !!st && st.dataset.role === "session" && st.innerText.toUpperCase().includes("E2E ARCHIVE · SESSION"); })()`));
+    const mixed = await evalIn(t, `new Set([...document.querySelectorAll("[data-wintos=session-header]")].map((h) => h.dataset.epic)).size > 1`);
+    if (!mixed && (await evalIn(t, `!!document.querySelector("[data-wintos=session-header][data-epic='${a}'] [data-wintos=session-epic]")`))) throw new Error("a second epic header in a view of one epic");
     await until("the avatar on its row", () => evalIn(t, `!!document.querySelector("[data-tabid='${tabId}'] [data-wintos=epic-avatar]")`));
     await press(t, "e", { code: "KeyE", mods: ["meta", "alt"] });
     await until("the epic picker", () => evalIn(t, `!!document.querySelector("[data-wintos=epic-picker]")`));
@@ -1039,6 +1043,7 @@ await scenario("48 · the epic agent's pane: the epic beside its terminal; ⌘L 
     await api(`/epics/${id}/agent`, { sessionId: "e2e-viewagent" });
     const col = `[data-blockid='${pane}'] [data-wintos=epic-column][data-epic='${id}']`;
     await until("the epic beside the agent's terminal", () => evalIn(t, `!!document.querySelector("${col}")?.offsetParent`), 20000);
+    await until("the agent's view looks like the epic itself", () => evalIn(t, `(() => { const st = document.querySelector("[data-wintos=epic-strip][data-epic='${id}']"); return st?.dataset.role === "agent" && !!st.querySelector("[data-wintos=agent-badge]") && st.innerText.includes("E2E agent view"); })()`));
     // A wide pane: two columns, the roadmap alone in the first; buttons without keycaps (⌘ held shows them).
     const layout = await evalIn(t, `(() => {
         const c = document.querySelector("${col}");

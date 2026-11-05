@@ -40,16 +40,22 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     const unitAt = at >= 0 ? { i: at + 1, n: units.length, name: units[at].name } : undefined;
     const epic = s.epic ? state?.epics?.find((e) => e.id === s.epic) : undefined;
     const look = epic ? lookOf(epic) : NO_EPIC;
+    // The epic strip over the view already names the epic when every session in it shares one; a
+    // second epic row here read as a duplicate header. A view mixing epics keeps it per pane.
+    const inView = (state?.sessions ?? []).filter((x) => x.tabId === s.tabId && x.state !== "ended" && !x.background);
+    const oneEpic = inView.every((x) => x.epic === s.epic);
+    const isAgent = !!epic && epic.agent === s.id;
     return (
-        <div data-wintos="session-header" data-epic={epic?.id ?? ""} data-epic-color={epic ? look.color : undefined} style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", gap: 5, padding: "7px 10px 8px 12px", borderTop: epic ? `3px solid ${look.fg}` : undefined, borderBottom: `1px solid ${T.border}`, background: epic ? `linear-gradient(90deg, ${look.bg} 0%, transparent 60%)` : undefined, fontFamily: T.ui, fontSize: 12, minWidth: 0 }}>
-            <button type="button" data-wintos="session-epic" data-key="⌥⌘E" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("epic")} title={epic?.title ?? "put this session in an epic"} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, padding: 0, background: "transparent", border: "none", cursor: "pointer", minWidth: 0, maxWidth: "100%" }}>
+        <div data-wintos="session-header" data-epic={epic?.id ?? ""} data-epic-color={epic ? look.color : undefined} style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", gap: 5, padding: "7px 10px 8px 12px", borderTop: epic && !oneEpic ? `3px solid ${look.fg}` : undefined, borderBottom: `1px solid ${T.border}`, background: epic && !oneEpic ? `linear-gradient(90deg, ${look.bg} 0%, transparent 60%)` : undefined, fontFamily: T.ui, fontSize: 12, minWidth: 0 }}>
+            {!oneEpic && <button type="button" data-wintos="session-epic" data-key="⌥⌘E" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("epic")} title={epic?.title ?? "put this session in an epic"} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, padding: 0, background: "transparent", border: "none", cursor: "pointer", minWidth: 0, maxWidth: "100%" }}>
                 <EpicAvatar look={look} size={18} />
                 {epic ? (
                     <span style={{ fontFamily: T.mono, fontSize: 10.5, letterSpacing: "0.06em", textTransform: "uppercase", color: look.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(epic)}</span>
                 ) : (
                     <Key k="⌥⌘E" label="no epic yet" />
                 )}
-            </button>
+                {isAgent && <span style={{ padding: "0 6px", borderRadius: 4, background: look.fg, color: look.bg, fontFamily: T.mono, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.1em" }}>AGENT</span>}
+            </button>}
             {h.tone && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: h.tone === "brick" ? T.brick : T.apricot }} />}
             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, whiteSpace: "nowrap" }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: SESSION_DOT[shown] }}>

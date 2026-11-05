@@ -435,6 +435,15 @@ describe("wintosd API", () => {
         expect(readFileSync(join(root, "ask-prompt.txt"), "utf8")).toContain("Here is the plan. Go?");
     });
 
+    test("a turn the model reads as carrying on by itself parks on that, and is not your move", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "echo 'waits: the CI retry loop on test'" });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        await event(prompt);
+        await event({ ...stop, last_assistant_message: "The retry loop runs; I'll be woken when it finishes. After the deploy: set the flags." });
+        expect(await settled((s) => s.state === "parked")).toMatchObject({ state: "parked", parkedOn: "the CI retry loop on test" });
+    });
+
     test("when the model fails, a guess: a question asks, a report is done", async () => {
         srv.close();
         srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "exit 1" });

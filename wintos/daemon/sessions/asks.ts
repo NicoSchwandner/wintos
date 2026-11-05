@@ -1,4 +1,4 @@
-import { ASK_KINDS, type Ask, type AskCard, type AskKind, type AskOption } from "./reduce";
+import { ASK_KINDS, type Ask, type AskCard, type AskKind, type AskOption, type TurnRead } from "./reduce";
 
 const MESSAGE_TAIL = 3000;
 const ASK_TEXT_MAX = 90;
@@ -12,11 +12,12 @@ export function askPrompt(message: string): string {
         "`<kind>: <what, in at most 10 words>`, where kind is one of:",
         "- answer: it asked them a question",
         "- decide: it laid out options and they pick one",
-        "- approve: a plan, a change or a step waits for their go",
+        "- approve: it explicitly asks for their go before it goes on (a plan of what it will do by itself is not this)",
         "- unblock: it needs them to do something it can't (a login, an unlock, a manual step)",
         "- read: it only reports (done, a status, an analysis, a PR to look at); nothing waits on them",
-        'E.g. "decide: two bands or one marked band", "read: momentum fix is live".',
-        "Unless it is read, add a line `context: <what this is about, at most 12 words>`, and when the message offers",
+        "- waits: it carries on by itself: something it started runs (CI, a loop, a deploy) and it will be woken or come back",
+        'E.g. "decide: two bands or one marked band", "read: momentum fix is live", "waits: the CI retry loop on test".',
+        "Unless it is read or waits, add a line `context: <what this is about, at most 12 words>`, and when the message offers",
         "choices, one line each (2 to 4) `option: <the choice, a few words> — <what it leads to, a few words>`.",
         "When it asks more than one thing, put `question: <which, a few words>` before the options of each, up to 8 options in all.",
         "Reply with these lines only.",
@@ -28,13 +29,14 @@ export function askPrompt(message: string): string {
 
 const clip = (t: string) => (t.length > ASK_TEXT_MAX ? `${t.slice(0, ASK_TEXT_MAX - 1).trimEnd()}…` : t);
 
-export function parseAsk(out: string): Ask | "done" | undefined {
+export function parseAsk(out: string): TurnRead | undefined {
     const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
-    const m = /^\W*(answer|decide|approve|unblock|read)\b\W*(.*)$/i.exec(lines[0] ?? "");
+    const m = /^\W*(answer|decide|approve|unblock|read|waits)\b\W*(.*)$/i.exec(lines[0] ?? "");
     if (!m) return undefined;
     const kind = m[1].toLowerCase();
     if (kind === "read") return "done";
     const text = m[2].replace(/^["'“`]+|["'”.`]+$/g, "").trim();
+    if (kind === "waits") return { waits: clip(text || "something it started") };
     const context = lines.map((l) => /^context:\s*(.+)$/i.exec(l)?.[1]).find(Boolean);
     let q: string | undefined;
     const read = lines.flatMap((l): AskOption[] => {

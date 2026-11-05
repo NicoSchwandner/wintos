@@ -275,6 +275,9 @@ describe("readTurn (the daemon's reading of a turn that said nothing)", () => {
         expect(only(readTurn(ended, only(ended).id, turnAt, { kind: "answer", text: "ship it?", by: "model" })).ask).toEqual({ kind: "answer", text: "ship it?", by: "model" });
         expect(only(readTurn(ended, only(ended).id, turnAt, "done")).state).toBe("done");
     });
+    test("a turn that carries on by itself parks on what it started, asking nothing", () => {
+        expect(only(readTurn(ended, only(ended).id, turnAt, { waits: "the CI retry loop" }))).toMatchObject({ state: "parked", parkedOn: "the CI retry loop", ask: undefined });
+    });
 
     test("a later turn, or an ask the session gave itself, makes it moot", () => {
         expect(readTurn(ended, only(ended).id, turnAt - 1, "done")).toBe(ended);

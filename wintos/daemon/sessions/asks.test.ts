@@ -10,6 +10,8 @@ describe("parseAsk", () => {
 
     test("a reply that only reports is done; anything else is unreadable", () => {
         expect(parseAsk("read: momentum fix is live")).toBe("done");
+        expect(parseAsk("waits: the CI retry loop on test")).toEqual({ waits: "the CI retry loop on test" });
+        expect(parseAsk("Waits:")).toEqual({ waits: "something it started" });
         expect(parseAsk("I think the developer should")).toBeUndefined();
     });
 });

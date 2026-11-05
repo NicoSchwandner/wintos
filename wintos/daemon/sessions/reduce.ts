@@ -17,6 +17,9 @@ export type AskPick = { label: string; on: boolean };
 export type AskCard = { context?: string; why?: string; options?: AskOption[]; recommend?: number; final?: boolean; picks?: AskPick[] };
 // suggestion: the epic agent's recommendation on it (wintos suggest), shown with the question.
 export type Ask = { kind: AskKind; text?: string; by: "tool" | "session" | "model" | "guess"; suggestion?: string } & AskCard;
+// How a turn that ended without a word from the session reads (sessions/asks.ts): a question for
+// you, only a report ("done"), or it carries on by itself and parks on what it started (waits).
+export type TurnRead = Ask | "done" | { waits: string };
 export type Session = {
     id: string;
     tabId: string;
@@ -345,10 +348,13 @@ export function askSession(sessions: Map<string, Session>, blockId: string, kind
 
 // What the daemon read in a turn that ended saying nothing (no ask, wait or done): an ask, or
 // "done" for a reply that only reports. turnAt: the Stop it read; a later turn makes it moot.
-export function readTurn(sessions: Map<string, Session>, sessionId: string, turnAt: number, read: Ask | "done"): Map<string, Session> {
+export function readTurn(sessions: Map<string, Session>, sessionId: string, turnAt: number, read: TurnRead): Map<string, Session> {
     const s = sessions.get(sessionId);
     if (!s || s.state !== "waiting" || s.ask || s.turnEndedAt !== turnAt) return sessions;
-    return new Map(sessions).set(s.id, read === "done" ? { ...s, state: "done" } : { ...s, ask: read });
+    if (read === "done") return new Map(sessions).set(s.id, { ...s, state: "done" });
+    // It said it carries on by itself (a loop, CI, a deploy it started): parked on that, not your move.
+    if ("waits" in read) return new Map(sessions).set(s.id, { ...s, state: "parked", parkedOn: read.waits });
+    return new Map(sessions).set(s.id, { ...s, ask: read });
 }
 
 // The sessions a pane runs, not ended: usually one. The one you last prompted first: that is the

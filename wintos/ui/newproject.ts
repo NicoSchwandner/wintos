@@ -23,8 +23,9 @@ export function offerPrompt(prompt: string): void {
 
 // ⌘N's sheet: the epic and step the new project's first session is, handed over the same way.
 const STEP_KEY = "wintos:new-step";
-// agentOf: the new session becomes that epic's agent (its page's a).
-export type PendingStep = { epic?: string; step?: string; agentOf?: string };
+// agentOf: the new session becomes that epic's agent (its page's a). unit: the roadmap step it
+// starts, which then counts it among the sessions that worked that step.
+export type PendingStep = { epic?: string; step?: string; agentOf?: string; unit?: string };
 export function offerStep(step: PendingStep): void {
     localStorage.setItem(STEP_KEY, JSON.stringify({ ...step, at: Date.now() }));
 }
@@ -32,8 +33,8 @@ export function takePendingStep(ls: Storage, now: number): PendingStep | undefin
     const raw = ls.getItem(STEP_KEY);
     if (!raw) return undefined;
     ls.removeItem(STEP_KEY);
-    const { epic, step, agentOf, at } = JSON.parse(raw) as PendingStep & { at: number };
-    return now - at < TTL_MS ? { ...(epic ? { epic } : {}), ...(step ? { step } : {}), ...(agentOf ? { agentOf } : {}) } : undefined;
+    const { epic, step, agentOf, unit, at } = JSON.parse(raw) as PendingStep & { at: number };
+    return now - at < TTL_MS ? { ...(epic ? { epic } : {}), ...(step ? { step } : {}), ...(agentOf ? { agentOf } : {}), ...(unit ? { unit } : {}) } : undefined;
 }
 
 export function takePendingPrompt(ls: Storage, now: number): string | undefined {
@@ -64,7 +65,12 @@ export function useNewProjectPaste(tabId: string, blockIds: string[] | undefined
         if (!first) return;
         const s = step.current;
         step.current = undefined;
-        if (s?.epic) void daemonFetch(`/sessions/${encodeURIComponent(first.id)}/epic`, { method: "POST", body: { epic: s.epic } }).catch(() => {});
+        const sid = encodeURIComponent(first.id);
+        // The link needs the session in the epic first.
+        if (s?.epic)
+            void daemonFetch(`/sessions/${sid}/epic`, { method: "POST", body: { epic: s.epic } })
+                .then(() => s.unit && daemonFetch(`/sessions/${sid}/unit`, { method: "POST", body: { unit: s.unit } }))
+                .catch(() => {});
         if (s?.step) void daemonFetch(`/sessions/${encodeURIComponent(first.id)}/name`, { method: "POST", body: { text: s.step } }).catch(() => {});
         if (s?.agentOf) void daemonFetch(`/epics/${encodeURIComponent(s.agentOf)}/agent`, { method: "POST", body: { sessionId: first.id } }).catch(() => {});
         if (!pending.current) return;

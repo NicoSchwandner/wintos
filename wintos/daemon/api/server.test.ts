@@ -87,14 +87,39 @@ describe("wintosd API", () => {
         expect((await post("/epics", { title: "a\nb" })).status).toBe(400);
     });
 
-    test("a planned step added from the epic page goes to the end of its roadmap, once", async () => {
+    test("the roadmap edited by hand: add, rename, move, done and remove; the epic agent hears of each", async () => {
         const id = await (await post("/epics", { title: "Route" })).text();
+        await post(`/epics/${id}/agent`, { sessionId: "agent" });
         expect((await post(`/epics/${id}/roadmap`, { add: "Drafts mapping" })).status).toBe(200);
         expect((await post(`/epics/${id}/roadmap`, { add: " Export " })).status).toBe(200);
-        expect((await (await fetch(base + "/state")).json()).epics[0].steps).toEqual([{ name: "Drafts mapping", state: "todo" }, { name: "Export", state: "todo" }]);
         expect((await post(`/epics/${id}/roadmap`, { add: "export" })).status).toBe(409);
         expect((await post(`/epics/${id}/roadmap`, { add: "a | b" })).status).toBe(400);
+        expect((await post(`/epics/${id}/roadmap`, { rename: { from: "Export", to: "Export to DO" } })).status).toBe(200);
+        expect((await post(`/epics/${id}/roadmap`, { move: { name: "Export to DO", by: -1 } })).status).toBe(200);
+        expect((await post(`/epics/${id}/roadmap`, { done: "Drafts mapping", on: true })).status).toBe(200);
+        expect((await post(`/epics/${id}/roadmap`, { remove: "Nope" })).status).toBe(404);
+        expect((await post(`/epics/${id}/roadmap`, { move: { name: "Export to DO", by: 2 } })).status).toBe(400);
         expect((await post("/epics/nope/roadmap", { add: "x" })).status).toBe(404);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.epics[0].steps).toEqual([{ name: "Export to DO", state: "todo" }, { name: "Drafts mapping", state: "done" }]);
+        expect(state.epicReports.agent.map((r: { text: string }) => r.text.replace(/^.*page: /, ""))).toEqual(['added "Drafts mapping"', 'added "Export"', 'renamed "Export" to "Export to DO"', 'moved "Export to DO" up, before "Drafts mapping"', 'marked "Drafts mapping" done']);
+    });
+
+    test("a session started from a planned step is linked to it, and the link follows a rename", async () => {
+        await event(prompt);
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post(`/epics/${id}/roadmap`, { add: "Cutover" });
+        expect((await post(`/sessions/${prompt.session_id}/unit`, { unit: "Cutover" })).status).toBe(409);
+        await post("/blocks/blk-1/epic", { epic: id });
+        expect((await post(`/sessions/${prompt.session_id}/unit`, { unit: "Nope" })).status).toBe(404);
+        expect((await post(`/sessions/${prompt.session_id}/unit`, { unit: "Cutover" })).status).toBe(200);
+        await post(`/epics/${id}/roadmap`, { rename: { from: "Cutover", to: "Cutover per group" } });
+        const epic = (await (await fetch(base + "/state")).json()).epics[0];
+        expect(epic.steps).toEqual([{ name: "Cutover per group", state: "current" }]);
+        expect(epic.links).toEqual({ "Cutover per group": [prompt.session_id] });
+        await post(`/epics/${id}/roadmap`, { add: "Backfill" });
+        expect((await post("/blocks/blk-1/units", { start: "Backfill" })).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).epics[0].links.Backfill).toEqual([prompt.session_id]);
     });
 
     test("an epic's mine.md is read and saved, and a save over a newer file is refused; done finishes it", async () => {

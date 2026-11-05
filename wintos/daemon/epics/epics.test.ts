@@ -17,7 +17,7 @@ describe("epic.md", () => {
         expect(parseEpicMd("no front matter")).toBeUndefined();
     });
     test("written back as it was read", () => {
-        const e: Epic = { id: "a", title: "A", lane: "review", steps: [{ name: "One", state: "todo" }], done: "2026-11-20", pinned: true, agent: "s-1" };
+        const e: Epic = { id: "a", title: "A", lane: "review", steps: [{ name: "One", state: "todo" }], done: "2026-11-20", pinned: true, agent: "s-1", links: { One: ["s-2"] } };
         expect(parseEpicMd(serializeEpicMd(e, "body\n"))).toEqual({ epic: e, body: "body\n" });
     });
 });

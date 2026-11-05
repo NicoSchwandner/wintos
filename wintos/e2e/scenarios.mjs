@@ -937,7 +937,7 @@ await scenario("46 · on an epic's page s adds a planned step, and n offers it f
     const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const id = await (await api("/epics", { title: "E2E roadmap" })).text();
     await evalIn(t, `import("/wintos/ui/menu.ts").then((m) => m.openEpic("${id}"))`);
-    await until("its page", () => evalIn(t, `!!document.querySelector("[data-wintos=epic-page][data-epic='${id}']")`));
+    await until("its page, focused", () => evalIn(t, `document.activeElement?.matches("[data-wintos=epic-page][data-epic='${id}']")`));
     await press(t, "s");
     await until("the step field", () => evalIn(t, `document.activeElement?.dataset.wintos === "epic-step-input"`));
     await cdp(t, "Input.insertText", { text: "Cutover per group" });
@@ -947,6 +947,46 @@ await scenario("46 · on an epic's page s adds a planned step, and n offers it f
     await until("the new-step view, this epic chosen, the step offered", () => evalIn(t, `!!document.querySelector("[data-wintos=new-step] [data-epic='${id}'][data-on]") && document.querySelector("#new-step-name")?.placeholder === "Cutover per group"`));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
+});
+
+await scenario("47 · the roadmap worked from its rows: rename, move, done; the agent hears each edit; ⏎ starts a session linked to the step", async () => {
+    const t = await toProject();
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const id = await (await api("/epics", { title: "E2E planner" })).text();
+    await api(`/epics/${id}/agent`, { sessionId: "e2e-agent" });
+    for (const add of ["Mapping", "Cutover", "Backfill"]) await api(`/epics/${id}/roadmap`, { add });
+    const steps = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).epics.find((e) => e.id === id);
+    await evalIn(t, `import("/wintos/ui/menu.ts").then((m) => m.openEpic("${id}"))`);
+    await until("three rows, the page focused", () => evalIn(t, `document.querySelectorAll("[data-wintos=epic-roadmap] [data-step]").length === 3 && document.activeElement?.dataset.wintos === "epic-page"`));
+    await until("the cursor on Cutover", async () => (await evalIn(t, `document.querySelector("[data-cursor]")?.dataset.step === "Cutover"`)) || void (await press(t, "j")));
+    await press(t, "e");
+    await until("the rename field", () => evalIn(t, `document.activeElement?.dataset.wintos === "epic-step-rename"`));
+    await evalIn(t, `document.activeElement.select()`);
+    await cdp(t, "Input.insertText", { text: "Cutover per group" });
+    await press(t, "Enter", { code: "Enter", keyCode: 13 });
+    await until("renamed", async () => (await steps()).steps[1]?.name === "Cutover per group");
+    await press(t, "K", { mods: ["shift"], code: "KeyK" });
+    await until("moved up, the cursor with it", () => evalIn(t, `document.querySelector("[data-wintos=epic-roadmap] [data-step]")?.dataset.step === "Cutover per group" && document.querySelector("[data-cursor]")?.dataset.step === "Cutover per group"`));
+    await press(t, "j");
+    await until("the cursor on Mapping", () => evalIn(t, `document.querySelector("[data-cursor]")?.dataset.step === "Mapping"`));
+    await press(t, "d");
+    await until("Mapping done", async () => (await steps()).steps.find((u) => u.name === "Mapping")?.state === "done");
+    const heard = (await (await fetch("http://127.0.0.1:7731/state")).json()).epicReports["e2e-agent"].map((r) => r.text);
+    if (heard.length !== 6 || !heard[3].includes('renamed "Cutover" to "Cutover per group"')) throw new Error(`the agent heard: ${JSON.stringify(heard)}`);
+    await until("Mapping shown done", () => evalIn(t, `document.querySelector("[data-step=Mapping]")?.dataset.unit === "done"`));
+    await press(t, "j");
+    await until("the cursor on Backfill", () => evalIn(t, `document.querySelector("[data-cursor]")?.dataset.step === "Backfill"`));
+    const active = () => sql(`select data->>'activetabid' from db_workspace limit 1`);
+    const from = active();
+    await press(t, "Enter", { code: "Enter", keyCode: 13 });
+    await until("a new view in front", () => active() !== from);
+    const tab = active();
+    const first = await until("its first pane", () => sql(`select json_extract(data, '$.blockids[0]') from db_tab where oid='${tab}'`) || false);
+    await api("/events", { tabId: tab, blockId: first, payload: { session_id: "e2e-backfill", hook_event_name: "SessionStart" } });
+    await until("a session linked to Backfill, the step current", async () => {
+        const e = await steps();
+        return e.links?.Backfill?.[0] === "e2e-backfill" && e.steps.find((u) => u.name === "Backfill")?.state === "current";
+    }, 20_000);
 });
 
 await scenario("clean-up · the panes this run opened are closed", async () => {

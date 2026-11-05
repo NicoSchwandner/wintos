@@ -38,12 +38,13 @@ function move(root: HTMLElement, delta: number): boolean {
 }
 
 // Puts the cursor on the first item that matches (an open task: ticking is what you came for).
-export function startCursor(root: HTMLElement, match: (el: HTMLElement) => boolean): void {
+export function startCursor(root: HTMLElement, match: (el: HTMLElement) => boolean): boolean {
     const i = items(root).findIndex(match);
-    if (i < 0) return;
+    if (i < 0) return false;
     marked.set(root, i);
     watch(root);
     paint(root);
+    return true;
 }
 
 // The item under the cursor, if it is of this kind; its clickable part is itself or the first

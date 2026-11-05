@@ -20,7 +20,7 @@ import { useFocusOnMount } from "./useFocusOnMount";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { ghPrs, prRef, relTime, sessionName } from "./view";
-import { useZoneKeys } from "./zones";
+import { isTextField, useZoneKeys, type KeyTable } from "./zones";
 
 type History = { days: { day: string; ms: number }[]; steps: { sessionId: string; ms: number; last: string; name: string; prs: string[]; live: boolean }[] };
 const spent = (ms: number) => (ms < 3_600_000 ? `${Math.round(ms / 60_000)} min` : `${(ms / 3_600_000).toFixed(1).replace(/\.0$/, "")} h`);
@@ -54,17 +54,23 @@ export const EpicPage = memo(() => {
         return () => void (live = false);
     }, [id, Math.floor(now / 300_000)]);
     useEffect(() => {
-        if (ref.current) requestAnimationFrame(() => ref.current && startCursor(ref.current, (el) => el.dataset.item === "link"));
+        if (ref.current) requestAnimationFrame(() => ref.current && (startCursor(ref.current, (el) => el.dataset.unit === "current") || startCursor(ref.current, (el) => el.dataset.item === "link")));
     }, [id]);
     const toggleDone = () => epic && void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/done`, { method: "POST", body: { done: !epic.done } });
     // a: to the epic agent's pane; resumed from the shelf when its pane was closed; else a new
     // one in a view of its own, which knows from its first prompt that it is the epic's agent.
+    // To the newest of these sessions that is still open, else resumed from the shelf; false when none is left.
+    const goTo = (ids: string[]): boolean => {
+        for (const id of [...ids].reverse()) {
+            const live = state?.sessions.find((s) => s.id === id && s.state !== "ended");
+            if (live) return focusSession({ tabId: live.tabId, blockId: live.blockId }), true;
+            const shelved = Object.entries(state?.shelf ?? {}).flatMap(([tabId, items]) => items.filter((i) => i.sessionId === id).map((i) => ({ tabId, script: i.script })))[0];
+            if (shelved) return focusSession({ tabId: shelved.tabId, blockId: "", resume: shelved.script }), true;
+        }
+        return false;
+    };
     const toAgent = () => {
-        if (!epic) return;
-        const live = epic.agent ? state?.sessions.find((s) => s.id === epic.agent && s.state !== "ended") : undefined;
-        if (live) return focusSession({ tabId: live.tabId, blockId: live.blockId });
-        const shelved = epic.agent ? Object.entries(state?.shelf ?? {}).flatMap(([tabId, items]) => items.filter((i) => i.sessionId === epic.agent).map((i) => ({ tabId, script: i.script })))[0] : undefined;
-        if (shelved) return focusSession({ tabId: shelved.tabId, blockId: "", resume: shelved.script });
+        if (!epic || (epic.agent && goTo([epic.agent]))) return;
         offerStep({ epic: epic.id, step: `${shortName(epic)} agent`, agentOf: epic.id });
         runAction("project");
     };
@@ -77,8 +83,36 @@ export const EpicPage = memo(() => {
         void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/roadmap`, { method: "POST", body: { add: name } }).then(async (r) => (r.ok ? stopAdding() : setAddError(await r.text())));
     };
     const newStep = () => epic && (globalStore.set(newStepEpicAtom, epic.id), runKey("new-step"));
+    // The roadmap, worked from its rows: ⏎ goes to the session working the step (a done one too), or
+    // starts one for it; d done or open again; J K move; e renames; ⌫ twice removes. The epic agent hears of each edit.
+    const [renaming, setRenaming] = useState<string | undefined>();
+    const [removing, setRemoving] = useState<string | undefined>();
+    const [stepError, setStepError] = useState("");
+    const edit = (op: object) => epic && void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/roadmap`, { method: "POST", body: op }).then(async (r) => setStepError(r.ok ? "" : await r.text()));
+    const openStep = (name: string) => {
+        if (!epic || goTo(epic.links?.[name] ?? [])) return;
+        offerStep({ epic: epic.id, step: name, unit: name });
+        runAction("project");
+    };
+    const stepAtCursor = () => ref.current?.querySelector<HTMLElement>("[data-cursor][data-step]")?.dataset.step;
+    const onStep = (f: (name: string) => void) => () => {
+        const name = stepAtCursor();
+        if (name === undefined) return false;
+        if (removing && removing !== name) setRemoving(undefined);
+        return f(name), true;
+    };
     const togglePin = () => epic && void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/pin`, { method: "POST", body: { pinned: !epic.pinned } });
-    useZoneKeys(ref, { ...cursorKeys(() => ref.current), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true) });
+    // Enter and ⌫ reach this table from the page's own fields too; there they belong to the field.
+    const cursor = cursorKeys(() => ref.current);
+    const notInField = (run: KeyTable[string]): KeyTable[string] => (e) => (isTextField(document.activeElement) ? false : run(e));
+    useZoneKeys(ref, { ...cursor, Enter: notInField(cursor.Enter), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true),
+        d: onStep((name) => edit({ done: name, on: epic?.steps.find((u) => u.name === name)?.state !== "done" })),
+        // The cursor goes along with the step it moves.
+        "Shift:j": (e) => onStep((name) => (edit({ move: { name, by: 1 } }), cursor.j(e)))(),
+        "Shift:k": (e) => onStep((name) => (edit({ move: { name, by: -1 } }), cursor.k(e)))(),
+        e: onStep((name) => setRenaming(name)),
+        Backspace: notInField(onStep((name) => (removing === name ? (edit({ remove: name }), setRemoving(undefined)) : setRemoving(name)))),
+    });
     if (!epic) return <div ref={ref} tabIndex={0} data-zone="list" style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, outline: "none" }}>That epic is gone.</div>;
     const look = lookOf(epic);
     const roadmap = epic.steps;
@@ -126,19 +160,49 @@ export const EpicPage = memo(() => {
                                 <button type="button" data-wintos="epic-add-step" data-key="s" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => setAdding(true)} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                                     <Key k="s" label="add a step" />
                                 </button>
+                                {roadmap.length > 0 && <Key k="⏎ d J K e ⌫" label="go or start · done · move · rename · remove" />}
                                 <button type="button" data-wintos="epic-start-step" data-key="n" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={newStep} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
-                                    <Key k="n" label="start one" />
+                                    <Key k="n" label="new session" />
                                 </button>
                             </>
                         }
                     >
                         <div data-wintos="epic-roadmap" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {roadmap.map((u) => (
-                                <div key={u.name} data-unit={u.state} style={{ display: "flex", alignItems: "baseline", gap: 10, fontSize: 13.5, color: u.state === "current" ? T.emphasis : u.state === "done" ? T.faint : T.secondary, fontWeight: u.state === "current" ? 600 : 400 }}>
-                                    <span style={{ width: 10, flexShrink: 0, fontFamily: T.mono, color: u.state === "todo" ? T.faint : T.moss }}>{u.state === "done" ? "✓" : u.state === "current" ? "▸" : "○"}</span>
-                                    <span style={{ textDecoration: u.state === "done" ? "line-through" : undefined }}>{u.name}</span>
-                                </div>
-                            ))}
+                            {roadmap.map((u) => {
+                                const ids = epic.links?.[u.name] ?? [];
+                                const live = (state?.sessions ?? []).filter((x) => ids.includes(x.id) && x.state !== "ended");
+                                const worked = (history?.steps ?? []).filter((x) => ids.includes(x.sessionId));
+                                const ms = worked.reduce((n, x) => n + x.ms, 0);
+                                const refs = [...new Set(worked.flatMap((x) => x.prs))].map((url) => (state ? prRef(state, url) : url));
+                                const shown = live[0] && shownState(live[0], now);
+                                const tail = [shown && `● ${shown}`, ms >= 60_000 && spent(ms), refs.join(" · ")].filter(Boolean).join(" · ");
+                                return (
+                                    <div key={u.name} data-item="link" data-step={u.name} data-unit={u.state} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr) auto", gap: 10, alignItems: "baseline", fontSize: 13.5, color: u.state === "current" ? T.emphasis : u.state === "done" ? T.faint : T.secondary, fontWeight: u.state === "current" ? 600 : 400 }}>
+                                        <span style={{ fontFamily: T.mono, color: u.state === "todo" ? T.faint : T.moss }}>{u.state === "done" ? "✓" : u.state === "current" ? "▸" : "○"}</span>
+                                        {renaming === u.name ? (
+                                            <input
+                                                autoFocus
+                                                data-wintos="epic-step-rename"
+                                                aria-label="rename the step"
+                                                defaultValue={u.name}
+                                                maxLength={80}
+                                                onKeyDown={(ev) => {
+                                                    ev.stopPropagation();
+                                                    const done = () => (setRenaming(undefined), ref.current?.focus());
+                                                    if (ev.key === "Enter") ev.preventDefault(), edit({ rename: { from: u.name, to: (ev.target as HTMLInputElement).value } }), done();
+                                                    if (ev.key === "Escape") ev.preventDefault(), done();
+                                                }}
+                                                style={{ padding: "1px 6px", background: T.card, border: `1px solid ${T.borderActive}`, borderRadius: 6, outline: "none", color: T.text, fontFamily: T.ui, fontSize: 13.5 }}
+                                            />
+                                        ) : (
+                                            <button type="button" data-act tabIndex={-1} onMouseDown={(ev) => ev.preventDefault()} onClick={() => openStep(u.name)} title={live.length ? "⏎ its session" : ids.length ? "⏎ resumes its session" : "⏎ starts a session for it"} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", font: "inherit", color: "inherit", textDecoration: u.state === "done" ? "line-through" : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                {u.name}
+                                            </button>
+                                        )}
+                                        <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 400, color: removing === u.name ? T.apricot : shown === "waiting" ? T.apricot : T.muted }}>{removing === u.name ? "⌫ again removes it" : tail}</span>
+                                    </div>
+                                );
+                            })}
                             {adding && (
                                 <input
                                     autoFocus
@@ -154,7 +218,7 @@ export const EpicPage = memo(() => {
                                     style={{ padding: "4px 8px", background: T.card, border: `1px solid ${T.borderActive}`, borderRadius: 6, outline: "none", color: T.text, fontFamily: T.ui, fontSize: 13.5 }}
                                 />
                             )}
-                            {addError && <span style={{ fontSize: 12, color: T.apricot }}>{addError}</span>}
+                            {(addError || stepError) && <span style={{ fontSize: 12, color: T.apricot }}>{addError || stepError}</span>}
                         </div>
                     </Panel>
                     <Panel label="Finished steps" note={finished.length ? `${finished.length} · ${spent(finished.reduce((n, f) => n + f.ms, 0))} at them` : "none yet"}>

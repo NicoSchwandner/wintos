@@ -26,7 +26,8 @@ export const NewStep = memo(() => {
     const [step, setStep] = useState("");
     const planned = open.find((e) => e.id === epic)?.steps.filter((x) => x.state !== "done").map((x) => x.name) ?? [];
     const start = () => {
-        offerStep({ epic, step: step.trim() || undefined });
+        const name = step.trim();
+        offerStep({ epic, step: name || undefined, unit: planned.includes(name) ? name : undefined });
         closeOverlay();
         void runAction("project");
     };

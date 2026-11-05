@@ -12,6 +12,7 @@ import { lineDiff } from "../projects/diff";
 import { workedFocus } from "../epics/worked";
 import { icsToMeetings } from "../../plugins/calendar/parse";
 import { meetingMs } from "../../plugins/calendar/hours";
+import { editRoadmap, linkStep, pruneLinks, type RoadmapOp } from "../epics/roadmap";
 import { addReport, delivered as reportsDelivered, reportLine, type Reports } from "../epics/reports";
 import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
@@ -58,6 +59,13 @@ const SAFE = /^[^\r\n\u0000-\u001f]+$/;
 // token: a per-launch secret Electron hands to both wintosd and the UI. Any request that comes
 // from a web origin must carry it, because the UI's origin alone proves nothing: every Vite
 // dev server is http://localhost:5173 too.
+const isRoadmapOp = (o: unknown): o is RoadmapOp => {
+    const v = o as Record<string, unknown> | null;
+    if (!v || typeof v !== "object") return false;
+    const r = v.rename as { from?: unknown; to?: unknown } | undefined;
+    const m = v.move as { name?: unknown; by?: unknown } | undefined;
+    return typeof v.add === "string" || typeof v.remove === "string" || (typeof v.done === "string" && typeof v.on === "boolean") || (!!r && typeof r.from === "string" && typeof r.to === "string") || (!!m && typeof m.name === "string" && (m.by === 1 || m.by === -1));
+};
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 
 export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string }): Promise<WintosServer> {
@@ -695,17 +703,36 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, "");
             }
-            // A planned step, added on the epic's page; sessions start and finish it with wintos unit.
-            const roadmapAdd = /^\/epics\/([^/]+)\/roadmap$/.exec(url.pathname);
-            if (req.method === "POST" && roadmapAdd) {
-                const b = (await body(req)) as { add?: unknown };
-                const name = typeof b?.add === "string" ? b.add.trim() : "";
-                if (!name || !isSafe(name) || name.includes("|") || name.length > UNIT_MAX) return send(res, 400, `need add: one line up to ${UNIT_MAX} characters, without |`);
-                const epic = epics.byId(decodeURIComponent(roadmapAdd[1]));
+            // The roadmap edited by hand on the epic's page (epics/roadmap.ts). The epic agent hears of
+            // every edit, so it can bring the plan in line with it.
+            const roadmapEdit = /^\/epics\/([^/]+)\/roadmap$/.exec(url.pathname);
+            if (req.method === "POST" && roadmapEdit) {
+                const op = (await body(req)) as RoadmapOp;
+                const epic = epics.byId(decodeURIComponent(roadmapEdit[1]));
                 if (!epic) return send(res, 404, "no such epic");
-                if (epic.steps.some((u) => u.name.toLowerCase() === name.toLowerCase())) return send(res, 409, "the roadmap has that step already");
-                if (epic.steps.length >= UNITS_MAX) return send(res, 409, `the roadmap holds ${UNITS_MAX} steps at most`);
-                epics.update(epic.id, (e) => ({ ...e, steps: [...e.steps, { name, state: "todo" }] }));
+                if (!isRoadmapOp(op)) return send(res, 400, "need one of add, rename {from, to}, move {name, by: 1 or -1}, done + on, remove");
+                const r = editRoadmap({ steps: epic.steps, links: epic.links ?? {} }, op);
+                if (typeof r === "string") return send(res, r === "no such step" ? 404 : r.includes("already") || r.includes("at most") ? 409 : 400, r);
+                epics.update(epic.id, ({ links: _, ...e }) => ({ ...e, steps: r.steps, ...(Object.keys(r.links).length ? { links: r.links } : {}) }));
+                if (r.note && epic.agent) {
+                    reports = addReport(reports, epic.agent, `roadmap edited by the developer on the epic page: ${r.note}`, Date.now());
+                    writeFileSync(reportsFile, JSON.stringify(reports));
+                }
+                broadcast();
+                return send(res, 200, "");
+            }
+            // The session started from a planned step (⏎ on the epic page, or ⌘N with that step):
+            // the step is current and the session linked to it.
+            const sessionUnit = /^\/sessions\/([^/]+)\/unit$/.exec(url.pathname);
+            if (req.method === "POST" && sessionUnit) {
+                const b = (await body(req)) as { unit?: unknown };
+                const s = sessions.get(decodeURIComponent(sessionUnit[1]));
+                if (!s) return send(res, 404, "no such session");
+                const epic = s.epic ? epics.byId(s.epic) : undefined;
+                if (!epic) return send(res, 409, "the session is in no epic");
+                const r = typeof b?.unit === "string" ? linkStep({ steps: epic.steps, links: epic.links ?? {} }, b.unit, s.id) : undefined;
+                if (!r) return send(res, 404, "no such step in the epic's roadmap");
+                epics.update(epic.id, (e) => ({ ...e, steps: r.steps, links: r.links }));
                 broadcast();
                 return send(res, 200, "");
             }
@@ -1125,9 +1152,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 // A session in an epic moves the epic's roadmap, which every session in it shares.
                 const epic = live.epic ? epics.byId(live.epic) : undefined;
                 if (epic) {
-                    const next = change(epic.steps);
+                    const linked = okName(b.start) && !okItems ? linkStep({ steps: epic.steps, links: epic.links ?? {} }, b.start, live.id) : undefined;
+                    const next = linked?.steps ?? change(epic.steps);
                     if (!next) return send(res, 400, "no such step in the epic's roadmap; wintos unit <unit>… sets it");
-                    epics.update(epic.id, (e) => ({ ...e, steps: next }));
+                    const links = pruneLinks(linked?.links ?? epic.links ?? {}, next);
+                    epics.update(epic.id, ({ links: _, ...e }) => ({ ...e, steps: next, ...(Object.keys(links).length ? { links } : {}) }));
                     broadcast();
                     return send(res, 200, serializeUnits(next));
                 }

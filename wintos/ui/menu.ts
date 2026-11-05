@@ -491,8 +491,8 @@ function toggleStoredFlag(key: string): void {
 }
 
 // An epic's page, from its card on the epics home.
-// An epic with its agent open opens as the agent's view, its page beside the terminal; else its
-// page. The full page (mine.md, the month's hours) is the column's f.
+// An epic opens as its agent's view: the agent's terminal with the epic beside it (its mine.md in
+// the notes rail). Only an epic with no agent running opens on a page, where a starts one.
 export function openEpic(id: string): void {
     const state = currentState();
     const agent = state?.epics?.find((e) => e.id === id)?.agent;
@@ -500,7 +500,7 @@ export function openEpic(id: string): void {
     if (live) return focusSession({ tabId: live.tabId, blockId: live.blockId });
     openEpicPage(id);
 }
-export function openEpicPage(id: string): void {
+function openEpicPage(id: string): void {
     globalStore.set(openEpicAtom, id);
     openView("epic");
 }

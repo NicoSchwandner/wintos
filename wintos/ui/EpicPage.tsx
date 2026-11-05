@@ -5,7 +5,7 @@ import { EpicAvatar } from "./EpicAvatar";
 import { agentWorking, lookOf, shortName } from "./epicLook";
 import { globalStore } from "@/app/store/jotaiStore";
 import { editMine, focusSession } from "./focus";
-import { openEpicPage, runAction, runKey } from "./menu";
+import { runAction, runKey } from "./menu";
 import { offerStep } from "./newproject";
 import { capStyle, Key } from "./Key";
 import { stepSessions as linkedSessions } from "./stepLinks";
@@ -126,7 +126,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
     // Enter and ⌫ reach this table from the page's own fields too; there they belong to the field.
     const cursor = cursorKeys(() => ref.current);
     const notInField = (run: KeyTable[string]): KeyTable[string] => (e) => (isTextField(document.activeElement) ? false : run(e));
-    useZoneKeys(ref, { ...cursor, Enter: notInField(cursor.Enter), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true), f: () => (column && epic ? (openEpicPage(epic.id), true) : false),
+    useZoneKeys(ref, { ...cursor, Enter: notInField(cursor.Enter), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true),
         d: onStep((name) => edit({ done: name, on: epic?.steps.find((u) => u.name === name)?.state !== "done" })),
         // The cursor goes along with the step it moves.
         "Shift:j": (e) => onStep((name) => (edit({ move: { name, by: 1 } }), cursor.j(e)))(),
@@ -196,7 +196,6 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                 </div>
                 <span style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                     {column && <Key k="⌘L ⌘H" label="into the epic · back to the agent" hold />}
-                    {column && <Act wintos="epic-full-page" k="f" label="Full page" onClick={() => openEpicPage(epic.id)} />}
                     {!column && <Act wintos="epic-agent" k="a" label={epic.agent ? "Epic agent" : "Start the epic agent"} onClick={toAgent} primary />}
                     <Act wintos="epic-pin" k="p" label={epic.pinned ? "Unpin" : "Pin"} onClick={togglePin} />
                     <Act wintos="epic-done" k="x" label={epic.done ? "Open again" : "Epic done"} onClick={toggleDone} />

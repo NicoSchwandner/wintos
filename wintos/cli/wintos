@@ -21,6 +21,7 @@
 #                                      in their words; WintOS types it into that session's pane as theirs
 #   wintos suggest <session> <text…>   epic agent: your recommendation on a session's open question, shown with it
 #   wintos tell <session> <text…>      epic agent: your own words to one of the epic's sessions, typed in marked as yours
+#   wintos peek <session>              epic agent: a session's state, step, open question, PRs and last reply
 #   wintos start [--cwd <dir>] <step> <prompt…>
 #                                      epic agent: start a session for a roadmap step, in Claude's background service;
 #                                      it shows in the epic, linked to the step, and reports to you like the others
@@ -172,6 +173,16 @@ unit)
     list=$(printf '%s' "$body" | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/units$SESSION_Q") ||
         die "wintosd refused it: no such unit (wintos unit <unit>… sets the list), a unit with | in it, a project without a title yet, or not reachable on port $PORT"
     echo "units: $list"
+    ;;
+peek)
+    shift
+    [ $# -ge 1 ] || die "usage: wintos peek <session>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    out=$(jq -n --arg t "$*" '{to: $t}' | curl -s -m 40 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/peek$SESSION_Q") || die "wintosd not reachable on port $PORT"
+    code=$(printf '%s' "$out" | tail -n 1)
+    reply=$(printf '%s' "$out" | sed '$d')
+    [ "$code" = 200 ] || die "$reply"
+    printf '%s\n' "$reply"
     ;;
 start)
     shift

@@ -13,6 +13,7 @@ import { lineDiff } from "../projects/diff";
 import { workedFocus } from "../epics/worked";
 import { icsToMeetings } from "../../plugins/calendar/parse";
 import { meetingMs } from "../../plugins/calendar/hours";
+import { lastReply as lastReplyIn, peekText, readTail } from "../epics/peek";
 import { BG_ID, BG_MAX, liveStarts, mergeBg, parseAgents, type BgAgent, type BgStarts } from "../epics/bgstart";
 import { addRelay, relayPrompt, findWorker, relaysDelivered, youSaid, type Relays } from "../epics/relay";
 import { editRoadmap, linkStep, pruneLinks, type RoadmapOp } from "../epics/roadmap";
@@ -72,7 +73,7 @@ const isRoadmapOp = (o: unknown): o is RoadmapOp => {
 };
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean> }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined> }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // Beside the projects in main.ts; a hidden folder in them by default, which the project store skips.
     const epics = new EpicStore(opts.epicsRoot ?? join(opts.root, ".epics"));
@@ -191,6 +192,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // What you told each epic agent last, so a relay passes only your own words (epics/relay.ts);
     // and the relays waiting to be typed into their sessions.
     const lastSaid = new Map<string, string>();
+    // Each session's transcript, from its hook events, for wintos peek's last reply.
+    const transcripts = new Map<string, string>();
     const relaysFile = join(opts.root, ".relays.json");
     let relays = readJson<Relays>(relaysFile, {});
     const saveRelays = (next: Relays) => ((relays = next), writeFileSync(relaysFile, JSON.stringify(relays)));
@@ -227,6 +230,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // A background session has no pane to type into: what is passed on to it goes in as a prompt
     // through the background service, from the directory it runs in, once it is not at work.
     const bgSend = opts.bgSend ?? ((sessionId: string, cwd: string | undefined, prompt: string) => new Promise<boolean>((resolve) => execFile("/bin/zsh", ["-lc", 'claude --bg --resume "$0" "$1"', sessionId, prompt], { cwd, timeout: 30_000 }, (err) => resolve(!err))));
+    // A background session's recent output, for wintos peek: it has no transcript WintOS heard of.
+    const bgLogs = opts.bgLogs ?? ((bgId: string) => new Promise<string | undefined>((resolve) => execFile("/bin/zsh", ["-lc", 'claude logs "$0" | tail -n 60', bgId], { timeout: 30_000, maxBuffer: 1 << 20 }, (err, out) => resolve(err ? undefined : String(out).trim() || undefined))));
     async function deliverToBackground(listed: BgAgent[]) {
         for (const [to, list] of Object.entries(relays)) {
             const s = sessions.get(to);
@@ -618,6 +623,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const configDir = (p as { config_dir?: unknown }).config_dir;
                 if (opts.claudeDirs && typeof configDir === "string" && configDir.startsWith("/")) watchStore(configDir);
                 const tp = (p as { transcript_path?: unknown }).transcript_path;
+                if (typeof tp === "string" && tp.startsWith("/")) transcripts.set(p.session_id, tp);
                 if (p.hook_event_name === "Stop" && typeof tp === "string") nameByModel(p.session_id, tp, store.byTab(ev.tabId)?.title);
                 if (p.hook_event_name === "Stop" && typeof p.last_assistant_message === "string" && p.last_assistant_message.trim()) readEndedTurn(p.session_id, p.last_assistant_message);
                 recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now(), p.hook_event_name === "UserPromptSubmit" ? waitedFor(before, Date.now()) : 0);
@@ -1275,6 +1281,22 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (to.bgId) setTimeout(() => void pollBg(), 2_000);
                 broadcast();
                 return send(res, 200, to.name?.text ?? to.label ?? to.id);
+            }
+            // `wintos peek <session>`: one of the epic's sessions beyond its digest line.
+            const peek = /^\/blocks\/([^/]+)\/peek$/.exec(url.pathname);
+            if (req.method === "POST" && peek) {
+                const b = (await body(req)) as { to?: unknown };
+                const live = liveIn(sessions, decodeURIComponent(peek[1]), sid);
+                const epic = live?.epic ? epics.byId(live.epic) : undefined;
+                if (!live || !epic || epic.agent !== live.id) return send(res, 403, "only an epic's agent peeks at its sessions");
+                if (!isSafe(b?.to)) return send(res, 400, "need to, a session");
+                const to = findWorker([...sessions.values()], epic.id, live.id, b.to, epic.links);
+                if (!to) return send(res, 404, "no open session in the epic matches");
+                const step = Object.entries(epic.links ?? {}).find(([, ids]) => ids.includes(to.id))?.[0];
+                const prs = (to.prs ?? []).map((u) => ({ url: u, state: donePrs[u] ? (donePrs[u].merged ? "merged" : "closed") : "open or unknown" }));
+                const tp = transcripts.get(to.id);
+                const reply = to.bgId && !to.attachedTo ? await bgLogs(to.bgId) : tp ? lastReplyIn(readTail(tp) ?? "") : undefined;
+                return send(res, 200, peekText(to, { step, prs, reply }));
             }
             // `wintos start`: the epic agent starts a session for a roadmap step in the background.
             // check: before it runs `claude --bg`, may it, and under what name; then bgId: it did.

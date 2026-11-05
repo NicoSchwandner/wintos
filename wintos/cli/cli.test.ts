@@ -450,6 +450,8 @@ describe("wintos lane and step", () => {
         expect(d.seen[1].body).toEqual({ to: "#14715", text: "checklist first" });
         expect((await cli(["tell", "#14715", "pick", "up", "the", "thread"], d.port)).trim()).toBe("told #14715 todo review, marked as yours (not the developer's); WintOS types it in once it is free");
         expect(d.seen[2]).toEqual({ url: "/blocks/blk-1/tell?session=s-1", body: { to: "#14715", text: "pick up the thread" } });
+        expect((await cli(["peek", "#14715"], d.port)).trim()).toBe("#14715 todo review");
+        expect(d.seen[3]).toEqual({ url: "/blocks/blk-1/peek?session=s-1", body: { to: "#14715" } });
     });
     test("unit sets the project's units, starts one, ticks one; it prints the list back", async () => {
         const d = await fakeDaemon("[>] ABC-42 phase 1 | [ ] ABC-43");

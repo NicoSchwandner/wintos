@@ -127,6 +127,25 @@ describe("wintosd API", () => {
         expect(epic.links).toBeUndefined();
     });
 
+    test("the epic agent peeks at a session: its question, PRs and last reply from its transcript", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        const tp = join(root, "wk.jsonl");
+        writeFileSync(tp, JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Pushed it. Which id should the drafts use?" }] } }) + "\n");
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post("/events", { tabId: "tab-1", blockId: "blk-w", payload: { session_id: "wk", hook_event_name: "UserPromptSubmit", prompt: "go", transcript_path: tp } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/ag/epic", { epic: id });
+        await post("/sessions/wk/epic", { epic: id });
+        await post("/sessions/wk/name", { text: "Drafts mapping" });
+        await post("/blocks/blk-w/ask", { kind: "decide", text: "which id" });
+        await post("/events", { tabId: "tab-1", blockId: "blk-w", payload: { session_id: "wk", hook_event_name: "Stop", transcript_path: tp } });
+        expect((await post("/blocks/blk-w/peek", { to: "ag" })).status).toBe(403);
+        const text = await (await post("/blocks/blk-a/peek", { to: "Drafts" })).text();
+        expect(text).toContain("Drafts mapping: waiting");
+        expect(text).toContain("asks you (decide): which id");
+        expect(text).toContain("its last reply:\nPushed it. Which id should the drafts use?");
+    });
+
     test("the event log: a session's changes with their cause, and roadmap edits, one JSON line each", async () => {
         await event(prompt);
         const id = await (await post("/epics", { title: "Route" })).text();

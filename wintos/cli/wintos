@@ -16,6 +16,10 @@
 #   wintos unit <unit>…                the project's units of work (tickets, phases), in order (used by Claude)
 #   wintos unit start|done <unit>      the one worked on now, or one finished; by its name or its start
 #   wintos epic <name> | none          the epic this session is a step of, by its id, title or their start (used by Claude)
+#   wintos relay <session> <words…> [--note "<your own context>"]
+#                                      epic agent: pass on to one of the epic's sessions what the developer told you,
+#                                      in their words; WintOS types it into that session's pane as theirs
+#   wintos suggest <session> <text…>   epic agent: your recommendation on a session's open question, shown with it
 #   wintos hooks install|uninstall [<claude config dir>]
 #                                      wire the hook into that Claude Code config (default ~/.claude);
 #                                      one account each, named explicitly
@@ -164,6 +168,29 @@ unit)
     list=$(printf '%s' "$body" | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/units$SESSION_Q") ||
         die "wintosd refused it: no such unit (wintos unit <unit>… sets the list), a unit with | in it, a project without a title yet, or not reachable on port $PORT"
     echo "units: $list"
+    ;;
+relay | suggest)
+    verb="$1"
+    shift
+    [ $# -ge 2 ] || die "usage: wintos relay <session> <words…> [--note \"<your own context>\"] | wintos suggest <session> <text…>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    to="$1"
+    shift
+    note=""
+    text=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --note) [ $# -ge 2 ] || die "--note needs its text"; note="$2"; shift 2 ;;
+        *) text="${text:+$text }$1"; shift ;;
+        esac
+    done
+    body=$(jq -n --arg to "$to" --arg t "$text" --arg n "$note" '{to: $to, text: $t} + (if $n == "" then {} else {note: $n} end)')
+    out=$(printf '%s' "$body" | curl -s -m 2 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/$verb$SESSION_Q") ||
+        die "wintosd not reachable on port $PORT"
+    code=$(printf '%s' "$out" | tail -n 1)
+    reply=$(printf '%s' "$out" | sed '$d')
+    [ "$code" = 200 ] || die "$reply"
+    if [ "$verb" = relay ]; then echo "relayed to $reply; WintOS types it in once it is free"; else echo "suggested on $reply's question"; fi
     ;;
 epic)
     shift

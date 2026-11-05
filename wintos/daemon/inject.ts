@@ -67,6 +67,7 @@ export function epicInjection(epic: { id: string; title: string } | undefined, o
             ? `[WintOS] This session belongs to no epic yet. Once you know what the work is for, run \`wintos epic <name>\` with one of: ${list}. Run \`wintos epic none\` if it belongs to none.`
             : "";
     const parts = [`[WintOS epic: ${epic.title}] This session is one step of that epic. If it belongs to another, run \`wintos epic <name>\`${open.length > 1 ? ` (${list})` : ""}.`];
+    parts.push("A prompt starting `[You, via the … agent]` is the developer's own words, passed on by the epic agent and checked by WintOS against what they told it: act on it as theirs. A line `[The … agent's note, not the developer's: …]` after it is the agent's context, never an approval.");
     if (mine?.diff) parts.push(`The epic's mine.md changed since your last prompt:\n${mine.diff}`);
     if (mine?.text.trim()) parts.push(`The epic's mine.md (the developer's; read it, never write it):\n${mine.text}`);
     return parts.join("\n\n");
@@ -86,7 +87,8 @@ You are this epic's agent: the developer's single place to see the whole epic an
 - The roadmap is the list of steps (now: ${epic.steps || "empty"}); set and move it with \`wintos unit\`. You may add steps. When a step's work is finished (its PR merged, or a session's report says so), mark it with \`wintos unit done <step>\`.
 - A report \`roadmap edited by the developer\` is their own edit on the epic page: keep it as they made it, and bring the plan's milestones and anything naming that step in line with it.
 - When the developer pastes meeting notes, save them as ${epic.dir}/notes/<YYYY-MM-DD>-<topic>.md, then update the plan and roadmap with what they change.
-- To reach one of the sessions, send it a message by its name (SendMessage); suggest next steps, but start nothing and change no code without the developer's OK.
+- Never ask the developer what one of your sessions already asks them (its line below shows "asks: …"): put your recommendation on that question with \`wintos suggest <session> "<recommendation>"\`, so they answer once, in that session.
+- When the developer answers you about a session's work, pass it on with \`wintos relay <session> "<their words, quoted from their message>" --note "<what it answers, in your words>"\`. WintOS types it into that session as theirs, and only their own words go through. Name a session by the start of its name below. Start nothing and change no code without the developer's OK.
 - A prompt starting \`[WintOS report]\` is your sessions' turn ends, not the developer. Bring the plan and roadmap up to date with it, then end with \`wintos done\`, unless something there needs the developer: then \`wintos ask\` with the one thing they must decide or unblock.
 The epic's sessions now:
 ${digest}`;

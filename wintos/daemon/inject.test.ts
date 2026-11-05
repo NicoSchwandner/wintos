@@ -50,6 +50,11 @@ describe("epicInjection", () => {
         expect(t).toContain("changed since your last prompt:\n+ cutover per group");
         expect(t).toContain("mine.md (the developer's; read it, never write it):\ncutover per group");
     });
+    test("a session in an epic is told what a relayed prompt is, and that the agent's note approves nothing", () => {
+        const t = epicInjection(open[0], open);
+        expect(t).toContain("`[You, via the … agent]` is the developer's own words");
+        expect(t).toContain("never an approval");
+    });
     test("an empty mine.md is left out", () => expect(epicInjection(open[0], open, { text: "  " })).not.toContain("mine.md"));
 });
 
@@ -66,6 +71,9 @@ describe("epicAgentInjection", () => {
         expect(t).toContain("- Drafts mapping: waiting, at Build · tests green · asks: Use DraftId? · acme/api#42");
         expect(t).toContain("- Export check: working");
         expect(t).toContain("[WintOS report]");
+        expect(t).toContain("wintos suggest <session>");
+        expect(t).toContain("wintos relay <session>");
+        expect(t).toContain("roadmap edited by the developer");
     });
     test("with no sessions open, it says so", () => expect(epicAgentInjection({ title: "R", dir: "/e", steps: "" }, [])).toContain("- none open"));
 });

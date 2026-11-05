@@ -423,6 +423,13 @@ describe("wintos lane and step", () => {
         await cli(["pr", "--own", "o/r#7"], d.port);
         expect(d.seen[0].body).toEqual({ ref: "o/r#7", own: true });
     });
+    test("relay passes words and a note to the epic's session; suggest puts a recommendation on its question", async () => {
+        const d = await fakeDaemon("#14715 todo review");
+        expect((await cli(["relay", "#14715", "checklist", "first", "--note", "re the review"], d.port)).trim()).toBe("relayed to #14715 todo review; WintOS types it in once it is free");
+        expect(d.seen[0]).toEqual({ url: "/blocks/blk-1/relay?session=s-1", body: { to: "#14715", text: "checklist first", note: "re the review" } });
+        expect((await cli(["suggest", "#14715", "checklist first"], d.port)).trim()).toBe("suggested on #14715 todo review's question");
+        expect(d.seen[1].body).toEqual({ to: "#14715", text: "checklist first" });
+    });
     test("unit sets the project's units, starts one, ticks one; it prints the list back", async () => {
         const d = await fakeDaemon("[>] ABC-42 phase 1 | [ ] ABC-43");
         expect((await cli(["unit", "ABC-42 phase 1", "ABC-43"], d.port)).trim()).toBe("units: [>] ABC-42 phase 1 | [ ] ABC-43");

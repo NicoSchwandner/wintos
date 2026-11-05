@@ -146,6 +146,7 @@ describe("a row says how the last turn ended", () => {
     test("your move: what the turn expects of you, then what about", () => {
         const move = (ask: Session["ask"], outcome = true) => rowView({ key: "t", tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, sessions: [sess("waiting", { ask, ...(outcome ? {} : { outcome: undefined }) })] }, undefined, "T", 10).next;
         expect(move({ kind: "decide", text: "two bands or one", by: "session" })).toBe("Decide · two bands or one");
+        expect(move({ kind: "decide", text: "two bands or one", by: "session", suggestion: "one" })).toBe("Decide · two bands or one · agent suggests: one");
         expect(move({ kind: "unblock", by: "model" })).toBe("Unblock · Fixed the walk");
         expect(move({ kind: "unblock", by: "model" }, false)).toBe("Unblock");
         expect(move(undefined)).toBe("Fixed the walk");

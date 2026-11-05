@@ -87,6 +87,34 @@ describe("wintosd API", () => {
         expect((await post("/epics", { title: "a\nb" })).status).toBe(400);
     });
 
+    test("the epic agent passes on only your words, to its own sessions; and suggests on a session's open question", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        const at = (blockId: string, payload: object) => post("/events", { tabId: "tab-1", blockId, payload });
+        await at("blk-a", { session_id: "ag", hook_event_name: "SessionStart" });
+        await at("blk-w", { session_id: "wk", hook_event_name: "UserPromptSubmit", prompt: "go" });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/ag/epic", { epic: id });
+        await post("/sessions/wk/epic", { epic: id });
+        await post("/sessions/wk/name", { text: "#14715 todo review" });
+        expect((await post("/blocks/blk-w/relay", { to: "ag", text: "x" })).status).toBe(403);
+        await at("blk-a", { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "Write the checklist first,\nthen walk it" });
+        expect((await post("/blocks/blk-a/relay", { to: "#14715", text: "merge it now" })).status).toBe(403);
+        expect((await post("/blocks/blk-a/relay", { to: "nobody", text: "checklist first" })).status).toBe(404);
+        const ok = await post("/blocks/blk-a/relay", { to: "#14715", text: "write the checklist first, then walk it", note: "re the test-plan review" });
+        expect(await ok.text()).toBe("#14715 todo review");
+        expect((await (await fetch(base + "/state")).json()).relays.wk).toMatchObject([{ text: "write the checklist first, then walk it", note: "re the test-plan review", from: "ag" }]);
+        await at("blk-a", { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "[WintOS report] wk asks something" });
+        expect((await post("/blocks/blk-a/relay", { to: "#14715", text: "write the checklist first" })).status).toBe(200);
+        expect((await post("/sessions/wk/relays/delivered", { n: 2 })).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).relays).toEqual({});
+        expect((await post("/blocks/blk-a/suggest", { to: "#14715", text: "checklist first" })).status).toBe(409);
+        await post("/blocks/blk-w/ask", { kind: "decide", text: "when to rewrite the test plan" });
+        await at("blk-w", { session_id: "wk", hook_event_name: "Stop" });
+        expect((await post("/blocks/blk-a/suggest", { to: "#14715", text: "checklist first" })).status).toBe(200);
+        const wk = (await (await fetch(base + "/state")).json()).sessions.find((x: { id: string }) => x.id === "wk");
+        expect(wk.ask).toMatchObject({ kind: "decide", suggestion: "checklist first" });
+    });
+
     test("the event log: a session's changes with their cause, and roadmap edits, one JSON line each", async () => {
         await event(prompt);
         const id = await (await post("/epics", { title: "Route" })).text();
@@ -164,7 +192,7 @@ describe("wintosd API", () => {
         expect(told).toContain("[WintOS epic agent: Route documents]");
         expect(told).toContain("- Drafts mapping: working");
         const worker = await (await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } })).text();
-        expect(worker).not.toContain("epic agent");
+        expect(worker).not.toContain("[WintOS epic agent:");
         expect((await post(`/epics/${id}/agent`, { sessionId: 3 })).status).toBe(400);
     });
 

@@ -90,7 +90,8 @@ function askLine(sessions: Session[]): string | undefined {
     // A question mid-turn is in the pane; the last turn's outcome would be stale.
     if (s.ask.by === "tool") return s.ask.kind === "approve" ? "Approve · its plan" : "Answer · its question";
     const what = s.ask.text ?? s.outcome?.text;
-    return what ? `${ASK_LABEL[s.ask.kind]} · ${what}` : ASK_LABEL[s.ask.kind];
+    const line = what ? `${ASK_LABEL[s.ask.kind]} · ${what}` : ASK_LABEL[s.ask.kind];
+    return s.ask.suggestion ? `${line} · agent suggests: ${s.ask.suggestion}` : line;
 }
 
 const lastSaid = (sessions: Session[]) => sessions.filter((s) => s.outcome).sort((a, b) => b.outcome!.at - a.outcome!.at)[0]?.outcome!.text;

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { Reports } from "../daemon/epics/reports";
+import { relayPrompt, type Relays } from "../daemon/epics/relay";
 import type { Session } from "../daemon/sessions/reduce";
 import { typeIntoPane } from "./typeIntoPane";
 import { daemonFetch } from "./useWintos";
@@ -18,10 +19,22 @@ export function reportDeliveries(reports: Reports, sessions: Session[], tabId: s
     });
 }
 
+// What the epic agent passed on from you, typed into its session the same way, without the wait:
+// it is your answer, and the session may be waiting on it.
+export function relayDeliveries(relays: Relays, sessions: Session[], epics: { id: string; title: string; short?: string }[], tabId: string, lookingAt?: string): ReportDelivery[] {
+    return Object.entries(relays).flatMap(([to, list]) => {
+        const s = sessions.find((x) => x.id === to && x.state !== "ended");
+        if (!s || s.tabId !== tabId || s.state === "working" || s.blockId === lookingAt || !list.length) return [];
+        const e = epics.find((x) => x.id === s.epic);
+        return [{ agent: to, blockId: s.blockId, n: list.length, text: list.map((r) => relayPrompt(r, e ? (e.short ?? e.title) : "epic")).join("\n") }];
+    });
+}
+
 const busy = new Set<string>();
-export function useEpicReports(reports: Reports | undefined, sessions: Session[] | undefined, tabId: string, now: number, lookingAt: string | undefined): void {
+export function useEpicReports(reports: Reports | undefined, sessions: Session[] | undefined, tabId: string, now: number, lookingAt: string | undefined, relays: Relays = {}, epics: { id: string; title: string; short?: string }[] = []): void {
     const due = reports && sessions ? reportDeliveries(reports, sessions, tabId, now, lookingAt) : [];
-    const key = due.map((d) => `${d.agent}:${d.n}`).join(" ");
+    const relayed = sessions ? relayDeliveries(relays, sessions, epics, tabId, lookingAt) : [];
+    const key = [...due, ...relayed].map((d) => `${d.agent}:${d.n}`).join(" ");
     useEffect(() => {
         for (const d of due) {
             if (busy.has(d.agent)) continue;
@@ -30,6 +43,14 @@ export function useEpicReports(reports: Reports | undefined, sessions: Session[]
                 .then((r) => (r.ok ? typeIntoPane(d.blockId, d.text) : undefined))
                 .catch(() => {})
                 .finally(() => busy.delete(d.agent));
+        }
+        for (const d of relayed) {
+            if (busy.has(`relay:${d.agent}`)) continue;
+            busy.add(`relay:${d.agent}`);
+            void daemonFetch(`/sessions/${encodeURIComponent(d.agent)}/relays/delivered`, { method: "POST", body: { n: d.n } })
+                .then((r) => (r.ok ? typeIntoPane(d.blockId, d.text) : undefined))
+                .catch(() => {})
+                .finally(() => busy.delete(`relay:${d.agent}`));
         }
     }, [key]);
 }

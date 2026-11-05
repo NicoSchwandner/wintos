@@ -15,7 +15,8 @@ export type AskOption = { label: string; then?: string; q?: string }; // q: the 
 // picks: findings or parts the developer toggles before answering (which review comments to post).
 export type AskPick = { label: string; on: boolean };
 export type AskCard = { context?: string; why?: string; options?: AskOption[]; recommend?: number; final?: boolean; picks?: AskPick[] };
-export type Ask = { kind: AskKind; text?: string; by: "tool" | "session" | "model" | "guess" } & AskCard;
+// suggestion: the epic agent's recommendation on it (wintos suggest), shown with the question.
+export type Ask = { kind: AskKind; text?: string; by: "tool" | "session" | "model" | "guess"; suggestion?: string } & AskCard;
 export type Session = {
     id: string;
     tabId: string;

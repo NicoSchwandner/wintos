@@ -79,7 +79,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const { state: raw, offline } = useWintos();
     useWakeDelivery(raw?.wakes, raw?.sessions, raw?.shelf?.[activeTabId], activeTabId);
     const lookingAt = useAtomValue(getLayoutModelForStaticTab().focusedNode)?.data?.blockId;
-    useEpicReports(raw?.epicReports, raw?.sessions, activeTabId, useNow(15_000), typeof document !== "undefined" && document.hasFocus() ? lookingAt : undefined);
+    useEpicReports(raw?.epicReports, raw?.sessions, activeTabId, useNow(15_000), typeof document !== "undefined" && document.hasFocus() ? lookingAt : undefined, raw?.relays, raw?.epics);
     useSchemeNotices(raw?.sessions, activeTabId);
     const wokeClosed = raw ? closedWakes(raw.wakes ?? {}, raw.shelf ?? {}, raw.projects, tabIds, (u) => prRef(raw, u)) : [];
     useFreshPaneLists(raw?.sessions, tabs);

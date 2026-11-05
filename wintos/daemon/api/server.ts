@@ -12,6 +12,7 @@ import { lineDiff } from "../projects/diff";
 import { workedFocus } from "../epics/worked";
 import { icsToMeetings } from "../../plugins/calendar/parse";
 import { meetingMs } from "../../plugins/calendar/hours";
+import { addRelay, findWorker, relaysDelivered, youSaid, type Relays } from "../epics/relay";
 import { editRoadmap, linkStep, pruneLinks, type RoadmapOp } from "../epics/roadmap";
 import { addReport, delivered as reportsDelivered, reportLine, type Reports } from "../epics/reports";
 import { Plugin, PluginRunner } from "../plugins/runner";
@@ -183,6 +184,12 @@ export async function startServer(opts: { root: string; port: number; host?: str
         writeFileSync(reportsFile, JSON.stringify(reports));
         logEvent("report", { agent, from: s.id, epic: s.epic, text });
     };
+    // What you told each epic agent last, so a relay passes only your own words (epics/relay.ts);
+    // and the relays waiting to be typed into their sessions.
+    const lastSaid = new Map<string, string>();
+    const relaysFile = join(opts.root, ".relays.json");
+    let relays = readJson<Relays>(relaysFile, {});
+    const saveRelays = (next: Relays) => ((relays = next), writeFileSync(relaysFile, JSON.stringify(relays)));
     // The steps you prompted today, by session, for the journal's "Today's focus" (epics/worked.ts).
     const workedFile = join(opts.root, ".worked.json");
     let worked = readJson<{ day: string; ids: string[] }>(workedFile, { day: "", ids: [] });
@@ -379,6 +386,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         // mineFirst: mine.md's first line, for the epic's card on the home.
         epics: epics.list().map(({ body, ...e }) => ({ ...e, plan: body.trim(), mineFirst: (epics.mine(e.id)?.text ?? "").split("\n").map((l) => l.replace(/^[-*#\s]+/, "").trim()).find(Boolean) })),
         epicReports: reports,
+        relays,
         plugins: runner.results,
         donePrs,
         pluginNames: runner.names,
@@ -564,6 +572,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (p.hook_event_name === "Stop" && typeof p.last_assistant_message === "string" && p.last_assistant_message.trim()) readEndedTurn(p.session_id, p.last_assistant_message);
                 recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now(), p.hook_event_name === "UserPromptSubmit" ? waitedFor(before, Date.now()) : 0);
                 if (p.hook_event_name === "UserPromptSubmit") markSeen(p.session_id); // you read it to answer it
+                if (p.hook_event_name === "UserPromptSubmit" && typeof p.prompt === "string" && !/^\[(WintOS|You, via)/.test(p.prompt) && epics.list().some((e) => e.agent === p.session_id)) lastSaid.set(p.session_id, p.prompt);
                 if (p.hook_event_name === "UserPromptSubmit" && p.kind !== "bg") writeWorked(p.session_id);
                 if (p.hook_event_name === "Stop" && p.kind !== "bg") reportUp(p.session_id);
                 if (p.hook_event_name === "UserPromptSubmit" && typeof p.prompt === "string" && p.kind !== "bg") setRhythm(prompted(rhythm, Date.now(), p.prompt.length));
@@ -1177,6 +1186,45 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (typeof r === "string") return send(res, r === "no project" ? 409 : 400, r === "no project" ? "this pane's project has no project.md yet; name it with wintos title first" : "no such unit; wintos unit <unit>… sets the list");
                 broadcast();
                 return send(res, 200, serializeUnits(r));
+            }
+            // The epic agent passes what you told it on to one of its sessions (wintos relay), or puts its
+            // recommendation on a session's open question (wintos suggest) instead of asking it again.
+            const agentTo = /^\/blocks\/([^/]+)\/(relay|suggest)$/.exec(url.pathname);
+            if (req.method === "POST" && agentTo) {
+                const b = (await body(req)) as { to?: unknown; text?: unknown; note?: unknown };
+                const blockId = decodeURIComponent(agentTo[1]);
+                if (!isSafe(blockId) || !isSafe(b?.to) || typeof b.text !== "string" || !b.text.trim() || b.text.length > 2000 || (b.note !== undefined && (!isSafe(b.note) || b.note.length > MAX_STATUS)))
+                    return send(res, 400, `need to (a session), text up to 2000 characters, and a one-line note up to ${MAX_STATUS}`);
+                const live = liveIn(sessions, blockId, sid);
+                const epic = live?.epic ? epics.byId(live.epic) : undefined;
+                if (!live || !epic || epic.agent !== live.id) return send(res, 403, "only an epic's agent passes things on to its sessions");
+                const to = findWorker([...sessions.values()], epic.id, live.id, b.to, epic.links);
+                if (!to) {
+                    const names = [...sessions.values()].filter((x) => x.epic === epic.id && x.id !== live.id && x.state !== "ended").map((x) => x.name?.text ?? x.label ?? x.id.slice(0, 8));
+                    return send(res, 404, `no open session in the epic matches; its sessions: ${names.join(", ") || "none"}`);
+                }
+                if (agentTo[2] === "suggest") {
+                    if (!to.ask) return send(res, 409, "that session asks nothing now");
+                    sessions = new Map(sessions).set(to.id, { ...to, ask: { ...to.ask, suggestion: b.text.trim() } });
+                    saveSessions("wintos suggest");
+                    logEvent("suggest", { agent: live.id, to: to.id, text: b.text.trim() });
+                    broadcast();
+                    return send(res, 200, to.name?.text ?? to.label ?? to.id);
+                }
+                if (!youSaid(lastSaid.get(live.id), b.text)) return send(res, 403, "only words the developer said to you go through: quote them from their last prompt; your own words go in --note");
+                saveRelays(addRelay(relays, to.id, { text: b.text.trim(), ...(typeof b.note === "string" && b.note.trim() ? { note: b.note.trim() } : {}), from: live.id, at: Date.now() }));
+                logEvent("relay", { agent: live.id, to: to.id, text: b.text.trim(), note: b.note });
+                broadcast();
+                return send(res, 200, to.name?.text ?? to.label ?? to.id);
+            }
+            const relayDone = /^\/sessions\/([^/]+)\/relays\/delivered$/.exec(url.pathname);
+            if (req.method === "POST" && relayDone) {
+                const b = (await body(req)) as { n?: unknown };
+                if (typeof b?.n !== "number" || !(b.n >= 0)) return send(res, 400, "need n, how many were typed in");
+                saveRelays(relaysDelivered(relays, decodeURIComponent(relayDone[1]), b.n));
+                logEvent("relays-delivered", { to: decodeURIComponent(relayDone[1]), n: b.n });
+                broadcast();
+                return send(res, 200, "");
             }
             const todo = /^\/blocks\/([^/]+)\/todo$/.exec(url.pathname);
             if (req.method === "POST" && todo) {

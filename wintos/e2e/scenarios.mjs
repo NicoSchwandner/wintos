@@ -1034,6 +1034,27 @@ await scenario("48 · the epic agent's pane: the epic beside its terminal; ⌘L 
     await until("the epic opens as its agent's pane, not a page", () => evalIn(t, `!document.querySelector("[data-wintos=today]") && !document.querySelector("[data-wintos=epic-page]") && window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId === "${pane}"`));
 });
 
+await scenario("49 · the epic agent relays your words to a session: refused unless you said them; typed in by the session's view", async () => {
+    const t = await visible();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const st = async () => (await fetch("http://127.0.0.1:7731/state")).json();
+    const id = await (await api("/epics", { title: "E2E relay" })).text();
+    await api("/events", { tabId: "e2e-elsewhere", blockId: "e2e-relay-ag", payload: { session_id: "e2e-relay-ag", hook_event_name: "SessionStart" } });
+    await api(`/epics/${id}/agent`, { sessionId: "e2e-relay-ag" });
+    await api("/sessions/e2e-relay-ag/epic", { epic: id });
+    await api("/events", { tabId, blockId: "e2e-relay-wk", payload: { session_id: "e2e-relay-wk", hook_event_name: "UserPromptSubmit", prompt: "e2e worker" } });
+    await api("/sessions/e2e-relay-wk/epic", { epic: id });
+    await api("/sessions/e2e-relay-wk/name", { text: "E2E cutover check" });
+    await api("/events", { tabId, blockId: "e2e-relay-wk", payload: { session_id: "e2e-relay-wk", hook_event_name: "Stop" } });
+    await api("/events", { tabId: "e2e-elsewhere", blockId: "e2e-relay-ag", payload: { session_id: "e2e-relay-ag", hook_event_name: "UserPromptSubmit", prompt: "Tell it: cut over group A first" } });
+    const refused = await api("/blocks/e2e-relay-ag/relay", { to: "E2E cutover", text: "cut over everything" });
+    if (refused.status !== 403) throw new Error(`words you never said went through: ${refused.status}`);
+    const ok = await api("/blocks/e2e-relay-ag/relay", { to: "E2E cutover", text: "cut over group A first", note: "re its cutover question" });
+    if (ok.status !== 200) throw new Error(`relay refused: ${await ok.text()}`);
+    await until("typed in by the session's view and off the queue", async () => !(await st()).relays?.["e2e-relay-wk"], 30000);
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

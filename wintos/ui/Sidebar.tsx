@@ -24,7 +24,7 @@ import { closeProjectTab, openView, registerWintosMenu, runKey, SIDEBAR_BY_EPIC 
 import { isPage, mainViewAtom, newStepEpicAtom, renamingAtom, yourMoveAtom } from "./notes/state";
 import { inFlight, liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
-import { attention } from "./attention";
+import { attention, plain } from "./attention";
 import { ghPrs, inboxKind, isInboxTab, type InboxList, prRef, projectTabIds, relTime, RowView, sessionName, type WintosState } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
@@ -34,7 +34,7 @@ import { EpicAvatar } from "./EpicAvatar";
 import { PinnedEpics } from "./PinnedEpics";
 import { EpicGroups, groupByEpic } from "./EpicGroups";
 import { useEpicReports } from "./epicReports";
-import { lookOf, NO_EPIC, type Look } from "./epicLook";
+import { lookOf, NO_EPIC, withoutEpic, type Look } from "./epicLook";
 
 const BAND_STYLE = {
     needs: { label: "Your move", color: T.apricot },
@@ -178,11 +178,13 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             key: row.key,
             rowKey: row.key,
             rowNo: listed.indexOf(row) + 1,
-            look: own ? (epic ? lookOf(epic) : NO_EPIC) : undefined,
+            // By epic, the group's heading and rail already name the epic: a row repeats neither its
+            // face nor its name.
+            look: own && !byEpic ? (epic ? lookOf(epic) : NO_EPIC) : undefined,
             // By epic the rows lose the state bands that head them by state, so each says its own.
             band: byEpic ? row.band : undefined,
             tabId: row.tabId,
-            v,
+            v: byEpic && epic ? { ...v, title: withoutEpic(v.title, epic) } : v,
             active: here,
             cursor: switchTarget === row.key,
             renaming: !own && renaming === row.tabId,
@@ -195,7 +197,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                 if (title?.trim()) fireAndForget(() => setProjectTitle(row.tabId, title.trim(), true));
             },
         };
-        return row.band === "quiet" ? <QuietRow {...props} /> : row.band === "running" ? <QuietRow {...props} v={{ ...v, reason: v.next }} dot={T.moss} /> : <CardRow {...props} />;
+        return row.band === "quiet" ? <QuietRow {...props} /> : row.band === "running" ? <QuietRow {...props} v={{ ...props.v, reason: v.next }} dot={T.moss} /> : <CardRow {...props} />;
     };
 
     const bgCard = (s: Session) => (
@@ -370,9 +372,6 @@ type RowProps = {
     band?: Row["band"];
 };
 
-const StateChip = ({ band }: { band?: Row["band"] }) =>
-    band ? <span data-wintos="row-state" data-state={band} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.03em", color: BAND_STYLE[band].color }}>{BAND_STYLE[band].label}</span> : null;
-
 function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming" | "onRename"> & { style: React.CSSProperties }) {
     const ref = useRef<HTMLInputElement>(null);
     useZoneKeys(ref, { Enter: () => onRename(ref.current?.value ?? null), Escape: () => onRename(null) });
@@ -407,9 +406,12 @@ const RowClose = ({ p }: { p: RowProps }) =>
         </button>
     ) : null;
 
+// The title has the first line to itself; under it, what the turn expects (the chip), what about,
+// and how long it has waited. Only the chip carries the band's colour.
 function CardRow(p: RowProps) {
     const { v } = p;
     const tone = { apricot: T.apricot, blue: T.blue, brick: T.brick, secondary: T.secondary }[v.tone ?? "secondary"];
+    const chip = v.kind ?? (p.band ? BAND_STYLE[p.band].label : undefined);
     return (
         <div
             data-tabid={p.tabId}
@@ -433,18 +435,24 @@ function CardRow(p: RowProps) {
                 ...(p.active ? ACTIVE : {}),
             }}
         >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 {p.look && <EpicAvatar look={p.look} size={22} />}
-                <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 14, fontWeight: 600, letterSpacing: "-0.005em", color: p.active ? T.emphasis : T.title, fontFamily: T.ui }} />
-                <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                    {p.active && <WalkKeys />}
-                    <StateChip band={p.band} />
-                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>{v.age}</span>
-                    <RowClose p={p} />
-                </span>
+                <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 14, fontWeight: 600, letterSpacing: "-0.005em", color: p.active ? T.emphasis : T.title, fontFamily: T.ui, display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflow: "hidden" } as React.CSSProperties} />
+                {p.active && <WalkKeys />}
+                <RowClose p={p} />
             </div>
-            {/* Cut at three lines: a long ask is read in its pane, the card only says what kind it is. */}
-            {v.next && <div data-wintos="row-next" title={v.next} style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 3, overflow: "hidden" } as React.CSSProperties}><Rich text={v.next} size="rail" links={false} /></div>}
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                {chip && (
+                    <span data-wintos={p.band ? "row-state" : "row-kind"} data-state={p.band} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.03em", color: v.tone === "brick" ? T.brick : tone }}>
+                        {chip}
+                    </span>
+                )}
+                {/* Cut at three lines: a long ask is read in its pane. */}
+                <div data-wintos="row-next" title={v.next} style={{ flexGrow: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.4, color: v.tone === "brick" ? T.brick : T.secondary, textWrap: "pretty", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 3, overflow: "hidden" } as React.CSSProperties}>
+                    {v.next && <Rich text={v.next} size="rail" links={false} />}
+                </div>
+                <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: T.muted }}>{v.age}</span>
+            </div>
             {v.meta && <div title={v.meta} style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.meta}</div>}
         </div>
     );
@@ -479,12 +487,12 @@ function QuietRow(p: RowProps & { dot?: string }) {
         >
             {/* The title gets the room; the note is capped and cut, so neither wraps. */}
             {p.look && <EpicAvatar look={p.look} size={18} />}
-            {p.dot && <span style={{ width: 6, height: 6, borderRadius: "50%", background: p.dot, flexShrink: 0, marginRight: -2 }} />}
+            {/* One mark for its state: a dot while it runs, a ring while it is quiet. */}
+            {(p.dot || p.band) && <span data-wintos={p.band ? "row-state" : undefined} data-state={p.band} title={p.band && BAND_STYLE[p.band].label} style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, marginRight: -2, boxSizing: "border-box", ...(p.dot ? { background: p.dot } : { border: `1.5px solid ${T.faint}` }) }} />}
             <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} />
             {v.view && <span data-wintos="row-view" title="shares its view with the other sessions marked so" style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>⧉</span>}
             {p.active && <WalkKeys />}
-            <StateChip band={p.band} />
-            <span title={v.reason} style={{ maxWidth: "48%", fontSize: 11.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>
+            <span title={v.reason && plain(v.reason)} style={{ maxWidth: "48%", fontSize: 11.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason && plain(v.reason)}</span>
             <RowClose p={p} />
         </div>
     );

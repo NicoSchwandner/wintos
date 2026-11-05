@@ -21,7 +21,8 @@ export type WintosState = { now: number; sessions: Session[]; projects: Project[
 export type Tone = "apricot" | "blue" | "brick" | "secondary";
 // done: an errand past its finish line, what reached it ("PR up"); the row says ⇧⌘W closes it.
 // view: "⧉ <title>", the view (tab) a session row shares with other sessions.
-export type RowView = { title: string; next?: string; tone?: Tone; meta?: string; age: string; reason?: string; view?: string };
+// kind: what a waiting turn expects of you ("Answer", "Decide"), shown as its chip.
+export type RowView = { title: string; next?: string; kind?: string; tone?: Tone; meta?: string; age: string; reason?: string; view?: string };
 
 export function relTime(ms: number): string {
     const s = Math.max(0, Math.floor(ms / 1000));

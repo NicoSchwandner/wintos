@@ -46,9 +46,12 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
     const link = first ? `${label(first.repo)} #${first.number} · ${first.branch}` : noted;
     // Restored at the last restart: shown as it was, but its Claude starts only when you open it.
     const notStarted = row.sessions.length > 0 && row.sessions.every((s) => s.restored);
-    const meta = notStarted ? [link, "not started, opens with the project"].filter(Boolean).join(" · ") : link;
+    const meta = notStarted ? [link, "starts when opened"].filter(Boolean).join(" · ") : link;
     if (project?.error) return { title, next: `note unreadable: ${project.dir}/project.md`, tone: "brick", age, meta };
-    if (row.band === "needs") return { title, next: askLine(row.sessions) ?? project?.next ?? "Your turn", tone: "apricot", age, meta };
+    if (row.band === "needs") {
+        const ask = askParts(row.sessions);
+        return { title, kind: ask?.kind, next: ask?.text ?? project?.next ?? (ask?.kind ? undefined : "Your turn"), tone: "apricot", age, meta };
+    }
     if (row.band === "read") return { title, next: lastSaid(row.sessions) ?? project?.next ?? "New reply", tone: "blue", age, meta };
     if (row.band === "running") {
         // Parked beats the next action: it is the live reason nobody needs to act.
@@ -84,15 +87,22 @@ export function waking(split: Ranking, tabs: Record<string, string>): Ranking {
 // What the longest-waiting turn expects of you, ahead of what it said: "Decide · two bands or one".
 // A turn not read yet shows what it said.
 const ASK_LABEL = { answer: "Answer", decide: "Decide", approve: "Approve", unblock: "Unblock" } as const;
-function askLine(sessions: Session[]): string | undefined {
+function askParts(sessions: Session[]): { kind?: string; text?: string } | undefined {
     const s = sessions.filter((x) => x.state === "waiting").sort((a, b) => a.since - b.since)[0];
-    if (!s?.ask) return s?.outcome?.text;
+    if (!s) return undefined;
+    if (!s.ask) return { text: s.outcome?.text };
     // A question mid-turn is in the pane; the last turn's outcome would be stale.
-    if (s.ask.by === "tool") return s.ask.kind === "approve" ? "Approve · its plan" : "Answer · its question";
+    if (s.ask.by === "tool") return s.ask.kind === "approve" ? { kind: "Approve", text: "its plan" } : { kind: "Answer", text: "its question" };
     const what = s.ask.text ?? s.outcome?.text;
-    const line = what ? `${ASK_LABEL[s.ask.kind]} · ${what}` : ASK_LABEL[s.ask.kind];
-    return s.ask.suggestion ? `${line} · agent suggests: ${s.ask.suggestion}` : line;
+    return { kind: ASK_LABEL[s.ask.kind], text: [what, s.ask.suggestion && `agent suggests: ${s.ask.suggestion}`].filter(Boolean).join(" · ") || undefined };
 }
+function askLine(sessions: Session[]): string | undefined {
+    const a = askParts(sessions);
+    return [a?.kind, a?.text].filter(Boolean).join(" · ") || undefined;
+}
+
+// A line as plain text, for a row that cuts it to one line: a Markdown link keeps its words.
+export const plain = (md: string) => md.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/(\*\*|__|`)/g, "");
 
 const lastSaid = (sessions: Session[]) => sessions.filter((s) => s.outcome).sort((a, b) => b.outcome!.at - a.outcome!.at)[0]?.outcome!.text;
 
@@ -119,7 +129,7 @@ export function attention(tabIds: string[], state: WintosState, names: Record<st
         const own = r.key !== r.tabId ? r.sessions[0] : undefined;
         const shared = own && (perTab.get(r.tabId) ?? 0) > 1 ? `⧉ ${project(r.tabId)?.title ?? names[r.tabId] ?? "view"}` : undefined;
         const named = own ? { ...v, title: sessionName(own), ...(shared ? { meta: [shared, v.meta].filter(Boolean).join(" · "), view: shared } : {}) } : v;
-        return lines[r.tabId] ? { ...named, next: lines[r.tabId], tone: "apricot" as const } : named;
+        return lines[r.tabId] ? { ...named, next: lines[r.tabId], kind: undefined, tone: "apricot" as const } : named;
     };
     const views = Object.fromEntries(rows.map((r) => [r.key, viewOf(r)]));
     for (const key of held) views[key] = { ...views[key], reason: ["held until you are back", askLine(rows.find((r) => r.key === key)!.sessions)].filter(Boolean).join(" · ") };

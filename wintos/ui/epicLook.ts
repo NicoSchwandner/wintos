@@ -39,6 +39,16 @@ export function lookOf(e: Pick<Epic, "id" | "glyph" | "color" | "lane">): Look {
 // What the sidebar and the pane frame call it: the short name, else the title.
 export const shortName = (e: Pick<Epic, "title" | "short">) => e.short ?? e.title;
 
+// A session's name under its epic's heading, without the epic it repeats: "Backstage: Auto-book
+// fix" under Backstage reads "Auto-book fix".
+export function withoutEpic(name: string, e: Pick<Epic, "title" | "short">): string {
+    for (const prefix of [shortName(e), e.title]) {
+        const m = name.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[:·–-]\\s*`, "i"));
+        if (m && name.length > m[0].length) return name.slice(m[0].length);
+    }
+    return name;
+}
+
 // Its agent is at work now: its face shows a turning ring (EpicAvatar's running).
 export const agentWorking = (epic: { agent?: string } | undefined, sessions: { id: string; state: string }[] | undefined) =>
     !!epic?.agent && !!sessions?.some((s) => s.id === epic.agent && s.state === "working");

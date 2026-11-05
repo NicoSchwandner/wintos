@@ -34,7 +34,7 @@ export function groupByEpic(rows: Row[], epics: EpicView[]): EpicGroup[] {
 // their epic, a click opens one in a pane.
 export function EpicGroups({ groups, renderRow, cursor, newStep, background = [] }: { groups: EpicGroup[]; renderRow: (r: Row) => React.ReactNode; cursor: string | null; newStep: (epic: string) => void; background?: Session[] }) {
     // An epic with nothing under it (Reviews, Elmah between errands) folds to one line, kept apart
-    // at the bottom, its + still there.
+    // at the bottom.
     const bgOf = (g: EpicGroup) => (g.epic ? background.filter((s) => s.epic === g.epic!.id) : []);
     const empty = (g: EpicGroup) => !!g.epic && !g.rows.length && !bgOf(g).length && g.agent?.band !== "needs";
     const header = (g: EpicGroup, folded: boolean) => {
@@ -55,7 +55,7 @@ export function EpicGroups({ groups, renderRow, cursor, newStep, background = []
                     {g.agent?.band === "needs" && <span data-wintos="epic-agent-state" style={{ fontSize: 10.5, fontWeight: 600, color: T.apricot }}>agent: your move</span>}
                     {!folded && <span style={{ fontFamily: T.mono, fontSize: 11, color: waiting ? T.apricot : T.faint }}>{waiting ? `${waiting} waiting` : g.rows.length}</span>}
                 </button>
-                {folded && <NewSession epic={g.epic!.id} newStep={newStep} folded />}
+                <NewSession epic={g.epic!.id} newStep={newStep} />
             </div>
         );
     };
@@ -77,7 +77,6 @@ export function EpicGroups({ groups, renderRow, cursor, newStep, background = []
                                             <span style={{ flexShrink: 0, fontSize: 10.5, color: s.state === "waiting" ? T.apricot : T.faint }}>background · {STATE_WORD[s.state]}</span>
                                         </button>
                                     ))}
-                            {g.epic && <NewSession epic={g.epic.id} newStep={newStep} />}
                         </div>
                     </div>
                 );
@@ -95,10 +94,11 @@ export function EpicGroups({ groups, renderRow, cursor, newStep, background = []
     );
 }
 
-function NewSession({ epic, newStep, folded }: { epic: string; newStep: (epic: string) => void; folded?: boolean }) {
+// The + at the end of an epic's heading: ⌘N's sheet on that epic.
+function NewSession({ epic, newStep }: { epic: string; newStep: (epic: string) => void }) {
     return (
-        <button type="button" data-wintos="epic-new-step" title="New session in this epic" aria-label="New session in this epic" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => newStep(epic)} style={{ flexShrink: 0, alignSelf: folded ? "center" : "flex-start", padding: folded ? "2px 8px" : "3px 8px", background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12, color: T.faint }}>
-            {folded ? "+" : "+ new session"}
+        <button type="button" data-wintos="epic-new-step" title="New session in this epic (⌘N)" aria-label="New session in this epic" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => newStep(epic)} style={{ flexShrink: 0, padding: "2px 8px", background: "transparent", border: "none", borderRadius: 5, cursor: "pointer", fontFamily: T.ui, fontSize: 14, lineHeight: 1, color: T.faint }}>
+            +
         </button>
     );
 }

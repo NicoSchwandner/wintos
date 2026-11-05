@@ -608,7 +608,7 @@ await scenario("25 · a turn that asks you to decide sits in Your move saying so
     const row = (band) => `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-band-group=${band}] [data-tabid='${tabId}']")].map((e) => e.innerText).join(" ")`;
     const others = [];
     for (const r of await renderers()) if ((await evalIn(r, "window.wintosTabId?.()")) !== tabId) others.push(r);
-    await until("Decide in Your move in another sidebar", async () => { for (const r of others) if ((await evalIn(r, row("needs"))).includes("Decide · two bands or one")) return true; return false; });
+    await until("Decide in Your move in another sidebar", async () => { for (const r of others) { const text = await evalIn(r, row("needs")); if (/Decide\s+two bands or one/.test(text)) return true; } return false; });
     await post("UserPromptSubmit");
     await until("out of Your move", async () => !(await evalIn(t, row("needs"))), 8000);
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
@@ -912,7 +912,7 @@ await scenario("43 · a worker's turn end reaches its epic's agent: typed into t
     await until("typed into the agent and off the queue", async () => !(await st()).epicReports?.["e2e-ag"], 120_000);
 });
 
-await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sessions; + new session opens ⌘N's sheet on that epic; an epic with no session folds to one line with its +; ⌥⌘V again goes back", async () => {
+await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sessions; + new session opens ⌘N's sheet on that epic; a row drops the epic it sits under; an epic with no session folds to one line with its +; ⌥⌘V again goes back", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const pane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
@@ -923,7 +923,9 @@ await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sess
     await evalIn(t, `localStorage.setItem("wintos:sidebar-by-epic", "0"); window.dispatchEvent(new StorageEvent("storage"))`);
     await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
     const group = `document.querySelector("[data-wintos=epic-groups] [data-epic-group='${id}']")`;
+    await api("/sessions/e2e-grouped/name", { text: "E2E grouped: the worker" });
     await until("its group with its session, which says its state", () => evalIn(t, `!!${group}?.querySelector("[data-row='s:e2e-grouped'] [data-wintos=row-state][data-state]")`));
+    await until("the row without the epic it sits under: no face, no name prefix", () => evalIn(t, `(() => { const r = ${group}.querySelector("[data-row='s:e2e-grouped']"); return r.innerText.includes("the worker") && !r.innerText.includes("E2E grouped:") && !r.querySelector("[data-epic-avatar], svg"); })()`));
     await evalIn(t, `${group}.querySelector("[data-wintos=epic-new-step]").click()`);
     await until("the sheet on that epic", () => evalIn(t, `!!document.querySelector("[data-wintos=new-step] [data-epic='${id}'][data-on]")`));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });

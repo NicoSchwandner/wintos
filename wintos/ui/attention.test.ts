@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
 import type { Session } from "../daemon/sessions/reduce";
 import type { WintosState } from "./view";
-import { attention, prsByTab, rowView, sidebarModel } from "./attention";
+import { attention, plain, prsByTab, rowView, sidebarModel } from "./attention";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ key: extra.tabId ?? "t", tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -125,7 +125,7 @@ describe("prsByTab with snoozes", () => {
 describe("rowView after a restart", () => {
     test("a project whose sessions haven't started again says so", () => {
         const r: Row = { key: "t", tabId: "t", band: "needs", lastAt: 1, waitingSince: 1, sessions: [{ id: "s", tabId: "t", blockId: "b", state: "waiting", since: 1, lastAt: 1, restored: true }] };
-        expect(rowView(r, { dir: "/p", mtime: 0, title: "X", pr: ["Core#1"] }, "T", 10).meta).toBe("Core#1 · not started, opens with the project");
+        expect(rowView(r, { dir: "/p", mtime: 0, title: "X", pr: ["Core#1"] }, "T", 10).meta).toBe("Core#1 · starts when opened");
         expect(rowView({ ...r, sessions: [{ ...r.sessions[0], restored: undefined }] }, { dir: "/p", mtime: 0, title: "X", pr: ["Core#1"] }, "T", 10).meta).toBe("Core#1");
     });
 });
@@ -144,7 +144,8 @@ describe("a row says how the last turn ended", () => {
         expect(rowView(r, { dir: "/p", mtime: 0, title: "X", next: "Ship it", pr: [] }, "T", 10)).toMatchObject({ next: "Fixed the walk", tone: "blue" });
     });
     test("your move: what the turn expects of you, then what about", () => {
-        const move = (ask: Session["ask"], outcome = true) => rowView({ key: "t", tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, sessions: [sess("waiting", { ask, ...(outcome ? {} : { outcome: undefined }) })] }, undefined, "T", 10).next;
+        const line = (v: { kind?: string; next?: string }) => [v.kind, v.next].filter(Boolean).join(" · ");
+        const move = (ask: Session["ask"], outcome = true) => line(rowView({ key: "t", tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, sessions: [sess("waiting", { ask, ...(outcome ? {} : { outcome: undefined }) })] }, undefined, "T", 10));
         expect(move({ kind: "decide", text: "two bands or one", by: "session" })).toBe("Decide · two bands or one");
         expect(move({ kind: "decide", text: "two bands or one", by: "session", suggestion: "one" })).toBe("Decide · two bands or one · agent suggests: one");
         expect(move({ kind: "unblock", by: "model" })).toBe("Unblock · Fixed the walk");
@@ -152,7 +153,10 @@ describe("a row says how the last turn ended", () => {
         expect(move(undefined)).toBe("Fixed the walk");
     });
     test("a question mid-turn points at the pane, not at the last turn's outcome", () => {
-        const move = (kind: "answer" | "approve") => rowView({ key: "t", tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, sessions: [sess("waiting", { ask: { kind, by: "tool" } })] }, undefined, "T", 10).next;
+        const move = (kind: "answer" | "approve") => {
+            const v = rowView({ key: "t", tabId: "t", band: "needs", lastAt: 5, waitingSince: 5, sessions: [sess("waiting", { ask: { kind, by: "tool" } })] }, undefined, "T", 10);
+            return `${v.kind} · ${v.next}`;
+        };
         expect([move("answer"), move("approve")]).toEqual(["Answer · its question", "Approve · its plan"]);
     });
     test("quiet: what it waits on, else what it said", () => {
@@ -254,4 +258,8 @@ describe("attention by session (the sidebar)", () => {
         expect(a.targets["t1"]).toEqual({ tabId: "t1", blockId: "b-w" });
     });
     test("by project, as the palette and Herdr ask, a tab is one row as before", () => expect(attention(["t1"], state, {}, 10).needs.map((r) => r.key)).toEqual(["t1"]));
+});
+
+test("plain: a Markdown link keeps its words, code and bold lose their marks", () => {
+    expect(plain("[Core#14692](https://github.com/x/y/pull/14692) merged, `ci` **green**")).toBe("Core#14692 merged, ci green");
 });

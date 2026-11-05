@@ -34,7 +34,12 @@ export function magnifyBlock(blockId: string): boolean {
 export function focusBlock(blockId: string): void {
     const lm = getLayoutModelForStaticTab();
     const node = lm?.getNodeByBlockId(blockId);
-    if (node) lm.focusNode(node.id);
+    if (!node) return;
+    // The layout's own focus does nothing for the pane it already has as focused, and the keys
+    // stayed where they were (the sidebar, the notes, the epic beside the agent): bring them in.
+    const already = globalStore.get(lm.focusedNode)?.id === node.id;
+    lm.focusNode(node.id);
+    if (already) focusArea("terminal");
 }
 
 // Every project switch: the project opens on its terminals. Views are per renderer, so a PR

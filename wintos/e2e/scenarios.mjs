@@ -1107,6 +1107,16 @@ await scenario("50 · by epic, the agent is its epic's header: no row of its own
     await until("back by state", () => evalIn(t, `!document.querySelector("[data-wintos=epic-groups]")`));
 });
 
+await scenario("51 · a click on the open pane's chip brings the keys into that pane, from wherever they were", async () => {
+    const t = await toProject();
+    const pane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    await evalIn(t, `(() => { const l = document.querySelector("[data-wintos=sidebar-list]"); l.setAttribute("tabindex", "-1"); l.focus(); })()`);
+    if (await evalIn(t, `!!document.activeElement?.closest("[data-blockid]")`)) throw new Error("the keys did not leave the pane");
+    const at = await evalIn(t, `(() => { const b = document.querySelector("[data-pane='${pane}']").getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`);
+    for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) await cdp(t, "Input.dispatchMouseEvent", { type, ...at, button: "left", clickCount: 1 });
+    await until("the keys in that pane", () => evalIn(t, `document.activeElement?.closest("[data-blockid]")?.dataset.blockid === "${pane}"`));
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

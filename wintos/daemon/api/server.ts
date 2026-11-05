@@ -32,7 +32,8 @@ import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setEpic, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askCard, askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
-import { trail } from "../sessions/trail";
+import { changes, trail } from "../sessions/trail";
+import { eventLog } from "../events";
 import { lastReply, reentry } from "../sessions/reentry";
 import { AWAY_MS, prompted, snooze, startBreak, tick, type Rhythm } from "../rhythm/rhythm";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
@@ -118,9 +119,15 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // Every change to a session leaves a line in the log, with what caused it: the request being
     // served (cause), or the reading that ran after one.
     let logged = sessions;
+    const logEvent = eventLog(join(opts.root, ".events"));
     const cause = new AsyncLocalStorage<string>();
     const saveSessions = (why = cause.getStore() ?? "wintosd", always?: string) => {
         for (const line of trail(logged, sessions, why, (t) => store.byTab(t)?.title, always)) console.log(`[wintosd] ${line}`);
+        for (const s of sessions.values()) {
+            const moved = changes(logged.get(s.id), s);
+            if (moved.length) logEvent("session", { id: s.id, epic: s.epic, cause: why, changes: moved });
+        }
+        for (const id of logged.keys()) if (!sessions.has(id)) logEvent("session", { id, cause: why, changes: ["gone"] });
         logged = sessions;
         writeFileSync(sessionFile, JSON.stringify([...sessions.values()]));
     };
@@ -171,8 +178,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const s = sessions.get(sessionId);
         const agent = s?.epic ? epics.byId(s.epic)?.agent : undefined;
         if (!s || !agent || agent === s.id) return;
-        reports = addReport(reports, agent, reportLine(s), Date.now());
+        const text = reportLine(s);
+        reports = addReport(reports, agent, text, Date.now());
         writeFileSync(reportsFile, JSON.stringify(reports));
+        logEvent("report", { agent, from: s.id, epic: s.epic, text });
     };
     // The steps you prompted today, by session, for the journal's "Today's focus" (epics/worked.ts).
     const workedFile = join(opts.root, ".worked.json");
@@ -714,6 +723,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const r = editRoadmap({ steps: epic.steps, links: epic.links ?? {} }, op);
                 if (typeof r === "string") return send(res, r === "no such step" ? 404 : r.includes("already") || r.includes("at most") ? 409 : 400, r);
                 epics.update(epic.id, ({ links: _, ...e }) => ({ ...e, steps: r.steps, ...(Object.keys(r.links).length ? { links: r.links } : {}) }));
+                if (r.note) logEvent("roadmap", { epic: epic.id, by: "developer", note: r.note });
                 if (r.note && epic.agent) {
                     reports = addReport(reports, epic.agent, `roadmap edited by the developer on the epic page: ${r.note}`, Date.now());
                     writeFileSync(reportsFile, JSON.stringify(reports));
@@ -742,6 +752,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const b = (await body(req)) as { n?: unknown };
                 if (typeof b?.n !== "number" || !(b.n >= 0)) return send(res, 400, "need n, how many were typed in");
                 reports = reportsDelivered(reports, decodeURIComponent(reportsDone[1]), b.n);
+                logEvent("reports-delivered", { agent: decodeURIComponent(reportsDone[1]), n: b.n });
                 writeFileSync(reportsFile, JSON.stringify(reports));
                 broadcast();
                 return send(res, 200, "");
@@ -861,6 +872,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (b?.sessionId !== null && !isSafe(b?.sessionId)) return send(res, 400, "need sessionId, a session's id or null");
                 // Each visible window reports every few seconds: the same session again changes nothing.
                 if (focused?.sessionId === b.sessionId || (!focused && b.sessionId === null)) return send(res, 200, "");
+                logEvent("focus", { id: b.sessionId });
                 const now = Date.now();
                 if (focused) countTime(now, lastIdleMs);
                 focused = typeof b.sessionId === "string" ? { sessionId: b.sessionId, since: now } : undefined;
@@ -1157,6 +1169,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     if (!next) return send(res, 400, "no such step in the epic's roadmap; wintos unit <unit>… sets it");
                     const links = pruneLinks(linked?.links ?? epic.links ?? {}, next);
                     epics.update(epic.id, ({ links: _, ...e }) => ({ ...e, steps: next, ...(Object.keys(links).length ? { links } : {}) }));
+                    logEvent("roadmap", { epic: epic.id, by: live.id, steps: serializeUnits(next) });
                     broadcast();
                     return send(res, 200, serializeUnits(next));
                 }

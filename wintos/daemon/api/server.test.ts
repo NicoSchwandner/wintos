@@ -87,6 +87,17 @@ describe("wintosd API", () => {
         expect((await post("/epics", { title: "a\nb" })).status).toBe(400);
     });
 
+    test("the event log: a session's changes with their cause, and roadmap edits, one JSON line each", async () => {
+        await event(prompt);
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post(`/epics/${id}/roadmap`, { add: "Cutover" });
+        const day = new Date();
+        const file = join(root, ".events", `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}.jsonl`);
+        const lines = readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+        expect(lines.find((l) => l.kind === "session" && l.id === prompt.session_id)).toMatchObject({ cause: expect.stringContaining("UserPromptSubmit"), changes: [expect.stringMatching(/^new, /)] });
+        expect(lines.find((l) => l.kind === "roadmap")).toMatchObject({ epic: id, by: "developer", note: 'added "Cutover"' });
+    });
+
     test("the roadmap edited by hand: add, rename, move, done and remove; the epic agent hears of each", async () => {
         const id = await (await post("/epics", { title: "Route" })).text();
         await post(`/epics/${id}/agent`, { sessionId: "agent" });

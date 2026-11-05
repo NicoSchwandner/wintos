@@ -18,7 +18,7 @@ export function trail(before: Map<string, Session>, after: Map<string, Session>,
 
 const quote = (t: string | undefined) => (t === undefined ? "none" : JSON.stringify(t));
 
-function changes(was: Session | undefined, s: Session): string[] {
+export function changes(was: Session | undefined, s: Session): string[] {
     if (!was) return [`new, ${s.state}`];
     const out: string[] = [];
     const diff = (label: string, a: string | undefined, b: string | undefined) => a !== b && out.push(`${label} ${a ?? "none"} → ${b ?? "none"}`);

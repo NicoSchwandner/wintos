@@ -1138,10 +1138,12 @@ await scenario("52 · the epic agent starts a session for a step in the backgrou
     // Blocked on you: a card in Your move, and ⌃⇥ stops there.
     writeFileSync(join(process.env.HOME, ".local/share/wintos-dev/bg-agents.json"), JSON.stringify([{ id: "52e2e52e", sessionId: "52e2e52e-0000-4000-8000-000000000052", kind: "background", state: "blocked" }]));
     await until("in Your move", () => evalIn(t, `!!document.querySelector("[data-band-group=needs] [data-row='bg:52e2e52e-0000-4000-8000-000000000052']")`), 30000);
+    // Opened in a view of its own, never as a split of the view in front (T2 here, another epic's).
     const panes = () => sql(`select json_array_length(data->'blockids') from db_tab where oid='${t2Tab}'`);
     const before = Number(panes());
     await evalIn(t, `document.querySelector("[data-row='bg:52e2e52e-0000-4000-8000-000000000052']")?.click()`);
-    await until("a pane attached to it", async () => Number(panes()) === before + 1 && (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((x) => x.id === "52e2e52e-0000-4000-8000-000000000052")?.attachedTo, 20000);
+    const own = await until("a view of its own attached to it", async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((x) => x.id === "52e2e52e-0000-4000-8000-000000000052" && x.attachedTo)?.tabId ?? false, 30000);
+    if (own === t2Tab || Number(panes()) !== before) throw new Error(`it opened in the view in front (${own})`);
 });
 
 await scenario("clean-up · the panes this run opened are closed", async () => {

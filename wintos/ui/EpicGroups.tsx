@@ -33,52 +33,72 @@ export function groupByEpic(rows: Row[], epics: EpicView[]): EpicGroup[] {
 // background: sessions the agents started in the background (no pane, so no row): listed under
 // their epic, a click opens one in a pane.
 export function EpicGroups({ groups, renderRow, cursor, newStep, background = [] }: { groups: EpicGroup[]; renderRow: (r: Row) => React.ReactNode; cursor: string | null; newStep: (epic: string) => void; background?: Session[] }) {
+    // An epic with nothing under it (Reviews, Elmah between errands) folds to one line, kept apart
+    // at the bottom, its + still there.
+    const bgOf = (g: EpicGroup) => (g.epic ? background.filter((s) => s.epic === g.epic!.id) : []);
+    const empty = (g: EpicGroup) => !!g.epic && !g.rows.length && !bgOf(g).length && g.agent?.band !== "needs";
+    const header = (g: EpicGroup, folded: boolean) => {
+        const look = lookOf(g.epic!);
+        const waiting = g.rows.filter((r) => r.band === "needs").length;
+        return (
+            <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                <button
+                    type="button"
+                    data-row={`epic:${g.epic!.id}`}
+                    tabIndex={-1}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => openEpic(g.epic!.id)}
+                    style={{ flexGrow: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 9, padding: folded ? "3px 8px" : "5px 8px", borderRadius: 8, background: "transparent", border: `1px solid ${cursor === `epic:${g.epic!.id}` ? T.apricot : "transparent"}`, cursor: "pointer", textAlign: "left", fontFamily: T.ui }}
+                >
+                    <EpicAvatar look={look} size={folded ? 16 : 20} running={g.agent?.sessions[0]?.state === "working"} />
+                    <span style={{ flexGrow: 1, minWidth: 0, fontSize: folded ? 12 : 12.5, fontWeight: folded ? 500 : 700, letterSpacing: "0.02em", color: folded ? T.muted : look.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(g.epic!)}</span>
+                    {g.agent?.band === "needs" && <span data-wintos="epic-agent-state" style={{ fontSize: 10.5, fontWeight: 600, color: T.apricot }}>agent: your move</span>}
+                    {!folded && <span style={{ fontFamily: T.mono, fontSize: 11, color: waiting ? T.apricot : T.faint }}>{waiting ? `${waiting} waiting` : g.rows.length}</span>}
+                </button>
+                {folded && <NewSession epic={g.epic!.id} newStep={newStep} folded />}
+            </div>
+        );
+    };
+    const full = groups.filter((g) => !empty(g));
+    const folded = groups.filter(empty);
     return (
         <div data-wintos="epic-groups" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {groups.map((g) => {
+            {full.map((g) => {
                 const look = g.epic ? lookOf(g.epic) : NO_EPIC;
-                const waiting = g.rows.filter((r) => r.band === "needs").length;
-                const agent = g.agent?.band;
                 return (
                     <div key={g.epic?.id ?? "none"} data-epic-group={g.epic?.id ?? ""} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        {g.epic ? (
-                            <button
-                                type="button"
-                                data-row={`epic:${g.epic.id}`}
-                                tabIndex={-1}
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => openEpic(g.epic!.id)}
-                                style={{ display: "flex", alignItems: "center", gap: 9, padding: "5px 8px", borderRadius: 8, background: "transparent", border: `1px solid ${cursor === `epic:${g.epic.id}` ? T.apricot : "transparent"}`, cursor: "pointer", textAlign: "left", fontFamily: T.ui }}
-                            >
-                                <EpicAvatar look={look} size={20} running={g.agent?.sessions[0]?.state === "working"} />
-                                <span style={{ flexGrow: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, letterSpacing: "0.02em", color: look.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(g.epic)}</span>
-                                {agent === "needs" && <span data-wintos="epic-agent-state" style={{ fontSize: 10.5, fontWeight: 600, color: T.apricot }}>agent: your move</span>}
-                                <span style={{ fontFamily: T.mono, fontSize: 11, color: waiting ? T.apricot : T.faint }}>{waiting ? `${waiting} waiting` : g.rows.length ? `${g.rows.length}` : "–"}</span>
-                            </button>
-                        ) : (
-                            <span style={{ padding: "5px 8px", fontSize: 12, fontWeight: 600, color: T.faint }}>Outside the epics</span>
-                        )}
+                        {g.epic ? header(g, false) : <span style={{ padding: "5px 8px", fontSize: 12, fontWeight: 600, color: T.faint }}>Outside the epics</span>}
                         <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingLeft: 10, borderLeft: `2px solid ${g.epic ? look.ring : T.border}`, marginLeft: 17 }}>
                             {g.rows.map(renderRow)}
-                            {g.epic &&
-                                background
-                                    .filter((s) => s.epic === g.epic!.id)
-                                    .map((s) => (
+                            {bgOf(g).map((s) => (
                                         <button key={s.id} type="button" data-wintos="epic-bg-session" data-session={s.id} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openBackground(s.bgId!)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "3px 8px", background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui, fontSize: 12, color: T.secondary, minWidth: 0 }}>
                                             <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: SESSION_DOT[s.state] }} />
                                             <span style={{ flexGrow: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessionName(s)}</span>
                                             <span style={{ flexShrink: 0, fontSize: 10.5, color: s.state === "waiting" ? T.apricot : T.faint }}>background · {STATE_WORD[s.state]}</span>
                                         </button>
                                     ))}
-                            {g.epic && (
-                                <button type="button" data-wintos="epic-new-step" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => newStep(g.epic!.id)} style={{ alignSelf: "flex-start", padding: "3px 8px", background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12, color: T.faint }}>
-                                    + new session
-                                </button>
-                            )}
+                            {g.epic && <NewSession epic={g.epic.id} newStep={newStep} />}
                         </div>
                     </div>
                 );
             })}
+            {folded.length > 0 && (
+                <div data-wintos="epic-groups-folded" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    {folded.map((g) => (
+                        <div key={g.epic!.id} data-epic-group={g.epic!.id} data-folded>
+                            {header(g, true)}
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
+    );
+}
+
+function NewSession({ epic, newStep, folded }: { epic: string; newStep: (epic: string) => void; folded?: boolean }) {
+    return (
+        <button type="button" data-wintos="epic-new-step" title="New session in this epic" aria-label="New session in this epic" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => newStep(epic)} style={{ flexShrink: 0, alignSelf: folded ? "center" : "flex-start", padding: folded ? "2px 8px" : "3px 8px", background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12, color: T.faint }}>
+            {folded ? "+" : "+ new session"}
+        </button>
     );
 }

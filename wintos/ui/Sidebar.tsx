@@ -443,7 +443,8 @@ function CardRow(p: RowProps) {
                     <RowClose p={p} />
                 </span>
             </div>
-            {v.next && <div style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty" } as React.CSSProperties}><Rich text={v.next} size="rail" links={false} /></div>}
+            {/* Cut at three lines: a long ask is read in its pane, the card only says what kind it is. */}
+            {v.next && <div data-wintos="row-next" title={v.next} style={{ fontSize: 12.5, lineHeight: 1.4, color: tone, textWrap: "pretty", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 3, overflow: "hidden" } as React.CSSProperties}><Rich text={v.next} size="rail" links={false} /></div>}
             {v.meta && <div title={v.meta} style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.meta}</div>}
         </div>
     );

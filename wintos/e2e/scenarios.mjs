@@ -912,7 +912,7 @@ await scenario("43 · a worker's turn end reaches its epic's agent: typed into t
     await until("typed into the agent and off the queue", async () => !(await st()).epicReports?.["e2e-ag"], 120_000);
 });
 
-await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sessions; + new session opens ⌘N's sheet on that epic; ⌥⌘V again goes back", async () => {
+await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sessions; + new session opens ⌘N's sheet on that epic; an epic with no session folds to one line with its +; ⌥⌘V again goes back", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const pane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
@@ -926,6 +926,12 @@ await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sess
     await until("its group with its session, which says its state", () => evalIn(t, `!!${group}?.querySelector("[data-row='s:e2e-grouped'] [data-wintos=row-state][data-state]")`));
     await evalIn(t, `${group}.querySelector("[data-wintos=epic-new-step]").click()`);
     await until("the sheet on that epic", () => evalIn(t, `!!document.querySelector("[data-wintos=new-step] [data-epic='${id}'][data-on]")`));
+    await press(t, "Escape", { code: "Escape", keyCode: 27 });
+    const bare = await (await api("/epics", { title: "E2E bare" })).text();
+    const folded = `document.querySelector("[data-wintos=epic-groups-folded] [data-epic-group='${bare}'][data-folded]")`;
+    await until("an epic with no session folded to one line", () => evalIn(t, `!!${folded} && !${folded}.querySelector("[data-row^='s:']")`));
+    await evalIn(t, `${folded}.querySelector("[data-wintos=epic-new-step]").click()`);
+    await until("its + still opens the sheet on it", () => evalIn(t, `!!document.querySelector("[data-wintos=new-step] [data-epic='${bare}'][data-on]")`));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
     await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
     await until("back by state, where the bands say it", () => evalIn(t, `!document.querySelector("[data-wintos=epic-groups]") && !document.querySelector("[data-wintos=row-state]")`));

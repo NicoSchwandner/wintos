@@ -503,13 +503,12 @@ function toggleStoredFlag(key: string): void {
 
 // An epic's page, from its card on the epics home.
 // An epic with its agent open opens as the agent's view, its page beside the terminal; else its
-// page. From the agent's own pane it is the full page (mine.md, the month's hours).
+// page. The full page (mine.md, the month's hours) is the column's f.
 export function openEpic(id: string): void {
     const state = currentState();
     const agent = state?.epics?.find((e) => e.id === id)?.agent;
     const live = agent ? state?.sessions.find((s) => s.id === agent && s.state !== "ended") : undefined;
-    const inAgent = globalStore.get(mainViewAtom) === "terminal" && focusedSession()?.id === live?.id;
-    if (live && !inAgent) return focusSession({ tabId: live.tabId, blockId: live.blockId });
+    if (live) return focusSession({ tabId: live.tabId, blockId: live.blockId });
     openEpicPage(id);
 }
 export function openEpicPage(id: string): void {

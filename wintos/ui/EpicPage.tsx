@@ -5,7 +5,7 @@ import { EpicAvatar } from "./EpicAvatar";
 import { lookOf, shortName } from "./epicLook";
 import { globalStore } from "@/app/store/jotaiStore";
 import { editMine, focusSession } from "./focus";
-import { runAction, runKey } from "./menu";
+import { openEpicPage, runAction, runKey } from "./menu";
 import { offerStep } from "./newproject";
 import { Key } from "./Key";
 import { cursorKeys, startCursor } from "./itemCursor";
@@ -111,7 +111,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
     // Enter and ⌫ reach this table from the page's own fields too; there they belong to the field.
     const cursor = cursorKeys(() => ref.current);
     const notInField = (run: KeyTable[string]): KeyTable[string] => (e) => (isTextField(document.activeElement) ? false : run(e));
-    useZoneKeys(ref, { ...cursor, Enter: notInField(cursor.Enter), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true),
+    useZoneKeys(ref, { ...cursor, Enter: notInField(cursor.Enter), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true), f: () => (column && epic ? (openEpicPage(epic.id), true) : false),
         d: onStep((name) => edit({ done: name, on: epic?.steps.find((u) => u.name === name)?.state !== "done" })),
         // The cursor goes along with the step it moves.
         "Shift:j": (e) => onStep((name) => (edit({ move: { name, by: 1 } }), cursor.j(e)))(),
@@ -150,6 +150,11 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                 </div>
                 <span style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                     {column && <Key k="⌘L ⌘H" label="here and back to the agent" />}
+                    {column && (
+                        <button type="button" data-wintos="epic-full-page" data-key="f" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openEpicPage(epic.id)} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                            <Key k="f" label="full page" />
+                        </button>
+                    )}
                     {!column && <button type="button" data-wintos="epic-agent" data-key="a" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={toAgent} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                         <Key k="a" label={epic.agent ? "the epic agent" : "start the epic agent"} />
                     </button>}

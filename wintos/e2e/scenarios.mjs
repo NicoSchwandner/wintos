@@ -1022,6 +1022,12 @@ await scenario("48 · the epic agent's pane: the epic beside its terminal; ⌘L 
     await until("shown in the column", () => evalIn(t, `!!document.querySelector("${col} [data-step='Ask about the cutover']")`));
     await press(t, "h", { mods: ["meta"] });
     await until("⌘H: back in the agent's terminal", () => evalIn(t, `!!document.activeElement?.closest("[data-blockid='${pane}']") && !document.activeElement?.closest("[data-wintos=epic-column]")`));
+    await evalIn(t, `import("/wintos/ui/menu.ts").then((m) => m.openEpic("${id}"))`);
+    await until("from its own terminal, the epic stays this view", () => evalIn(t, `!document.querySelector("[data-wintos=epic-page]") && !!document.activeElement?.closest("[data-blockid='${pane}']")`));
+    await press(t, "l", { mods: ["meta"] });
+    await until("in the column again", () => evalIn(t, `document.activeElement?.matches("${col}")`));
+    await press(t, "f");
+    await until("f: the full page", () => evalIn(t, `document.querySelector("[data-wintos=epic-page]")?.dataset.epic === "${id}"`));
     await press(t, "y", { mods: ["meta", "shift"] });
     await until("the epics home", () => evalIn(t, `!!document.querySelector("[data-wintos=today]")`));
     await evalIn(t, `import("/wintos/ui/menu.ts").then((m) => m.openEpic("${id}"))`);

@@ -4,7 +4,7 @@ vi.mock("./focusLog", () => ({ flog: vi.fn() }));
 const here = { tab: "a", session: undefined as { id: string; tabId: string } | undefined };
 vi.mock("./focus", () => ({ enterProject: vi.fn(), focusArea: vi.fn(), whereYouAre: () => here.tab, focusedSession: () => here.session }));
 import { enterProject } from "./focus";
-import { setSwitchOrder, stepProject, switchProject, switchTargetAtom, topProject, toRow, undoWalkKey, walkKey, walking } from "./switcher";
+import { setSwitchOrder, setWakeStops, stepProject, switchProject, switchTargetAtom, topProject, toRow, undoWalkKey, walkKey, walking } from "./switcher";
 
 describe("stepProject", () => {
     const order = ["a", "b", "c"];
@@ -229,9 +229,9 @@ describe("⌃⇥: the rows that need you, from the top of the sidebar, switching
 });
 
 describe("⌘J/⌘K and ⌥⌘1–9 count rows only", () => {
-    test("⌥⌘1 is the first row, past the cards, pinned epics and a closed project's wake above it", () => {
+    test("⌥⌘1 is the first row, past the cards, pinned epics, background sessions and a closed project's wake above it", () => {
         vi.mocked(enterProject).mockClear();
-        setSwitchOrder(["card:prs", "wake:x", "epic:e", "a", "b"]);
+        setSwitchOrder(["card:prs", "bg:s1", "wake:x", "epic:e", "a", "b"]);
         toRow(1);
         expect(enterProject).toHaveBeenCalledExactlyOnceWith("a");
     });
@@ -245,4 +245,17 @@ describe("⌘J/⌘K and ⌥⌘1–9 count rows only", () => {
         switchProject(1, true);
         expect(globalStore.get(switchTargetAtom)).toBe("a");
     });
+});
+
+test("⌃⇥ lands on a background session waiting on you and opens it", () => {
+    vi.stubGlobal("window", new EventTarget());
+    vi.stubGlobal("document", new EventTarget());
+    globalStore.set(switchTargetAtom, null);
+    const opened: string[] = [];
+    setWakeStops({ "bg:s1": () => opened.push("s1") });
+    setSwitchOrder(["bg:s1", "a", "q"], {}, ["bg:s1", "a"], []);
+    here.tab = "a";
+    here.session = undefined;
+    switchProject(1, false, "top");
+    expect(opened).toEqual(["s1"]);
 });

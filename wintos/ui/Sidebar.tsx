@@ -17,7 +17,7 @@ import { useSchemeNotices } from "./schemeNotices";
 import { meetingsFrom } from "./meetings";
 import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
-import { editMine, enterProject, focusArea, focusSession, reopenProject, resumePane, setLatestSessions } from "./focus";
+import { editMine, enterProject, focusArea, focusSession, openBackground, reopenProject, resumePane, setLatestSessions } from "./focus";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
 import { closeProjectTab, openView, registerWintosMenu, runKey, SIDEBAR_BY_EPIC } from "./menu";
@@ -25,7 +25,7 @@ import { isPage, mainViewAtom, newStepEpicAtom, renamingAtom, yourMoveAtom } fro
 import { inFlight, liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { attention } from "./attention";
-import { ghPrs, inboxKind, isInboxTab, type InboxList, prRef, projectTabIds, relTime, RowView, type WintosState } from "./view";
+import { ghPrs, inboxKind, isInboxTab, type InboxList, prRef, projectTabIds, relTime, RowView, sessionName, type WintosState } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
@@ -82,6 +82,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEpicReports(raw?.epicReports, raw?.sessions, activeTabId, useNow(15_000), typeof document !== "undefined" && document.hasFocus() ? lookingAt : undefined, raw?.relays, raw?.epics);
     useSchemeNotices(raw?.sessions, activeTabId);
     const wokeClosed = raw ? closedWakes(raw.wakes ?? {}, raw.shelf ?? {}, raw.projects, tabIds, (u) => prRef(raw, u)) : [];
+    // Sessions the epic agents started in the background (no pane): one waiting on you is in Your move.
+    const background = (raw?.sessions ?? []).filter((s) => s.bgId && !s.attachedTo && s.state !== "ended");
+    const bgNeeds = background.filter((s) => s.state === "waiting");
     const wakeNeeds = wokeClosed.filter((w) => !w.news);
     const wakeNews = wokeClosed.filter((w) => w.news);
     useFreshPaneLists(raw?.sessions, tabs);
@@ -118,24 +121,24 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const groups = byEpic ? groupByEpic(byState, state?.epics ?? []) : [];
     const listed = byEpic ? groups.flatMap((g) => g.rows) : byState;
     const stops = byEpic ? groups.flatMap((g) => [...(g.epic ? [`epic:${g.epic.id}`] : []), ...g.rows.map((r) => r.key)]) : [...pinned.map((e) => `epic:${e.id}`), ...listed.map((r) => r.key)];
-    const switchOrder = model ? [...cards, ...wokeClosed.map((w) => `wake:${w.projectId}`), ...stops] : [];
+    const switchOrder = model ? [...cards, ...bgNeeds.map((s) => `bg:${s.id}`), ...wokeClosed.map((w) => `wake:${w.projectId}`), ...stops] : [];
     const tabOfRow = Object.fromEntries(listed.map((r) => [r.key, r.tabId]));
 
     useEffect(registerWintosMenu, []);
 
     // By epic, an agent's row is its epic's header: ⌃⇥ stops there when the agent needs you.
     const asStop = Object.fromEntries(groups.flatMap((g) => (g.agent && g.epic ? [[g.agent.key, `epic:${g.epic.id}`]] : [])));
-    const needKeys = model ? [...wakeNeeds.map((w) => `wake:${w.projectId}`), ...model.needs.map((r) => asStop[r.key] ?? r.key)] : [];
+    const needKeys = model ? [...bgNeeds.map((s) => `bg:${s.id}`), ...wakeNeeds.map((w) => `wake:${w.projectId}`), ...model.needs.map((r) => asStop[r.key] ?? r.key)] : [];
     const readKeys = model ? [...wakeNews.map((w) => `wake:${w.projectId}`), ...model.read.map((r) => asStop[r.key] ?? r.key)] : [];
     useEffect(() => void setSwitchOrder(switchOrder, tabOfRow, needKeys, readKeys), [switchOrder.join(","), needKeys.join(","), readKeys.join(",")]);
     const reopenWoke = (w: ClosedWake) => reopenProject(w.projectId, [resumePane(w.script)]);
-    useEffect(() => void setWakeStops(Object.fromEntries(wokeClosed.map((w) => [`wake:${w.projectId}`, () => reopenWoke(w)]))), [wokeClosed.map((w) => w.sessionId).join(",")]);
+    useEffect(() => void setWakeStops(Object.fromEntries([...wokeClosed.map((w) => [`wake:${w.projectId}`, () => reopenWoke(w)] as const), ...bgNeeds.map((s) => [`bg:${s.id}`, () => openBackground(s.bgId!)] as const)])), [wokeClosed.map((w) => w.sessionId).join(","), bgNeeds.map((s) => s.id).join(",")]);
     useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-row="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
 
     useEffect(() => {
         if (state) setLatestSessions(state.sessions, model?.targets ?? {});
     }, [state, tabIds.join(",")]);
-    const yourMove = model ? model.needs.length + wakeNeeds.length : 0;
+    const yourMove = model ? model.needs.length + wakeNeeds.length + bgNeeds.length : 0;
     useEffect(() => void globalStore.set(yourMoveAtom, yourMove), [yourMove]);
 
     // The project title is the source of truth; the tab name follows it.
@@ -195,6 +198,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
         return row.band === "quiet" ? <QuietRow {...props} /> : row.band === "running" ? <QuietRow {...props} v={{ ...v, reason: v.next }} dot={T.moss} /> : <CardRow {...props} />;
     };
 
+    const bgCard = (s: Session) => (
+        <CardRow key={`bg:${s.id}`} rowKey={`bg:${s.id}`} tabId={`bg:${s.id}`} v={{ title: sessionName(s), next: s.ask?.text ?? "it waits for you", tone: "apricot", age: relTime(Date.now() - s.since), meta: "background · ⏎ or a click opens it in a pane" }} active={false} cursor={switchTarget === `bg:${s.id}`} renaming={false} onOpen={() => openBackground(s.bgId!)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
+    );
     const wakeCard = (w: ClosedWake) => (
         <CardRow key={`wake:${w.sessionId}`} rowKey={`wake:${w.projectId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: w.news ? "blue" : "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌃⇥ or ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
     );
@@ -246,14 +252,15 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     </div>
                 ) : (
                     <>
-                        <Band kind="needs" count={(byEpic ? 0 : model.needs.length) + wakeNeeds.length}>
+                        <Band kind="needs" count={(byEpic ? 0 : model.needs.length) + wakeNeeds.length + bgNeeds.length}>
+                            {bgNeeds.map(bgCard)}
                             {wakeNeeds.map(wakeCard)}
                             {!byEpic && model.needs.map(renderRow)}
                         </Band>
                         {byEpic ? (
                             <>
                                 <Band kind="read" count={wakeNews.length}>{wakeNews.map(wakeCard)}</Band>
-                                <EpicGroups groups={groups} renderRow={renderRow} cursor={switchTarget} newStep={(epic) => (globalStore.set(newStepEpicAtom, epic), runKey("new-step"))} />
+                                <EpicGroups groups={groups} renderRow={renderRow} cursor={switchTarget} newStep={(epic) => (globalStore.set(newStepEpicAtom, epic), runKey("new-step"))} background={background} />
                             </>
                         ) : (
                         <>

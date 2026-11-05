@@ -28,6 +28,7 @@ export function waitingStops(order: string[], needs: Set<string>, read: Set<stri
     return mine.length ? mine : order.filter((k) => read.has(k));
 }
 // "wake:<project>" stops: a closed project's due wake, which opening reopens on its session.
+// "bg:<session>" stops: a session its epic's agent started in the background, waiting on you.
 let wakeStops: Record<string, () => void> = {};
 export const setWakeStops = (stops: Record<string, () => void>) => (wakeStops = stops);
 // Where closing a project lands: the uppermost project in the sidebar. The walk's other stops
@@ -42,7 +43,7 @@ export function topProject(closing: string): string | undefined {
 
 // ⌥⌘1-9: the sidebar's rows, top to bottom; the cards above them are no rows.
 export function toRow(n: number): void {
-    const target = order.filter((k) => !k.startsWith("card:") && !k.startsWith("epic:") && !k.startsWith("wake:"))[n - 1];
+    const target = order.filter((k) => !k.startsWith("card:") && !k.startsWith("epic:") && !k.startsWith("wake:") && !k.startsWith("bg:"))[n - 1];
     if (target) go(target);
 }
 
@@ -85,7 +86,7 @@ export function switchProject(delta: 1 | -1, held: boolean, from: "here" | "top"
 function go(target: string | null): void {
     if (target === "card:prs" || target === "card:oncall") goToInbox(target.slice(5) as InboxList);
     else if (target === "card:today") openView("day");
-    else if (target?.startsWith("wake:")) wakeStops[target]?.();
+    else if (target?.startsWith("wake:") || target?.startsWith("bg:")) wakeStops[target]?.();
     else if (target?.startsWith("epic:")) openEpic(target.slice(5));
     else if (target) enterProject(target);
     else focusArea("terminal");

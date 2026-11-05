@@ -1,8 +1,12 @@
 import type { Row } from "../daemon/ranking/rank";
 import { EpicAvatar } from "./EpicAvatar";
 import { lookOf, NO_EPIC, shortName } from "./epicLook";
+import { openBackground } from "./focus";
 import { openEpic } from "./menu";
-import { T } from "./tokens";
+import { STATE_WORD } from "./sessions";
+import { sessionName } from "./view";
+import type { Session } from "../daemon/sessions/reduce";
+import { SESSION_DOT, T } from "./tokens";
 import type { EpicView } from "./view";
 
 // agent: the epic agent's own row, shown as the epic's header rather than as a row under it:
@@ -26,7 +30,9 @@ export function groupByEpic(rows: Row[], epics: EpicView[]): EpicGroup[] {
     return [...groups, ...(loose.length ? [{ rows: loose }] : [])];
 }
 
-export function EpicGroups({ groups, renderRow, cursor, newStep }: { groups: EpicGroup[]; renderRow: (r: Row) => React.ReactNode; cursor: string | null; newStep: (epic: string) => void }) {
+// background: sessions the agents started in the background (no pane, so no row): listed under
+// their epic, a click opens one in a pane.
+export function EpicGroups({ groups, renderRow, cursor, newStep, background = [] }: { groups: EpicGroup[]; renderRow: (r: Row) => React.ReactNode; cursor: string | null; newStep: (epic: string) => void; background?: Session[] }) {
     return (
         <div data-wintos="epic-groups" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {groups.map((g) => {
@@ -54,6 +60,16 @@ export function EpicGroups({ groups, renderRow, cursor, newStep }: { groups: Epi
                         )}
                         <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingLeft: 10, borderLeft: `2px solid ${g.epic ? look.ring : T.border}`, marginLeft: 17 }}>
                             {g.rows.map(renderRow)}
+                            {g.epic &&
+                                background
+                                    .filter((s) => s.epic === g.epic!.id)
+                                    .map((s) => (
+                                        <button key={s.id} type="button" data-wintos="epic-bg-session" data-session={s.id} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openBackground(s.bgId!)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "3px 8px", background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui, fontSize: 12, color: T.secondary, minWidth: 0 }}>
+                                            <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: SESSION_DOT[s.state] }} />
+                                            <span style={{ flexGrow: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessionName(s)}</span>
+                                            <span style={{ flexShrink: 0, fontSize: 10.5, color: s.state === "waiting" ? T.apricot : T.faint }}>background · {STATE_WORD[s.state]}</span>
+                                        </button>
+                                    ))}
                             {g.epic && (
                                 <button type="button" data-wintos="epic-new-step" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => newStep(g.epic!.id)} style={{ alignSelf: "flex-start", padding: "3px 8px", background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12, color: T.faint }}>
                                     + new session

@@ -40,7 +40,7 @@ import { changes, trail } from "../sessions/trail";
 import { eventLog } from "../events";
 import { lastReply, reentry } from "../sessions/reentry";
 import { AWAY_MS, prompted, snooze, startBreak, tick, type Rhythm } from "../rhythm/rhythm";
-import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
+import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, wakePrompt, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
 import { prNow, type Who } from "../wakes/github";
 import { fetchDone, unlisted } from "../prs/done";
 import { DEFAULT_PORT } from "../../instance";
@@ -239,6 +239,15 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const bgLogs = opts.bgLogs ?? ((bgId: string) => new Promise<string | undefined>((resolve) => execFile("/bin/zsh", ["-lc", 'claude logs "$0" | tail -n 60', bgId], { timeout: 30_000, maxBuffer: 1 << 20 }, (err, out) => resolve(err ? undefined : String(out).trim() || undefined))));
     const bgStop = opts.bgStop ?? ((bgId: string) => new Promise<boolean>((resolve) => execFile("/bin/zsh", ["-lc", 'claude stop "$0"', bgId], { timeout: 30_000 }, (err) => resolve(!err))));
     async function deliverToBackground(listed: BgAgent[]) {
+        // Its due wakes too: the panes' renderers type a wake in, and a background session has no pane.
+        for (const [wid, w] of Object.entries(wakes)) {
+            const s = w.due ? sessions.get(w.sessionId) : undefined;
+            if (!s?.bgId || s.attachedTo || s.state === "working" || s.state === "ended") continue;
+            if (!(await bgSend(s.id, listed.find((a) => a.id === s.bgId)?.cwd, wakePrompt(w)))) continue;
+            delete wakes[wid];
+            saveWakes();
+            logEvent("wake-delivered", { to: s.id, via: "background" });
+        }
         for (const [to, list] of Object.entries(relays)) {
             const s = sessions.get(to);
             if (!s?.bgId || s.attachedTo || s.state === "working" || s.state === "ended" || !list.length) continue;
@@ -1328,9 +1337,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
             // `wintos adopt <session>`: a session in no epic joins the agent's (one in another epic stays
             // there: moving it is the developer's call). `wintos stop <session>`: one the agent started
             // in the background stops.
-            const agentAct = /^\/blocks\/([^/]+)\/(adopt|stop)$/.exec(url.pathname);
+            const agentAct = /^\/blocks\/([^/]+)\/(adopt|stop|rename)$/.exec(url.pathname);
             if (req.method === "POST" && agentAct) {
-                const b = (await body(req)) as { to?: unknown };
+                const b = (await body(req)) as { to?: unknown; name?: unknown };
                 const live = liveIn(sessions, decodeURIComponent(agentAct[1]), sid);
                 const epic = live?.epic ? epics.byId(live.epic) : undefined;
                 if (!live || !epic || epic.agent !== live.id) return send(res, 403, "only an epic's agent does this");
@@ -1343,6 +1352,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     logEvent("adopt", { agent: live.id, epic: epic.id, to: to.id });
                     broadcast();
                     return send(res, 200, to.name?.text ?? to.label ?? to.id);
+                }
+                // `wintos rename <session> <name>`: one of its sessions renamed, as a session names itself:
+                // a name the developer gave stays, the agent's waits beside it as a suggestion.
+                if (agentAct[2] === "rename") {
+                    const to = findWorker([...sessions.values()], epic.id, live.id, b.to, epic.links);
+                    if (!to) return send(res, 404, "no open session in the epic matches");
+                    if (typeof b.name !== "string" || !isSafe(b.name) || !b.name.trim() || b.name.length > 60) return send(res, 400, "need name, one line up to 60 characters");
+                    sessions = nameSession(sessions, to.blockId, b.name.trim(), Date.now(), to.id);
+                    saveSessions("wintos rename");
+                    broadcast();
+                    return send(res, 200, sessions.get(to.id)?.name?.by === "you" ? `${to.name?.text}: the developer named it, so "${b.name.trim()}" waits beside it as a suggestion` : b.name.trim());
                 }
                 const to = findWorker([...sessions.values()], epic.id, live.id, b.to, epic.links);
                 if (!to?.bgId) return send(res, 404, "no session you started in the background matches; the developer closes the others");

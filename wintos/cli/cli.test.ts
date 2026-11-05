@@ -390,6 +390,17 @@ describe("wintos status", () => {
     });
 });
 
+describe("wintos in Claude's background service", () => {
+    test("with no pane, a command goes by the session's own id", async () => {
+        const d = await fakeDaemon("");
+        const env = { ...process.env, CLAUDE_CODE_SESSION_ID: "430f7f7e-9d03", CLAUDE_CODE_SESSION_KIND: "bg", WINTOS_PORT: String(d.port) } as Record<string, string | undefined>;
+        delete env.WAVETERM_BLOCKID;
+        delete env.WAVETERM_TABID;
+        await new Promise((resolve) => require("child_process").execFile(CLI, ["status", "Walking", "it"], { env }, resolve));
+        expect(d.seen[0]).toEqual({ url: "/blocks/-/status?session=430f7f7e-9d03", body: { text: "Walking it" } });
+    });
+});
+
 describe("wintos name", () => {
     test("proposes this session's name; you have a minute to change it", async () => {
         const d = await fakeDaemon("");
@@ -455,6 +466,8 @@ describe("wintos lane and step", () => {
         expect((await cli(["adopt", "#14715"], d.port)).trim()).toBe("#14715 todo review is in your epic now");
         expect((await cli(["stop", "#14715"], d.port)).trim()).toBe("stopped #14715 todo review");
         expect(d.seen.slice(4).map((x: { url: string }) => x.url)).toEqual(["/blocks/blk-1/adopt?session=s-1", "/blocks/blk-1/stop?session=s-1"]);
+        expect((await cli(["rename", "#14715", "Receipts", "dark", "launch"], d.port)).trim()).toBe("renamed: #14715 todo review");
+        expect(d.seen[6]).toEqual({ url: "/blocks/blk-1/rename?session=s-1", body: { to: "#14715", name: "Receipts dark launch" } });
     });
     test("unit sets the project's units, starts one, ticks one; it prints the list back", async () => {
         const d = await fakeDaemon("[>] ABC-42 phase 1 | [ ] ABC-43");

@@ -229,7 +229,8 @@ export function restoreSessions(saved: Session[], now?: number): Map<string, Ses
     for (const s of saved) {
         if (s.state === "ended" || (now !== undefined && now - s.lastAt > RESTORE_MAX_AGE_MS)) continue;
         const { subagents: _gone, ...rest } = s;
-        out.set(s.id, { ...rest, state: s.state === "working" ? "idle" : s.state, restored: true });
+        // One its epic's agent started runs on in Claude's background service: nothing waits to restart.
+        out.set(s.id, s.bgId ? rest : { ...rest, state: s.state === "working" ? "idle" : s.state, restored: true });
     }
     return out;
 }

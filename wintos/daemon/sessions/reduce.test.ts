@@ -229,6 +229,9 @@ describe("restoreSessions (after a WintOS restart)", () => {
         ]);
     });
 
+    test("one its epic's agent started runs on in the background: not marked not started, its turn not cut off", () =>
+        expect(restoreSessions([{ ...s("bg", "working", ""), bgId: "430f7f7e" }]).get("bg")).toEqual({ ...s("bg", "working", ""), bgId: "430f7f7e" }));
+
     test("a restart stopped every subagent: none comes back", () =>
         expect(restoreSessions([{ ...s("a", "waiting"), subagents: { x: 1 } }]).get("a")?.subagents).toBeUndefined());
 

@@ -140,6 +140,53 @@ describe("wintosd API", () => {
         expect((await (await fetch(base + "/state")).json()).epics[0].links).toEqual({ "Cutover per group": [prompt.session_id] });
     });
 
+    test("a background session registers a wake by its own id, and the daemon delivers it when due", async () => {
+        let listing = "[]";
+        const sent: string[] = [];
+        const boot = async () => {
+            srv.close();
+            srv = await startServer({ root, port: 0, token: "t0ken", listAgents: async () => listing, bgSend: async (_id, _cwd, p) => (sent.push(p), true) });
+            base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        };
+        await boot();
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/ag/epic", { epic: id });
+        await post(`/epics/${id}/roadmap`, { add: "Cutover" });
+        await post("/blocks/blk-a/start", { step: "Cutover", bgId: "430f7f7e" });
+        listing = JSON.stringify([{ id: "430f7f7e", sessionId: "430f7f7e-9d03", state: "working", status: "busy" }]);
+        for (let i = 0; i < 100 && !(await (await fetch(base + "/state")).json()).sessions.some((x: { id: string }) => x.id === "430f7f7e-9d03"); i++) await new Promise((r) => setTimeout(r, 50));
+        // wintos wake from the background session: no pane, so the CLI sends "-" and its own id.
+        expect((await post("/blocks/-/wake?session=430f7f7e-9d03", { until: "merged", pr: "https://github.com/o/r/pull/9", prompt: "carry on after the merge" })).status).toBe(200);
+        const wakesFile = join(root, ".wakes.json");
+        const wakes = JSON.parse(readFileSync(wakesFile, "utf8"));
+        for (const w of Object.values(wakes) as { due?: number }[]) w.due = Date.now();
+        writeFileSync(wakesFile, JSON.stringify(wakes));
+        listing = JSON.stringify([{ id: "430f7f7e", sessionId: "430f7f7e-9d03", state: "done", status: "idle" }]);
+        await boot();
+        for (let i = 0; i < 400 && !sent.length; i++) await new Promise((r) => setTimeout(r, 50));
+        expect(sent.join("\n")).toContain("carry on after the merge");
+        expect(Object.keys(JSON.parse(readFileSync(wakesFile, "utf8")))).toEqual([]);
+    }, 30_000);
+
+    test("the epic agent renames its sessions; a name the developer gave stays, the agent's waits as a suggestion", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post("/events", { tabId: "tab-1", blockId: "blk-w", payload: { session_id: "wk", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post("/events", { tabId: "tab-1", blockId: "blk-y", payload: { session_id: "yours", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        for (const x of ["ag", "wk", "yours"]) await post(`/sessions/${x}/epic`, { epic: id });
+        await post("/blocks/blk-w/name", { text: "drafts" });
+        await post("/sessions/yours/name", { text: "My review" });
+        expect((await post("/blocks/blk-w/rename", { to: "ag", name: "x" })).status).toBe(403);
+        expect(await (await post("/blocks/blk-a/rename", { to: "drafts", name: "Drafts mapping" })).text()).toBe("Drafts mapping");
+        expect(await (await post("/blocks/blk-a/rename", { to: "My review", name: "Review" })).text()).toContain("waits beside it as a suggestion");
+        const st = (await (await fetch(base + "/state")).json()).sessions as { id: string; name?: { text: string; suggested?: string } }[];
+        expect(st.find((x) => x.id === "wk")?.name?.text).toBe("Drafts mapping");
+        expect(st.find((x) => x.id === "yours")?.name).toMatchObject({ text: "My review", suggested: "Review" });
+    });
+
     test("the epic agent adopts a session in no epic; one in another epic stays", async () => {
         const id = await (await post("/epics", { title: "Route" })).text();
         const other = await (await post("/epics", { title: "Other" })).text();

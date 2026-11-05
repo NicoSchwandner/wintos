@@ -26,6 +26,7 @@
 #   wintos peek <session>              epic agent: a session's state, step, open question, PRs and last reply
 #   wintos adopt <session>             epic agent: a session in no epic joins yours
 #   wintos stop <session>              epic agent: stop a session you started in the background
+#   wintos rename <session> <name…>    epic agent: rename one of its sessions (one you named keeps yours)
 #   wintos start [--cwd <dir>] <step> <prompt…>
 #                                      epic agent: start a session for a roadmap step, in Claude's background service;
 #                                      it shows in the epic, linked to the step, and reports to you like the others
@@ -39,6 +40,11 @@ if [ -z "${WAVETERM_BLOCKID:-}" ] && [ -n "${HC_TERMINAL_ID:-}" ]; then
     WAVETERM_BLOCKID="$HC_TERMINAL_ID"
     WAVETERM_TABID="$(hc get --json "$HC_TERMINAL_ID" 2>/dev/null | jq -r '.labels["herdr.tab"] // empty' 2>/dev/null || true)"
     PORT="${WINTOS_HERDR_PORT:-7732}"
+fi
+# In Claude's background service there is no pane: a session its epic's agent started is found
+# by its own id instead, so its wintos commands (status, wake, ask…) work there too.
+if [ -z "${WAVETERM_BLOCKID:-}" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && [ "${CLAUDE_CODE_SESSION_KIND:-}" = bg ]; then
+    WAVETERM_BLOCKID="-"
 fi
 # The session this runs in, so a pane running two (a fork in the background) never mixes them up.
 SESSION_Q="${CLAUDE_CODE_SESSION_ID:+?session=$CLAUDE_CODE_SESSION_ID}"
@@ -183,6 +189,18 @@ unit)
     list=$(printf '%s' "$body" | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/units$SESSION_Q") ||
         die "wintosd refused it: no such unit (wintos unit <unit>… sets the list), a unit with | in it, a project without a title yet, or not reachable on port $PORT"
     echo "units: $list"
+    ;;
+rename)
+    shift
+    [ $# -ge 2 ] || die "usage: wintos rename <session> <name…>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    to="$1"
+    shift
+    out=$(jq -n --arg t "$to" --arg n "$*" '{to: $t, name: $n}' | curl -s -m 5 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/rename$SESSION_Q") || die "wintosd not reachable on port $PORT"
+    code=$(printf '%s' "$out" | tail -n 1)
+    reply=$(printf '%s' "$out" | sed '$d')
+    [ "$code" = 200 ] || die "$reply"
+    echo "renamed: $reply"
     ;;
 adopt | stop)
     verb="$1"

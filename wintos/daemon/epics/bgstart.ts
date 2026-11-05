@@ -46,7 +46,7 @@ export function mergeBg(sessions: Map<string, Session>, starts: BgStarts, agents
             continue;
         }
         if (known.state === state || known.state === "ended") continue;
-        const ask = state === "waiting" ? { ask: { kind: "answer" as const, text: "it waits for you in the background; open it to answer", by: "guess" as const } } : { ask: undefined };
+        const ask = state === "waiting" ? { ask: { kind: "answer" as const, text: "it waits for your answer", by: "guess" as const } } : { ask: undefined };
         out.set(known.id, { ...known, state, since: now, lastAt: now, ...ask });
         moved.push(known.id);
     }

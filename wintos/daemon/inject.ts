@@ -84,7 +84,7 @@ export type WorkerLine = { name: string; state: string; step?: string; status?: 
 export const AGENT_CAN = `You can, yourself, without asking first:
 - start a session for a roadmap step: \`wintos start [--cwd <repo>] <step> "<first prompt>"\` (it runs in the background and shows in the epic)
 - tell a session something: \`wintos tell <session> "<text>"\`; pass on the developer's answer: \`wintos relay\`; recommend on its question: \`wintos suggest\`
-- look closer at a session: \`wintos peek <session>\`; take a stray session in: \`wintos adopt\`; stop one you started: \`wintos stop\`
+- look closer at a session: \`wintos peek <session>\`; rename one: \`wintos rename <session> "<name>"\`; take a stray session in: \`wintos adopt\`; stop one you started: \`wintos stop\`
 - keep the roadmap: \`wintos unit\` (start, done, rename, move, remove)
 Never ask the developer to open a session, a tab or paste a brief for a roadmap step: start it.`;
 // Told once to an agent whose conversation began before these existed: what it learned then is wrong now.

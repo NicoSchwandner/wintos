@@ -903,12 +903,12 @@ await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sess
     await evalIn(t, `localStorage.setItem("wintos:sidebar-by-epic", "0"); window.dispatchEvent(new StorageEvent("storage"))`);
     await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
     const group = `document.querySelector("[data-wintos=epic-groups] [data-epic-group='${id}']")`;
-    await until("its group with its session", () => evalIn(t, `!!${group}?.querySelector("[data-row='s:e2e-grouped']")`));
+    await until("its group with its session, which says its state", () => evalIn(t, `!!${group}?.querySelector("[data-row='s:e2e-grouped'] [data-wintos=row-state][data-state]")`));
     await evalIn(t, `${group}.querySelector("[data-wintos=epic-new-step]").click()`);
     await until("the sheet on that epic", () => evalIn(t, `!!document.querySelector("[data-wintos=new-step] [data-epic='${id}'][data-on]")`));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
     await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
-    await until("back by state", () => evalIn(t, `!document.querySelector("[data-wintos=epic-groups]")`));
+    await until("back by state, where the bands say it", () => evalIn(t, `!document.querySelector("[data-wintos=epic-groups]") && !document.querySelector("[data-wintos=row-state]")`));
 });
 
 await scenario("45 · an epic's page shows its finished steps and last 8 workdays; the month's hours on the home can be corrected", async () => {

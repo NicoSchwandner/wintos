@@ -170,6 +170,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             rowKey: row.key,
             rowNo: listed.indexOf(row) + 1,
             look: own ? (epic ? lookOf(epic) : NO_EPIC) : undefined,
+            // By epic the rows lose the state bands that head them by state, so each says its own.
+            band: byEpic ? row.band : undefined,
             tabId: row.tabId,
             v,
             active: here,
@@ -344,7 +346,11 @@ type RowProps = {
     look?: Look;
     rowKey: string;
     rowNo?: number;
+    band?: Row["band"];
 };
+
+const StateChip = ({ band }: { band?: Row["band"] }) =>
+    band ? <span data-wintos="row-state" data-state={band} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.03em", color: BAND_STYLE[band].color }}>{BAND_STYLE[band].label}</span> : null;
 
 function Title({ v, renaming, onRename, style }: Pick<RowProps, "v" | "renaming" | "onRename"> & { style: React.CSSProperties }) {
     const ref = useRef<HTMLInputElement>(null);
@@ -411,6 +417,7 @@ function CardRow(p: RowProps) {
                 <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 14, fontWeight: 600, letterSpacing: "-0.005em", color: p.active ? T.emphasis : T.title, fontFamily: T.ui }} />
                 <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                     {p.active && <WalkKeys />}
+                    <StateChip band={p.band} />
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>{v.age}</span>
                     <RowClose p={p} />
                 </span>
@@ -454,6 +461,7 @@ function QuietRow(p: RowProps & { dot?: string }) {
             <Title v={v} renaming={p.renaming} onRename={p.onRename} style={{ flexGrow: 1, minWidth: 0, fontSize: 13, color: p.active ? T.emphasis : T.quietTitle, fontFamily: T.ui, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} />
             {v.view && <span data-wintos="row-view" title="shares its view with the other sessions marked so" style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 10.5, color: T.faint }}>⧉</span>}
             {p.active && <WalkKeys />}
+            <StateChip band={p.band} />
             <span title={v.reason} style={{ maxWidth: "48%", fontSize: 11.5, color: v.tone === "brick" ? T.brick : T.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.tone === "brick" ? "note unreadable" : v.reason}</span>
             <RowClose p={p} />
         </div>

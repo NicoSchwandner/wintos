@@ -16,7 +16,17 @@ export const switchTargetAtom = atom(null as string | null);
 // The sidebar's rows top to bottom: tabs, "s:<session>" rows (tabOf says whose tab), cards.
 let order: string[] = [];
 let tabOf: Record<string, string> = {};
-export const setSwitchOrder = (keys: string[], tabs: Record<string, string> = {}) => ((order = keys), (tabOf = tabs));
+// The rows that need you (Your move), and those with something to read: ⌃⇥ walks only these.
+let needing: Set<string> = new Set();
+let reading: Set<string> = new Set();
+export const setSwitchOrder = (keys: string[], tabs: Record<string, string> = {}, needs: string[] = [], read: string[] = []) => ((order = keys), (tabOf = tabs), (needing = new Set(needs)), (reading = new Set(read)));
+
+// ⌃⇥'s stops: the rows that need you, in the sidebar's order; when none does, those to read.
+// Quiet and running ones are skipped: nothing there waits on you.
+export function waitingStops(order: string[], needs: Set<string>, read: Set<string>): string[] {
+    const mine = order.filter((k) => needs.has(k));
+    return mine.length ? mine : order.filter((k) => read.has(k));
+}
 // "wake:<project>" stops: a closed project's due wake, which opening reopens on its session.
 let wakeStops: Record<string, () => void> = {};
 export const setWakeStops = (stops: Record<string, () => void>) => (wakeStops = stops);
@@ -53,11 +63,11 @@ export function stepProject(order: string[], current: string, delta: 1 | -1): st
 
 // hold: the key whose release switches, ⌘ for ⌘J/⌘K, ⌃ for ⌃⇥.
 let hold: "Meta" | "Control" = "Meta";
-// from: "here" steps from where you are (⌘J/⌘K); "top" starts each walk at the sidebar's first
-// project, or its last for ⌃⇧⇥, and walks the projects only (⌃⇥).
+// from: "here" steps from where you are (⌘J/⌘K); "top" starts each walk at the first row that needs
+// you, or the last for ⌃⇧⇥, and walks only those (⌃⇥).
 export function switchProject(delta: 1 | -1, held: boolean, from: "here" | "top" = "here"): void {
     if (!walking()) hold = from === "top" ? "Control" : "Meta";
-    const stops = from === "top" ? order.filter((id) => !id.startsWith("card:")) : order;
+    const stops = from === "top" ? waitingStops(order, needing, reading) : order;
     const at = globalStore.get(switchTargetAtom);
     let next = stepProject(stops, at ?? (from === "top" ? "" : here()), delta);
     // Starting from the top in the topmost project already: the first tap is the one after it.

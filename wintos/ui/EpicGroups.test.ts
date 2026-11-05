@@ -18,3 +18,11 @@ test("a done epic has no group; its sessions go outside", () => {
     const groups = groupByEpic([row("a", "quiet", "old")], [e("old", { done: "2026-11-01" })]);
     expect(groups.map((g) => g.epic?.id ?? "outside")).toEqual(["outside"]);
 });
+
+test("the epic agent's row is its epic's header, not a row under it nor outside; its wait ranks the epic", () => {
+    const groups = groupByEpic([row("w", "quiet", "e1"), row("ag", "needs", "e1"), row("x", "running", "e2")], [e("e2"), e("e1", { agent: "ag" })]);
+    expect(groups.map((g) => g.epic?.id)).toEqual(["e1", "e2"]);
+    expect(groups[0].rows.map((r) => r.key)).toEqual(["s:w"]);
+    expect(groups[0].agent?.key).toBe("s:ag");
+    expect(groups.some((g) => !g.epic)).toBe(false);
+});

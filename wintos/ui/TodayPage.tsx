@@ -3,7 +3,7 @@ import type { EpicTime } from "../daemon/epics/time";
 import type { Session } from "../daemon/sessions/reduce";
 import { dayTimeline, DEFAULT_WORKDAY, parseSpan, type Block } from "./dayplan";
 import { EpicAvatar } from "./EpicAvatar";
-import { lookOf, NO_EPIC, shortName } from "./epicLook";
+import { agentWorking, lookOf, NO_EPIC, shortName } from "./epicLook";
 import { Key } from "./Key";
 import { meetingsFrom } from "./meetings";
 import { openEpic } from "./menu";
@@ -99,7 +99,7 @@ function EpicCard({ epic, sessions, now }: { epic: EpicView; sessions: Session[]
     return (
         <div data-item="link" data-epic={epic.id} style={{ display: "flex", flexDirection: "column", gap: 8, padding: "11px 13px", borderRadius: 10, background: T.sidebar, border: `1px solid ${T.border}`, borderTop: `3px solid ${look.fg}` }}>
             <button type="button" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openEpic(epic.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: 0, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui }}>
-                <EpicAvatar look={look} size={28} />
+                <EpicAvatar look={look} size={28} running={agentWorking(epic, sessions)} />
                 <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                     <span style={{ fontSize: 13.5, fontWeight: 600, color: T.emphasis, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(epic)}</span>
                     <span style={{ fontSize: 12, color: waiting ? T.apricot : working ? T.moss : T.muted }}>{state}</span>

@@ -1,7 +1,7 @@
 import { memo } from "react";
 import type { Session } from "../daemon/sessions/reduce";
 import { EpicAvatar } from "./EpicAvatar";
-import { lookOf, shortName } from "./epicLook";
+import { agentWorking, lookOf, shortName } from "./epicLook";
 import { openEpic } from "./menu";
 import { shownState } from "./sessions";
 import { T } from "./tokens";
@@ -39,7 +39,7 @@ export const PinnedEpics = memo(({ epics, sessions, now, cursor }: { epics: Epic
                         onClick={() => openEpic(e.id)}
                         style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 9, background: `linear-gradient(90deg, ${look.bg} 0%, ${T.card} 80%)`, border: `1px solid ${cursor === `epic:${e.id}` ? T.apricot : T.border}`, borderLeft: `3px solid ${look.fg}`, cursor: "pointer", textAlign: "left", fontFamily: T.ui, minWidth: 0 }}
                     >
-                        <EpicAvatar look={look} size={26} />
+                        <EpicAvatar look={look} size={26} running={agentWorking(e, sessions)} />
                         <span style={{ display: "flex", flexDirection: "column", minWidth: 0, flexGrow: 1 }}>
                             <span style={{ fontSize: 13, fontWeight: 600, color: T.emphasis, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(e)}</span>
                             <span style={{ fontSize: 11.5, color: line.color, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.text}</span>

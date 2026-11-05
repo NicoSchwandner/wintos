@@ -51,7 +51,9 @@ Start after the reasons queue. Look at `daemon/inject.ts` (what a session is tol
 
 - **Closed-project wakes have no e2e check.** No e2e step can create a due wake on a closed
   project, so the To read placement is covered by `ui/wakes.test.ts` only.
-- **e2e scenarios 2 and 3 load live GitHub pages** and fail on the dev instance.
+- **e2e scenarios 2, 3 and 30 need live GitHub** (pages, or real PR rows in the PRs tab) and fail
+  on the dev instance.
+- **Scenario 37 depends on order:** it passes alone and failed once in a 20–50 run.
 - **A view opened during an e2e run has no size** while the dev window is covered, and
   `Page.captureScreenshot` hangs then. Scenarios that check layout work in an existing view (48
   uses T2).

@@ -73,3 +73,31 @@
 .block:has([data-wintos="session-header"][data-epic-color="blue"]) { --w-pane-accent: var(--w-epic-blue); }
 .block:has([data-wintos="session-header"][data-epic-color="stone"]) .block-mask { border-color: var(--w-epic-stone-ring) !important; }
 .block:has([data-wintos="session-header"][data-epic-color="stone"]) { --w-pane-accent: var(--w-epic-stone); }
+
+/* An epic whose agent is at work: a short arc turning around its face. Without motion, a still ring. */
+.w-agent-run {
+    position: relative;
+}
+.w-agent-run::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    border-top-color: var(--w-run);
+    border-right-color: var(--w-run);
+    animation: w-agent-orbit 1.4s linear infinite;
+    pointer-events: none;
+}
+@keyframes w-agent-orbit {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .w-agent-run::after {
+        animation: none;
+        border-color: var(--w-run);
+        opacity: 0.6;
+    }
+}

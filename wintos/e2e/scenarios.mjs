@@ -661,7 +661,7 @@ await scenario("27 · an unwritten reflection nudges on the Today card; ⌥⌘Y 
     await until("the page gone", async () => !(await evalIn(t, `!!document.querySelector("[data-wintos=reflect]")`)));
 });
 
-await scenario("28 · ⌃⇥ held walks to the sidebar's top project, and only the ⌃ release switches", async () => {
+await scenario("28 · ⌃⇥ held walks to the first session that needs you, past quiet ones, and only the ⌃ release switches", async () => {
     const active = () => sql(`select data->>'activetabid' from db_workspace limit 1`);
     let t = await toProject();
     const from = active();
@@ -671,8 +671,22 @@ await scenario("28 · ⌃⇥ held walks to the sidebar's top project, and only t
     await until("a new project in front", () => active() !== from);
     t = await visible();
     const here = active();
-    const top = await until("the sidebar's top project", () => evalIn(t, `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-tabid]")].map((e) => e.dataset.tabid).filter((id) => !id.includes(":"))[0]`));
-    if (top === here) throw new Error("the new project is the sidebar's top: nothing to walk to");
+    // A session in another view asks you something, so Your move has a row outside this view.
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const other = sql(`select oid from db_tab where oid != '${here}' and json_array_length(data->'blockids') > 0 limit 1`);
+    const pane = sql(`select json_extract(data, '$.blockids[0]') from db_tab where oid='${other}'`);
+    await api("/events", { tabId: other, blockId: pane, payload: { session_id: "e2e-ct", hook_event_name: "UserPromptSubmit", prompt: "e2e" } });
+    await api(`/blocks/${pane}/ask`, { kind: "decide", text: "e2e: which one?" });
+    await api("/events", { tabId: other, blockId: pane, payload: { session_id: "e2e-ct", hook_event_name: "Stop" } });
+    // Read from a view that has a size: one opened during the run may not draw while the window is covered.
+    const top = await until("the first row in Your move outside this view", async () => {
+        for (const r of await renderers()) {
+            if (!(await evalIn(r, "innerWidth > 0"))) continue;
+            const first = await evalIn(r, `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-band-group=needs] [data-tabid]")].map((e) => e.dataset.tabid).filter((id) => !id.includes(":") && id !== "${here}")[0] ?? false`);
+            if (first) return first;
+        }
+        return false;
+    });
     await focusOut(t);
     const tab = { key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, modifiers: MODS.ctrl };
     await cdp(t, "Input.dispatchKeyEvent", { type: "rawKeyDown", ...tab });
@@ -680,7 +694,7 @@ await scenario("28 · ⌃⇥ held walks to the sidebar's top project, and only t
     await sleep(800);
     if (active() !== here) throw new Error("⌃⇥ switched before ⌃ was released");
     await cdp(t, "Input.dispatchKeyEvent", { type: "keyUp", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17 });
-    await until("on the sidebar's top project", () => active() === top);
+    await until("on the first session that needs you", () => active() === top);
 });
 
 await scenario("29 · the open project's title heads its session strip", async () => {
@@ -1054,6 +1068,25 @@ await scenario("49 · the epic agent relays your words to a session: refused unl
     const ok = await api("/blocks/e2e-relay-ag/relay", { to: "E2E cutover", text: "cut over group A first", note: "re its cutover question" });
     if (ok.status !== 200) throw new Error(`relay refused: ${await ok.text()}`);
     await until("typed in by the session's view and off the queue", async () => !(await st()).relays?.["e2e-relay-wk"], 30000);
+});
+
+await scenario("50 · by epic, the agent is its epic's header: no row of its own, a turning ring while it works", async () => {
+    const t = await visible();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const id = await (await api("/epics", { title: "E2E ring" })).text();
+    const pane = sql(`select json_extract(data, '$.blockids[0]') from db_tab where oid='${tabId}'`);
+    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-ring-ag", hook_event_name: "UserPromptSubmit", prompt: "e2e" } });
+    await api(`/epics/${id}/agent`, { sessionId: "e2e-ring-ag" });
+    await api("/sessions/e2e-ring-ag/epic", { epic: id });
+    await evalIn(t, `localStorage.setItem("wintos:sidebar-by-epic", "0"); window.dispatchEvent(new StorageEvent("storage"))`);
+    await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
+    const group = `document.querySelector("[data-epic-group='${id}']")`;
+    await until("its group, the agent in the header, turning", () => evalIn(t, `!!${group}?.querySelector("[data-row='epic:${id}'] [data-agent-running]") && !${group}.querySelector("[data-row='s:e2e-ring-ag']") && !document.querySelector("[data-epic-group=''] [data-row='s:e2e-ring-ag']")`));
+    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-ring-ag", hook_event_name: "Stop" } });
+    await until("still once it stops", () => evalIn(t, `!${group}?.querySelector("[data-agent-running]")`));
+    await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
+    await until("back by state", () => evalIn(t, `!document.querySelector("[data-wintos=epic-groups]")`));
 });
 
 await scenario("clean-up · the panes this run opened are closed", async () => {

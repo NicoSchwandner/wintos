@@ -38,3 +38,7 @@ export function lookOf(e: Pick<Epic, "id" | "glyph" | "color" | "lane">): Look {
 
 // What the sidebar and the pane frame call it: the short name, else the title.
 export const shortName = (e: Pick<Epic, "title" | "short">) => e.short ?? e.title;
+
+// Its agent is at work now: its face shows a turning ring (EpicAvatar's running).
+export const agentWorking = (epic: { agent?: string } | undefined, sessions: { id: string; state: string }[] | undefined) =>
+    !!epic?.agent && !!sessions?.some((s) => s.id === epic.agent && s.state === "working");

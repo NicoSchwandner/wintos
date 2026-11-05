@@ -157,13 +157,14 @@ describe("a walk from a page ends on the main process's word", () => {
     });
 });
 
-describe("⌃⇥: the projects from the top of the sidebar, switching on release", () => {
+describe("⌃⇥: the rows that need you, from the top of the sidebar, switching on release", () => {
     const setup = () => {
         vi.stubGlobal("window", new EventTarget());
         vi.stubGlobal("document", new EventTarget());
         globalStore.set(switchTargetAtom, null);
         vi.mocked(enterProject).mockClear();
-        setSwitchOrder(["card:today", "card:prs", "wake:x", "a", "b"]);
+        // q is quiet and r only has something to read: ⌃⇥ skips both while anything needs you.
+        setSwitchOrder(["card:today", "card:prs", "wake:x", "a", "q", "b", "r"], {}, ["wake:x", "a", "b"], ["r"]);
         here.tab = "b";
     };
     const release = (key: string) => window.dispatchEvent(Object.assign(new Event("keyup"), { key }));
@@ -190,6 +191,23 @@ describe("⌃⇥: the projects from the top of the sidebar, switching on release
         here.tab = "b";
         switchProject(-1, true, "top");
         expect(globalStore.get(switchTargetAtom)).toBe("a");
+    });
+
+    test("quiet and running rows are skipped; with nothing needing you it walks what there is to read, else stays", () => {
+        setup();
+        here.tab = "x";
+        switchProject(1, true, "top");
+        switchProject(1, true, "top");
+        switchProject(1, true, "top");
+        expect(globalStore.get(switchTargetAtom)).toBe("b");
+        globalStore.set(switchTargetAtom, null);
+        setSwitchOrder(["a", "q", "r"], {}, [], ["r"]);
+        switchProject(1, true, "top");
+        expect(globalStore.get(switchTargetAtom)).toBe("r");
+        globalStore.set(switchTargetAtom, null);
+        setSwitchOrder(["a", "q"], {}, [], []);
+        switchProject(1, true, "top");
+        expect(globalStore.get(switchTargetAtom)).toBeNull();
     });
 
     test("⌃⇧⇥ starts from the bottom, and the cards are no stops", () => {

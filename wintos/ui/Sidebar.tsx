@@ -82,6 +82,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEpicReports(raw?.epicReports, raw?.sessions, activeTabId, useNow(15_000), typeof document !== "undefined" && document.hasFocus() ? lookingAt : undefined, raw?.relays, raw?.epics);
     useSchemeNotices(raw?.sessions, activeTabId);
     const wokeClosed = raw ? closedWakes(raw.wakes ?? {}, raw.shelf ?? {}, raw.projects, tabIds, (u) => prRef(raw, u)) : [];
+    const wakeNeeds = wokeClosed.filter((w) => !w.news);
+    const wakeNews = wokeClosed.filter((w) => w.news);
     useFreshPaneLists(raw?.sessions, tabs);
     const state = raw && { ...raw, sessions: liveSessions(raw.sessions, Object.fromEntries(tabIds.map((id) => [id, tabs[id]?.blockids]))) };
     const now = useNow();
@@ -121,7 +123,11 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
 
     useEffect(registerWintosMenu, []);
 
-    useEffect(() => void setSwitchOrder(switchOrder, tabOfRow), [switchOrder.join(",")]);
+    // By epic, an agent's row is its epic's header: ⌃⇥ stops there when the agent needs you.
+    const asStop = Object.fromEntries(groups.flatMap((g) => (g.agent && g.epic ? [[g.agent.key, `epic:${g.epic.id}`]] : [])));
+    const needKeys = model ? [...wakeNeeds.map((w) => `wake:${w.projectId}`), ...model.needs.map((r) => asStop[r.key] ?? r.key)] : [];
+    const readKeys = model ? [...wakeNews.map((w) => `wake:${w.projectId}`), ...model.read.map((r) => asStop[r.key] ?? r.key)] : [];
+    useEffect(() => void setSwitchOrder(switchOrder, tabOfRow, needKeys, readKeys), [switchOrder.join(","), needKeys.join(","), readKeys.join(",")]);
     const reopenWoke = (w: ClosedWake) => reopenProject(w.projectId, [resumePane(w.script)]);
     useEffect(() => void setWakeStops(Object.fromEntries(wokeClosed.map((w) => [`wake:${w.projectId}`, () => reopenWoke(w)]))), [wokeClosed.map((w) => w.sessionId).join(",")]);
     useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-row="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);
@@ -129,8 +135,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEffect(() => {
         if (state) setLatestSessions(state.sessions, model?.targets ?? {});
     }, [state, tabIds.join(",")]);
-    const wakeNeeds = wokeClosed.filter((w) => !w.news);
-    const wakeNews = wokeClosed.filter((w) => w.news);
     const yourMove = model ? model.needs.length + wakeNeeds.length : 0;
     useEffect(() => void globalStore.set(yourMoveAtom, yourMove), [yourMove]);
 

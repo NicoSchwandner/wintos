@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { COLORS, GLYPHS, lookOf, shortName } from "./epicLook";
+import { agentWorking, COLORS, GLYPHS, lookOf, shortName } from "./epicLook";
 
 describe("lookOf", () => {
     test("the glyph and colour epic.md names", () => expect(lookOf({ id: "a", glyph: "route", color: "teal" })).toMatchObject({ glyph: "route", d: GLYPHS.route, fg: "var(--w-epic-teal)", bg: "var(--w-epic-teal-bg)" }));
@@ -22,4 +22,11 @@ describe("lookOf", () => {
 test("shortName: the short name, else the title", () => {
     expect(shortName({ title: "Route all incoming documents", short: "Route DO" })).toBe("Route DO");
     expect(shortName({ title: "Reviews" })).toBe("Reviews");
+});
+
+test("an epic's agent is working only while its session works", () => {
+    const sessions = [{ id: "ag", state: "working" }, { id: "w", state: "working" }];
+    expect(agentWorking({ agent: "ag" }, sessions)).toBe(true);
+    expect(agentWorking({ agent: "ag" }, [{ id: "ag", state: "waiting" }])).toBe(false);
+    expect(agentWorking({}, sessions)).toBe(false);
 });

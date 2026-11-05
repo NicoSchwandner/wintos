@@ -2,7 +2,7 @@ import { useAtomValue } from "jotai";
 import { memo, useEffect, useRef, useState } from "react";
 import type { EpicTime } from "../daemon/epics/time";
 import { EpicAvatar } from "./EpicAvatar";
-import { lookOf, shortName } from "./epicLook";
+import { agentWorking, lookOf, shortName } from "./epicLook";
 import { globalStore } from "@/app/store/jotaiStore";
 import { editMine, focusSession } from "./focus";
 import { openEpicPage, runAction, runKey } from "./menu";
@@ -141,7 +141,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
             style={column ? { width: 360, flexShrink: 0, display: "flex", flexDirection: "column", gap: 12, padding: "10px 12px", borderLeft: `1px solid ${T.border}`, background: T.ground, outline: "none", fontFamily: T.ui, minHeight: 0, overflowY: "auto" } : { flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 18px", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0, overflowY: "auto" }}
         >
             <div style={{ display: "flex", alignItems: "center", gap: column ? 10 : 16, flexWrap: "wrap", padding: column ? "8px 10px" : "14px 16px", borderRadius: 12, background: `linear-gradient(90deg, ${look.bg} 0%, transparent 70%)`, borderTop: `3px solid ${look.fg}` }}>
-                <EpicAvatar look={look} size={column ? 30 : 56} />
+                <EpicAvatar look={look} size={column ? 30 : 56} running={agentWorking(epic, state?.sessions)} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, flexGrow: 1, minWidth: 0 }}>
                     <h1 style={{ margin: 0, fontFamily: T.display, fontSize: column ? 18 : 30, fontWeight: 400, lineHeight: 1.1, color: T.emphasis }}>{column ? shortName(epic) : epic.title}</h1>
                     <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>

@@ -2,7 +2,7 @@ import { getLayoutModelForStaticTab } from "@/layout/index";
 import { useAtomValue } from "jotai";
 import { memo } from "react";
 import { EpicAvatar } from "./EpicAvatar";
-import { lookOf, NO_EPIC } from "./epicLook";
+import { agentWorking, lookOf, NO_EPIC } from "./epicLook";
 import { Key } from "./Key";
 import { openEpic, runKey } from "./menu";
 import { T } from "./tokens";
@@ -24,7 +24,7 @@ export const EpicStrip = memo(({ tabId }: { tabId: string }) => {
     // The right padding keeps clear of the notes rail's toggle, which floats over this corner.
     return (
         <div data-wintos="epic-strip" data-epic={epic?.id ?? ""} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "8px 120px 8px 14px", background: `linear-gradient(90deg, ${look.bg} 0%, transparent 65%)`, borderTop: `3px solid ${epic ? look.fg : "transparent"}`, borderBottom: `1px solid ${T.border}`, fontFamily: T.ui, minWidth: 0 }}>
-            <EpicAvatar look={look} size={32} />
+            <EpicAvatar look={look} size={32} running={agentWorking(epic, state?.sessions)} />
             <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0, flexGrow: 1 }}>
                 {epic ? (
                     <button type="button" data-key="⇧⌥⌘E" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openEpic(epic.id)} title="the epic's page (⇧⌥⌘E)" style={{ alignSelf: "flex-start", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10.5, letterSpacing: "0.08em", textTransform: "uppercase", color: look.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>

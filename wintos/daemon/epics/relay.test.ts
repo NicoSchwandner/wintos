@@ -11,6 +11,9 @@ describe("findWorker", () => {
         expect(findWorker(sessions, "e", "agent", "w2")?.id).toBe("w2");
         expect(findWorker(sessions, "e", "agent", "Cutover", { Cutover: ["w2"] })?.id).toBe("w2");
     });
+    test("in no epic: the sessions without one", () => {
+        expect(findWorker([...sessions, s("loose", { epic: undefined, label: "loose end" })], undefined, "agent", "loose")?.id).toBe("loose");
+    });
     test("never the agent itself, an ended session, another epic's, or a two-letter guess", () => {
         expect(findWorker(sessions, "e", "agent", "backstage agent")).toBeUndefined();
         expect(findWorker(sessions, "e", "agent", "old one")).toBeUndefined();

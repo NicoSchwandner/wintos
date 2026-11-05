@@ -10,7 +10,8 @@ export type Relays = Record<string, Relay[]>;
 
 // The session meant: by its name, its id's start, or a roadmap step it is linked to; exact first,
 // then the first that starts with it. Only the epic's own open sessions, never the agent itself.
-export function findWorker(sessions: Session[], epic: string, agent: string, q: string, links: Links = {}): Session | undefined {
+// epic undefined: the sessions in no epic (wintos adopt takes one of them in).
+export function findWorker(sessions: Session[], epic: string | undefined, agent: string, q: string, links: Links = {}): Session | undefined {
     const want = q.trim().toLowerCase();
     const open = sessions.filter((s) => s.epic === epic && s.id !== agent && s.state !== "ended");
     const names = (s: Session) => [s.name?.text, s.label, s.id, ...Object.entries(links).filter(([, ids]) => ids.includes(s.id)).map(([step]) => step)].filter((x): x is string => !!x).map((x) => x.toLowerCase());

@@ -140,6 +140,25 @@ describe("wintosd API", () => {
         expect((await (await fetch(base + "/state")).json()).epics[0].links).toEqual({ "Cutover per group": [prompt.session_id] });
     });
 
+    test("the epic agent adopts a session in no epic; one in another epic stays", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        const other = await (await post("/epics", { title: "Other" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post("/events", { tabId: "tab-2", blockId: "blk-l", payload: { session_id: "loose", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post("/events", { tabId: "tab-2", blockId: "blk-o", payload: { session_id: "elsewhere", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/ag/epic", { epic: id });
+        await post("/sessions/loose/name", { text: "Drafts cleanup" });
+        await post("/sessions/elsewhere/name", { text: "Drafts other" });
+        await post("/sessions/elsewhere/epic", { epic: other });
+        expect((await post("/blocks/blk-l/adopt", { to: "Drafts" })).status).toBe(403);
+        expect(await (await post("/blocks/blk-a/adopt", { to: "Drafts" })).text()).toBe("Drafts cleanup");
+        expect((await post("/blocks/blk-a/adopt", { to: "Drafts other" })).status).toBe(404);
+        const st = (await (await fetch(base + "/state")).json()).sessions as { id: string; epic?: string }[];
+        expect(st.find((x) => x.id === "loose")?.epic).toBe(id);
+        expect(st.find((x) => x.id === "elsewhere")?.epic).toBe(other);
+    });
+
     test("the epic agent peeks at a session: its question, PRs and last reply from its transcript", async () => {
         const id = await (await post("/epics", { title: "Route" })).text();
         const tp = join(root, "wk.jsonl");
@@ -483,7 +502,8 @@ describe("wintosd API", () => {
         let listing = "[]";
         srv.close();
         const srvBgSend = { fn: async (_id: string, _cwd: string | undefined, _p: string) => false };
-        srv = await startServer({ root, port: 0, token: "t0ken", listAgents: async () => listing, bgSend: (id, cwd, p) => srvBgSend.fn(id, cwd, p) });
+        const stopped: string[] = [];
+        srv = await startServer({ root, port: 0, token: "t0ken", listAgents: async () => listing, bgSend: (id, cwd, p) => srvBgSend.fn(id, cwd, p), bgStop: async (bg) => (stopped.push(bg), true) });
         base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
         const id = await (await post("/epics", { title: "Route", short: "Route" })).text();
         await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
@@ -512,7 +532,12 @@ describe("wintosd API", () => {
         expect((await post("/blocks/blk-a/tell", { to: "Route: Cut", text: "the review thread first" })).status).toBe(200);
         for (let i = 0; i < 400 && !sent.length; i++) await new Promise((r) => setTimeout(r, 50));
         expect(sent).toEqual([{ id: "430f7f7e-9d03", cwd: "/w/core", prompt: "[The Route agent, not the developer] the review thread first" }]);
-        for (let n = 0; n < 2; n++) await post("/blocks/blk-a/start", { step: "Cutover", bgId: `00000${n}aa` });
+        // Stopped by the agent: claude stop, and it is over in WintOS at once; a pane session is not its to stop.
+        expect((await post("/blocks/blk-a/stop", { to: "wk" })).status).toBe(404);
+        expect(await (await post("/blocks/blk-a/stop", { to: "Route: Cut" })).text()).toBe("Route: Cutover");
+        expect(stopped).toEqual(["430f7f7e"]);
+        expect((await (await fetch(base + "/state")).json()).sessions.find((x: { id: string }) => x.id === "430f7f7e-9d03")?.state).toBe("ended");
+        for (let n = 0; n < 3; n++) await post("/blocks/blk-a/start", { step: "Cutover", bgId: `00000${n}aa` });
         expect((await post("/blocks/blk-a/start", { step: "Cutover", check: true })).status).toBe(409);
     }, 30_000);
 

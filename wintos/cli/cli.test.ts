@@ -452,6 +452,9 @@ describe("wintos lane and step", () => {
         expect(d.seen[2]).toEqual({ url: "/blocks/blk-1/tell?session=s-1", body: { to: "#14715", text: "pick up the thread" } });
         expect((await cli(["peek", "#14715"], d.port)).trim()).toBe("#14715 todo review");
         expect(d.seen[3]).toEqual({ url: "/blocks/blk-1/peek?session=s-1", body: { to: "#14715" } });
+        expect((await cli(["adopt", "#14715"], d.port)).trim()).toBe("#14715 todo review is in your epic now");
+        expect((await cli(["stop", "#14715"], d.port)).trim()).toBe("stopped #14715 todo review");
+        expect(d.seen.slice(4).map((x: { url: string }) => x.url)).toEqual(["/blocks/blk-1/adopt?session=s-1", "/blocks/blk-1/stop?session=s-1"]);
     });
     test("unit sets the project's units, starts one, ticks one; it prints the list back", async () => {
         const d = await fakeDaemon("[>] ABC-42 phase 1 | [ ] ABC-43");

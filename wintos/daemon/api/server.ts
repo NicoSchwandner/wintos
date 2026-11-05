@@ -73,7 +73,7 @@ const isRoadmapOp = (o: unknown): o is RoadmapOp => {
 };
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined> }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined>; bgStop?: (bgId: string) => Promise<boolean> }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // Beside the projects in main.ts; a hidden folder in them by default, which the project store skips.
     const epics = new EpicStore(opts.epicsRoot ?? join(opts.root, ".epics"));
@@ -232,6 +232,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const bgSend = opts.bgSend ?? ((sessionId: string, cwd: string | undefined, prompt: string) => new Promise<boolean>((resolve) => execFile("/bin/zsh", ["-lc", 'claude --bg --resume "$0" "$1"', sessionId, prompt], { cwd, timeout: 30_000 }, (err) => resolve(!err))));
     // A background session's recent output, for wintos peek: it has no transcript WintOS heard of.
     const bgLogs = opts.bgLogs ?? ((bgId: string) => new Promise<string | undefined>((resolve) => execFile("/bin/zsh", ["-lc", 'claude logs "$0" | tail -n 60', bgId], { timeout: 30_000, maxBuffer: 1 << 20 }, (err, out) => resolve(err ? undefined : String(out).trim() || undefined))));
+    const bgStop = opts.bgStop ?? ((bgId: string) => new Promise<boolean>((resolve) => execFile("/bin/zsh", ["-lc", 'claude stop "$0"', bgId], { timeout: 30_000 }, (err) => resolve(!err))));
     async function deliverToBackground(listed: BgAgent[]) {
         for (const [to, list] of Object.entries(relays)) {
             const s = sessions.get(to);
@@ -1318,6 +1319,34 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (to.bgId) setTimeout(() => void pollBg(), 2_000);
                 broadcast();
                 return send(res, 200, to.name?.text ?? to.label ?? to.id);
+            }
+            // `wintos adopt <session>`: a session in no epic joins the agent's (one in another epic stays
+            // there: moving it is the developer's call). `wintos stop <session>`: one the agent started
+            // in the background stops.
+            const agentAct = /^\/blocks\/([^/]+)\/(adopt|stop)$/.exec(url.pathname);
+            if (req.method === "POST" && agentAct) {
+                const b = (await body(req)) as { to?: unknown };
+                const live = liveIn(sessions, decodeURIComponent(agentAct[1]), sid);
+                const epic = live?.epic ? epics.byId(live.epic) : undefined;
+                if (!live || !epic || epic.agent !== live.id) return send(res, 403, "only an epic's agent does this");
+                if (!isSafe(b?.to)) return send(res, 400, "need to, a session");
+                if (agentAct[2] === "adopt") {
+                    const to = findWorker([...sessions.values()], undefined, live.id, b.to);
+                    if (!to) return send(res, 404, "no open session in no epic matches; one in another epic stays there, the developer moves it");
+                    sessions = setEpic(sessions, to.id, epic.id);
+                    saveSessions("wintos adopt");
+                    logEvent("adopt", { agent: live.id, epic: epic.id, to: to.id });
+                    broadcast();
+                    return send(res, 200, to.name?.text ?? to.label ?? to.id);
+                }
+                const to = findWorker([...sessions.values()], epic.id, live.id, b.to, epic.links);
+                if (!to?.bgId) return send(res, 404, "no session you started in the background matches; the developer closes the others");
+                if (!(await bgStop(to.bgId))) return send(res, 502, "claude stop failed");
+                sessions = new Map(sessions).set(to.id, { ...to, state: "ended", since: Date.now(), lastAt: Date.now() });
+                saveSessions("wintos stop");
+                logEvent("bg-stop", { agent: live.id, to: to.id });
+                broadcast();
+                return send(res, 200, to.name?.text ?? to.id);
             }
             // `wintos peek <session>`: one of the epic's sessions beyond its digest line.
             const peek = /^\/blocks\/([^/]+)\/peek$/.exec(url.pathname);

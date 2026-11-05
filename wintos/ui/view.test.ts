@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
+import type { Session } from "../daemon/sessions/reduce";
 import type { Row } from "../daemon/ranking/rank";
-import { backgroundSessions, reopenFor, repoLabel, inboxKind, inboxTabId, isInboxTab, prProjectLists, prProjects, projectSessions, projectTabIds, projectPrList, projectTouched, relTime, sessionHeader, sessionTouched, urgentPr, type WintosState } from "./view";
+import { backgroundSessions, reopenFor, repoLabel, inboxKind, inboxTabId, isInboxTab, prProjectLists, prProjects, projectSessions, projectTabIds, projectPrList, projectTouched, relTime, sessionHeader, sessionTouched, stepOf, urgentPr, type WintosState } from "./view";
 
 const NOW = 1_000_000_000;
 const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ key: extra.tabId ?? "t", tabId: "t", band, lastAt: NOW - 60_000, sessions: [], ...extra });
@@ -250,4 +251,11 @@ test("the project's background sessions are listed apart, and never as a pane's"
     const st = { now: 0, projects: [], sessions: [{ id: "fork", tabId: "t", blockId: "b", state: "waiting", since: 0, lastAt: 0, background: true }, { id: "pane", tabId: "t", blockId: "b", state: "idle", since: 0, lastAt: 0 }] } as unknown as WintosState;
     expect(backgroundSessions(st, "t").map((s) => s.id)).toEqual(["fork"]);
     expect(sessionHeader(st, "b")?.session.id).toBe("pane");
+});
+
+test("a session's step: the one it is linked to, else the first under way", () => {
+    const state = { sessions: [], projects: [], now: 0, epics: [{ id: "e", title: "E", dir: "", mtime: 0, mineMtime: 0, steps: [{ name: "Pilot", state: "current" }, { name: "Hand-off", state: "current" }], links: { "Hand-off": ["s2"] } }] } as unknown as WintosState;
+    const s = (id: string) => ({ id, epic: "e", tabId: "t" }) as Session;
+    expect(stepOf(state, s("s2"))).toBe(1);
+    expect(stepOf(state, s("s9"))).toBe(0);
 });

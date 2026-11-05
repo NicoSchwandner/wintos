@@ -208,6 +208,14 @@ export function roadmapOf(state: WintosState, s: Session): { units: Unit[]; epic
     return epic ? { units: epic.steps, epic } : { units: state.projects.find((p) => p.id === s.tabId)?.units ?? [] };
 }
 
+// The step this session works: the one it is linked to, else, with several under way, the first.
+export function stepOf(state: WintosState, s: Session): number {
+    const { units, epic } = roadmapOf(state, s);
+    const linked = epic ? Object.entries(epic.links ?? {}).find(([, ids]) => ids.includes(s.id))?.[0] : undefined;
+    const at = linked ? units.findIndex((u) => u.name === linked) : -1;
+    return at >= 0 ? at : units.findIndex((u) => u.state === "current");
+}
+
 export const sessionName = (s: Session) => s.name?.text ?? s.label ?? "session";
 
 // A project's sessions, as its notes list them and ⌥⌘1–9 counts them: the live ones in pane

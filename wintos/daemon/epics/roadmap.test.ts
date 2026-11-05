@@ -43,7 +43,8 @@ describe("editRoadmap", () => {
 describe("links", () => {
     test("a session starting a step makes it current and is linked to it, once", () => {
         const r = linkStep(road, "Backfill", "s2")!;
-        expect(r.steps.map((x) => x.state)).toEqual(["done", "todo", "current"]);
+        expect(r.steps.map((x) => x.state)).toEqual(["done", "current", "current"]); // Cutover stays under way
+        expect(r.links.Backfill).toEqual(["s2"]);
         expect(linkStep(r, "Backfill", "s2")!.links.Backfill).toEqual(["s2"]);
         expect(linkStep(road, "Nope", "s2")).toBeUndefined();
     });

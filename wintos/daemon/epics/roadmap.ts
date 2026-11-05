@@ -1,4 +1,4 @@
-import { startUnit, UNIT_MAX, UNITS_MAX, type Unit } from "../projects/units";
+import { startUnit, UNIT_MAX, UNITS_MAX, unitIndex, type Unit } from "../projects/units";
 
 // The roadmap as you edit it on the epic page, and which sessions worked each step. A step is known
 // by its name, so the links follow a rename and go with a removed step. Each edit returns a line
@@ -54,7 +54,7 @@ export function editRoadmap({ steps, links }: Roadmap, op: RoadmapOp): (Roadmap 
 export function linkStep({ steps, links }: Roadmap, name: string, sessionId: string): Roadmap | undefined {
     const next = startUnit(steps, name);
     if (!next) return undefined;
-    const unit = next.find((u) => u.state === "current")!.name;
+    const unit = next[unitIndex(next, name)].name;
     return { steps: next, links: { ...links, [unit]: [...(links[unit] ?? []).filter((x) => x !== sessionId), sessionId].slice(-LINKS_MAX) } };
 }
 

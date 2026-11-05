@@ -25,11 +25,13 @@ function find(units: Unit[], q: string): number {
     return exact >= 0 ? exact : units.findIndex((x) => x.name.toLowerCase().startsWith(want));
 }
 
+// Several can be under way at once (a pilot and the hand-off after it): starting one leaves the others.
 export function startUnit(units: Unit[], q: string): Unit[] | undefined {
     const at = find(units, q);
     if (at < 0) return undefined;
-    return units.map((x, i) => (i === at ? { ...x, state: "current" } : x.state === "current" ? { ...x, state: "todo" } : x));
+    return units.map((x, i) => (i === at ? { ...x, state: "current" } : x));
 }
+export const unitIndex = (units: Unit[], q: string) => find(units, q);
 
 export function doneUnit(units: Unit[], q: string): Unit[] | undefined {
     const at = find(units, q);

@@ -17,7 +17,7 @@ import { WhereWasI } from "./WhereWasI";
 import { EpicAvatar } from "./EpicAvatar";
 import { EpicBody } from "./EpicPage";
 import { lookOf, NO_EPIC, shortName } from "./epicLook";
-import { prRef, relTime, roadmapOf, sessionHeader, sessionName, urgentPr, type PrChip, type PrStatus } from "./view";
+import { prRef, relTime, roadmapOf, sessionHeader, stepOf, sessionName, urgentPr, type PrChip, type PrStatus } from "./view";
 
 
 // Above a Claude pane: its state, what it works on, its own status line and its PRs' verdicts.
@@ -36,7 +36,7 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     const waiting = focused && state ? decisions(state, now, () => "") : [];
     const more = waiting.some((d) => d.sessionId === s.id) ? waiting.length - 1 : 0;
     const units = state ? roadmapOf(state, s).units : [];
-    const at = units.findIndex((u) => u.state === "current");
+    const at = state ? stepOf(state, s) : -1;
     const unitAt = at >= 0 ? { i: at + 1, n: units.length, name: units[at].name } : undefined;
     const epic = s.epic ? state?.epics?.find((e) => e.id === s.epic) : undefined;
     const look = epic ? lookOf(epic) : NO_EPIC;
@@ -212,7 +212,7 @@ export const SessionSteps = memo(({ blockId }: { blockId: string }) => {
     // The epic agent's pane is the epic's view: the epic page beside it, not just the roadmap.
     if (s && epic?.agent === s.id) return <EpicBody id={epic.id} column />;
     if (!lane && !units.length) return null;
-    const current = units.findIndex((u) => u.state === "current");
+    const current = state && s ? stepOf(state, s) : -1;
     return (
         <div className="wintos-steps-side" data-wintos="session-steps" style={{ width: 210, flexShrink: 0, borderLeft: `1px solid ${T.border}`, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", fontFamily: T.ui }}>
             {units.length > 0 ? (

@@ -17,9 +17,10 @@ export function deliverable(wakes: Wakes, sessions: Session[], shelf: Shelved[],
     });
 }
 
-// Due wakes of projects whose tab is closed: nothing runs; they wait in Your move, and opening
+// Due wakes of projects whose tab is closed: nothing runs; they wait in the sidebar, and opening
 // one reopens its project on the waking session, which is then typed into as usual.
-export type ClosedWake = { projectId: string; title: string; sessionId: string; script: string; due: number; line: string };
+// news: a merge or a release asks nothing of you, so it waits in To read rather than Your move.
+export type ClosedWake = { projectId: string; title: string; sessionId: string; script: string; due: number; line: string; news: boolean };
 export function closedWakes(wakes: Wakes, shelf: Record<string, Shelved[]>, projects: { id?: string; title?: string }[], tabIds: string[], ref: (url: string) => string): ClosedWake[] {
     const due = Object.values(wakes).filter((w) => w.due);
     // One row per session, for its first due wake: opening it delivers the rest in turn.
@@ -27,7 +28,7 @@ export function closedWakes(wakes: Wakes, shelf: Record<string, Shelved[]>, proj
         const projectId = Object.keys(shelf).find((id) => !tabIds.includes(id) && shelf[id].some((x) => x.sessionId === w.sessionId));
         const item = projectId && shelf[projectId].find((x) => x.sessionId === w.sessionId);
         if (!projectId || !item) return [];
-        return [{ projectId, title: projects.find((p) => p.id === projectId)?.title ?? "Closed project", sessionId: w.sessionId, script: item.script, due: w.due, line: `${ref(w.pr)} ${WOKE[w.until]} · opening it resumes the session` }];
+        return [{ projectId, title: projects.find((p) => p.id === projectId)?.title ?? "Closed project", sessionId: w.sessionId, script: item.script, due: w.due, line: `${ref(w.pr)} ${WOKE[w.until]} · opening it resumes the session`, news: w.until === "merged" || w.until === "released" }];
     });
 }
 export const WOKE = { green: "went green", merged: "was merged", released: "was released", rereview: "asks for your re-review", comments: "got review feedback" } as const;

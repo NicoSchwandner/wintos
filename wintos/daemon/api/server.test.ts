@@ -203,13 +203,33 @@ describe("wintosd API", () => {
         await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } });
         await post("/sessions/worker/epic", { epic: id });
         await post("/sessions/worker/name", { text: "Drafts mapping" });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker", hook_event_name: "Stop", last_assistant_message: "Still waiting on CI." } });
+        let state = await (await fetch(base + "/state")).json();
+        expect(state.epicReports).toEqual({}); // a status turn stays in the digest
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } });
+        await post("/blocks/blk-2/ask", { kind: "decide", text: "Use DraftId?" });
         await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker", hook_event_name: "Stop", last_assistant_message: "Pushed the fix." } });
         await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent", hook_event_name: "Stop" } });
-        let state = await (await fetch(base + "/state")).json();
-        expect(state.epicReports.agent.map((r: { text: string }) => r.text)).toEqual(["Drafts mapping Pushed the fix."]);
+        state = await (await fetch(base + "/state")).json();
+        expect(state.epicReports.agent.map((r: { text: string }) => r.text)).toEqual([expect.stringMatching(/^Drafts mapping .*Use DraftId\?/)]);
         expect((await post("/agents/agent/reports/delivered", { n: 1 })).status).toBe(200);
         state = await (await fetch(base + "/state")).json();
         expect(state.epicReports).toEqual({});
+    });
+
+    test("a question found by reading a worker's turn goes up to the agent once it is read", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } });
+        await post(`/epics/${id}/agent`, { sessionId: "agent" });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } });
+        await post("/sessions/worker/epic", { epic: id });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker", hook_event_name: "Stop", last_assistant_message: "Pushed it. Should I merge now?" } });
+        let reports: { text: string }[] = [];
+        for (let i = 0; i < 50 && !reports.length; i++) {
+            reports = (await (await fetch(base + "/state")).json()).epicReports?.agent ?? [];
+            if (!reports.length) await new Promise((r) => setTimeout(r, 20));
+        }
+        expect(reports.map((r) => r.text)).toEqual([expect.stringContaining("Should I merge now?")]);
     });
 
     test("a refused epic name lists the open ones", async () => {

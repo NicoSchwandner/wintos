@@ -129,7 +129,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     useEffect(() => {
         if (state) setLatestSessions(state.sessions, model?.targets ?? {});
     }, [state, tabIds.join(",")]);
-    const yourMove = model ? model.needs.length + wokeClosed.length : 0;
+    const wakeNeeds = wokeClosed.filter((w) => !w.news);
+    const wakeNews = wokeClosed.filter((w) => w.news);
+    const yourMove = model ? model.needs.length + wakeNeeds.length : 0;
     useEffect(() => void globalStore.set(yourMoveAtom, yourMove), [yourMove]);
 
     // The project title is the source of truth; the tab name follows it.
@@ -189,6 +191,10 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
         return row.band === "quiet" ? <QuietRow {...props} /> : row.band === "running" ? <QuietRow {...props} v={{ ...v, reason: v.next }} dot={T.moss} /> : <CardRow {...props} />;
     };
 
+    const wakeCard = (w: ClosedWake) => (
+        <CardRow key={`wake:${w.sessionId}`} rowKey={`wake:${w.projectId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: w.news ? "blue" : "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌃⇥ or ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
+    );
+
     return (
         <div data-wintos="sidebar" style={{ height: "100%", display: "flex", flexDirection: "column", background: T.sidebar, borderRight: `1px solid ${T.border}`, fontFamily: T.ui, color: T.text }}>
             {instance().label && (
@@ -236,17 +242,21 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     </div>
                 ) : (
                     <>
-                        <Band kind="needs" count={(byEpic ? 0 : model.needs.length) + wokeClosed.length}>
-                            {wokeClosed.map((w) => (
-                                <CardRow key={`wake:${w.sessionId}`} rowKey={`wake:${w.projectId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌃⇥ or ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
-                            ))}
+                        <Band kind="needs" count={(byEpic ? 0 : model.needs.length) + wakeNeeds.length}>
+                            {wakeNeeds.map(wakeCard)}
                             {!byEpic && model.needs.map(renderRow)}
                         </Band>
                         {byEpic ? (
-                            <EpicGroups groups={groups} renderRow={renderRow} cursor={switchTarget} newStep={(epic) => (globalStore.set(newStepEpicAtom, epic), runKey("new-step"))} />
+                            <>
+                                <Band kind="read" count={wakeNews.length}>{wakeNews.map(wakeCard)}</Band>
+                                <EpicGroups groups={groups} renderRow={renderRow} cursor={switchTarget} newStep={(epic) => (globalStore.set(newStepEpicAtom, epic), runKey("new-step"))} />
+                            </>
                         ) : (
                         <>
-                        <Band kind="read" count={model.read.length}>{model.read.map(renderRow)}</Band>
+                        <Band kind="read" count={model.read.length + wakeNews.length}>
+                            {wakeNews.map(wakeCard)}
+                            {model.read.map(renderRow)}
+                        </Band>
                         <Band kind="running" count={model.running.length}>{model.running.map(renderRow)}</Band>
                         <Band kind="quiet" count={model.quiet.length + model.quietMore.length} shown={quiet.length}>
                             {quiet.map(renderRow)}

@@ -17,6 +17,10 @@ export function reportLine(s: Session): string {
     return `${name}${step} ${ended}`;
 }
 
+// Only a turn end that changes something for the epic goes up: a question for you, done, or parked
+// on something outside. Progress ("still waiting on CI") stays in the digest the agent gets anyway.
+export const worthReporting = (s: Session) => s.state === "done" || s.state === "parked" || (s.state === "waiting" && !!s.ask);
+
 export function addReport(reports: Reports, agent: string, text: string, at: number): Reports {
     const was = (reports[agent] ?? []).filter((r) => r.text !== text);
     return { ...reports, [agent]: [...was, { text, at }].slice(-REPORTS_MAX) };

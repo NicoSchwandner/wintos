@@ -22,8 +22,11 @@ test("a due wake whose project is closed waits there, named by its project and w
     const shelf = { closed: [shelved], open: [] };
     const projects = [{ id: "closed", title: "Self-invoice review" }];
     expect(closedWakes({ s: { ...wake, until: "rereview" } }, shelf, projects, ["open"], () => "R #7")).toEqual([
-        { projectId: "closed", title: "Self-invoice review", sessionId: "s", script: shelved.script, due: 5, line: "R #7 asks for your re-review · opening it resumes the session" },
+        { projectId: "closed", title: "Self-invoice review", sessionId: "s", script: shelved.script, due: 5, line: "R #7 asks for your re-review · opening it resumes the session", news: false },
     ]);
+    // A merge or release is news: it still resumes the session, from To read instead of Your move.
+    expect(closedWakes({ s: { ...wake, until: "merged" } }, shelf, projects, ["open"], () => "R #7")[0]).toMatchObject({ news: true, line: "R #7 was merged · opening it resumes the session" });
+    expect(closedWakes({ s: { ...wake, until: "released" } }, shelf, projects, ["open"], () => "R #7")[0].news).toBe(true);
     expect(closedWakes({ s: wake }, shelf, projects, ["closed"], () => "R #7")).toEqual([]);
     expect(closedWakes({ s: { ...wake, due: undefined } }, shelf, projects, ["open"], () => "R #7")).toEqual([]);
 });

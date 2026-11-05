@@ -76,4 +76,8 @@ describe("epicAgentInjection", () => {
         expect(t).toContain("roadmap edited by the developer");
     });
     test("with no sessions open, it says so", () => expect(epicAgentInjection({ title: "R", dir: "/e", steps: "" }, [])).toContain("- none open"));
+    test("an empty roadmap is set before anything else; a set one is left to the agent", () => {
+        expect(epicAgentInjection({ title: "R", dir: "/e", steps: "" }, [])).toContain("It is empty: before anything else this turn, set one");
+        expect(epicAgentInjection({ title: "R", dir: "/e", steps: "[ ] A" }, [])).not.toContain("It is empty");
+    });
 });

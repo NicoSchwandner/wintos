@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../sessions/reduce";
-import { addReport, delivered, reportLine, REPORTS_MAX } from "./reports";
+import { addReport, delivered, reportLine, REPORTS_MAX, worthReporting } from "./reports";
 
 const s = (more: Partial<Session>): Session => ({ id: "w", tabId: "t", blockId: "b", state: "idle", since: 0, lastAt: 0, ...more }) as Session;
 
@@ -30,4 +30,12 @@ describe("the queue", () => {
         expect(delivered(r, "a", 1)).toEqual({ a: [{ text: "y", at: 2 }] });
         expect(delivered(r, "a", 2)).toEqual({});
     });
+});
+
+test("only a question for you, done, or parked goes up; a status turn stays in the digest", () => {
+    expect(worthReporting(s({ state: "waiting", ask: { kind: "decide", by: "session" } }))).toBe(true);
+    expect(worthReporting(s({ state: "done" }))).toBe(true);
+    expect(worthReporting(s({ state: "parked" }))).toBe(true);
+    expect(worthReporting(s({ state: "waiting" }))).toBe(false);
+    expect(worthReporting(s({ state: "working" }))).toBe(false);
 });

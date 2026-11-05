@@ -887,6 +887,7 @@ await scenario("43 · a worker's turn end reaches its epic's agent: typed into t
     await until("another pane focused", async () => (await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`)) !== pane);
     await api("/events", { tabId: "e2e-elsewhere", blockId: "e2e-wb", payload: { session_id: "e2e-wk", hook_event_name: "UserPromptSubmit", prompt: "e2e worker" } });
     await api("/sessions/e2e-wk/epic", { epic: id });
+    await api("/blocks/e2e-wb/ask", { kind: "decide", text: "merge the e2e fix?" });
     await api("/events", { tabId: "e2e-elsewhere", blockId: "e2e-wb", payload: { session_id: "e2e-wk", hook_event_name: "Stop", last_assistant_message: "Pushed the e2e fix." } });
     await until("the report queued", async () => ((await st()).epicReports?.["e2e-ag"] ?? []).length === 1);
     await until("typed into the agent and off the queue", async () => !(await st()).epicReports?.["e2e-ag"], 120_000);

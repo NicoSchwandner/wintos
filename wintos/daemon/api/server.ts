@@ -14,7 +14,7 @@ import { icsToMeetings } from "../../plugins/calendar/parse";
 import { meetingMs } from "../../plugins/calendar/hours";
 import { addRelay, findWorker, relaysDelivered, youSaid, type Relays } from "../epics/relay";
 import { editRoadmap, linkStep, pruneLinks, type RoadmapOp } from "../epics/roadmap";
-import { addReport, delivered as reportsDelivered, reportLine, type Reports } from "../epics/reports";
+import { addReport, delivered as reportsDelivered, reportLine, worthReporting, type Reports } from "../epics/reports";
 import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
 import { ProjectStore } from "../projects/store";
@@ -178,7 +178,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const reportUp = (sessionId: string) => {
         const s = sessions.get(sessionId);
         const agent = s?.epic ? epics.byId(s.epic)?.agent : undefined;
-        if (!s || !agent || agent === s.id) return;
+        if (!s || !agent || agent === s.id || !worthReporting(s)) return;
         const text = reportLine(s);
         reports = addReport(reports, agent, text, Date.now());
         writeFileSync(reportsFile, JSON.stringify(reports));
@@ -285,6 +285,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
             if (next === sessions) return;
             sessions = next;
             saveSessions("the model read the turn");
+            // A question found by reading the turn goes up now; the Stop it came from had none.
+            if (sessions.get(sessionId)?.ask) reportUp(sessionId);
             broadcast();
         });
     };

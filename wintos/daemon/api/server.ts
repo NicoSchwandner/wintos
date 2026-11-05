@@ -170,7 +170,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 .map((w) => ({ name: w.name?.text ?? w.label ?? "a session", state: w.state, step: w.lane?.steps[w.lane.at], status: w.status?.text, prs: w.prs ?? [], ask: w.state === "waiting" ? (w.ask?.text ?? w.outcome?.text) : undefined }));
             return epicAgentInjection({ title: epic.title, dir: epic.dir, steps: serializeUnits(epic.steps) }, workers);
         }
-        return epicInjection(epic && { id: epic.id, title: epic.title }, openEpics(), epic && epicMineDiff(epic.id, sessionId));
+        // A session already linked to a step is not asked to claim one.
+        const claimed = epic && Object.values(epic.links ?? {}).some((ids) => ids.includes(sessionId));
+        return epicInjection(epic && { id: epic.id, title: epic.title, steps: claimed ? [] : epic.steps.filter((u) => u.state !== "done").map((u) => u.name) }, openEpics(), epic && epicMineDiff(epic.id, sessionId));
     };
     // What the epics' sessions did, queued for each epic's agent (epics/reports.ts).
     const reportsFile = join(opts.root, ".epic-reports.json");
@@ -1175,7 +1177,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 // A session in an epic moves the epic's roadmap, which every session in it shares.
                 const epic = live.epic ? epics.byId(live.epic) : undefined;
                 if (epic) {
-                    const linked = okName(b.start) && !okItems ? linkStep({ steps: epic.steps, links: epic.links ?? {} }, b.start, live.id) : undefined;
+                    // The epic's agent moves the roadmap; it is no step's session, so it is never linked.
+                    const linked = okName(b.start) && !okItems && live.id !== epic.agent ? linkStep({ steps: epic.steps, links: epic.links ?? {} }, b.start, live.id) : undefined;
                     const next = linked?.steps ?? change(epic.steps);
                     if (!next) return send(res, 400, "no such step in the epic's roadmap; wintos unit <unit>… sets it");
                     const links = pruneLinks(linked?.links ?? epic.links ?? {}, next);

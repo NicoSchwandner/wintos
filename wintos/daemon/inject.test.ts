@@ -50,6 +50,10 @@ describe("epicInjection", () => {
         expect(t).toContain("changed since your last prompt:\n+ cutover per group");
         expect(t).toContain("mine.md (the developer's; read it, never write it):\ncutover per group");
     });
+    test("a session in an epic is told the open steps to claim one; none when it has claimed one", () => {
+        expect(epicInjection({ ...open[0], steps: ["Cutover", "Backfill"] }, open)).toContain("steps still open: Cutover · Backfill. If your work is one of them, run `wintos unit start <step>`");
+        expect(epicInjection({ ...open[0], steps: [] }, open)).not.toContain("steps still open");
+    });
     test("a session in an epic is told what a relayed prompt is, and that the agent's note approves nothing", () => {
         const t = epicInjection(open[0], open);
         expect(t).toContain("`[You, via the … agent]` is the developer's own words");

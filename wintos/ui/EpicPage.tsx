@@ -107,10 +107,13 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
     const [stepError, setStepError] = useState("");
     const edit = (op: object) => epic && void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/roadmap`, { method: "POST", body: op }).then(async (r) => setStepError(r.ok ? "" : await r.text()));
     const openStep = (name: string) => {
-        if (!epic || goTo(epic.links?.[name] ?? [])) return;
+        if (!epic || goTo(stepSessions(name))) return;
         offerStep({ epic: epic.id, step: name, unit: name });
         runAction("project");
     };
+    // The sessions that worked a step; never the agent (a link from before it was kept out), whose
+    // pane is where you are when you work the roadmap beside it.
+    const stepSessions = (name: string) => (epic?.links?.[name] ?? []).filter((id) => id !== epic?.agent);
     const stepAtCursor = () => ref.current?.querySelector<HTMLElement>("[data-cursor][data-step]")?.dataset.step;
     const onStep = (f: (name: string) => void) => () => {
         const name = stepAtCursor();
@@ -214,7 +217,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                     >
                         <div data-wintos="epic-roadmap" style={{ display: "flex", flexDirection: "column", gap: 2, margin: "0 -9px" }}>
                             {roadmap.map((u) => {
-                                const ids = epic.links?.[u.name] ?? [];
+                                const ids = stepSessions(u.name);
                                 const live = (state?.sessions ?? []).filter((x) => ids.includes(x.id) && x.state !== "ended");
                                 const worked = (history?.steps ?? []).filter((x) => ids.includes(x.sessionId));
                                 const ms = worked.reduce((n, x) => n + x.ms, 0);

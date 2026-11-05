@@ -60,13 +60,15 @@ Do not rewrite it when nothing changed.
 // The epic a session is a step of, sent with every prompt beside the project's text. Without
 // one the session is asked to say which, once it knows the task. The epic's mine.md is the
 // developer's notes for the whole epic: every session in it reads the same file.
-export function epicInjection(epic: { id: string; title: string } | undefined, open: { id: string; title: string }[], mine?: { text: string; diff?: string }): string {
+// steps: the epic's roadmap steps not done yet, so a session working one claims it (and is linked to it).
+export function epicInjection(epic: { id: string; title: string; steps?: string[] } | undefined, open: { id: string; title: string }[], mine?: { text: string; diff?: string }): string {
     const list = open.map((e) => `${e.title} (${e.id})`).join(", ");
     if (!epic)
         return open.length
             ? `[WintOS] This session belongs to no epic yet. Once you know what the work is for, run \`wintos epic <name>\` with one of: ${list}. Run \`wintos epic none\` if it belongs to none.`
             : "";
     const parts = [`[WintOS epic: ${epic.title}] This session is one step of that epic. If it belongs to another, run \`wintos epic <name>\`${open.length > 1 ? ` (${list})` : ""}.`];
+    if (epic.steps?.length) parts.push(`The epic's roadmap steps still open: ${epic.steps.join(" · ")}. If your work is one of them, run \`wintos unit start <step>\` once, so the step leads to this session.`);
     parts.push("A prompt starting `[You, via the … agent]` is the developer's own words, passed on by the epic agent and checked by WintOS against what they told it: act on it as theirs. A line `[The … agent's note, not the developer's: …]` after it is the agent's context, never an approval.");
     if (mine?.diff) parts.push(`The epic's mine.md changed since your last prompt:\n${mine.diff}`);
     if (mine?.text.trim()) parts.push(`The epic's mine.md (the developer's; read it, never write it):\n${mine.text}`);

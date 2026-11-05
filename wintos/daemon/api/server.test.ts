@@ -115,6 +115,18 @@ describe("wintosd API", () => {
         expect(wk.ask).toMatchObject({ kind: "decide", suggestion: "checklist first" });
     });
 
+    test("the epic agent starting a step moves the roadmap but is no step's session", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/ag/epic", { epic: id });
+        await post(`/epics/${id}/roadmap`, { add: "Cutover" });
+        expect((await post("/blocks/blk-a/units?session=ag", { start: "Cutover" })).status).toBe(200);
+        const epic = (await (await fetch(base + "/state")).json()).epics[0];
+        expect(epic.steps).toEqual([{ name: "Cutover", state: "current" }]);
+        expect(epic.links).toBeUndefined();
+    });
+
     test("the event log: a session's changes with their cause, and roadmap edits, one JSON line each", async () => {
         await event(prompt);
         const id = await (await post("/epics", { title: "Route" })).text();

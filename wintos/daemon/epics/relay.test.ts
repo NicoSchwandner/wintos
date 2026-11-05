@@ -26,6 +26,10 @@ test("only words you said to the agent pass, spaces and case aside", () => {
     expect(youSaid("ok", "  ")).toBe(false);
 });
 
+test("the agent's own words are marked as its, never as yours", () => {
+    expect(relayPrompt({ text: "pick up the review thread", from: "agent", at: 0, own: true }, "Route DO")).toBe("[The Route DO agent, not the developer] pick up the review thread");
+});
+
 test("the prompt marks your words and the agent's note apart", () => {
     expect(relayPrompt({ text: "checklist first", from: "agent", at: 0 }, "Backstage")).toBe("[You, via the Backstage agent] checklist first");
     expect(relayPrompt({ text: "yes", note: "re the test-plan question", from: "agent", at: 0 }, "Backstage")).toBe("[You, via the Backstage agent] yes\n[The Backstage agent's note, not the developer's: re the test-plan question]");

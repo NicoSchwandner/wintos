@@ -77,6 +77,7 @@ describe("epicAgentInjection", () => {
         expect(t).toContain("[WintOS report]");
         expect(t).toContain("wintos suggest <session>");
         expect(t).toContain("wintos relay <session>");
+        expect(t).toContain("wintos tell <session>");
         expect(t).toContain("wintos start [--cwd <repo>] <step>");
         expect(t).toContain("roadmap edited by the developer");
     });

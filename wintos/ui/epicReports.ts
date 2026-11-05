@@ -24,7 +24,8 @@ export function reportDeliveries(reports: Reports, sessions: Session[], tabId: s
 export function relayDeliveries(relays: Relays, sessions: Session[], epics: { id: string; title: string; short?: string }[], tabId: string, lookingAt?: string): ReportDelivery[] {
     return Object.entries(relays).flatMap(([to, list]) => {
         const s = sessions.find((x) => x.id === to && x.state !== "ended");
-        if (!s || s.tabId !== tabId || s.state === "working" || s.blockId === lookingAt || !list.length) return [];
+        // A background session (no pane) gets it from the daemon, through the background service.
+        if (!s || s.tabId !== tabId || s.state === "working" || s.blockId === lookingAt || !list.length || (s.bgId && !s.attachedTo)) return [];
         const e = epics.find((x) => x.id === s.epic);
         return [{ agent: to, blockId: s.blockId, n: list.length, text: list.map((r) => relayPrompt(r, e ? (e.short ?? e.title) : "epic")).join("\n") }];
     });

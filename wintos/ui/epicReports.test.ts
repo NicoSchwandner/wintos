@@ -24,7 +24,8 @@ describe("relayDeliveries", () => {
         expect(relayDeliveries(relays, [worker()], [{ id: "e", title: "Route all documents", short: "Route DO" }], "t1")).toEqual([
             { agent: "wk", blockId: "b-wk", n: 1, text: "[You, via the Route DO agent] checklist first\n[The Route DO agent's note, not the developer's: re the review]" },
         ]));
-    test("not while it works, nor while you are in its pane", () => {
+    test("not while it works, nor while you are in its pane, nor to a background session (the daemon sends those)", () => {
+        expect(relayDeliveries(relays, [worker({ bgId: "430f7f7e", blockId: "" })], [], "t1")).toEqual([]);
         expect(relayDeliveries(relays, [worker({ state: "working" })], [], "t1")).toEqual([]);
         expect(relayDeliveries(relays, [worker()], [], "t1", "b-wk")).toEqual([]);
     });

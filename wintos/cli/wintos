@@ -20,6 +20,7 @@
 #                                      epic agent: pass on to one of the epic's sessions what the developer told you,
 #                                      in their words; WintOS types it into that session's pane as theirs
 #   wintos suggest <session> <text…>   epic agent: your recommendation on a session's open question, shown with it
+#   wintos tell <session> <text…>      epic agent: your own words to one of the epic's sessions, typed in marked as yours
 #   wintos start [--cwd <dir>] <step> <prompt…>
 #                                      epic agent: start a session for a roadmap step, in Claude's background service;
 #                                      it shows in the epic, linked to the step, and reports to you like the others
@@ -189,10 +190,10 @@ start)
     ask "$(jq -n --arg s "$step" --arg i "$id" '{step: $s, bgId: $i}')"
     echo "started \"$name\" in the background ($id); it shows in the epic, and claude attach $id opens it"
     ;;
-relay | suggest)
+relay | suggest | tell)
     verb="$1"
     shift
-    [ $# -ge 2 ] || die "usage: wintos relay <session> <words…> [--note \"<your own context>\"] | wintos suggest <session> <text…>"
+    [ $# -ge 2 ] || die "usage: wintos relay <session> <words…> [--note \"<your own context>\"] | wintos suggest|tell <session> <text…>"
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     to="$1"
     shift
@@ -210,7 +211,11 @@ relay | suggest)
     code=$(printf '%s' "$out" | tail -n 1)
     reply=$(printf '%s' "$out" | sed '$d')
     [ "$code" = 200 ] || die "$reply"
-    if [ "$verb" = relay ]; then echo "relayed to $reply; WintOS types it in once it is free"; else echo "suggested on $reply's question"; fi
+    case "$verb" in
+    relay) echo "relayed to $reply; WintOS types it in once it is free" ;;
+    tell) echo "told $reply, marked as yours (not the developer's); WintOS types it in once it is free" ;;
+    *) echo "suggested on $reply's question" ;;
+    esac
     ;;
 epic)
     shift

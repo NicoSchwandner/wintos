@@ -13,8 +13,8 @@ import { lineDiff } from "../projects/diff";
 import { workedFocus } from "../epics/worked";
 import { icsToMeetings } from "../../plugins/calendar/parse";
 import { meetingMs } from "../../plugins/calendar/hours";
-import { BG_ID, BG_MAX, liveStarts, mergeBg, parseAgents, type BgStarts } from "../epics/bgstart";
-import { addRelay, findWorker, relaysDelivered, youSaid, type Relays } from "../epics/relay";
+import { BG_ID, BG_MAX, liveStarts, mergeBg, parseAgents, type BgAgent, type BgStarts } from "../epics/bgstart";
+import { addRelay, relayPrompt, findWorker, relaysDelivered, youSaid, type Relays } from "../epics/relay";
 import { editRoadmap, linkStep, pruneLinks, type RoadmapOp } from "../epics/roadmap";
 import { addReport, delivered as reportsDelivered, reportLine, worthReporting, type Reports } from "../epics/reports";
 import { Plugin, PluginRunner } from "../plugins/runner";
@@ -72,7 +72,7 @@ const isRoadmapOp = (o: unknown): o is RoadmapOp => {
 };
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined> }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean> }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // Beside the projects in main.ts; a hidden folder in them by default, which the project store skips.
     const epics = new EpicStore(opts.epicsRoot ?? join(opts.root, ".epics"));
@@ -206,9 +206,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
         try {
             const out = await listAgents();
             if (out === undefined) return;
-            const r = mergeBg(sessions, bgStarts, parseAgents(out), Date.now());
-            if (!r.moved.length) return;
+            const listed = parseAgents(out);
+            const r = mergeBg(sessions, bgStarts, listed, Date.now());
             sessions = r.sessions;
+            await deliverToBackground(listed);
+            if (!r.moved.length) return;
             for (const f of r.fresh) {
                 const epic = epics.byId(f.start.epic);
                 const linked = epic && linkStep({ steps: epic.steps, links: epic.links ?? {} }, f.start.step, f.id);
@@ -222,6 +224,20 @@ export async function startServer(opts: { root: string; port: number; host?: str
         }
     };
     const bgTimer = setInterval(() => void pollBg(), 15_000);
+    // A background session has no pane to type into: what is passed on to it goes in as a prompt
+    // through the background service, from the directory it runs in, once it is not at work.
+    const bgSend = opts.bgSend ?? ((sessionId: string, cwd: string | undefined, prompt: string) => new Promise<boolean>((resolve) => execFile("/bin/zsh", ["-lc", 'claude --bg --resume "$0" "$1"', sessionId, prompt], { cwd, timeout: 30_000 }, (err) => resolve(!err))));
+    async function deliverToBackground(listed: BgAgent[]) {
+        for (const [to, list] of Object.entries(relays)) {
+            const s = sessions.get(to);
+            if (!s?.bgId || s.attachedTo || s.state === "working" || s.state === "ended" || !list.length) continue;
+            const e = s.epic ? epics.byId(s.epic) : undefined;
+            const prompt = list.map((r) => relayPrompt(r, e ? (e.short ?? e.title) : "epic")).join("\n");
+            if (!(await bgSend(s.id, listed.find((a) => a.id === s.bgId)?.cwd, prompt))) continue;
+            saveRelays(relaysDelivered(relays, to, list.length));
+            logEvent("relays-delivered", { to, n: list.length, via: "background" });
+        }
+    }
     // The steps you prompted today, by session, for the journal's "Today's focus" (epics/worked.ts).
     const workedFile = join(opts.root, ".worked.json");
     let worked = readJson<{ day: string; ids: string[] }>(workedFile, { day: "", ids: [] });
@@ -1224,7 +1240,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             }
             // The epic agent passes what you told it on to one of its sessions (wintos relay), or puts its
             // recommendation on a session's open question (wintos suggest) instead of asking it again.
-            const agentTo = /^\/blocks\/([^/]+)\/(relay|suggest)$/.exec(url.pathname);
+            const agentTo = /^\/blocks\/([^/]+)\/(relay|suggest|tell)$/.exec(url.pathname);
             if (req.method === "POST" && agentTo) {
                 const b = (await body(req)) as { to?: unknown; text?: unknown; note?: unknown };
                 const blockId = decodeURIComponent(agentTo[1]);
@@ -1246,9 +1262,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     broadcast();
                     return send(res, 200, to.name?.text ?? to.label ?? to.id);
                 }
+                if (agentTo[2] === "tell") {
+                    saveRelays(addRelay(relays, to.id, { text: b.text.trim(), from: live.id, at: Date.now(), own: true }));
+                    logEvent("tell", { agent: live.id, to: to.id, text: b.text.trim() });
+                    if (to.bgId) setTimeout(() => void pollBg(), 2_000);
+                    broadcast();
+                    return send(res, 200, to.name?.text ?? to.label ?? to.id);
+                }
                 if (!youSaid(lastSaid.get(live.id), b.text)) return send(res, 403, "only words the developer said to you go through: quote them from their last prompt; your own words go in --note");
                 saveRelays(addRelay(relays, to.id, { text: b.text.trim(), ...(typeof b.note === "string" && b.note.trim() ? { note: b.note.trim() } : {}), from: live.id, at: Date.now() }));
                 logEvent("relay", { agent: live.id, to: to.id, text: b.text.trim(), note: b.note });
+                if (to.bgId) setTimeout(() => void pollBg(), 2_000);
                 broadcast();
                 return send(res, 200, to.name?.text ?? to.label ?? to.id);
             }

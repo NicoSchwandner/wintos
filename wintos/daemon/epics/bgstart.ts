@@ -5,7 +5,7 @@ import type { Session } from "../sessions/reduce";
 // `claude agents --json` instead: working, blocked (it waits for you) or done.
 export type BgStart = { epic: string; step: string; name: string; agent: string; tabId: string; at: number };
 export type BgStarts = Record<string, BgStart>; // by the short id `claude --bg` prints
-export type BgAgent = { id: string; sessionId: string; state?: string; status?: string };
+export type BgAgent = { id: string; sessionId: string; state?: string; status?: string; cwd?: string };
 
 export const BG_MAX = 3; // running at once per epic: the agent proposes work, it does not flood you
 export const BG_ID = /^[0-9a-f]{8}$/;

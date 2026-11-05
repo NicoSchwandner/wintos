@@ -450,7 +450,8 @@ describe("wintosd API", () => {
     test("the epic agent starts a session for a step in the background: it shows in the epic, linked, and reports up", async () => {
         let listing = "[]";
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", listAgents: async () => listing });
+        const srvBgSend = { fn: async (_id: string, _cwd: string | undefined, _p: string) => false };
+        srv = await startServer({ root, port: 0, token: "t0ken", listAgents: async () => listing, bgSend: (id, cwd, p) => srvBgSend.fn(id, cwd, p) });
         base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
         const id = await (await post("/epics", { title: "Route", short: "Route" })).text();
         await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
@@ -472,9 +473,16 @@ describe("wintosd API", () => {
         }
         expect(state.sessions.find((x) => x.id === "430f7f7e-9d03")).toMatchObject({ state: "working", bgId: "430f7f7e" });
         expect(state.epics[0].links?.Cutover).toEqual(["430f7f7e-9d03"]);
+        // The agent tells it something: no pane, so it goes in through the background service once it is free.
+        const sent: { id: string; cwd?: string; prompt: string }[] = [];
+        srvBgSend.fn = async (id, cwd, prompt) => (sent.push({ id, cwd, prompt }), true);
+        listing = JSON.stringify([{ id: "430f7f7e", sessionId: "430f7f7e-9d03", kind: "background", state: "done", status: "idle", cwd: "/w/core" }]);
+        expect((await post("/blocks/blk-a/tell", { to: "Route: Cut", text: "the review thread first" })).status).toBe(200);
+        for (let i = 0; i < 400 && !sent.length; i++) await new Promise((r) => setTimeout(r, 50));
+        expect(sent).toEqual([{ id: "430f7f7e-9d03", cwd: "/w/core", prompt: "[The Route agent, not the developer] the review thread first" }]);
         for (let n = 0; n < 2; n++) await post("/blocks/blk-a/start", { step: "Cutover", bgId: `00000${n}aa` });
         expect((await post("/blocks/blk-a/start", { step: "Cutover", check: true })).status).toBe(409);
-    }, 10_000);
+    }, 30_000);
 
     test("a turn the model reads as carrying on by itself parks on that, and is not your move", async () => {
         srv.close();

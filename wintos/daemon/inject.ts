@@ -79,12 +79,24 @@ export function epicInjection(epic: { id: string; title: string; steps?: string[
 // feature work itself; it keeps the plan and the roadmap true, from what you tell it, the
 // meeting notes you paste, and what its sessions are doing (the digest, fresh on every prompt).
 export type WorkerLine = { name: string; state: string; step?: string; status?: string; prs: string[]; ask?: string };
-export function epicAgentInjection(epic: { title: string; dir: string; steps: string }, workers: WorkerLine[]): string {
+// What the agent can do, first and short: a long rule list buried \`wintos start\`, and an agent that
+// had learned it could not start sessions kept asking the developer to open them by hand.
+export const AGENT_CAN = `You can, yourself, without asking first:
+- start a session for a roadmap step: \`wintos start [--cwd <repo>] <step> "<first prompt>"\` (it runs in the background and shows in the epic)
+- tell a session something: \`wintos tell <session> "<text>"\`; pass on the developer's answer: \`wintos relay\`; recommend on its question: \`wintos suggest\`
+- look closer at a session: \`wintos peek <session>\`; take a stray session in: \`wintos adopt\`; stop one you started: \`wintos stop\`
+- keep the roadmap: \`wintos unit\` (start, done, rename, move, remove)
+Never ask the developer to open a session, a tab or paste a brief for a roadmap step: start it.`;
+// Told once to an agent whose conversation began before these existed: what it learned then is wrong now.
+export const AGENT_NEWS = "[WintOS: new since this conversation began] You can now start sessions for roadmap steps (wintos start), tell sessions things in your own words (wintos tell), peek at them, adopt and stop them, and edit single roadmap steps. Anything earlier in this conversation saying you cannot open or start sessions is out of date.";
+export function epicAgentInjection(epic: { title: string; dir: string; steps: string }, workers: WorkerLine[], news?: string): string {
     const digest = workers.length
         ? workers.map((w) => `- ${w.name}: ${w.state}${w.step ? `, at ${w.step}` : ""}${w.status ? ` · ${w.status}` : ""}${w.ask ? ` · asks: ${w.ask}` : ""}${w.prs.length ? ` · ${w.prs.join(", ")}` : ""}`).join("\n")
         : "- none open";
-    return `[WintOS epic agent: ${epic.title}]
+    return `${news ? `${news}\n\n` : ""}[WintOS epic agent: ${epic.title}]
 You are this epic's agent: the developer's single place to see the whole epic and get it unstuck. You do no feature work yourself; the epic's sessions do, and the developer talks to them directly too.
+${AGENT_CAN}
+The details:
 - The plan lives in the body of ${epic.dir}/epic.md, in this shape: ## Goal (two sentences), ## Milestones (one bullet each, ✓ when reached), ## Open issues, ## Blockers (who or what it waits on). Keep it true; leave the front matter as it is.
 - The roadmap is the list of steps (now: ${epic.steps || "empty"}); set and move it with \`wintos unit\`; edit single steps with \`wintos unit rename "<step>" "<new name>"\`, \`wintos unit move "<step>" up|down\` and \`wintos unit remove "<step>"\`, which keep each step's sessions (setting the whole list again drops a renamed step's). You may add steps.${epic.steps ? "" : " It is empty: before anything else this turn, set one from the plan and what the sessions are doing (\`wintos unit <step> <step>…\`, a few words each); the developer edits it on the epic page."} When a step's work is finished (its PR merged, or a session's report says so), mark it with \`wintos unit done <step>\`.
 - A report \`roadmap edited by the developer\` is their own edit on the epic page: keep it as they made it, and bring the plan's milestones and anything naming that step in line with it.

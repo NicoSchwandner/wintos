@@ -5,7 +5,7 @@ import http from "http";
 import type { AddressInfo } from "net";
 import { basename, dirname, join } from "path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { epicAgentInjection, epicInjection, injection } from "../inject";
+import { AGENT_NEWS, epicAgentInjection, epicInjection, injection } from "../inject";
 import { EpicStore, EPIC_TITLE_MAX, findEpic, SHORT_MAX } from "../epics/epics";
 import { impliedEpic } from "../epics/assign";
 import { addTime, adjustMonth, epicHistory, lastWorkdays, mergeBackfill, monthByEpic, type TimeLog } from "../epics/time";
@@ -171,12 +171,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
             const workers = [...sessions.values()]
                 .filter((w) => w.epic === epic.id && w.id !== sessionId && w.state !== "ended" && !w.background)
                 .map((w) => ({ name: w.name?.text ?? w.label ?? "a session", state: w.state, step: w.lane?.steps[w.lane.at], status: freshStatus(w)?.text, prs: w.prs ?? [], ask: w.state === "waiting" ? (w.ask?.text ?? w.outcome?.text) : undefined }));
-            return epicAgentInjection({ title: epic.title, dir: epic.dir, steps: serializeUnits(epic.steps) }, workers);
+            // The news once per agent (inject.ts AGENT_NEWS), kept across restarts.
+            const told = agentNews[sessionId] === AGENT_NEWS;
+            if (!told) (agentNews = { ...agentNews, [sessionId]: AGENT_NEWS }), writeFileSync(agentNewsFile, JSON.stringify(agentNews));
+            return epicAgentInjection({ title: epic.title, dir: epic.dir, steps: serializeUnits(epic.steps) }, workers, told ? undefined : AGENT_NEWS);
         }
         // A session already linked to a step is not asked to claim one.
         const claimed = epic && Object.values(epic.links ?? {}).some((ids) => ids.includes(sessionId));
         return epicInjection(epic && { id: epic.id, title: epic.title, steps: claimed ? [] : epic.steps.filter((u) => u.state !== "done").map((u) => u.name) }, openEpics(), epic && epicMineDiff(epic.id, sessionId));
     };
+    const agentNewsFile = join(opts.root, ".agent-news.json");
+    let agentNews = readJson<Record<string, string>>(agentNewsFile, {});
     // What the epics' sessions did, queued for each epic's agent (epics/reports.ts).
     const reportsFile = join(opts.root, ".epic-reports.json");
     let reports = readJson<Reports>(reportsFile, {});

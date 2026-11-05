@@ -254,6 +254,12 @@ describe("wintosd API", () => {
         const told = await (await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } })).text();
         expect(told).toContain("[WintOS epic agent: Route documents]");
         expect(told).toContain("- Drafts mapping: working");
+        // What it can do comes first; the news that it can start sessions, once.
+        expect(told).toContain("[WintOS: new since this conversation began]");
+        expect(told.indexOf("You can, yourself")).toBeLessThan(told.indexOf("The details:"));
+        const again = await (await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } })).text();
+        expect(again).not.toContain("[WintOS: new since this conversation began]");
+        expect(again).toContain("Never ask the developer to open a session");
         const worker = await (await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } })).text();
         expect(worker).not.toContain("[WintOS epic agent:");
         expect((await post(`/epics/${id}/agent`, { sessionId: 3 })).status).toBe(400);

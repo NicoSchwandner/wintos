@@ -15,6 +15,8 @@
 #   wintos step <step> [note…]         where in it the session is now (used by Claude)
 #   wintos unit <unit>…                the project's units of work (tickets, phases), in order (used by Claude)
 #   wintos unit start|done <unit>      the one worked on now, or one finished; by its name or its start
+#   wintos unit rename <step> <new name> | move <step> up|down | remove <step>
+#                                      an epic's roadmap edited step by step; a step keeps its sessions
 #   wintos epic <name> | none          the epic this session is a step of, by its id, title or their start (used by Claude)
 #   wintos relay <session> <words…> [--note "<your own context>"]
 #                                      epic agent: pass on to one of the epic's sessions what the developer told you,
@@ -163,7 +165,13 @@ unit)
     shift
     [ $# -gt 0 ] || die "usage: wintos unit <unit>… | wintos unit start <unit> | wintos unit done <unit>"
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
-    if { [ "$1" = start ] || [ "$1" = done ]; } && [ $# -gt 1 ]; then
+    if [ "$1" = rename ] && [ $# -eq 3 ]; then
+        body=$(jq -n --arg f "$2" --arg t "$3" '{rename: {from: $f, to: $t}}')
+    elif [ "$1" = move ] && [ $# -eq 3 ] && { [ "$3" = up ] || [ "$3" = down ]; }; then
+        body=$(jq -n --arg n "$2" --argjson b "$([ "$3" = up ] && echo -1 || echo 1)" '{move: {name: $n, by: $b}}')
+    elif [ "$1" = remove ] && [ $# -eq 2 ]; then
+        body=$(jq -n --arg n "$2" '{remove: $n}')
+    elif { [ "$1" = start ] || [ "$1" = done ]; } && [ $# -gt 1 ]; then
         verb="$1"
         shift
         body=$(jq -n --arg v "$verb" --arg u "$*" '{($v): $u}')

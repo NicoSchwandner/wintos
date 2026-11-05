@@ -127,6 +127,19 @@ describe("wintosd API", () => {
         expect(epic.links).toBeUndefined();
     });
 
+    test("wintos unit rename, move and remove edit an epic's roadmap step by step; the sessions stay with their step", async () => {
+        await event(prompt);
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/blocks/blk-1/epic", { epic: id });
+        await post("/blocks/blk-1/units", { items: ["Cutover", "Backfill", "Flag off"] });
+        await post("/blocks/blk-1/units", { start: "Cutover" });
+        expect(await (await post("/blocks/blk-1/units", { rename: { from: "cut", to: "Cutover per group" } })).text()).toBe("[>] Cutover per group | [ ] Backfill | [ ] Flag off");
+        expect(await (await post("/blocks/blk-1/units", { move: { name: "Flag", by: -1 } })).text()).toBe("[>] Cutover per group | [ ] Flag off | [ ] Backfill");
+        expect(await (await post("/blocks/blk-1/units", { remove: "Backfill" })).text()).toBe("[>] Cutover per group | [ ] Flag off");
+        expect((await post("/blocks/blk-1/units", { remove: "Nope" })).status).toBe(404);
+        expect((await (await fetch(base + "/state")).json()).epics[0].links).toEqual({ "Cutover per group": [prompt.session_id] });
+    });
+
     test("the epic agent peeks at a session: its question, PRs and last reply from its transcript", async () => {
         const id = await (await post("/epics", { title: "Route" })).text();
         const tp = join(root, "wk.jsonl");

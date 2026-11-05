@@ -464,6 +464,13 @@ describe("wintos lane and step", () => {
             { url: "/blocks/blk-1/units?session=s-1", body: { done: "ABC-42 phase" } },
         ]);
     });
+    test("unit rename, move and remove edit an epic's roadmap one step at a time", async () => {
+        const d = await fakeDaemon("[>] ABC-42 phase 2 | [ ] ABC-43");
+        await cli(["unit", "rename", "ABC-42", "ABC-42 phase 2"], d.port);
+        await cli(["unit", "move", "ABC-43", "up"], d.port);
+        await cli(["unit", "remove", "ABC-43"], d.port);
+        expect(d.seen.map((x: { body: unknown }) => x.body)).toEqual([{ rename: { from: "ABC-42", to: "ABC-42 phase 2" } }, { move: { name: "ABC-43", by: -1 } }, { remove: "ABC-43" }]);
+    });
     test("epic puts the session in an epic by name, or in none; it prints the epic back", async () => {
         const d = await fakeDaemon("Route documents");
         expect((await cli(["epic", "route", "do"], d.port)).trim()).toBe("epic: Route documents");

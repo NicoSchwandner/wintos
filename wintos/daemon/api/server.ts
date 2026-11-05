@@ -1217,8 +1217,24 @@ export async function startServer(opts: { root: string; port: number; host?: str
             const unit = /^\/blocks\/([^/]+)\/units$/.exec(url.pathname);
             if (req.method === "POST" && unit) {
                 const blockId = decodeURIComponent(unit[1]);
-                const b = (await body(req)) as { items?: unknown; start?: unknown; done?: unknown };
+                const b = (await body(req)) as { items?: unknown; start?: unknown; done?: unknown; rename?: { from?: unknown; to?: unknown }; move?: { name?: unknown; by?: unknown }; remove?: unknown };
                 const okName = (s: unknown): s is string => typeof s === "string" && !!s.trim() && isSafe(s) && !s.includes("|") && s.trim().length <= UNIT_MAX;
+                // Rename, move, remove: an epic's roadmap edited step by step, its sessions kept with their steps.
+                const stepEdit = b?.rename ?? b?.move ?? b?.remove;
+                if (stepEdit !== undefined) {
+                    const live = liveIn(sessions, blockId, sid);
+                    const epic = live?.epic ? epics.byId(live.epic) : undefined;
+                    if (!live || !epic) return send(res, 409, "rename, move and remove are for an epic's roadmap; this session is in no epic");
+                    const want = (q: unknown) => (typeof q === "string" ? (epic.steps.find((u) => u.name.toLowerCase() === q.trim().toLowerCase()) ?? epic.steps.find((u) => u.name.toLowerCase().startsWith(q.trim().toLowerCase())))?.name : undefined);
+                    const op: RoadmapOp | undefined = b.rename ? (want(b.rename.from) && typeof b.rename.to === "string" ? { rename: { from: want(b.rename.from)!, to: b.rename.to } } : undefined) : b.move ? (want(b.move.name) && (b.move.by === 1 || b.move.by === -1) ? { move: { name: want(b.move.name)!, by: b.move.by } } : undefined) : want(b.remove) ? { remove: want(b.remove)! } : undefined;
+                    if (!op) return send(res, 404, `no such step; the roadmap: ${epic.steps.map((u) => u.name).join(" · ") || "empty"}`);
+                    const r = editRoadmap({ steps: epic.steps, links: epic.links ?? {} }, op);
+                    if (typeof r === "string") return send(res, 400, r);
+                    epics.update(epic.id, ({ links: _, ...e }) => ({ ...e, steps: r.steps, ...(Object.keys(r.links).length ? { links: r.links } : {}) }));
+                    if (r.note) logEvent("roadmap", { epic: epic.id, by: live.id, note: r.note });
+                    broadcast();
+                    return send(res, 200, serializeUnits(r.steps));
+                }
                 const items = Array.isArray(b?.items) ? b.items : undefined;
                 const okItems = !!items && items.length > 0 && items.length <= UNITS_MAX && items.every(okName);
                 if (!isSafe(blockId) || (!okItems && !okName(b?.start) && !okName(b?.done)))

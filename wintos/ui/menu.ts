@@ -130,6 +130,10 @@ function stepSideways(right: boolean): void {
         lm.switchNodeFocusInDirection(right ? NavigateDirection.Right : NavigateDirection.Left, false);
         if (globalStore.get(lm.focusedNode)?.id !== before) return; // a neighbour pane took it
     }
+    // Right of the epic agent's terminal is its epic, before the notes.
+    const blockId = globalStore.get(lm.focusedNode)?.data?.blockId;
+    const column = right && zone === "pane" && blockId ? document.querySelector<HTMLElement>(`[data-blockid="${blockId}"] [data-wintos=epic-column]`) : null;
+    if (column && column.offsetParent) return column.focus();
     if (right) return void (setRailCollapsed(false), focusArea("notes"));
     if (zone !== "pane") focusArea("terminal");
 }
@@ -498,7 +502,17 @@ function toggleStoredFlag(key: string): void {
 }
 
 // An epic's page, from its card on the epics home.
+// An epic with its agent open opens as the agent's view, its page beside the terminal; else its
+// page. From the agent's own pane it is the full page (mine.md, the month's hours).
 export function openEpic(id: string): void {
+    const state = currentState();
+    const agent = state?.epics?.find((e) => e.id === id)?.agent;
+    const live = agent ? state?.sessions.find((s) => s.id === agent && s.state !== "ended") : undefined;
+    const inAgent = globalStore.get(mainViewAtom) === "terminal" && focusedSession()?.id === live?.id;
+    if (live && !inAgent) return focusSession({ tabId: live.tabId, blockId: live.blockId });
+    openEpicPage(id);
+}
+export function openEpicPage(id: string): void {
     globalStore.set(openEpicAtom, id);
     openView("epic");
 }

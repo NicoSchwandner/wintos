@@ -14,6 +14,7 @@ import { liveSubagents, type Lane } from "../daemon/sessions/reduce";
 import { shownState } from "./sessions";
 import { WhereWasI } from "./WhereWasI";
 import { EpicAvatar } from "./EpicAvatar";
+import { EpicBody } from "./EpicPage";
 import { lookOf, NO_EPIC, shortName } from "./epicLook";
 import { prRef, relTime, roadmapOf, sessionHeader, sessionName, urgentPr, type PrChip, type PrStatus } from "./view";
 
@@ -206,6 +207,8 @@ export const SessionSteps = memo(({ blockId }: { blockId: string }) => {
     const s = state ? sessionHeader(state, blockId)?.session : undefined;
     const lane = s?.lane;
     const { units, epic } = s && state ? roadmapOf(state, s) : { units: [], epic: undefined };
+    // The epic agent's pane is the epic's view: the epic page beside it, not just the roadmap.
+    if (s && epic?.agent === s.id) return <EpicBody id={epic.id} column />;
     if (!lane && !units.length) return null;
     const current = units.findIndex((u) => u.state === "current");
     return (

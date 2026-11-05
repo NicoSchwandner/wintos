@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { EpicTime } from "../daemon/epics/time";
 import { EpicAvatar } from "./EpicAvatar";
 import { lookOf, shortName } from "./epicLook";
@@ -16,7 +16,6 @@ import { useEpicMine } from "./notes/useNotes";
 import { shownState } from "./sessions";
 import { SESSION_DOT, T } from "./tokens";
 import { Panel } from "./TodayPage";
-import { useFocusOnMount } from "./useFocusOnMount";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { ghPrs, prRef, relTime, sessionName } from "./view";
@@ -28,11 +27,16 @@ const spent = (ms: number) => (ms < 3_600_000 ? `${Math.round(ms / 60_000)} min`
 // An epic's page, from its card on the epics home: its sessions (each a step; ⏎ goes to its
 // pane), its roadmap (the units its sessions set with wintos unit), its mine.md (⌘E edits it) and its time this month.
 // p pins it to the top of the sidebar, to keep it in sight; x marks the epic done, or open again: a done epic leaves the sidebar's picks and stays in the report.
-export const EpicPage = memo(() => {
-    const ref = useFocusOnMount<HTMLDivElement>();
+// column: the same, narrow, beside the epic agent's terminal (its view is the epic's view); it
+// takes focus only by ⌘L from that terminal, so typing to the agent is never interrupted.
+export const EpicPage = memo(() => <EpicBody id={useAtomValue(openEpicAtom)} />);
+EpicPage.displayName = "EpicPage";
+
+export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) => {
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => void (column || ref.current?.focus()), []);
     const { state } = useWintos();
     const now = useNow(30_000);
-    const id = useAtomValue(openEpicAtom);
     const epic = state?.epics?.find((e) => e.id === id);
     const { mine, save } = useEpicMine(epic?.id);
     const [month, setMonth] = useState<EpicTime | undefined>();
@@ -115,7 +119,7 @@ export const EpicPage = memo(() => {
         e: onStep((name) => setRenaming(name)),
         Backspace: notInField(onStep((name) => (removing === name ? (edit({ remove: name }), setRemoving(undefined)) : setRemoving(name)))),
     });
-    if (!epic) return <div ref={ref} tabIndex={0} data-zone="list" style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, outline: "none" }}>That epic is gone.</div>;
+    if (!epic) return column ? null : <div ref={ref} tabIndex={0} data-zone="list" style={{ flexGrow: 1, padding: 26, color: T.muted, fontFamily: T.ui, outline: "none" }}>That epic is gone.</div>;
     const look = lookOf(epic);
     const roadmap = epic.steps;
     const finished = (history?.steps ?? []).filter((x) => !x.live);
@@ -127,29 +131,38 @@ export const EpicPage = memo(() => {
         return { url, ref: state ? prRef(state, url) : url, title: p?.title, state: p ? (p.mergedAt ? "merged" : p.isDraft ? "draft" : "open") : "closed or merged" };
     });
     return (
-        <div ref={ref} tabIndex={0} data-zone="list" data-wintos="epic-page" data-epic={epic.id} style={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 18px", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0, overflowY: "auto" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 16px", borderRadius: 12, background: `linear-gradient(90deg, ${look.bg} 0%, transparent 70%)`, borderTop: `3px solid ${look.fg}` }}>
-                <EpicAvatar look={look} size={56} />
+        <div
+            ref={ref}
+            tabIndex={0}
+            data-zone="list"
+            data-wintos={column ? "epic-column" : "epic-page"}
+            data-epic={epic.id}
+            className={column ? "wintos-steps-side" : undefined}
+            style={column ? { width: 360, flexShrink: 0, display: "flex", flexDirection: "column", gap: 12, padding: "10px 12px", borderLeft: `1px solid ${T.border}`, background: T.ground, outline: "none", fontFamily: T.ui, minHeight: 0, overflowY: "auto" } : { flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 18px", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0, overflowY: "auto" }}
+        >
+            <div style={{ display: "flex", alignItems: "center", gap: column ? 10 : 16, flexWrap: "wrap", padding: column ? "8px 10px" : "14px 16px", borderRadius: 12, background: `linear-gradient(90deg, ${look.bg} 0%, transparent 70%)`, borderTop: `3px solid ${look.fg}` }}>
+                <EpicAvatar look={look} size={column ? 30 : 56} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, flexGrow: 1, minWidth: 0 }}>
-                    <h1 style={{ margin: 0, fontFamily: T.display, fontSize: 30, fontWeight: 400, lineHeight: 1.1, color: T.emphasis }}>{epic.title}</h1>
+                    <h1 style={{ margin: 0, fontFamily: T.display, fontSize: column ? 18 : 30, fontWeight: 400, lineHeight: 1.1, color: T.emphasis }}>{column ? shortName(epic) : epic.title}</h1>
                     <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>
                         {[epic.done ? `done ${epic.done}` : `${sessions.length} session${sessions.length === 1 ? "" : "s"} open`, month && month.ms >= 60_000 && `${spent(month.ms)} this month`, epic.lane && `${epic.lane} sessions land here`].filter(Boolean).join(" · ")}
                     </span>
                 </div>
-                <span style={{ display: "flex", gap: 14 }}>
-                    <button type="button" data-wintos="epic-agent" data-key="a" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={toAgent} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                <span style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                    {column && <Key k="⌘L ⌘H" label="here and back to the agent" />}
+                    {!column && <button type="button" data-wintos="epic-agent" data-key="a" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={toAgent} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                         <Key k="a" label={epic.agent ? "the epic agent" : "start the epic agent"} />
-                    </button>
+                    </button>}
                     <button type="button" data-wintos="epic-pin" data-key="p" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={togglePin} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                         <Key k="p" label={epic.pinned ? "unpin from the sidebar" : "pin to the sidebar"} />
                     </button>
                     <button type="button" data-wintos="epic-done" data-key="x" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={toggleDone} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
                         <Key k="x" label={epic.done ? "open it again" : "epic done ✓"} />
                     </button>
-                    <Key k="esc" label="back" />
+                    {!column && <Key k="esc" label="back" />}
                 </span>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 360px)", gap: 20, alignItems: "start" }}>
+            <div style={{ display: "grid", gridTemplateColumns: column ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(260px, 360px)", gap: column ? 12 : 20, alignItems: "start" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                     <Panel
                         label="Roadmap"
@@ -266,12 +279,14 @@ export const EpicPage = memo(() => {
                         </a>
                     ))}
                 </Panel>
-                <Panel label="mine.md" note="every session in the epic reads it" keys={<Key k="⌘E" label="edit" />}>
-                    <Mine text={mine?.text ?? ""} mtime={mine?.mtime ?? 0} canEdit={!!mine} save={save} size="full" draftKey={`epic-mine:${epic.id}`} file={`${shortName(epic)}'s mine.md`} empty="Empty. Press ⌘E to write what every session in this epic must respect." />
-                </Panel>
+                {!column && (
+                    <Panel label="mine.md" note="every session in the epic reads it" keys={<Key k="⌘E" label="edit" />}>
+                        <Mine text={mine?.text ?? ""} mtime={mine?.mtime ?? 0} canEdit={!!mine} save={save} size="full" draftKey={`epic-mine:${epic.id}`} file={`${shortName(epic)}'s mine.md`} empty="Empty. Press ⌘E to write what every session in this epic must respect." />
+                    </Panel>
+                )}
                 </div>
             </div>
         </div>
     );
 });
-EpicPage.displayName = "EpicPage";
+EpicBody.displayName = "EpicBody";

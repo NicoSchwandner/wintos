@@ -401,6 +401,25 @@ describe("wintos name", () => {
     });
 });
 
+describe("wintos start", () => {
+    test("asks wintosd first, starts claude --bg named for the step, then reports its id", async () => {
+        const { mkdtempSync, writeFileSync, chmodSync, readFileSync } = require("fs");
+        const bin = mkdtempSync(require("path").join(require("os").tmpdir(), "fake-claude-"));
+        writeFileSync(`${bin}/claude`, `#!/bin/sh\nprintf '%s\\n' "$@" > "${bin}/args"\necho "  claude attach 430f7f7e    open in this terminal"\n`);
+        chmodSync(`${bin}/claude`, 0o755);
+        const d = await fakeDaemon("Route: Cutover");
+        const out = await new Promise<string>((resolve) =>
+            require("child_process").execFile(CLI, ["start", "Cutover", "Walk", "the", "cutover"], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port) } }, (_e: unknown, so: string) => resolve(so))
+        );
+        expect(out.trim()).toBe('started "Route: Cutover" in the background (430f7f7e); it shows in the epic, and claude attach 430f7f7e opens it');
+        expect(d.seen).toEqual([
+            { url: "/blocks/blk-1/start?session=s-1", body: { step: "Cutover", check: true } },
+            { url: "/blocks/blk-1/start?session=s-1", body: { step: "Cutover", bgId: "430f7f7e" } },
+        ]);
+        expect(readFileSync(`${bin}/args`, "utf8").trim().split("\n")).toEqual(["--bg", "-n", "Route: Cutover", "Walk the cutover"]);
+    });
+});
+
 describe("wintos lane and step", () => {
     const cli = (args: string[], port: number) =>
         new Promise<string>((resolve) => require("child_process").execFile(CLI, args, { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(port) } }, (_e: unknown, so: string) => resolve(so)));

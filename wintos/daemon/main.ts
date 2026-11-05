@@ -1,5 +1,5 @@
 import { homedir } from "os";
-import { execFileSync } from "child_process";
+import { execFile, execFileSync } from "child_process";
 import { dirname, join } from "path";
 import { wintosInstance } from "../instance";
 import { startServer } from "./api/server";
@@ -35,7 +35,14 @@ const journal = journalDir
     ? new Journal(journalDir, home(process.env.WINTOS_JOURNAL_TEMPLATE) ?? join(journalDir, "..", "templates", "daily_template.md"), join(root, ".day-planned.json"), newDay ? () => void execFileSync("/bin/sh", ["-c", newDay], { cwd: dirname(journalDir), timeout: 20_000, stdio: "ignore" }) : undefined)
     : undefined;
 
-startServer({ root, port, plugins, token: process.env.WINTOS_TOKEN, journal, onJournalChange: journalDir && process.env.WINTOS_JOURNAL_GIT === "1" ? syncWhenQuiet(journalDir) : undefined, lunch: process.env.WINTOS_LUNCH, workday: process.env.WINTOS_WORKDAY, recapCmd: process.env.WINTOS_RECAP_CMD, recapExtra: process.env.WINTOS_RECAP_EXTRA, fixCmd: process.env.WINTOS_FIX_CMD, fixCwd: process.env.WINTOS_FIX_CWD?.replace(/^~/, homedir()), repoNamesFile: home(process.env.WINTOS_REPO_NAMES) ?? join(homedir(), ".config/wintos/repos.json"), claudeDirs: [home(process.env.WINTOS_CLAUDE_DIR) ?? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")], checkout: __dirname, moveEveryMs: minutes(process.env.WINTOS_MOVE_EVERY, 30), termCols: count(process.env.WINTOS_TERM_COLS, 110), epicsRoot: home(process.env.WINTOS_EPICS) ?? join(dirname(root), "epics"), calendarIcs: process.env.WINTOS_CALENDAR_ICS })
+// WINTOS_LIST_AGENTS: the command that lists Claude's background sessions; the dev instance reads
+// a fixture with it, so e2e needs no real background session.
+function listAgentsCmd(): (() => Promise<string | undefined>) | undefined {
+    const cmd = process.env.WINTOS_LIST_AGENTS;
+    return cmd ? () => new Promise((resolve) => execFile("/bin/sh", ["-c", cmd], { timeout: 30_000, maxBuffer: 1 << 22 }, (err, out) => resolve(err ? undefined : String(out)))) : undefined;
+}
+
+startServer({ root, port, plugins, token: process.env.WINTOS_TOKEN, journal, onJournalChange: journalDir && process.env.WINTOS_JOURNAL_GIT === "1" ? syncWhenQuiet(journalDir) : undefined, lunch: process.env.WINTOS_LUNCH, workday: process.env.WINTOS_WORKDAY, recapCmd: process.env.WINTOS_RECAP_CMD, recapExtra: process.env.WINTOS_RECAP_EXTRA, fixCmd: process.env.WINTOS_FIX_CMD, fixCwd: process.env.WINTOS_FIX_CWD?.replace(/^~/, homedir()), repoNamesFile: home(process.env.WINTOS_REPO_NAMES) ?? join(homedir(), ".config/wintos/repos.json"), claudeDirs: [home(process.env.WINTOS_CLAUDE_DIR) ?? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")], checkout: __dirname, moveEveryMs: minutes(process.env.WINTOS_MOVE_EVERY, 30), termCols: count(process.env.WINTOS_TERM_COLS, 110), epicsRoot: home(process.env.WINTOS_EPICS) ?? join(dirname(root), "epics"), calendarIcs: process.env.WINTOS_CALENDAR_ICS, listAgents: listAgentsCmd() })
     .then(() => console.log(`[wintosd] listening on 127.0.0.1:${port}, projects in ${root}`))
     .catch((e) => {
         console.error(`[wintosd] failed to start: ${e}`);

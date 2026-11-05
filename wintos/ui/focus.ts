@@ -85,6 +85,11 @@ export function reopenProject(projectId: string, panes: MetaType[] = []): void {
     getApi().createTab(panes[0] ? { first: panes[0] } : undefined);
 }
 export const resumePane = (script: string): MetaType => ({ view: "term", controller: "shell", "cmd:initscript": script });
+// A session its epic's agent started in the background, opened in a pane of this view to look or answer.
+export function openBackground(bgId: string): void {
+    globalStore.set(mainViewAtom, "terminal");
+    void createBlock({ meta: resumePane(`claude attach ${bgId}`) });
+}
 export function takeReopen(): void {
     const raw = localStorage.getItem(REOPEN);
     if (!raw) return;

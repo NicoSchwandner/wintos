@@ -447,6 +447,35 @@ describe("wintosd API", () => {
         expect(readFileSync(join(root, "ask-prompt.txt"), "utf8")).toContain("Here is the plan. Go?");
     });
 
+    test("the epic agent starts a session for a step in the background: it shows in the epic, linked, and reports up", async () => {
+        let listing = "[]";
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", listAgents: async () => listing });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        const id = await (await post("/epics", { title: "Route", short: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post("/events", { tabId: "tab-1", blockId: "blk-w", payload: { session_id: "wk", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/ag/epic", { epic: id });
+        await post("/sessions/wk/epic", { epic: id });
+        await post(`/epics/${id}/roadmap`, { add: "Cutover" });
+        expect((await post("/blocks/blk-w/start", { step: "Cutover", check: true })).status).toBe(403);
+        expect((await post("/blocks/blk-a/start", { step: "Nope", check: true })).status).toBe(404);
+        expect(await (await post("/blocks/blk-a/start", { step: "cut", check: true })).text()).toBe("Route: Cutover");
+        expect((await post("/blocks/blk-a/start", { step: "Cutover", bgId: "not-an-id" })).status).toBe(400);
+        expect((await post("/blocks/blk-a/start", { step: "Cutover", bgId: "430f7f7e" })).status).toBe(200);
+        listing = JSON.stringify([{ id: "430f7f7e", sessionId: "430f7f7e-9d03", kind: "background", state: "working", status: "busy" }]);
+        let state: { sessions: { id: string; state: string; bgId?: string }[]; epics: { links?: Record<string, string[]> }[]; epicReports?: Record<string, { text: string }[]> } = { sessions: [], epics: [] };
+        for (let i = 0; i < 80 && !state.sessions.some((x) => x.id === "430f7f7e-9d03"); i++) {
+            await new Promise((r) => setTimeout(r, 50));
+            state = await (await fetch(base + "/state")).json();
+        }
+        expect(state.sessions.find((x) => x.id === "430f7f7e-9d03")).toMatchObject({ state: "working", bgId: "430f7f7e" });
+        expect(state.epics[0].links?.Cutover).toEqual(["430f7f7e-9d03"]);
+        for (let n = 0; n < 2; n++) await post("/blocks/blk-a/start", { step: "Cutover", bgId: `00000${n}aa` });
+        expect((await post("/blocks/blk-a/start", { step: "Cutover", check: true })).status).toBe(409);
+    }, 10_000);
+
     test("a turn the model reads as carrying on by itself parks on that, and is not your move", async () => {
         srv.close();
         srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "echo 'waits: the CI retry loop on test'" });

@@ -20,6 +20,9 @@
 #                                      epic agent: pass on to one of the epic's sessions what the developer told you,
 #                                      in their words; WintOS types it into that session's pane as theirs
 #   wintos suggest <session> <text…>   epic agent: your recommendation on a session's open question, shown with it
+#   wintos start [--cwd <dir>] <step> <prompt…>
+#                                      epic agent: start a session for a roadmap step, in Claude's background service;
+#                                      it shows in the epic, linked to the step, and reports to you like the others
 #   wintos hooks install|uninstall [<claude config dir>]
 #                                      wire the hook into that Claude Code config (default ~/.claude);
 #                                      one account each, named explicitly
@@ -168,6 +171,23 @@ unit)
     list=$(printf '%s' "$body" | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/units$SESSION_Q") ||
         die "wintosd refused it: no such unit (wintos unit <unit>… sets the list), a unit with | in it, a project without a title yet, or not reachable on port $PORT"
     echo "units: $list"
+    ;;
+start)
+    shift
+    cwd=""
+    [ "${1:-}" = --cwd ] && { [ $# -ge 2 ] || die "--cwd needs a directory"; cwd="$2"; shift 2; }
+    [ $# -ge 2 ] || die "usage: wintos start [--cwd <dir>] <step> <prompt…>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    step="$1"
+    shift
+    ask() { out=$(printf '%s' "$1" | curl -s -m 5 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/start$SESSION_Q") || die "wintosd not reachable on port $PORT"; code=$(printf '%s' "$out" | tail -n 1); reply=$(printf '%s' "$out" | sed '$d'); [ "$code" = 200 ] || die "$reply"; }
+    ask "$(jq -n --arg s "$step" '{step: $s, check: true}')"
+    name="$reply"
+    started=$(cd "${cwd:-.}" && claude --bg -n "$name" "$*" 2>&1) || die "claude --bg failed: $started"
+    id=$(printf '%s' "$started" | sed -n 's/.*claude attach \([0-9a-f]\{8\}\).*/\1/p' | head -n 1)
+    [ -n "$id" ] || die "claude --bg printed no session id: $started"
+    ask "$(jq -n --arg s "$step" --arg i "$id" '{step: $s, bgId: $i}')"
+    echo "started \"$name\" in the background ($id); it shows in the epic, and claude attach $id opens it"
     ;;
 relay | suggest)
     verb="$1"

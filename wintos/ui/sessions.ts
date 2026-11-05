@@ -35,8 +35,10 @@ export function unreadSessions(sessions: Session[], tabId: string, seen: Record<
 // (the same project open twice) would otherwise take it back from each other on every state.
 export function attachments(panes: { blockId: string; script?: string }[], sessions: Session[], tabId: string, sent: ReadonlySet<string>): { sessionId: string; blockId: string }[] {
     return panes.flatMap(({ blockId, script }) => {
+        // `claude attach <short id>` shows a session its epic's agent started in the background.
         const id = script && /--resume '([\w-]+)'/.exec(script)?.[1];
-        const s = id ? sessions.find((x) => x.id === id && x.state !== "ended") : undefined;
+        const bg = script && /claude attach ([0-9a-f]{8})\b/.exec(script)?.[1];
+        const s = id ? sessions.find((x) => x.id === id && x.state !== "ended") : bg ? sessions.find((x) => x.bgId === bg && x.state !== "ended") : undefined;
         return s && (s.blockId !== blockId || s.tabId !== tabId) && !sent.has(`${s.id}@${blockId}`) ? [{ sessionId: s.id, blockId }] : [];
     });
 }

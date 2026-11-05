@@ -1,3 +1,4 @@
+import { execFile } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "fs";
 import { AsyncLocalStorage } from "async_hooks";
 import http from "http";
@@ -12,6 +13,7 @@ import { lineDiff } from "../projects/diff";
 import { workedFocus } from "../epics/worked";
 import { icsToMeetings } from "../../plugins/calendar/parse";
 import { meetingMs } from "../../plugins/calendar/hours";
+import { BG_ID, BG_MAX, liveStarts, mergeBg, parseAgents, type BgStarts } from "../epics/bgstart";
 import { addRelay, findWorker, relaysDelivered, youSaid, type Relays } from "../epics/relay";
 import { editRoadmap, linkStep, pruneLinks, type RoadmapOp } from "../epics/roadmap";
 import { addReport, delivered as reportsDelivered, reportLine, worthReporting, type Reports } from "../epics/reports";
@@ -70,7 +72,7 @@ const isRoadmapOp = (o: unknown): o is RoadmapOp => {
 };
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined> }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // Beside the projects in main.ts; a hidden folder in them by default, which the project store skips.
     const epics = new EpicStore(opts.epicsRoot ?? join(opts.root, ".epics"));
@@ -192,6 +194,34 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const relaysFile = join(opts.root, ".relays.json");
     let relays = readJson<Relays>(relaysFile, {});
     const saveRelays = (next: Relays) => ((relays = next), writeFileSync(relaysFile, JSON.stringify(relays)));
+    // Sessions the epic agents started in the background (epics/bgstart.ts), followed through
+    // `claude agents --json`: polled only while some are tracked.
+    const bgFile = join(opts.root, ".bg-starts.json");
+    let bgStarts = readJson<BgStarts>(bgFile, {});
+    const listAgents = opts.listAgents ?? (() => new Promise<string | undefined>((resolve) => execFile("/bin/zsh", ["-lc", "claude agents --json --all"], { timeout: 30_000, maxBuffer: 1 << 22 }, (err, out) => resolve(err ? undefined : String(out)))));
+    let bgPolling = false;
+    const pollBg = async () => {
+        if (bgPolling || !Object.keys(bgStarts).length) return;
+        bgPolling = true;
+        try {
+            const out = await listAgents();
+            if (out === undefined) return;
+            const r = mergeBg(sessions, bgStarts, parseAgents(out), Date.now());
+            if (!r.moved.length) return;
+            sessions = r.sessions;
+            for (const f of r.fresh) {
+                const epic = epics.byId(f.start.epic);
+                const linked = epic && linkStep({ steps: epic.steps, links: epic.links ?? {} }, f.start.step, f.id);
+                if (linked) epics.update(epic!.id, (e) => ({ ...e, steps: linked.steps, links: linked.links }));
+            }
+            saveSessions("the background service's listing");
+            for (const id of r.moved) reportUp(id);
+            broadcast();
+        } finally {
+            bgPolling = false;
+        }
+    };
+    const bgTimer = setInterval(() => void pollBg(), 15_000);
     // The steps you prompted today, by session, for the journal's "Today's focus" (epics/worked.ts).
     const workedFile = join(opts.root, ".worked.json");
     let worked = readJson<{ day: string; ids: string[] }>(workedFile, { day: "", ids: [] });
@@ -1222,6 +1252,26 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, to.name?.text ?? to.label ?? to.id);
             }
+            // `wintos start`: the epic agent starts a session for a roadmap step in the background.
+            // check: before it runs `claude --bg`, may it, and under what name; then bgId: it did.
+            const bgStart = /^\/blocks\/([^/]+)\/start$/.exec(url.pathname);
+            if (req.method === "POST" && bgStart) {
+                const b = (await body(req)) as { step?: unknown; check?: unknown; bgId?: unknown };
+                const live = liveIn(sessions, decodeURIComponent(bgStart[1]), sid);
+                const epic = live?.epic ? epics.byId(live.epic) : undefined;
+                if (!live || !epic || epic.agent !== live.id) return send(res, 403, "only an epic's agent starts sessions for its steps");
+                const step = typeof b?.step === "string" ? epic.steps.find((u) => u.name.toLowerCase() === b.step!.toString().trim().toLowerCase()) ?? epic.steps.find((u) => u.name.toLowerCase().startsWith(String(b.step).trim().toLowerCase())) : undefined;
+                if (!step) return send(res, 404, `no such step in the roadmap; its steps: ${epic.steps.map((u) => u.name).join(" · ") || "none, wintos unit sets them"}`);
+                if (liveStarts(bgStarts, sessions, epic.id) >= BG_MAX) return send(res, 409, `${BG_MAX} sessions you started still run; wait for one to finish`);
+                const name = `${epic.short ?? epic.title}: ${step.name}`.slice(0, 80);
+                if (b.check === true) return send(res, 200, name);
+                if (typeof b.bgId !== "string" || !BG_ID.test(b.bgId)) return send(res, 400, "need bgId, the short id claude --bg printed");
+                bgStarts = { ...bgStarts, [b.bgId]: { epic: epic.id, step: step.name, name, agent: live.id, tabId: live.tabId, at: Date.now() } };
+                writeFileSync(bgFile, JSON.stringify(bgStarts));
+                logEvent("bg-start", { agent: live.id, epic: epic.id, step: step.name, bgId: b.bgId });
+                setTimeout(() => void pollBg(), 3_000);
+                return send(res, 200, name);
+            }
             const relayDone = /^\/sessions\/([^/]+)\/relays\/delivered$/.exec(url.pathname);
             if (req.method === "POST" && relayDone) {
                 const b = (await body(req)) as { n?: unknown };
@@ -1303,6 +1353,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             for (const w of storeWatchers.values()) w.close();
             clearInterval(warmRecap);
             clearInterval(wakeTimer);
+            clearInterval(bgTimer);
             update?.stop();
             runner.stop();
             clearTimeout(pending);

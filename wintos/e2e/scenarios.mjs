@@ -1117,6 +1117,30 @@ await scenario("51 · a click on the open pane's chip brings the keys into that 
     await until("the keys in that pane", () => evalIn(t, `document.activeElement?.closest("[data-blockid]")?.dataset.blockid === "${pane}"`));
 });
 
+await scenario("52 · the epic agent starts a session for a step in the background: it shows in the epic on its step, and a click opens it in a pane", async () => {
+    const t2 = (await renderers()).find((x) => x.title.endsWith(" - T2"));
+    const t2Tab = await evalIn(t2, "window.wintosTabId()");
+    await evalIn(await visible(), `import("/wintos/ui/focus.ts").then((f) => f.focusSession({ tabId: "${t2Tab}", blockId: "" }))`);
+    await until("T2 in front", () => sql(`select data->>'activetabid' from db_workspace limit 1`) === t2Tab);
+    const t = await visible();
+    const pane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const id = await (await api("/epics", { title: "E2E background", short: "Bg" })).text();
+    await api("/events", { tabId: t2Tab, blockId: pane, payload: { session_id: "e2e-bg-agent", hook_event_name: "SessionStart" } });
+    await api(`/epics/${id}/agent`, { sessionId: "e2e-bg-agent" });
+    await api("/sessions/e2e-bg-agent/epic", { epic: id });
+    await api(`/epics/${id}/roadmap`, { add: "Seed the routines" });
+    const started = await api(`/blocks/${pane}/start`, { step: "Seed", bgId: "52e2e52e" });
+    if (started.status !== 200) throw new Error(`start refused: ${await started.text()}`);
+    writeFileSync(join(process.env.HOME, ".local/share/wintos-dev/bg-agents.json"), JSON.stringify([{ id: "52e2e52e", sessionId: "52e2e52e-0000-4000-8000-000000000052", kind: "background", state: "working", status: "busy" }]));
+    const col = `[data-blockid='${pane}'] [data-wintos=epic-column][data-epic='${id}']`;
+    await until("in the epic, in the background, on its step", () => evalIn(t, `(() => { const c = document.querySelector("${col}"); return !!c && c.innerText.includes("background · running") && c.querySelector("[data-step='Seed the routines']")?.innerText.includes("running"); })()`), 30000);
+    const panes = () => sql(`select json_array_length(data->'blockids') from db_tab where oid='${t2Tab}'`);
+    const before = Number(panes());
+    await evalIn(t, `[...document.querySelectorAll("${col} [data-session] button")].find((b) => b.innerText.includes("background"))?.click()`);
+    await until("a pane attached to it", async () => Number(panes()) === before + 1 && (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((x) => x.id === "52e2e52e-0000-4000-8000-000000000052")?.attachedTo, 20000);
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

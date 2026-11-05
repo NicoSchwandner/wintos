@@ -45,6 +45,24 @@ and an old project.md's content should move into its epic.
 Start after the reasons queue. Look at `daemon/inject.ts` (what a session is told to write) and
 `daemon/projects/` (where project.md is read).
 
+### What the epic agent still can't do
+
+`wintos start` lets it start sessions for its steps. Still missing, most needed first:
+
+- **Tell a session something in its own words.** SendMessage loses sessions when Claude renames
+  them after a restart (work-42 becomes work-fc), and `wintos relay` passes only your words.
+  A `wintos tell <session> "<text>"` typed in as `[The <epic> agent]`, clearly not you, keeps
+  the link.
+- **See more than a line per session:** a session's last message, its PRs' state and its open
+  question in full (`wintos peek <session>`).
+- **Edit the roadmap without losing links:** `wintos unit a b c` replaces the list, so a rename
+  drops the step's sessions; it needs rename, move and remove like the epic page has.
+- **Mark a step done when its PR merges,** by itself, from the PR the step names.
+- **Bring a stray session into its epic** (`wintos epic` only works for the caller), and close
+  or pause one of its own started sessions.
+- **Background sessions in the sidebar:** they show only in their epic today, and their "waits
+  for you" is not in Your move or ⌃⇥.
+
 ## Known gaps
 
 - **The epic column needs a 700px pane.** Beside a narrower pane (a split), the agent's view has

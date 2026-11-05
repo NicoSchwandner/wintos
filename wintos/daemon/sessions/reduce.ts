@@ -46,6 +46,7 @@ export type Session = {
     promptAt?: number; // the last prompt: in a pane running two sessions, the one you talk to
     resume?: string; // the pane's resume command for it: only the session the pane runs sends one
     background?: boolean; // runs only in Claude's background service: no pane shows it
+    bgId?: string; // started by its epic's agent in the background (`wintos start`): the short id `claude attach` takes
     attachedTo?: string; // a pane showing it (`claude attach`) while it runs in the background service
     subagents?: Record<string, number>; // the subagents it started that have not stopped, by id: when each started
 };

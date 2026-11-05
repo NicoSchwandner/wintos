@@ -80,3 +80,9 @@ test("shownState: a turn that ended with its subagents still running shows as wo
 
 test("inFlight: at work and waiting on you count; parked, done, idle, background and not-started ones don't", () =>
     expect(inFlight([s("a", "t", "working"), s("b", "t", "waiting"), s("c", "t", "parked"), s("d", "t", "done"), s("e", "t", "idle"), { ...s("f", "t", "working"), background: true }, { ...s("g", "t", "waiting"), restored: true }, { ...s("h", "t", "waiting"), subagents: { x: 1000 } }], 2000)).toEqual({ working: 2, waiting: 1 }));
+
+test("a pane running claude attach <short id> shows the session its epic's agent started in the background", () => {
+    const s = (id: string, o = {}) => ({ id, tabId: "t", blockId: "", state: "working", since: 0, lastAt: 0, ...o }) as never;
+    expect(attachments([{ blockId: "v1", script: "claude attach 430f7f7e" }], [s("430f7f7e-9d03", { bgId: "430f7f7e", background: true })], "t", new Set())).toEqual([{ sessionId: "430f7f7e-9d03", blockId: "v1" }]);
+    expect(attachments([{ blockId: "v1", script: "claude attach 430f7f7e" }], [s("other", { bgId: "11111111" })], "t", new Set())).toEqual([]);
+});

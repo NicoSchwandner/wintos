@@ -4,7 +4,7 @@ import type { EpicTime } from "../daemon/epics/time";
 import { EpicAvatar } from "./EpicAvatar";
 import { agentWorking, lookOf, shortName } from "./epicLook";
 import { globalStore } from "@/app/store/jotaiStore";
-import { editMine, focusSession } from "./focus";
+import { editMine, focusSession, openBackground } from "./focus";
 import { runAction, runKey } from "./menu";
 import { offerStep } from "./newproject";
 import { capStyle, Key } from "./Key";
@@ -52,7 +52,8 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
     const epic = state?.epics?.find((e) => e.id === id);
     const { mine, save } = useEpicMine(epic?.id);
     const [month, setMonth] = useState<EpicTime | undefined>();
-    const sessions = (state?.sessions ?? []).filter((s) => s.epic === id && s.state !== "ended" && !s.background);
+    // Its sessions, also those its agent started in the background (wintos start), which no pane shows yet.
+    const sessions = (state?.sessions ?? []).filter((s) => s.epic === id && s.state !== "ended" && (!s.background || !!s.bgId));
     const iso = new Date(now).toISOString().slice(0, 7);
     useEffect(() => {
         let live = true;
@@ -79,6 +80,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
     const goTo = (ids: string[]): boolean => {
         for (const id of [...ids].reverse()) {
             const live = state?.sessions.find((s) => s.id === id && s.state !== "ended");
+            if (live?.bgId && !live.attachedTo) return openBackground(live.bgId), true;
             if (live) return focusSession({ tabId: live.tabId, blockId: live.blockId }), true;
             const shelved = Object.entries(state?.shelf ?? {}).flatMap(([tabId, items]) => items.filter((i) => i.sessionId === id).map((i) => ({ tabId, script: i.script })))[0];
             if (shelved) return focusSession({ tabId: shelved.tabId, blockId: "", resume: shelved.script }), true;
@@ -165,10 +167,10 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                 const shown = shownState(s, now);
                 return (
                     <div key={s.id} data-item="link" data-session={s.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <button type="button" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => focusSession({ tabId: s.tabId, blockId: s.blockId })} style={{ display: "flex", alignItems: "center", gap: 10, flexGrow: 1, minWidth: 0, padding: "4px 6px", margin: "0 -6px", borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui, fontSize: 13.5, color: T.text }}>
+                        <button type="button" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => (s.bgId && !s.attachedTo ? openBackground(s.bgId) : focusSession({ tabId: s.tabId, blockId: s.blockId }))} style={{ display: "flex", alignItems: "center", gap: 10, flexGrow: 1, minWidth: 0, padding: "4px 6px", margin: "0 -6px", borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui, fontSize: 13.5, color: T.text }}>
                             <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: SESSION_DOT[shown] }} />
                             <span style={{ flexGrow: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessionName(s)}</span>
-                            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: shown === "waiting" ? T.apricot : T.muted }}>{STATE_WORD[shown]} {relTime(now - s.since)}</span>
+                            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: shown === "waiting" ? T.apricot : T.muted }}>{s.bgId && !s.attachedTo ? "background · " : ""}{STATE_WORD[shown]} {relTime(now - s.since)}</span>
                         </button>
                     </div>
                 );
@@ -247,7 +249,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                                                 {u.name}
                                             </button>
                                         )}
-                                        <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 400, color: removing === u.name ? T.apricot : shown === "waiting" ? T.apricot : T.muted }}>{removing === u.name ? "⌫ again removes it" : tail}</span>
+                                        <span style={{ gridColumn: "2 / 4", fontFamily: T.mono, fontSize: 11, fontWeight: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: removing === u.name ? T.apricot : shown === "waiting" ? T.apricot : T.muted, display: tail || removing === u.name ? undefined : "none" }}>{removing === u.name ? "⌫ again removes it" : tail}</span>
                                     </div>
                                 );
                             })}

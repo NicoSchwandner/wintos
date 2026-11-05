@@ -9,7 +9,7 @@ import { runAction, runKey } from "./menu";
 import { offerStep } from "./newproject";
 import { Key } from "./Key";
 import { cursorKeys, startCursor } from "./itemCursor";
-import { Md } from "./notes/Md";
+import { More } from "./notes/ProjectNotes";
 import { Mine } from "./notes/Mine";
 import { newStepEpicAtom, openEpicAtom } from "./notes/state";
 import { useEpicMine } from "./notes/useNotes";
@@ -85,6 +85,8 @@ export const EpicPage = memo(() => {
     const newStep = () => epic && (globalStore.set(newStepEpicAtom, epic.id), runKey("new-step"));
     // The roadmap, worked from its rows: ⏎ goes to the session working the step (a done one too), or
     // starts one for it; d done or open again; J K move; e renames; ⌫ twice removes. The epic agent hears of each edit.
+    // Finished steps stay folded: what is done is looked up, not read every time.
+    const [showFinished, setShowFinished] = useState(false);
     const [renaming, setRenaming] = useState<string | undefined>();
     const [removing, setRemoving] = useState<string | undefined>();
     const [stepError, setStepError] = useState("");
@@ -149,9 +151,6 @@ export const EpicPage = memo(() => {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 360px)", gap: 20, alignItems: "start" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                    <Panel label="Plan" note={epic.plan ? "the epic agent keeps it, in epic.md" : "none yet: a starts the epic agent, which writes it"}>
-                        {epic.plan && <Md text={epic.plan} size="full" />}
-                    </Panel>
                     <Panel
                         label="Roadmap"
                         note={roadmap.length ? `${roadmap.filter((u) => u.state === "done").length} of ${roadmap.length} done` : "none yet: s adds a step, or the epic agent sets it"}
@@ -222,7 +221,8 @@ export const EpicPage = memo(() => {
                         </div>
                     </Panel>
                     <Panel label="Finished steps" note={finished.length ? `${finished.length} · ${spent(finished.reduce((n, f) => n + f.ms, 0))} at them` : "none yet"}>
-                        {finished.slice(0, 12).map((f) => (
+                        {finished.length > 0 && <More open={showFinished} label={`Show the ${finished.length} finished`} onClick={() => setShowFinished((v) => !v)} />}
+                        {showFinished && finished.map((f) => (
                             <div key={f.sessionId} data-wintos="finished-step" style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr) auto auto", gap: 10, alignItems: "baseline", fontSize: 13, color: T.secondary }}>
                                 <span style={{ fontFamily: T.mono, color: T.moss }}>✓</span>
                                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>

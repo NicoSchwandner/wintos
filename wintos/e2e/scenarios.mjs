@@ -916,7 +916,9 @@ await scenario("45 · an epic's page shows its finished steps and last 8 workday
     const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
     await api("/time/backfill", { log: { [iso(d)]: { "e2e-old": { epic: id, ms: 3_600_000 } } } });
     await evalIn(t, `import("/wintos/ui/menu.ts").then((m) => m.openEpic("${id}"))`);
-    await until("a finished step and eight days", () => evalIn(t, `document.querySelectorAll("[data-wintos=finished-step]").length === 1 && document.querySelectorAll("[data-wintos=epic-days] > div").length === 8`));
+    await until("finished steps folded, eight days", () => evalIn(t, `!document.querySelector("[data-wintos=finished-step]") && !!document.querySelector("[data-more=closed]") && document.querySelectorAll("[data-wintos=epic-days] > div").length === 8 && document.activeElement?.dataset.wintos === "epic-page"`));
+    await press(t, "m");
+    await until("m unfolds the finished step", () => evalIn(t, `document.querySelectorAll("[data-wintos=finished-step]").length === 1`));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
     await press(t, "y", { mods: ["meta", "shift"] });
     const row = `document.querySelector("[data-wintos=month-row][data-epic='${id}']")`;

@@ -1146,6 +1146,33 @@ await scenario("52 · the epic agent starts a session for a step in the backgrou
     if (own === t2Tab || Number(panes()) !== before) throw new Error(`it opened in the view in front (${own})`);
 });
 
+await scenario("53 · ⌥⌘T moves a background session attached as a split into a view of its own, also while it works", async () => {
+    const t2 = (await renderers()).find((x) => x.title.endsWith(" - T2"));
+    const t2Tab = await evalIn(t2, "window.wintosTabId()");
+    await evalIn(await visible(), `import("/wintos/ui/focus.ts").then((f) => f.focusSession({ tabId: "${t2Tab}", blockId: "" }))`);
+    await until("T2 in front", () => sql(`select data->>'activetabid' from db_workspace limit 1`) === t2Tab);
+    const t = await visible();
+    const agentPane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const st = async () => (await fetch("http://127.0.0.1:7731/state")).json();
+    const id = await (await api("/epics", { title: "E2E move bg", short: "MoveBg" })).text();
+    await api("/events", { tabId: t2Tab, blockId: agentPane, payload: { session_id: "e2e-mv-agent", hook_event_name: "SessionStart" } });
+    await api(`/epics/${id}/agent`, { sessionId: "e2e-mv-agent" });
+    await api("/sessions/e2e-mv-agent/epic", { epic: id });
+    await api(`/epics/${id}/roadmap`, { add: "Move me" });
+    await api(`/blocks/${agentPane}/start`, { step: "Move", bgId: "53e2e53e" });
+    const sid = "53e2e53e-0000-4000-8000-000000000053";
+    writeFileSync(join(process.env.HOME, ".local/share/wintos-dev/bg-agents.json"), JSON.stringify([{ id: "53e2e53e", sessionId: sid, kind: "background", state: "working", status: "busy" }]));
+    await until("listed", async () => (await st()).sessions.some((x) => x.id === sid), 30000);
+    // Attached as a split of T2, the way the old build opened it.
+    await evalIn(t, `import("/frontend/app/store/global.ts").then((g) => g.createBlock({ meta: { view: "term", controller: "shell", "cmd:initscript": "claude attach 53e2e53e" } }))`);
+    const pane = await until("attached in T2", async () => { const x = (await st()).sessions.find((y) => y.id === sid); return x?.tabId === t2Tab && x.attachedTo; }, 20000);
+    await evalIn(t, `window.wintosLayout().focusNode(window.wintosLayout().getNodeByBlockId("${pane}").id)`);
+    await until("its pane focused", () => evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId === "${pane}"`));
+    await press(t, "t", { code: "KeyT", mods: ["meta", "alt"] });
+    await until("in a view of its own, gone from T2", async () => { const x = (await st()).sessions.find((y) => y.id === sid); return x?.tabId !== t2Tab && x?.attachedTo && !sql(`select data->>'blockids' from db_tab where oid='${t2Tab}'`).includes(pane); }, 30000);
+});
+
 await scenario("clean-up · the panes this run opened are closed", async () => {
     const inbox = await toInbox();
     await evalIn(inbox, `(async () => {

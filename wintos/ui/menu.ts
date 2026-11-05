@@ -332,15 +332,18 @@ function movable() {
     const blockId = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
     const meta = blockId ? globalStore.get(getWaveObjectAtom<Block>(makeORef("block", blockId)))?.meta : undefined;
     const session = blockId ? liveSessionIn(currentState()?.sessions ?? [], blockId) : undefined;
-    const script = shelvable(meta);
-    const why = !session || !script ? "only a Claude session that can be resumed moves; this pane has none" : shownState(session, Date.now()) === "working" ? "it is working: move it once its turn ends" : undefined;
-    return { lm, blockId, session, script, why };
+    // A session its epic's agent started in the background shows here through `claude attach`: it
+    // moves by attaching elsewhere, and keeps running meanwhile, so a turn at work is no reason to wait.
+    const attached = session?.bgId && typeof meta?.["cmd:initscript"] === "string" && meta["cmd:initscript"].includes("claude attach") ? `claude attach ${session.bgId}` : undefined;
+    const script = attached ?? shelvable(meta);
+    const why = !session || !script ? "only a Claude session that can be resumed moves; this pane has none" : !attached && shownState(session, Date.now()) === "working" ? "it is working: move it once its turn ends" : undefined;
+    return { lm, blockId, session, script, why, attached: !!attached };
 }
 export const moveRefusal = () => movable().why;
 export function moveSession(to: string | "new"): string | undefined {
-    const { lm, blockId, session, script, why } = movable();
+    const { lm, blockId, session, script, why, attached } = movable();
     if (why || !session || !script) return why;
-    shelvePane(blockId);
+    if (!attached) shelvePane(blockId); // an attached one has nothing to shelve: it runs on in the background
     const node = lm.getNodeByBlockId(blockId!);
     if (node) void lm.closeNode(node.id);
     flog(`move ${session.id.slice(0, 8)} → ${to === "new" ? "a view of its own" : to.slice(0, 6)}`);

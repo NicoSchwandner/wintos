@@ -8,6 +8,7 @@ import { editMine, focusSession } from "./focus";
 import { openEpicPage, runAction, runKey } from "./menu";
 import { offerStep } from "./newproject";
 import { capStyle, Key } from "./Key";
+import { stepSessions as linkedSessions } from "./stepLinks";
 import { cursorKeys, startCursor } from "./itemCursor";
 import { More } from "./notes/ProjectNotes";
 import { Mine } from "./notes/Mine";
@@ -111,9 +112,9 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
         offerStep({ epic: epic.id, step: name, unit: name });
         runAction("project");
     };
-    // The sessions that worked a step; never the agent (a link from before it was kept out), whose
-    // pane is where you are when you work the roadmap beside it.
-    const stepSessions = (name: string) => (epic?.links?.[name] ?? []).filter((id) => id !== epic?.agent);
+    // The sessions that work a step (stepLinks.ts); never the agent, whose pane is where you are
+    // when you work the roadmap beside it.
+    const stepSessions = (name: string) => (epic ? linkedSessions(name, epic.links?.[name] ?? [], state?.sessions ?? [], epic) : []);
     const stepAtCursor = () => ref.current?.querySelector<HTMLElement>("[data-cursor][data-step]")?.dataset.step;
     const onStep = (f: (name: string) => void) => () => {
         const name = stepAtCursor();

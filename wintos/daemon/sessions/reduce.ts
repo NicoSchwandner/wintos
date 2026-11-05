@@ -366,6 +366,9 @@ export const liveSessionIn = (sessions: Iterable<Session>, blockId: string): Ses
 // The session a `wintos` call comes from: the one it names (CLAUDE_CODE_SESSION_ID), so a pane
 // running several (a fork Claude Code runs in the background shares its pane) never mixes them
 // up; without a name, the pane's.
+// Its status line while it still says something: set since your last prompt. One set turns ago
+// ("paused until afternoon", two days on) says nothing about what it does now.
+export const freshStatus = (s: Pick<Session, "status" | "promptAt">) => (s.status && s.status.at >= (s.promptAt ?? 0) ? s.status : undefined);
 export const liveIn = (sessions: Map<string, Session>, blockId: string, sessionId?: string) => {
     const named = sessionId ? sessions.get(sessionId) : undefined;
     return named && named.state !== "ended" ? named : liveSessionIn(sessions.values(), blockId);

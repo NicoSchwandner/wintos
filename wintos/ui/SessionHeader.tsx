@@ -11,7 +11,7 @@ import { SESSION_DOT, T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { wakesWhen } from "../daemon/wakes/wakes";
-import { liveSubagents, type Lane } from "../daemon/sessions/reduce";
+import { freshStatus, liveSubagents, type Lane } from "../daemon/sessions/reduce";
 import { shownState, STATE_WORD } from "./sessions";
 import { WhereWasI } from "./WhereWasI";
 import { EpicAvatar } from "./EpicAvatar";
@@ -29,6 +29,7 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     if (!h) return null;
     const s = h.session;
     const shown = shownState(s, now);
+    const status = freshStatus(s);
     const agents = liveSubagents(s, now);
     const urgent = urgentPr(h);
     // In a session waiting on you: how many more wait, and the key to the next.
@@ -78,10 +79,10 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                     <StepTrack lane={s.lane} unit={unitAt} />
                 </div>
             )}
-            {s.status && (
-                <div style={{ color: T.secondary, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.status.text}>
-                    {s.status.text}
-                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}> · {relTime(now - s.status.at)}</span>
+            {status && (
+                <div style={{ color: T.secondary, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={status.text}>
+                    {status.text}
+                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.faint }}> · {relTime(now - status.at)}</span>
                 </div>
             )}
             {h.wake && (

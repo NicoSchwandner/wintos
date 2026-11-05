@@ -13,7 +13,7 @@ export function askPrompt(message: string): string {
         "- answer: it asked them a question",
         "- decide: it laid out options and they pick one",
         "- approve: it explicitly asks for their go before it goes on (a plan of what it will do by itself is not this)",
-        "- unblock: it needs them to do something it can't (a login, an unlock, a manual step)",
+        "- unblock: it needs them to do something it can't (a login, an unlock, a manual step); never when it says nothing is needed",
         "- read: it only reports (done, a status, an analysis, a PR to look at); nothing waits on them",
         "- waits: it carries on by itself: something it started runs (CI, a loop, a deploy) and it will be woken or come back",
         'E.g. "decide: two bands or one marked band", "read: momentum fix is live", "waits: the CI retry loop on test".',
@@ -37,6 +37,8 @@ export function parseAsk(out: string): TurnRead | undefined {
     if (kind === "read") return "done";
     const text = m[2].replace(/^["'“`]+|["'”.`]+$/g, "").trim();
     if (kind === "waits") return { waits: clip(text || "something it started") };
+    // "unblock: none needed": the model named a kind, then said nothing is asked.
+    if (/^(none|nothing|no action|not needed|n\/a)\b/i.test(text)) return "done";
     const context = lines.map((l) => /^context:\s*(.+)$/i.exec(l)?.[1]).find(Boolean);
     let q: string | undefined;
     const read = lines.flatMap((l): AskOption[] => {

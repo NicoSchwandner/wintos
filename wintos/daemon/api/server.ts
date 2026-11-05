@@ -31,7 +31,7 @@ import { reassignPrs, touchPrs } from "../prs/owners";
 import { groupOf, type DonePr, type PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
-import { finishSession, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setEpic, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
+import { finishSession, freshStatus, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setEpic, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askCard, askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { changes, trail } from "../sessions/trail";
 import { eventLog } from "../events";
@@ -167,7 +167,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         if (epic && epic.agent === sessionId) {
             const workers = [...sessions.values()]
                 .filter((w) => w.epic === epic.id && w.id !== sessionId && w.state !== "ended" && !w.background)
-                .map((w) => ({ name: w.name?.text ?? w.label ?? "a session", state: w.state, step: w.lane?.steps[w.lane.at], status: w.status?.text, prs: w.prs ?? [], ask: w.state === "waiting" ? (w.ask?.text ?? w.outcome?.text) : undefined }));
+                .map((w) => ({ name: w.name?.text ?? w.label ?? "a session", state: w.state, step: w.lane?.steps[w.lane.at], status: freshStatus(w)?.text, prs: w.prs ?? [], ask: w.state === "waiting" ? (w.ask?.text ?? w.outcome?.text) : undefined }));
             return epicAgentInjection({ title: epic.title, dir: epic.dir, steps: serializeUnits(epic.steps) }, workers);
         }
         // A session already linked to a step is not asked to claim one.

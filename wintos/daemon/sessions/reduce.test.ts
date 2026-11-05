@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import start from "../fixtures/session-start.json";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
-import { acceptSuggestedName, askSession, attachSession, readTurn, endSessions, finishSession, nameSession, renameSession, titleSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setEpic, setLane, setStatus, setStep, setTodo, tickTodo, liveSessionsIn } from "./reduce";
+import { acceptSuggestedName, freshStatus, askSession, attachSession, readTurn, endSessions, finishSession, nameSession, renameSession, titleSession, HookEvent, parkSession, unparkSession, reduceSession, restoreSessions, Session, setEpic, setLane, setStatus, setStep, setTodo, tickTodo, liveSessionsIn } from "./reduce";
 
 const ev = (payload: object, tabId = "tab-1", blockId = "blk-1"): HookEvent => ({ tabId, blockId, payload: payload as HookEvent["payload"] });
 const run = (events: HookEvent[], t0 = 1000) =>
@@ -451,4 +451,10 @@ describe("setEpic", () => {
         expect(setEpic(one, "nope", "route")).toBe(one);
         expect(setEpic(one, "s1", undefined)).toBe(one);
     });
+});
+
+test("a status line shows while it is from this turn; one set before your last prompt is stale", () => {
+    expect(freshStatus({ status: { text: "walking the test plan", at: 200 }, promptAt: 100 })?.text).toBe("walking the test plan");
+    expect(freshStatus({ status: { text: "paused until afternoon", at: 100 }, promptAt: 200 })).toBeUndefined();
+    expect(freshStatus({ status: { text: "never prompted here", at: 5 } })?.text).toBe("never prompted here");
 });

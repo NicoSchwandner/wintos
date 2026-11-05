@@ -1039,6 +1039,15 @@ await scenario("48 · the epic agent's pane: the epic beside its terminal; ⌘L 
     await api(`/epics/${id}/agent`, { sessionId: "e2e-viewagent" });
     const col = `[data-blockid='${pane}'] [data-wintos=epic-column][data-epic='${id}']`;
     await until("the epic beside the agent's terminal", () => evalIn(t, `!!document.querySelector("${col}")?.offsetParent`), 20000);
+    // A wide pane: two columns, the roadmap alone in the first; buttons without keycaps (⌘ held shows them).
+    const layout = await evalIn(t, `(() => {
+        const c = document.querySelector("${col}");
+        const left = (label) => [...c.querySelectorAll("span")].find((e) => e.textContent === label)?.getBoundingClientRect().left;
+        return { pane: document.querySelector("[data-blockid='${pane}'] .wintos-pane")?.getBoundingClientRect().width, roadmap: left("Roadmap"), sessions: left("Sessions"), cap: getComputedStyle(c.querySelector(".w-keycap")).display, buttons: [...c.querySelectorAll("button[data-key]")].map((b) => b.textContent.trim()) };
+    })()`);
+    if (layout.pane >= 1300 && !(layout.sessions > layout.roadmap + 200)) throw new Error(`not two columns, the roadmap first: ${JSON.stringify(layout)}`);
+    if (layout.cap !== "none") throw new Error(`keycaps show beside the agent without ⌘: ${JSON.stringify(layout)}`);
+    if (!layout.buttons.some((b) => b.endsWith("Add step"))) throw new Error(`no Add step button: ${JSON.stringify(layout)}`);
     await cdpFocus(t, `[data-blockid='${pane}'] .xterm-helper-textarea`);
     await press(t, "l", { mods: ["meta"] });
     await until("⌘L: into the column", () => evalIn(t, `document.activeElement?.matches("${col}")`));

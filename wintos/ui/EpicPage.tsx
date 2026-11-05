@@ -7,7 +7,7 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { editMine, focusSession } from "./focus";
 import { openEpicPage, runAction, runKey } from "./menu";
 import { offerStep } from "./newproject";
-import { Key } from "./Key";
+import { capStyle, Key } from "./Key";
 import { cursorKeys, startCursor } from "./itemCursor";
 import { More } from "./notes/ProjectNotes";
 import { Mine } from "./notes/Mine";
@@ -29,6 +29,17 @@ const spent = (ms: number) => (ms < 3_600_000 ? `${Math.round(ms / 60_000)} min`
 // p pins it to the top of the sidebar, to keep it in sight; x marks the epic done, or open again: a done epic leaves the sidebar's picks and stays in the report.
 // column: the same, narrow, beside the epic agent's terminal (its view is the epic's view); it
 // takes focus only by ⌘L from that terminal, so typing to the agent is never interrupted.
+// An action as a button the mouse knows. Its key shows on it on the page; beside the agent's
+// terminal (chrome, theme.css) the cap hides and holding ⌘ badges the button instead.
+function Act({ k, label, onClick, wintos, primary }: { k: string; label: string; onClick: () => void; wintos: string; primary?: boolean }) {
+    return (
+        <button type="button" data-wintos={wintos} data-key={k} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "4px 10px", borderRadius: 7, border: `1px solid ${primary ? T.borderActive : T.border}`, background: primary ? T.cardActive : T.card, cursor: "pointer", fontFamily: T.ui, fontSize: 12.5, color: primary ? T.emphasis : T.secondary, whiteSpace: "nowrap" }}>
+            <span className="w-keycap" style={capStyle}>{k}</span>
+            {label}
+        </button>
+    );
+}
+
 export const EpicPage = memo(() => <EpicBody id={useAtomValue(openEpicAtom)} />);
 EpicPage.displayName = "EpicPage";
 
@@ -130,6 +141,37 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
         const p = gh?.prs.find((x) => x.url === url);
         return { url, ref: state ? prRef(state, url) : url, title: p?.title, state: p ? (p.mergedAt ? "merged" : p.isDraft ? "draft" : "open") : "closed or merged" };
     });
+    // Beside the agent the roadmap has the left column to itself; these go right, with the rest.
+    const finishedPanel = (
+        <Panel label="Finished sessions" note={finished.length ? `${finished.length} · ${spent(finished.reduce((n, f) => n + f.ms, 0))} at them` : "none yet"}>
+            {finished.length > 0 && <More open={showFinished} label={`Show the ${finished.length} finished`} onClick={() => setShowFinished((v) => !v)} />}
+            {showFinished && finished.map((f) => (
+                <div key={f.sessionId} data-wintos="finished-step" style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr) auto auto", gap: 10, alignItems: "baseline", fontSize: 13, color: T.secondary }}>
+                    <span style={{ fontFamily: T.mono, color: T.moss }}>✓</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{f.prs.map((u) => (state ? prRef(state, u) : u)).join(" · ")}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{spent(f.ms)} · {f.last.slice(5)}</span>
+                </div>
+            ))}
+        </Panel>
+    );
+    const sessionsPanel = (
+        <Panel label="Sessions" note={shortName(epic)} keys={sessions.length > 0 && <Key k="j k · ⏎" label="its pane" />}>
+            {sessions.map((s) => {
+                const shown = shownState(s, now);
+                return (
+                    <div key={s.id} data-item="link" data-session={s.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <button type="button" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => focusSession({ tabId: s.tabId, blockId: s.blockId })} style={{ display: "flex", alignItems: "center", gap: 10, flexGrow: 1, minWidth: 0, padding: "4px 6px", margin: "0 -6px", borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui, fontSize: 13.5, color: T.text }}>
+                            <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: SESSION_DOT[shown] }} />
+                            <span style={{ flexGrow: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessionName(s)}</span>
+                            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: shown === "waiting" ? T.apricot : T.muted }}>{STATE_WORD[shown]} {relTime(now - s.since)}</span>
+                        </button>
+                    </div>
+                );
+            })}
+            {!sessions.length && <span style={{ fontSize: 12.5, color: T.faint }}>No session in it now. n starts one.</span>}
+        </Panel>
+    );
     return (
         <div
             ref={ref}
@@ -137,8 +179,8 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
             data-zone="list"
             data-wintos={column ? "epic-column" : "epic-page"}
             data-epic={epic.id}
-            className={column ? "wintos-steps-side" : undefined}
-            style={column ? { width: 360, flexShrink: 0, display: "flex", flexDirection: "column", gap: 12, padding: "10px 12px", borderLeft: `1px solid ${T.border}`, background: T.ground, outline: "none", fontFamily: T.ui, minHeight: 0, overflowY: "auto" } : { flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 18px", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0, overflowY: "auto" }}
+            className={column ? "wintos-steps-side w-epic-col" : undefined}
+            style={column ? { flexShrink: 0, display: "flex", flexDirection: "column", gap: 12, padding: "10px 12px", borderLeft: `1px solid ${T.border}`, background: T.ground, outline: "none", fontFamily: T.ui, minHeight: 0, overflowY: "auto" } : { flexGrow: 1, display: "flex", flexDirection: "column", gap: 16, padding: "18px 26px 18px", background: T.ground, outline: "none", fontFamily: T.ui, minWidth: 0, minHeight: 0, overflowY: "auto" }}
         >
             <div style={{ display: "flex", alignItems: "center", gap: column ? 10 : 16, flexWrap: "wrap", padding: column ? "8px 10px" : "14px 16px", borderRadius: 12, background: `linear-gradient(90deg, ${look.bg} 0%, transparent 70%)`, borderTop: `3px solid ${look.fg}` }}>
                 <EpicAvatar look={look} size={column ? 30 : 56} running={agentWorking(epic, state?.sessions)} />
@@ -148,43 +190,29 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                         {[epic.done ? `done ${epic.done}` : `${sessions.length} session${sessions.length === 1 ? "" : "s"} open`, month && month.ms >= 60_000 && `${spent(month.ms)} this month`, epic.lane && `${epic.lane} sessions land here`].filter(Boolean).join(" · ")}
                     </span>
                 </div>
-                <span style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                    {column && <Key k="⌘L ⌘H" label="here and back to the agent" />}
-                    {column && (
-                        <button type="button" data-wintos="epic-full-page" data-key="f" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openEpicPage(epic.id)} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
-                            <Key k="f" label="full page" />
-                        </button>
-                    )}
-                    {!column && <button type="button" data-wintos="epic-agent" data-key="a" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={toAgent} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
-                        <Key k="a" label={epic.agent ? "the epic agent" : "start the epic agent"} />
-                    </button>}
-                    <button type="button" data-wintos="epic-pin" data-key="p" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={togglePin} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
-                        <Key k="p" label={epic.pinned ? "unpin from the sidebar" : "pin to the sidebar"} />
-                    </button>
-                    <button type="button" data-wintos="epic-done" data-key="x" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={toggleDone} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
-                        <Key k="x" label={epic.done ? "open it again" : "epic done ✓"} />
-                    </button>
+                <span style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    {column && <Key k="⌘L ⌘H" label="into the epic · back to the agent" hold />}
+                    {column && <Act wintos="epic-full-page" k="f" label="Full page" onClick={() => openEpicPage(epic.id)} />}
+                    {!column && <Act wintos="epic-agent" k="a" label={epic.agent ? "Epic agent" : "Start the epic agent"} onClick={toAgent} primary />}
+                    <Act wintos="epic-pin" k="p" label={epic.pinned ? "Unpin" : "Pin"} onClick={togglePin} />
+                    <Act wintos="epic-done" k="x" label={epic.done ? "Open again" : "Epic done"} onClick={toggleDone} />
                     {!column && <Key k="esc" label="back" />}
                 </span>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: column ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(260px, 360px)", gap: column ? 12 : 20, alignItems: "start" }}>
+            <div className={column ? "w-epic-grid" : undefined} style={{ display: "grid", gridTemplateColumns: column ? undefined : "minmax(0, 1fr) minmax(260px, 360px)", gap: column ? 12 : 20, alignItems: "start" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                     <Panel
                         label="Roadmap"
                         note={roadmap.length ? `${roadmap.filter((u) => u.state === "done").length} of ${roadmap.length} done` : "none yet: s adds a step, or the epic agent sets it"}
                         keys={
                             <>
-                                <button type="button" data-wintos="epic-add-step" data-key="s" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => setAdding(true)} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
-                                    <Key k="s" label="add a step" />
-                                </button>
-                                {roadmap.length > 0 && <Key k="⏎ d J K e ⌫" label="go or start · done · move · rename · remove" />}
-                                <button type="button" data-wintos="epic-start-step" data-key="n" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={newStep} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
-                                    <Key k="n" label="new session" />
-                                </button>
+                                {roadmap.length > 0 && <Key k="⏎ d ⇧J ⇧K e ⌫" label="go or start · done · move · rename · remove" hold={column} />}
+                                <Act wintos="epic-add-step" k="s" label="Add step" onClick={() => setAdding(true)} />
+                                <Act wintos="epic-start-step" k="n" label="New session" onClick={newStep} primary />
                             </>
                         }
                     >
-                        <div data-wintos="epic-roadmap" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div data-wintos="epic-roadmap" style={{ display: "flex", flexDirection: "column", gap: 2, margin: "0 -9px" }}>
                             {roadmap.map((u) => {
                                 const ids = epic.links?.[u.name] ?? [];
                                 const live = (state?.sessions ?? []).filter((x) => ids.includes(x.id) && x.state !== "ended");
@@ -194,7 +222,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                                 const shown = live[0] && shownState(live[0], now);
                                 const tail = [shown && `● ${STATE_WORD[shown]}`, ms >= 60_000 && spent(ms), refs.join(" · ")].filter(Boolean).join(" · ");
                                 return (
-                                    <div key={u.name} data-item="link" data-step={u.name} data-unit={u.state} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr) auto", gap: 10, alignItems: "baseline", fontSize: 13.5, color: u.state === "current" ? T.emphasis : u.state === "done" ? T.faint : T.secondary, fontWeight: u.state === "current" ? 600 : 400 }}>
+                                    <div key={u.name} data-item="link" data-step={u.name} data-unit={u.state} style={{ display: "grid", gridTemplateColumns: "12px minmax(0, 1fr) auto", gap: 10, alignItems: "baseline", padding: "6px 9px", borderRadius: 8, background: u.state === "current" ? T.cardActive : "transparent", boxShadow: u.state === "current" ? `inset 3px 0 0 ${look.fg}` : undefined, fontSize: 14.5, lineHeight: 1.35, color: u.state === "current" ? T.emphasis : u.state === "done" ? T.faint : T.text, fontWeight: u.state === "current" ? 600 : 400 }}>
                                         <span style={{ fontFamily: T.mono, color: u.state === "todo" ? T.faint : T.moss }}>{u.state === "done" ? "✓" : u.state === "current" ? "▸" : "○"}</span>
                                         {renaming === u.name ? (
                                             <input
@@ -238,34 +266,12 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                             {(addError || stepError) && <span style={{ fontSize: 12, color: T.apricot }}>{addError || stepError}</span>}
                         </div>
                     </Panel>
-                    <Panel label="Finished sessions" note={finished.length ? `${finished.length} · ${spent(finished.reduce((n, f) => n + f.ms, 0))} at them` : "none yet"}>
-                        {finished.length > 0 && <More open={showFinished} label={`Show the ${finished.length} finished`} onClick={() => setShowFinished((v) => !v)} />}
-                        {showFinished && finished.map((f) => (
-                            <div key={f.sessionId} data-wintos="finished-step" style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr) auto auto", gap: 10, alignItems: "baseline", fontSize: 13, color: T.secondary }}>
-                                <span style={{ fontFamily: T.mono, color: T.moss }}>✓</span>
-                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
-                                <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{f.prs.map((u) => (state ? prRef(state, u) : u)).join(" · ")}</span>
-                                <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{spent(f.ms)} · {f.last.slice(5)}</span>
-                            </div>
-                        ))}
-                    </Panel>
-                    <Panel label="Sessions" note={shortName(epic)} keys={sessions.length > 0 && <Key k="j k · ⏎" label="its pane" />}>
-                        {sessions.map((s) => {
-                            const shown = shownState(s, now);
-                            return (
-                                <div key={s.id} data-item="link" data-session={s.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                    <button type="button" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => focusSession({ tabId: s.tabId, blockId: s.blockId })} style={{ display: "flex", alignItems: "center", gap: 10, flexGrow: 1, minWidth: 0, padding: "4px 6px", margin: "0 -6px", borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui, fontSize: 13.5, color: T.text }}>
-                                        <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: SESSION_DOT[shown] }} />
-                                        <span style={{ flexGrow: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessionName(s)}</span>
-                                        <span style={{ fontFamily: T.mono, fontSize: 11.5, color: shown === "waiting" ? T.apricot : T.muted }}>{STATE_WORD[shown]} {relTime(now - s.since)}</span>
-                                    </button>
-                                </div>
-                            );
-                        })}
-                        {!sessions.length && <span style={{ fontSize: 12.5, color: T.faint }}>No session in it now. n starts one.</span>}
-                    </Panel>
+                    {!column && finishedPanel}
+                    {!column && sessionsPanel}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {column && sessionsPanel}
+                {column && finishedPanel}
                 <Panel label="Last 8 workdays" note={history ? spent(history.days.reduce((n, d) => n + d.ms, 0)) : "…"}>
                     <div data-wintos="epic-days" style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 90 }}>
                         {(history?.days ?? []).map((d) => (

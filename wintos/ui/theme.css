@@ -111,6 +111,14 @@ body {
         display: none !important;
     }
 }
+/* The epic beside its agent's terminal: one column, and two once the pane is wide, the roadmap
+   in the first. */
+.w-epic-col { width: 360px; }
+.w-epic-grid { grid-template-columns: minmax(0, 1fr); }
+@container (min-width: 1300px) {
+    .w-epic-col { width: 700px; }
+    .w-epic-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
 @container (max-width: 699px) {
     .wintos-steps-side {
         /* !important: the column sets display: flex inline. */
@@ -122,7 +130,7 @@ body {
    and holding ⌘ badges each button with its key (KeyBadges.tsx) without moving anything. A key
    with no button of its own (.w-hold) shows inline while ⌘ is held. Pages, footers and the nudge
    keep their caps: there a key is the instruction. */
-:is([data-wintos="sidebar"], [data-wintos="pane-strip"], [data-wintos="session-header"], [data-wintos="notes-rail"], [data-wintos="notes-drawer"]) .w-keycap:not(.w-always):not(.w-hold),
+:is([data-wintos="sidebar"], [data-wintos="pane-strip"], [data-wintos="session-header"], [data-wintos="notes-rail"], [data-wintos="notes-drawer"], [data-wintos="epic-column"]) .w-keycap:not(.w-always):not(.w-hold),
 body:not(.w-show-keys) .w-hold {
     display: none !important;
 }

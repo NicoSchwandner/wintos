@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Unit } from "../projects/units";
-import { editRoadmap, linkStep, parseLinks, pruneLinks } from "./roadmap";
+import { editRoadmap, linkStep, mergedSteps, parseLinks, pruneLinks } from "./roadmap";
 
 const u = (name: string, state: Unit["state"] = "todo"): Unit => ({ name, state });
 const road = { steps: [u("Mapping", "done"), u("Cutover", "current"), u("Backfill")], links: { Cutover: ["s1"], Mapping: ["s0"] } };
@@ -52,4 +52,11 @@ describe("links", () => {
         expect(parseLinks('{"a":["s1"],"b":3}')).toEqual({ a: ["s1"] });
         expect(parseLinks("{oops")).toEqual({});
     });
+});
+
+test("a step naming a merged PR is done by itself; one naming an open PR, or none, is not", () => {
+    const steps = [u("Core#14715 on test"), u("core #14717 merged"), u("Receipt routines seed"), u("Core#14692 merged", "done")];
+    expect(mergedSteps(steps, [{ repo: "acme/Core", number: 14715 }, { repo: "acme/Core", number: 14692 }])).toEqual(["Core#14715 on test"]);
+    expect(mergedSteps(steps, [{ repo: "acme/Core", number: 14717 }])).toEqual(["core #14717 merged"]);
+    expect(mergedSteps(steps, [{ repo: "acme/Other", number: 14715 }])).toEqual([]);
 });

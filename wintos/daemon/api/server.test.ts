@@ -1564,6 +1564,28 @@ describe("done PRs", () => {
         await new Promise((r) => setTimeout(r, 200));
         expect(asked).toEqual([[MERGED]]);
     });
+    test("a roadmap step naming a PR that merged is done by itself, and the epic's agent hears of it", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-done-"));
+        writeFileSync(join(dir, "gh"), `#!/bin/sh\necho '${JSON.stringify({ me: "me", prs: [{ url: OPEN }] })}'\n`, { mode: 0o755 });
+        srv = await startServer({ root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fetchDone: async () => [{ url: MERGED, number: 2, repo: "o/r", merged: true }] });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event(prompt);
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/blocks/blk-1/epic", { epic: id });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post(`/epics/${id}/roadmap`, { add: "r#2 merged" });
+        await post(`/epics/${id}/roadmap`, { add: "r#1 merged" });
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [OPEN, MERGED] });
+        await post("/plugins/gh-prs/run", {});
+        let state: { epics: { steps: { name: string; state: string }[] }[]; epicReports?: Record<string, { text: string }[]> } = { epics: [] };
+        for (let i = 0; i < 100 && state.epics[0]?.steps[0]?.state !== "done"; i++) {
+            await new Promise((r) => setTimeout(r, 20));
+            state = await (await fetch(base + "/state")).json();
+        }
+        expect(state.epics[0].steps).toEqual([{ name: "r#2 merged", state: "done" }, { name: "r#1 merged", state: "todo" }]);
+        expect(state.epicReports?.ag?.map((r) => r.text)).toContain('roadmap: "r#2 merged" is done by itself, its PR merged');
+    });
 });
 
 describe("update", () => {

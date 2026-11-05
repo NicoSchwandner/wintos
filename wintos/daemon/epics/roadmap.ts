@@ -69,3 +69,10 @@ export function parseLinks(raw: string | undefined): Links {
         return {};
     }
 }
+
+// Steps not done yet that name a PR now merged ("Core#14715 merged" → acme/Core #14715): done by
+// themselves. merged: repo (owner/name) and number of each merged PR.
+export function mergedSteps(steps: Unit[], merged: { repo: string; number: number }[]): string[] {
+    const done = new Set(merged.map((p) => `${p.repo.split("/").pop()!.toLowerCase()}#${p.number}`));
+    return steps.filter((u) => u.state !== "done" && [...u.name.matchAll(/([\w.-]+)\s?#(\d+)/g)].some((m) => done.has(`${m[1].toLowerCase()}#${m[2]}`))).map((u) => u.name);
+}

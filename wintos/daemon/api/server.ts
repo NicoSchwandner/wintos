@@ -16,7 +16,7 @@ import { meetingMs } from "../../plugins/calendar/hours";
 import { lastReply as lastReplyIn, peekText, readTail } from "../epics/peek";
 import { BG_ID, BG_MAX, liveStarts, mergeBg, parseAgents, type BgAgent, type BgStarts } from "../epics/bgstart";
 import { addRelay, relayPrompt, findWorker, relaysDelivered, youSaid, type Relays } from "../epics/relay";
-import { editRoadmap, linkStep, pruneLinks, type RoadmapOp } from "../epics/roadmap";
+import { editRoadmap, linkStep, mergedSteps, pruneLinks, type RoadmapOp } from "../epics/roadmap";
 import { addReport, delivered as reportsDelivered, reportLine, worthReporting, type Reports } from "../epics/reports";
 import { Plugin, PluginRunner } from "../plugins/runner";
 import type { Snoozes } from "../prs/group";
@@ -488,7 +488,27 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const doneFile = join(opts.root, ".done-prs.json");
     let donePrs = readJson<Record<string, DonePr>>(doneFile, {});
     let askingDone = false;
+    // A roadmap step naming a PR that merged is done by itself; its agent hears of it.
+    const closeMergedSteps = () => {
+        const merged = Object.values(donePrs).filter((d) => d.merged);
+        if (!merged.length) return;
+        for (const epic of epics.list().filter((e) => !e.done)) {
+            for (const name of mergedSteps(epic.steps, merged)) {
+                const now = epics.byId(epic.id);
+                const r = now && editRoadmap({ steps: now.steps, links: now.links ?? {} }, { done: name, on: true });
+                if (!r || typeof r === "string") continue;
+                epics.update(epic.id, (e) => ({ ...e, steps: r.steps }));
+                logEvent("roadmap", { epic: epic.id, by: "a merged PR", note: r.note });
+                if (epic.agent) {
+                    reports = addReport(reports, epic.agent, `roadmap: "${name}" is done by itself, its PR merged`, Date.now());
+                    writeFileSync(reportsFile, JSON.stringify(reports));
+                }
+                broadcast();
+            }
+        }
+    };
     const checkDone = async () => {
+        closeMergedSteps();
         const gh = ghData();
         const urls = [...sessions.values(), ...Object.values(shelf).flat()].flatMap((x) => [...(x.prs ?? []), ...(x.touched ?? [])]);
         const ask = gh ? unlisted(urls, new Set(gh.prs.map((p) => p.url)), donePrs) : [];
@@ -499,6 +519,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             if (!found.length) return;
             donePrs = { ...donePrs, ...Object.fromEntries(found.map((d) => [d.url, d])) };
             writeFileSync(doneFile, JSON.stringify(donePrs));
+            closeMergedSteps();
             broadcast();
         } finally {
             askingDone = false;

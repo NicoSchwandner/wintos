@@ -255,7 +255,7 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     // The key's own path (runKey), so an action does from here exactly what its key does.
     const action = (id: string, t: string, hint: string, a: string): PaletteItem => ({ id: `a:${id}`, kind: "action", title: t, hint, run: () => void runKey(a) });
     out.push(action("terminal", `New terminal in ${here}`, "⌘T", "terminal"));
-    out.push(action("project", "New step: its epic and name, in a view of its own", "⌘N", "new-step"));
+    out.push(action("project", "New session: its epic and what it is for, in a view of its own", "⌘N", "new-step"));
     out.push(action("rename", `Rename ${here}`, "⌘R", "rename"));
     out.push(action("prs", "PRs need attention", "⇧⌘G", "prs"));
     for (const p of pluginPanels(state)) out.push(action(`panel:${p.name}`, p.title, "⇧⌘O", `panel:${p.name}`));

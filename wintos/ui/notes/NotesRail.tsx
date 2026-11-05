@@ -8,6 +8,7 @@ import { T } from "../tokens";
 import { Mine } from "./Mine";
 import { Rich } from "./ProjectNotes";
 import { editingMineAtom } from "./state";
+import { STATE_WORD } from "../sessions";
 import { useEpicMine, useNotes } from "./useNotes";
 import { notesKeys, PrList } from "./PrList";
 import { daemonFetch, useWintos } from "../useWintos";
@@ -161,7 +162,7 @@ export function Sessions({ tabId, state, size }: { tabId: string; state?: Wintos
                         <button type="button" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => toSession(i + 1)} style={{ display: "flex", alignItems: "center", gap: 9, padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: size === "rail" ? 12.5 : 13, lineHeight: 1.55, color: live ? T.title : T.quietTitle, textAlign: "left" }}>
                             <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: "50%", boxSizing: "border-box", background: live ? SESSION_DOT[x.session.state] : "transparent", border: live ? "none" : `1.5px solid ${T.faint}` }} />
                             <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</span>
-                            <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: T.faint }}>{live ? x.session.state : `shelved ${relTime(Date.now() - x.item.at)}`}</span>
+                            <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: T.faint }}>{live ? STATE_WORD[x.session.state] : `shelved ${relTime(Date.now() - x.item.at)}`}</span>
                         </button>
                         {x.kind === "live" && x.session.status && <span style={{ paddingLeft: 16, fontSize: 11, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.session.status.text}</span>}
                         {(x.prs.length > 0 || x.alsoIn.length > 0) && (

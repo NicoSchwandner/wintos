@@ -10,7 +10,7 @@ const row = (band: Row["band"], extra: Partial<Row> = {}): Row => ({ key: extra.
 describe("rowView", () => {
     test("running behind an ended turn says what it waits for", () => {
         const behind = { id: "a", tabId: "t", blockId: "b", state: "waiting", since: NOW, lastAt: NOW, subagents: { x: NOW - 1000, y: NOW - 500 } } as Session;
-        expect(rowView(row("running", { sessions: [behind] }), undefined, "T1", NOW).next).toBe("Waiting for 2 subagents; comes back by itself");
+        expect(rowView(row("running", { sessions: [behind] }), undefined, "T1", NOW).next).toBe("2 subagents still running; comes back by itself");
     });
 
     test("needs: apricot next action, age since the wait began", () => {
@@ -24,12 +24,12 @@ describe("rowView", () => {
 
     test("quiet on a parked session says what it waits on, in place of the PR reason", () => {
         const parked = { id: "s", tabId: "t", blockId: "b", state: "parked", since: NOW, lastAt: NOW, parkedOn: "review on #1479" } as const;
-        expect(rowView(row("quiet", { sessions: [parked] }), { dir: "/p", mtime: 0, title: "X", pr: [] }, "T", NOW)).toMatchObject({ reason: "waiting on review on #1479" });
+        expect(rowView(row("quiet", { sessions: [parked] }), { dir: "/p", mtime: 0, title: "X", pr: [] }, "T", NOW)).toMatchObject({ reason: "paused on review on #1479" });
     });
 
     test("running on a parked session says what it waits on", () => {
         const parked = { id: "s", tabId: "t", blockId: "b", state: "parked", since: NOW, lastAt: NOW, parkedOn: "CI on #1479" } as const;
-        expect(rowView(row("running", { sessions: [parked] }), { dir: "/p", mtime: 0, title: "X", next: "Mark #1479 ready", pr: [] }, "T", NOW)).toMatchObject({ next: "Waiting on CI on #1479", tone: "secondary" });
+        expect(rowView(row("running", { sessions: [parked] }), { dir: "/p", mtime: 0, title: "X", next: "Mark #1479 ready", pr: [] }, "T", NOW)).toMatchObject({ next: "Paused on CI on #1479", tone: "secondary" });
     });
 
     test("running: neutral line, Claude named as the one working", () => {
@@ -156,7 +156,7 @@ describe("a row says how the last turn ended", () => {
         expect([move("answer"), move("approve")]).toEqual(["Answer · its question", "Approve · its plan"]);
     });
     test("quiet: what it waits on, else what it said", () => {
-        expect(rowView(row("quiet", { sessions: [sess("parked", { parkedOn: "CI" })] }), undefined, "T", NOW).reason).toBe("waiting on CI");
+        expect(rowView(row("quiet", { sessions: [sess("parked", { parkedOn: "CI" })] }), undefined, "T", NOW).reason).toBe("paused on CI");
         expect(rowView(row("quiet", { sessions: [sess("done")] }), undefined, "T", NOW).reason).toBe("Fixed the walk");
     });
     test("opening an unread project lands on the session with the reply", () => {

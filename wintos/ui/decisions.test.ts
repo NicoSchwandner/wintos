@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../daemon/sessions/reduce";
-import { decisions, nextDecision } from "./decisions";
+import { decisions } from "./decisions";
 import type { WintosState } from "./view";
 
 const NOW = 1_000_000;
@@ -39,15 +39,3 @@ describe("decisions: turns", () => {
     });
 });
 
-describe("nextDecision", () => {
-    const list = decisions(state([s("a", { kind: "approve", by: "session" }), s("b", { kind: "decide", by: "session" })]), NOW, title);
-    test("from outside the list, the first; from one of them, the next, round the end", () => {
-        expect(nextDecision(list, undefined)?.sessionId).toBe("a");
-        expect(nextDecision(list, "a")?.sessionId).toBe("b");
-        expect(nextDecision(list, "b")?.sessionId).toBe("a");
-    });
-    test("nothing else waiting: none", () => {
-        expect(nextDecision(list.slice(0, 1), "a")).toBeUndefined();
-        expect(nextDecision([], undefined)).toBeUndefined();
-    });
-});

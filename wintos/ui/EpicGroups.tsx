@@ -39,7 +39,6 @@ export function EpicGroups({ groups, renderRow, cursor, newStep }: { groups: Epi
                             <button
                                 type="button"
                                 data-row={`epic:${g.epic.id}`}
-                                data-key="⌘J / ⌘K"
                                 tabIndex={-1}
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => openEpic(g.epic!.id)}
@@ -56,8 +55,8 @@ export function EpicGroups({ groups, renderRow, cursor, newStep }: { groups: Epi
                         <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingLeft: 10, borderLeft: `2px solid ${g.epic ? look.ring : T.border}`, marginLeft: 17 }}>
                             {g.rows.map(renderRow)}
                             {g.epic && (
-                                <button type="button" data-wintos="epic-new-step" data-key="⌘N" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => newStep(g.epic!.id)} style={{ alignSelf: "flex-start", padding: "3px 8px", background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12, color: T.faint }}>
-                                    + new step
+                                <button type="button" data-wintos="epic-new-step" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => newStep(g.epic!.id)} style={{ alignSelf: "flex-start", padding: "3px 8px", background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12, color: T.faint }}>
+                                    + new session
                                 </button>
                             )}
                         </div>

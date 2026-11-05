@@ -26,7 +26,8 @@ export const NewStep = memo(() => {
     const [step, setStep] = useState("");
     const planned = open.find((e) => e.id === epic)?.steps.filter((x) => x.state !== "done").map((x) => x.name) ?? [];
     const start = () => {
-        const name = step.trim();
+        // Empty, it takes what the field shows: the epic's next planned step.
+        const name = step.trim() || planned[0] || "";
         offerStep({ epic, step: name || undefined, unit: planned.includes(name) ? name : undefined });
         closeOverlay();
         void runAction("project");
@@ -34,7 +35,7 @@ export const NewStep = memo(() => {
     return (
         <div style={{ position: "absolute", inset: 0, zIndex: 100, background: `color-mix(in srgb, ${T.ground} 70%, transparent)`, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "14vh" }} onClick={closeOverlay}>
             <div data-wintos="new-step" data-zone="overlay" onClick={(e) => e.stopPropagation()} style={{ width: "min(540px, calc(100% - 32px))", padding: "18px 22px", background: T.ground, border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, display: "flex", flexDirection: "column", gap: 12 }}>
-                <span style={{ fontFamily: T.display, fontSize: 22, color: T.emphasis }}>New step</span>
+                <span style={{ fontFamily: T.display, fontSize: 22, color: T.emphasis }}>New session</span>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     {open.map((e, i) => (
                         <button
@@ -60,7 +61,7 @@ export const NewStep = memo(() => {
                     </div>
                 </div>
                 <label htmlFor="new-step-name" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: 12, color: T.muted }}>Step: what this session is for, a few words</span>
+                    <span style={{ fontSize: 12, color: T.muted }}>What it is for, a few words</span>
                     <input
                         id="new-step-name"
                         ref={ref}
@@ -78,7 +79,7 @@ export const NewStep = memo(() => {
                         }}
                         style={{ padding: "7px 10px", background: T.card, border: `1px solid ${T.borderActive}`, borderRadius: 8, outline: "none", color: T.text, fontFamily: T.ui, fontSize: 14 }}
                     />
-                    {planned.length > 0 && <span style={{ fontSize: 12, color: T.muted }}>Planned in this epic: {planned.join(" · ")} (↓ takes one)</span>}
+                    {planned.length > 0 && <span style={{ fontSize: 12, color: T.muted }}>Planned steps: {planned.join(" · ")} (⏎ takes the first, ↓ another)</span>}
                 </label>
                 <div style={{ display: "flex", gap: 22, fontSize: 12, color: T.muted, flexWrap: "wrap" }}>
                     <Key k="⏎" label="start it; the prompt goes in the terminal" />

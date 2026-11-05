@@ -42,7 +42,7 @@ export function topProject(closing: string): string | undefined {
 
 // ⌥⌘1-9: the sidebar's rows, top to bottom; the cards above them are no rows.
 export function toRow(n: number): void {
-    const target = order.filter((k) => !k.startsWith("card:") && !k.startsWith("epic:"))[n - 1];
+    const target = order.filter((k) => !k.startsWith("card:") && !k.startsWith("epic:") && !k.startsWith("wake:"))[n - 1];
     if (target) go(target);
 }
 
@@ -67,7 +67,8 @@ let hold: "Meta" | "Control" = "Meta";
 // you, or the last for ⌃⇧⇥, and walks only those (⌃⇥).
 export function switchProject(delta: 1 | -1, held: boolean, from: "here" | "top" = "here"): void {
     if (!walking()) hold = from === "top" ? "Control" : "Meta";
-    const stops = from === "top" ? waitingStops(order, needing, reading) : order;
+    // ⌘J/⌘K walks the rows; the cards above them have keys of their own (⇧⌘Y, ⇧⌘G, ⇧⌘O).
+    const stops = from === "top" ? waitingStops(order, needing, reading) : order.filter((k) => !k.startsWith("card:"));
     const at = globalStore.get(switchTargetAtom);
     let next = stepProject(stops, at ?? (from === "top" ? "" : here()), delta);
     // Starting from the top in the topmost project already: the first tap is the one after it.

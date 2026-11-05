@@ -395,7 +395,7 @@ await scenario("14b · a session that parks itself stays in To read with its las
     if (!(await evalIn(t, row("read")))) throw new Error("acked without its pane ever focused");
     await focus(blockId);
     await until("the project quiet", () => evalIn(t, row("quiet")), 8000);
-    await elsewhere("quiet", "waiting on CI on #1");
+    await elsewhere("quiet", "paused on CI on #1");
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
 });
 
@@ -757,7 +757,7 @@ await scenario("33 · ⌥⌘B starts a break: the status bar counts it, the side
     await until("the sidebar's meter saying it", () => evalIn(t, `document.querySelector("[data-wintos=rhythm-meter]")?.innerText.includes("on a break")`));
 });
 
-await scenario("37 · wintos unit: the project's units in the side column, the current one holding the lane; unit i/n in the header", async () => {
+await scenario("37 · wintos unit: the project's steps in the side column, the current one holding the lane; step i/n in the header", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -770,7 +770,7 @@ await scenario("37 · wintos unit: the project's units in the side column, the c
     await api(`/blocks/${pane}/lane${q}`, { name: "fast", steps: ["Failing test", "Fix"] });
     await until("the units in the side column", async () => (await evalIn(t, `[...document.querySelectorAll("[data-wintos=project-units] [data-unit]")].map((e) => e.dataset.unit).join(",")`)) === "done,current,todo");
     if (!(await evalIn(t, `document.querySelector("[data-unit=current]")?.innerText.includes("Failing test")`))) throw new Error("the current unit does not hold the lane");
-    if (!(await evalIn(t, `document.querySelector("[data-wintos=unit-of]")?.innerText === "unit 2/3"`))) throw new Error("no unit 2/3 in the header");
+    if (!(await evalIn(t, `document.querySelector("[data-wintos=unit-of]")?.innerText === "step 2/3"`))) throw new Error("no step 2/3 in the header");
 });
 
 await scenario("38 · epics: a session's epic heads its pane and marks its row; ⌥⌘E picks another by its digit", async () => {
@@ -789,8 +789,9 @@ await scenario("38 · epics: a session's epic heads its pane and marks its row; 
     await until("the avatar on its row", () => evalIn(t, `!!document.querySelector("[data-tabid='${tabId}'] [data-wintos=epic-avatar]")`));
     await press(t, "e", { code: "KeyE", mods: ["meta", "alt"] });
     await until("the epic picker", () => evalIn(t, `!!document.querySelector("[data-wintos=epic-picker]")`));
-    const digit = await evalIn(t, `document.querySelector("[data-wintos=epic-picker] [data-epic='${b}']")?.dataset.key`);
-    await press(t, digit, { code: `Digit${digit}` });
+    const digit = (await evalIn(t, `document.querySelector("[data-wintos=epic-picker] [data-epic='${b}']")?.dataset.key`)).replace("⌘", "");
+    // Straight to the picker's field: press() with a modifier first moves focus to the body.
+    for (const type of ["rawKeyDown", "keyUp"]) await cdp(t, "Input.dispatchKeyEvent", { type, key: digit, code: `Digit${digit}`, windowsVirtualKeyCode: 48 + Number(digit), modifiers: MODS.meta });
     await until("the session in the other epic", async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((s) => s.id === "e2e-epic")?.epic === b);
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(pane)}).id)`);
 });
@@ -860,7 +861,7 @@ await scenario("41 · ⇧⌘Y is the epics home: a card per epic, the one waitin
     await press(t, "Enter", { code: "Enter", keyCode: 13 });
     await until("its page", () => evalIn(t, `document.querySelector("[data-wintos=epic-page]")?.dataset.epic === "${id}" && document.querySelector("[data-wintos=epic-page] [data-session='e2e-home']") !== null`));
     await press(t, "p", { code: "KeyP" });
-    await until("pinned at the top of the sidebar, saying what waits", () => evalIn(t, `document.querySelector("[data-wintos=pinned-epics] [data-epic='${id}']")?.innerText.includes("waits on you")`));
+    await until("pinned at the top of the sidebar, saying what waits", () => evalIn(t, `document.querySelector("[data-wintos=pinned-epics] [data-epic='${id}']")?.innerText.includes("your move")`));
     await press(t, "p", { code: "KeyP" });
     await until("unpinned", () => evalIn(t, `!document.querySelector("[data-wintos=pinned-epics] [data-epic='${id}']")`));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
@@ -907,7 +908,7 @@ await scenario("43 · a worker's turn end reaches its epic's agent: typed into t
     await until("typed into the agent and off the queue", async () => !(await st()).epicReports?.["e2e-ag"], 120_000);
 });
 
-await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sessions; + new step opens ⌘N's sheet on that epic; ⌥⌘V again goes back", async () => {
+await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sessions; + new session opens ⌘N's sheet on that epic; ⌥⌘V again goes back", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const pane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
@@ -926,7 +927,7 @@ await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sess
     await until("back by state, where the bands say it", () => evalIn(t, `!document.querySelector("[data-wintos=epic-groups]") && !document.querySelector("[data-wintos=row-state]")`));
 });
 
-await scenario("45 · an epic's page shows its finished steps and last 8 workdays; the month's hours on the home can be corrected", async () => {
+await scenario("45 · an epic's page shows its finished sessions and last 8 workdays; the month's hours on the home can be corrected", async () => {
     const t = await toProject();
     const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const id = await (await api("/epics", { title: "E2E history" })).text();
@@ -949,6 +950,11 @@ await scenario("45 · an epic's page shows its finished steps and last 8 workday
     await press(t, "Enter", { code: "Enter", keyCode: 13 });
     const month = iso(d).slice(0, 7);
     await until("corrected to 2.5 h", async () => (await (await fetch(`http://127.0.0.1:7731/time/month?month=${month}`)).json()).find((r) => r.epic === id)?.ms === 9_000_000);
+    // ← steps back a month (no brackets: they need ⌥ on a German or Swedish keyboard).
+    const before = new Date(d.getFullYear(), d.getMonth() - 1, 1).toLocaleDateString("en-GB", { month: "long" });
+    await cdpFocus(t, "[data-wintos=today]");
+    await press(t, "ArrowLeft", { code: "ArrowLeft", keyCode: 37 });
+    await until(`the month before (${before})`, () => evalIn(t, `document.querySelector("[data-wintos=today]")?.innerText.toLowerCase().includes(${JSON.stringify(before.toLowerCase() + " by epic")})`));
     await press(t, "y", { mods: ["meta", "shift"] });
 });
 
@@ -965,8 +971,15 @@ await scenario("46 · on an epic's page s adds a planned step, and n offers it f
     await until("on the roadmap", () => evalIn(t, `document.querySelector("[data-wintos=epic-page] [data-wintos=epic-roadmap]")?.textContent.includes("Cutover per group") && !document.querySelector("[data-wintos=epic-page] [data-wintos=epic-step-input]")`));
     await press(t, "n");
     await until("the new-step view, this epic chosen, the step offered", () => evalIn(t, `!!document.querySelector("[data-wintos=new-step] [data-epic='${id}'][data-on]") && document.querySelector("#new-step-name")?.placeholder === "Cutover per group"`));
-    await press(t, "Escape", { code: "Escape", keyCode: 27 });
-    await press(t, "Escape", { code: "Escape", keyCode: 27 });
+    // ⏎ on the empty field takes the step it offers: the new session is linked to it.
+    const active = () => sql(`select data->>'activetabid' from db_workspace limit 1`);
+    const from = active();
+    await press(t, "Enter", { code: "Enter", keyCode: 13 });
+    await until("a new view in front", () => active() !== from);
+    const tab = active();
+    const first = await until("its first pane", () => sql(`select json_extract(data, '$.blockids[0]') from db_tab where oid='${tab}'`) || false);
+    await api("/events", { tabId: tab, blockId: first, payload: { session_id: "e2e-took-step", hook_event_name: "SessionStart" } });
+    await until("linked to the planned step", async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).epics.find((e) => e.id === id)?.links?.["Cutover per group"]?.[0] === "e2e-took-step", 20000);
 });
 
 await scenario("47 · the roadmap worked from its rows: rename, move, done; the agent hears each edit; ⏎ starts a session linked to the step", async () => {

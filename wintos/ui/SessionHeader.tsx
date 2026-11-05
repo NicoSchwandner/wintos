@@ -5,13 +5,14 @@ import { memo } from "react";
 import { decisions } from "./decisions";
 import { Key } from "./Key";
 import { runAction, runKey } from "./menu";
+import { switchProject } from "./switcher";
 import { HEADERS } from "./PrQueue";
 import { SESSION_DOT, T } from "./tokens";
 import { useNow } from "./useNow";
 import { daemonFetch, useWintos } from "./useWintos";
 import { wakesWhen } from "../daemon/wakes/wakes";
 import { liveSubagents, type Lane } from "../daemon/sessions/reduce";
-import { shownState } from "./sessions";
+import { shownState, STATE_WORD } from "./sessions";
 import { WhereWasI } from "./WhereWasI";
 import { EpicAvatar } from "./EpicAvatar";
 import { EpicBody } from "./EpicPage";
@@ -52,15 +53,15 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, whiteSpace: "nowrap" }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: SESSION_DOT[shown] }}>
                     <span style={{ width: 6, height: 6, borderRadius: "50%", background: SESSION_DOT[shown] }} />
-                    {shown}
+                    {STATE_WORD[shown]}
                     {shown !== s.state ? ` · ${agents} subagent${agents === 1 ? "" : "s"}` : s.state !== "working" && ` ${relTime(now - s.since)}`}
                 </span>
                 <span data-wintos="session-name" style={{ color: T.emphasis, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>{sessionName(s)}</span>
                 {s.name?.by === "session" && now - s.name.at < NAME_PROPOSAL_MS && <NameButton label={`change the name · ${Math.min(60, Math.ceil((NAME_PROPOSAL_MS - (now - s.name.at)) / 1000))}s`} />}
                 {s.name?.suggested && <NameButton label={`it suggests “${s.name.suggested}”`} />}
                 {more > 0 && (
-                    <button type="button" data-wintos="walk-next" data-key="⌥⌘O" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("release")} style={{ flexShrink: 0, marginLeft: "auto", order: 9, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
-                        <Key k="⌥⌘O" label={`next waiting · ${more} more`} always />
+                    <button type="button" data-wintos="walk-next" data-key="⌃⇥" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => switchProject(1, false, "top")} style={{ flexShrink: 0, marginLeft: "auto", order: 9, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
+                        <Key k="⌃⇥" label={`next that needs you · ${more} more`} always />
                     </button>
                 )}
                 {h.task && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>{h.task}</span>}
@@ -173,7 +174,7 @@ const Dot = ({ c, size = 7 }: { c: { dot: string; ring: string }; size?: number 
 // the one now, and the next that is your call (else simply the next one). The note gives way first.
 // unit: which of the project's units this is (i of n), beside the lane.
 function StepTrack({ lane, unit }: { lane?: Lane; unit?: { i: number; n: number; name: string } }) {
-    const unitChip = unit && <span data-wintos="unit-of" title={unit.name} style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted, flexShrink: 0 }}>unit {unit.i}/{unit.n}</span>;
+    const unitChip = unit && <span data-wintos="unit-of" title={unit.name} style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted, flexShrink: 0 }}>step {unit.i}/{unit.n}</span>;
     if (!lane) return <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 11 }}>{unitChip}<span style={{ color: T.secondary, overflow: "hidden", textOverflow: "ellipsis" }}>{unit!.name}</span></div>;
     const ahead = lane.steps.slice(lane.at + 1);
     const nextGate = ahead.findIndex(gate);
@@ -215,7 +216,7 @@ export const SessionSteps = memo(({ blockId }: { blockId: string }) => {
         <div className="wintos-steps-side" data-wintos="session-steps" style={{ width: 210, flexShrink: 0, borderLeft: `1px solid ${T.border}`, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", fontFamily: T.ui }}>
             {units.length > 0 ? (
                 <>
-                    <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>{epic ? `ROADMAP · ${shortName(epic).toUpperCase()}` : "UNITS"} · {units.filter((u) => u.state === "done").length}/{units.length}</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", color: T.faint }}>{epic ? `ROADMAP · ${shortName(epic).toUpperCase()}` : "STEPS"} · {units.filter((u) => u.state === "done").length}/{units.length}</span>
                     <div data-wintos="project-units" style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                         {units.map((u, i) => (
                             <div key={i} data-unit={u.state} style={{ display: "flex", flexDirection: "column", gap: 7 }}>

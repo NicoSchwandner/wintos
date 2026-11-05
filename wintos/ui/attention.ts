@@ -54,12 +54,12 @@ export function rowView(row: Row, project: Project | undefined, tabName: string 
         // Parked beats the next action: it is the live reason nobody needs to act.
         const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
         const agents = row.sessions.some((s) => s.state === "working") ? 0 : row.sessions.reduce((n, s) => n + liveSubagents(s, now), 0);
-        const behind = agents && `Waiting for ${agents} subagent${agents === 1 ? "" : "s"}; comes back by itself`;
-        return { title, next: behind || (parkedOn ? `Waiting on ${parkedOn}` : (project?.next ?? "Claude is working")), tone: "secondary", age, meta };
+        const behind = agents && `${agents} subagent${agents === 1 ? "" : "s"} still running; comes back by itself`;
+        return { title, next: behind || (parkedOn ? `Paused on ${parkedOn}` : (project?.next ?? "Claude is working")), tone: "secondary", age, meta };
     }
     const parkedOn = row.sessions.find((s) => s.state === "parked")?.parkedOn;
     // A PR that needs you no longer lifts the project: its line says so, quietly.
-    return { title, age, reason: parkedOn ? `waiting on ${parkedOn}` : (lastSaid(row.sessions) ?? prs?.blocked?.text ?? prs?.reason ?? meta ?? age) };
+    return { title, age, reason: parkedOn ? `paused on ${parkedOn}` : (lastSaid(row.sessions) ?? prs?.blocked?.text ?? prs?.reason ?? meta ?? age) };
 }
 
 // Open projects with a due wake on its way (the session resuming, or between turns): they stay

@@ -13,7 +13,7 @@ import { More } from "./notes/ProjectNotes";
 import { Mine } from "./notes/Mine";
 import { newStepEpicAtom, openEpicAtom } from "./notes/state";
 import { useEpicMine } from "./notes/useNotes";
-import { shownState } from "./sessions";
+import { shownState, STATE_WORD } from "./sessions";
 import { SESSION_DOT, T } from "./tokens";
 import { Panel } from "./TodayPage";
 import { useNow } from "./useNow";
@@ -192,7 +192,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                                 const ms = worked.reduce((n, x) => n + x.ms, 0);
                                 const refs = [...new Set(worked.flatMap((x) => x.prs))].map((url) => (state ? prRef(state, url) : url));
                                 const shown = live[0] && shownState(live[0], now);
-                                const tail = [shown && `● ${shown}`, ms >= 60_000 && spent(ms), refs.join(" · ")].filter(Boolean).join(" · ");
+                                const tail = [shown && `● ${STATE_WORD[shown]}`, ms >= 60_000 && spent(ms), refs.join(" · ")].filter(Boolean).join(" · ");
                                 return (
                                     <div key={u.name} data-item="link" data-step={u.name} data-unit={u.state} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr) auto", gap: 10, alignItems: "baseline", fontSize: 13.5, color: u.state === "current" ? T.emphasis : u.state === "done" ? T.faint : T.secondary, fontWeight: u.state === "current" ? 600 : 400 }}>
                                         <span style={{ fontFamily: T.mono, color: u.state === "todo" ? T.faint : T.moss }}>{u.state === "done" ? "✓" : u.state === "current" ? "▸" : "○"}</span>
@@ -238,7 +238,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                             {(addError || stepError) && <span style={{ fontSize: 12, color: T.apricot }}>{addError || stepError}</span>}
                         </div>
                     </Panel>
-                    <Panel label="Finished steps" note={finished.length ? `${finished.length} · ${spent(finished.reduce((n, f) => n + f.ms, 0))} at them` : "none yet"}>
+                    <Panel label="Finished sessions" note={finished.length ? `${finished.length} · ${spent(finished.reduce((n, f) => n + f.ms, 0))} at them` : "none yet"}>
                         {finished.length > 0 && <More open={showFinished} label={`Show the ${finished.length} finished`} onClick={() => setShowFinished((v) => !v)} />}
                         {showFinished && finished.map((f) => (
                             <div key={f.sessionId} data-wintos="finished-step" style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr) auto auto", gap: 10, alignItems: "baseline", fontSize: 13, color: T.secondary }}>
@@ -249,7 +249,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                             </div>
                         ))}
                     </Panel>
-                    <Panel label="Sessions" note={`${shortName(epic)} · each a step`} keys={sessions.length > 0 && <Key k="j k · ⏎" label="its pane" />}>
+                    <Panel label="Sessions" note={shortName(epic)} keys={sessions.length > 0 && <Key k="j k · ⏎" label="its pane" />}>
                         {sessions.map((s) => {
                             const shown = shownState(s, now);
                             return (
@@ -257,12 +257,12 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                                     <button type="button" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => focusSession({ tabId: s.tabId, blockId: s.blockId })} style={{ display: "flex", alignItems: "center", gap: 10, flexGrow: 1, minWidth: 0, padding: "4px 6px", margin: "0 -6px", borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui, fontSize: 13.5, color: T.text }}>
                                         <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: SESSION_DOT[shown] }} />
                                         <span style={{ flexGrow: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessionName(s)}</span>
-                                        <span style={{ fontFamily: T.mono, fontSize: 11.5, color: shown === "waiting" ? T.apricot : T.muted }}>{shown} {relTime(now - s.since)}</span>
+                                        <span style={{ fontFamily: T.mono, fontSize: 11.5, color: shown === "waiting" ? T.apricot : T.muted }}>{STATE_WORD[shown]} {relTime(now - s.since)}</span>
                                     </button>
                                 </div>
                             );
                         })}
-                        {!sessions.length && <span style={{ fontSize: 12.5, color: T.faint }}>No session in it now. ⌘N starts the next step.</span>}
+                        {!sessions.length && <span style={{ fontSize: 12.5, color: T.faint }}>No session in it now. n starts one.</span>}
                     </Panel>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>

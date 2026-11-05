@@ -21,12 +21,12 @@ export const PinnedEpics = memo(({ epics, sessions, now, cursor }: { epics: Epic
                 const working = here.filter((s) => shownState(s, now) === "working");
                 const next = e.steps.find((x) => x.state !== "done")?.name;
                 const line = waiting.length
-                    ? { text: `${sessionName(waiting[0])}${waiting.length > 1 ? ` +${waiting.length - 1}` : ""} waits on you`, color: T.apricot }
+                    ? { text: `${sessionName(waiting[0])}${waiting.length > 1 ? ` +${waiting.length - 1}` : ""} · your move`, color: T.apricot }
                     : working.length
-                      ? { text: `${sessionName(working[0])} at work`, color: T.moss }
+                      ? { text: `${sessionName(working[0])} · running`, color: T.moss }
                       : next
                         ? { text: `next: ${next}`, color: T.muted }
-                        : { text: here.length ? `${here.length} quiet` : "nothing open: ⌘N starts the next step", color: T.faint };
+                        : { text: here.length ? `${here.length} quiet` : "nothing open: ⌘N starts a session", color: T.faint };
                 return (
                     <button
                         key={e.id}

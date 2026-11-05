@@ -3,7 +3,7 @@ import type { AskOption, AskPick } from "../daemon/sessions/reduce";
 import { shownState } from "./sessions";
 import { sessionName, type WintosState } from "./view";
 
-// A turn waiting on you, in the order ⌥⌘O walks them, with what its session (or the daemon's
+// A turn waiting on you, oldest first, with what its session (or the daemon's
 // reading of the turn) says it needs.
 // turn: the session and when this turn began waiting; a session that asks again is a new card.
 export type Decision = {
@@ -72,12 +72,4 @@ export function decisions(state: WintosState, now: number, titleOf: (tabId: stri
             };
         });
     return out.sort((a, b) => Number(a.final) - Number(b.final) || (KIND_ORDER[a.kind] ?? 1) - (KIND_ORDER[b.kind] ?? 1) || a.since - b.since);
-}
-
-// ⌥⌘O: the next turn waiting on you, after the one you are in, round the list; none when the one
-// you are in is the only one.
-export function nextDecision(list: Decision[], currentSessionId: string | undefined): Decision | undefined {
-    const at = list.findIndex((d) => d.sessionId === currentSessionId);
-    const next = list[(at + 1) % (list.length || 1)];
-    return next && next.sessionId !== currentSessionId ? next : undefined;
 }

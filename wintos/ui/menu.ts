@@ -11,7 +11,6 @@ import { switchProject, toRow, topProject } from "./switcher";
 import { getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
 import { railCollapsedAtom, setRailCollapsed } from "./notes/railWidth";
 import { isInboxTab, projectSessions, sessionHeader, sessionName, urgentPr } from "./view";
-import { decisions, nextDecision } from "./decisions";
 import { rememberUndo, takeUndo } from "./undo";
 import { closeAction, escapeAction, isTextField, zoneOf } from "./zones";
 import { paneOrder } from "./panes";
@@ -70,12 +69,13 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:j", "join-meeting"],
     ["Shift:Cmd:y", "day"],
     ["Option:Cmd:c{KeyY}", "reflect"],
+    // The key marked Y is where Z is on a German (QWERTZ) keyboard: ⌥⌘Y works on either.
+    ["Option:Cmd:c{KeyZ}", "reflect"],
     ["Shift:Cmd:i", "keyboard"],
     ["Option:Cmd:c{KeyR}", "restart-terminal"],
     ["Option:Cmd:c{KeyU}", "update"],
     ["Option:Cmd:c{KeyB}", "break"],
     ["Shift:Option:Cmd:c{KeyB}", "break-later"],
-    ["Option:Cmd:c{KeyO}", "release"],
     ["Option:Cmd:c{KeyS}", "quiet"],
     ["Option:Cmd:c{KeyL}", "rail"],
     // ⌥ turns a digit into another character too, so these match the key's place.
@@ -249,8 +249,6 @@ export function runAction(action: string): void {
     if (action === "restart-terminal") return restartTerminal();
     if (action === "update") return updateWintos();
     if (action === "break") return void (flog("break: started"), daemonFetch("/rhythm/break", { method: "POST", body: {} }));
-    // ⌥⌘O: the next session waiting on you, in its own pane.
-    if (action === "release") return void walkDecisions();
     if (action === "break-later") return void (flog("break: in 10 min"), daemonFetch("/rhythm/snooze", { method: "POST", body: { minutes: 10 } }));
     if (action.startsWith("session-")) return toRow(Number(action.slice("session-".length)));
     if (action === "rail") return toggleRail();
@@ -279,15 +277,6 @@ export function wintosClose(): boolean {
         shelvePane(focused?.data?.blockId);
     }
     return action !== "pane";
-}
-
-function walkDecisions(): void {
-    const state = currentState();
-    if (!state) return;
-    const list = decisions(state, Date.now(), (tabId) => state.projects.find((p) => p.id === tabId)?.title ?? "Untitled");
-    const next = nextDecision(list, focusedSession()?.id);
-    flog(next ? `walk: to ${next.session} (${list.length} waiting)` : `walk: nothing else waiting (${list.length})`);
-    if (next) focusSession({ tabId: next.tabId, blockId: next.blockId });
 }
 
 // ⌘W on a pane, or its ×: a working session's pane asks first, then the pane goes to the shelf.

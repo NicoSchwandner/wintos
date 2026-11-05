@@ -24,7 +24,7 @@ export const NameSession = memo(() => {
     return (
         <div style={{ position: "absolute", inset: 0, zIndex: 100, background: `color-mix(in srgb, ${T.ground} 70%, transparent)`, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "18vh" }} onClick={closeOverlay}>
             <div data-wintos="name-session" data-zone="overlay" onClick={(e) => e.stopPropagation()} style={{ width: "min(520px, calc(100% - 32px))", padding: "18px 22px", background: T.ground, border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, display: "flex", flexDirection: "column", gap: 12 }}>
-                <span style={{ fontFamily: T.display, fontSize: 22, color: T.emphasis }}>Name this step</span>
+                <span style={{ fontFamily: T.display, fontSize: 22, color: T.emphasis }}>Name this session</span>
                 {session.name?.suggested && <span style={{ fontSize: 12, color: T.muted }}>It suggests “{session.name.suggested}”; ⏎ takes it.</span>}
                 <input
                     ref={ref}

@@ -43,7 +43,8 @@ export const EpicPicker = memo(() => {
                     placeholder="Type to narrow, or name a new epic"
                     onChange={(e) => (setText(e.target.value), setAt(0))}
                     onKeyDown={(e) => {
-                        const digit = /^[0-9]$/.test(e.key) && !text ? Number(e.key) : undefined;
+                        // ⌘1–9 as in ⌘N's sheet: a bare digit is typed, so a new epic may start with one ("2027 …").
+                        const digit = e.metaKey && /^Digit\d$/.test(e.code) ? Number(e.code.slice(5)) : undefined;
                         if (digit === 0) return e.preventDefault(), assign(null);
                         if (digit !== undefined && open[digit - 1]) return e.preventDefault(), assign(open[digit - 1].id);
                         if (e.key === "ArrowDown") e.preventDefault(), setAt((i) => Math.min(i + 1, Math.max(shown.length - 1, 0)));
@@ -59,13 +60,13 @@ export const EpicPicker = memo(() => {
                             key={e.id}
                             type="button"
                             data-epic={e.id}
-                            data-key={!q && i < 9 ? String(i + 1) : undefined}
+                            data-key={!q && i < 9 ? `⌘${i + 1}` : undefined}
                             tabIndex={-1}
                             onMouseDown={(ev) => ev.preventDefault()}
                             onClick={() => assign(e.id)}
                             style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", borderRadius: 8, border: "none", cursor: "pointer", textAlign: "left", background: i === at ? T.cardActive : "transparent", color: T.text, fontFamily: T.ui, fontSize: 13.5 }}
                         >
-                            <span style={{ width: 14, fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{!q && i < 9 ? i + 1 : ""}</span>
+                            <span style={{ width: 24, fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>{!q && i < 9 ? `⌘${i + 1}` : ""}</span>
                             <EpicAvatar look={lookOf(e)} size={22} />
                             <span style={{ flexGrow: 1 }}>{e.title}</span>
                             {session.epic === e.id && <span style={{ fontSize: 11.5, color: T.muted }}>now</span>}
@@ -86,8 +87,8 @@ export const EpicPicker = memo(() => {
                 </div>
                 <div style={{ display: "flex", gap: 22, fontSize: 12, color: T.muted, flexWrap: "wrap" }}>
                     <Key k="⏎" label={shown[at] ? "move it there" : q ? "start the epic" : "close"} />
-                    <Key k="1–9" label="pick" />
-                    <Key k="0" label="no epic" />
+                    <Key k="⌘1–9" label="pick" />
+                    <Key k="⌘0" label="no epic" />
                     <Key k="esc" label="keep it" />
                 </div>
             </div>

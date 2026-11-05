@@ -22,7 +22,21 @@ that stayed open after their PR merged. Build only the resolving rules the log s
 Touches `daemon/sessions/reduce.ts` (reasons replace `ask`), `daemon/ranking/rank.ts`,
 `wintos ask --about`, and the agent instructions in `daemon/inject.ts`.
 
-### Retire project.md for sessions in an epic
+### One header per pane
+
+Three bands sit over a pane today: the epic strip, the view's title row and the session header.
+The epic and session names show two or three times, and clicking them does different things.
+Merge them into one band: the epic's face and name once, the session's name once, its state in
+the sidebar's words, and one reason line ("Your move: it asks …", "Quiet: paused on CI") that
+says why the session sits where it does.
+
+Start: `ui/EpicStrip.tsx`, `ui/PaneStrip.tsx`, `ui/SessionHeader.tsx`.
+
+### Retire "project" from the UI, and project.md for sessions in an epic
+
+With epics, the project (a tab) is close to vestigial, but it still names things ("Close tab",
+"Open project", "a view of its own"), drives ⌘R with no session focused and ⇧⌘W, and keeps
+project.md. A view should be a layout of sessions and nothing more.
 
 Sessions in an epic still write `next:` lines into the project.md of the project they run in, so
 the plan lives in two places that drift apart. Sessions in an epic should stop writing project.md,

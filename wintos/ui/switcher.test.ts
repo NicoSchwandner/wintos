@@ -4,7 +4,7 @@ vi.mock("./focusLog", () => ({ flog: vi.fn() }));
 const here = { tab: "a", session: undefined as { id: string; tabId: string } | undefined };
 vi.mock("./focus", () => ({ enterProject: vi.fn(), focusArea: vi.fn(), whereYouAre: () => here.tab, focusedSession: () => here.session }));
 import { enterProject } from "./focus";
-import { setSwitchOrder, stepProject, switchProject, switchTargetAtom, topProject, undoWalkKey, walkKey, walking } from "./switcher";
+import { setSwitchOrder, stepProject, switchProject, switchTargetAtom, topProject, toRow, undoWalkKey, walkKey, walking } from "./switcher";
 
 describe("stepProject", () => {
     const order = ["a", "b", "c"];
@@ -225,5 +225,24 @@ describe("⌃⇥: the rows that need you, from the top of the sidebar, switching
         expect([walkKey({ key: "Tab", control: true }), walkKey({ key: "j", control: true })]).toEqual([false, true]);
         expect(walkKey({ key: "x" })).toBe(false);
         expect(enterProject).not.toHaveBeenCalled();
+    });
+});
+
+describe("⌘J/⌘K and ⌥⌘1–9 count rows only", () => {
+    test("⌥⌘1 is the first row, past the cards, pinned epics and a closed project's wake above it", () => {
+        vi.mocked(enterProject).mockClear();
+        setSwitchOrder(["card:prs", "wake:x", "epic:e", "a", "b"]);
+        toRow(1);
+        expect(enterProject).toHaveBeenCalledExactlyOnceWith("a");
+    });
+    test("⌘J walks past the cards: they have keys of their own", () => {
+        vi.stubGlobal("window", new EventTarget());
+        vi.stubGlobal("document", new EventTarget());
+        globalStore.set(switchTargetAtom, null);
+        setSwitchOrder(["card:today", "card:prs", "a", "b"]);
+        here.tab = "b";
+        here.session = undefined;
+        switchProject(1, true);
+        expect(globalStore.get(switchTargetAtom)).toBe("a");
     });
 });

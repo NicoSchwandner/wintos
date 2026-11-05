@@ -45,8 +45,9 @@ export const TodayPage = memo(() => {
     const [back, setBack] = useState(0);
     useZoneKeys(ref, {
         ...cursorKeys(() => ref.current),
-        "[": () => (setBack((b) => b + 1), true),
-        "]": () => (setBack((b) => Math.max(0, b - 1)), true),
+        // ← →, not [ ]: brackets need ⌥ on a German or Swedish keyboard.
+        ArrowLeft: () => (setBack((b) => b + 1), true),
+        ArrowRight: () => (setBack((b) => Math.max(0, b - 1)), true),
         e: () => {
             const b = ref.current?.querySelector<HTMLElement>("[data-edit-daily]");
             b?.click();
@@ -75,7 +76,7 @@ export const TodayPage = memo(() => {
                 <Timeline now={now} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflowY: "auto" }}>
                     {day && <Standup today={today} focus={plan} panel={(p) => <Panel {...p} />} />}
-                    <Panel label="Epics" note={epics.length ? undefined : "none yet: ⌥⌘E in a session starts one"} keys={epics.length > 0 && <Key k="j k · ⏎" label="open its page" />}>
+                    <Panel label="Epics" note={epics.length ? undefined : "none yet: ⌥⌘E in a session starts one"} keys={epics.length > 0 && <Key k="j k · ⏎" label="open the epic" />}>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 10 }}>
                             {epics.map((e) => <EpicCard key={e.id} epic={e} sessions={live.filter((s) => s.epic === e.id)} now={now} />)}
                         </div>
@@ -94,7 +95,7 @@ function EpicCard({ epic, sessions, now }: { epic: EpicView; sessions: Session[]
     const look = lookOf(epic);
     const waiting = sessions.filter((s) => shownState(s, now) === "waiting").length;
     const working = sessions.filter((s) => shownState(s, now) === "working").length;
-    const state = waiting ? `${waiting} waiting on you` : working ? `${working} at work` : sessions.length ? "quiet" : "no session open";
+    const state = waiting ? `${waiting} your move` : working ? `${working} running` : sessions.length ? "quiet" : "no session open";
     const planned = epic.steps.filter((x) => x.state !== "done").map((x) => x.name);
     return (
         <div data-item="link" data-epic={epic.id} style={{ display: "flex", flexDirection: "column", gap: 8, padding: "11px 13px", borderRadius: 10, background: T.sidebar, border: `1px solid ${T.border}`, borderTop: `3px solid ${look.fg}` }}>
@@ -117,7 +118,7 @@ function EpicCard({ epic, sessions, now }: { epic: EpicView; sessions: Session[]
 
 // The month so far by epic: the hours you were at its sessions (daemon/epics/time.ts). c copies
 // it as a table for the project report.
-// [ and ] step to the month before and back; the report is due for the month just past.
+// ← and → step to the month before and back; the report is due for the month just past.
 type MonthRow = EpicTime & { prs: number; adjusted: number };
 function MonthByEpic({ now, back }: { now: number; back: number }) {
     const { state } = useWintos();
@@ -163,7 +164,7 @@ function MonthByEpic({ now, back }: { now: number; back: number }) {
             note={rows?.length ? `${span(total)} at sessions` : "nothing logged"}
             keys={
                 <>
-                    <Key k="[ ]" label="month" />
+                    <Key k="← →" label="month" />
                     <Key k="j k · ⏎" label="correct the hours" />
                     {rows && rows.length > 0 && (
                         <button type="button" data-wintos="month-copy" data-key="c" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={copy} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>

@@ -12,7 +12,9 @@ export const QUIET_CAP = 6;
 
 // seen holds when the developer last looked at each session (or, from before that, its project).
 // A parked turn is a reply too: it goes quiet once you have read how it ended.
-export const isUnread = (s: Session, seen: Record<string, number>) => s.state !== "ended" && (s.turnEndedAt ?? 0) > (seen[s.id] ?? seen[s.tabId] ?? 0);
+// A parked turn said it carries on by itself (CI, its teammates, "a summary follows"): no result
+// to read yet, so it is quiet until a turn that is one.
+export const isUnread = (s: Session, seen: Record<string, number>) => s.state !== "ended" && s.state !== "parked" && (s.turnEndedAt ?? 0) > (seen[s.id] ?? seen[s.tabId] ?? 0);
 export const STALE_MS = 14 * 86_400_000;
 
 // seen: when the developer last looked at each session; a reply after that is unread.

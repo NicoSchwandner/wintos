@@ -110,11 +110,13 @@ describe("unread", () => {
         expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
     });
 
-    test("a parked turn you haven't seen is to read too: it goes quiet once you've read how it ended", () =>
-        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, { t: NOW - 100 }).read[0]?.unread).toBe(true));
+    test("a parked turn is quiet unseen too: it carries on by itself, nothing to read yet", () => {
+        const r = rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, { t: NOW - 100 });
+        expect([r.read, r.quiet.map((x) => x.tabId)]).toEqual([[], ["t"]]);
+    });
 
     test("seen is per session: reading one pane leaves the other's reply unread", () => {
-        const two = [ended("t", "done", NOW - 50), { ...ended("t", "parked", NOW - 40), id: "s2", blockId: "b2" }];
+        const two = [ended("t", "done", NOW - 50), { ...ended("t", "done", NOW - 40), id: "s2", blockId: "b2" }];
         expect(rank(["t"], two, NOW, {}, { [two[0].id]: NOW - 10 }).read[0]?.unread).toBe(true);
         expect(rank(["t"], two, NOW, {}, { [two[0].id]: NOW - 10, s2: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
     });

@@ -15,7 +15,7 @@ export function askPrompt(message: string): string {
         "- approve: it explicitly asks for their go before it goes on (a plan of what it will do by itself is not this)",
         "- unblock: it needs them to do something it can't (a login, an unlock, a manual step); never when it says nothing is needed",
         "- read: it only reports (done, a status, an analysis, a PR to look at); nothing waits on them",
-        "- waits: it carries on by itself: something it started runs (CI, a loop, a deploy) and it will be woken or come back",
+        "- waits: it carries on by itself: something it started runs (CI, a loop, a deploy, its subagents or teammates) and it will be woken or come back. A progress update while that work still runs (\"nothing needs you yet; a summary follows\") is waits, not read",
         'E.g. "decide: two bands or one marked band", "read: momentum fix is live", "waits: the CI retry loop on test".',
         "Unless it is read or waits, add a line `context: <what this is about, at most 12 words>`, and when the message offers",
         "choices, one line each (2 to 4) `option: <the choice, a few words> — <what it leads to, a few words>`.",

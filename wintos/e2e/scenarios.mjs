@@ -373,7 +373,7 @@ await scenario("14 · ⌥⌘P parks the session waiting in a pane just opened", 
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
 });
 
-await scenario("14b · a session that parks itself stays in To read with its last line until you focus its pane, then goes quiet saying it", async () => {
+await scenario("14b · a session that parks itself goes quiet at once, saying what it waits on: nothing to read yet", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
@@ -390,12 +390,8 @@ await scenario("14b · a session that parks itself stays in To read with its las
     const others = [];
     for (const r of await renderers()) if ((await evalIn(r, "window.wintosTabId?.()")) !== tabId) others.push(r);
     const elsewhere = (band, line) => until(`"${line}" in ${band} in another sidebar`, async () => { for (const r of others) if ((await evalIn(r, row(band))).includes(line)) return true; return false; });
-    await elsewhere("read", "Pushed the fix; CI is running.");
-    await sleep(3000);
-    if (!(await evalIn(t, row("read")))) throw new Error("acked without its pane ever focused");
-    await focus(blockId);
-    await until("the project quiet", () => evalIn(t, row("quiet")), 8000);
     await elsewhere("quiet", "paused on CI on #1");
+    if (await evalIn(t, row("read"))) throw new Error("a parked turn in To read");
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
 });
 

@@ -1109,6 +1109,7 @@ await scenario("50 · by epic, the agent is its epic's header: no row of its own
     await evalIn(t, `localStorage.setItem("wintos:sidebar-by-epic", "0"); window.dispatchEvent(new StorageEvent("storage"))`);
     await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
     const group = `document.querySelector("[data-epic-group='${id}']")`;
+    await until("its heading lit: the agent's pane is where you are", () => evalIn(t, `!!${group}?.querySelector("[data-row='epic:${id}'][data-on]")`));
     await until("its group, the agent in the header, turning", () => evalIn(t, `!!${group}?.querySelector("[data-row='epic:${id}'] [data-agent-running]") && !${group}.querySelector("[data-row='s:e2e-ring-ag']") && !document.querySelector("[data-epic-group=''] [data-row='s:e2e-ring-ag']")`));
     await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-ring-ag", hook_event_name: "Stop" } });
     await until("still once it stops", () => evalIn(t, `!${group}?.querySelector("[data-agent-running]")`));

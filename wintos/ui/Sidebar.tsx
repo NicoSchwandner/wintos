@@ -168,12 +168,16 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             e
         );
     };
+    // In its tab, the row of the focused pane's session; a tab's own row when it has no session.
+    const isHere = (row: Row) => {
+        const own = row.key !== row.tabId ? row.sessions[0] : undefined;
+        return row.tabId === activeTabId && !isPage(mainView) && (!own || own.blockId === focusedBlock || !listed.some((r) => r.tabId === row.tabId && r.sessions[0]?.blockId === focusedBlock));
+    };
     const renderRow = (row: Row) => {
         const v = model!.views[row.key];
         const own = row.key !== row.tabId ? row.sessions[0] : undefined;
         const epic = own?.epic ? state?.epics?.find((e) => e.id === own.epic) : undefined;
-        // In its tab, the row of the focused pane's session; a tab's own row when it has no session.
-        const here = row.tabId === activeTabId && !isPage(mainView) && (!own || own.blockId === focusedBlock || !listed.some((r) => r.tabId === row.tabId && r.sessions[0]?.blockId === focusedBlock));
+        const here = isHere(row);
         const props = {
             key: row.key,
             rowKey: row.key,
@@ -262,7 +266,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         {byEpic ? (
                             <>
                                 <Band kind="read" count={wakeNews.length}>{wakeNews.map(wakeCard)}</Band>
-                                <EpicGroups groups={groups} renderRow={renderRow} cursor={switchTarget} newStep={(epic) => (globalStore.set(newStepEpicAtom, epic), runKey("new-step"))} background={background} />
+                                <EpicGroups groups={groups} renderRow={renderRow} isHere={isHere} cursor={switchTarget} newStep={(epic) => (globalStore.set(newStepEpicAtom, epic), runKey("new-step"))} background={background} />
                             </>
                         ) : (
                         <>

@@ -6,7 +6,7 @@ import { openEpic } from "./menu";
 import { STATE_WORD } from "./sessions";
 import { sessionName } from "./view";
 import type { Session } from "../daemon/sessions/reduce";
-import { SESSION_DOT, T } from "./tokens";
+import { ACTIVE, SESSION_DOT, T } from "./tokens";
 import type { EpicView } from "./view";
 
 // agent: the epic agent's own row, shown as the epic's header rather than as a row under it:
@@ -32,23 +32,26 @@ export function groupByEpic(rows: Row[], epics: EpicView[]): EpicGroup[] {
 
 // background: sessions the agents started in the background (no pane, so no row): listed under
 // their epic, a click opens one in a pane.
-export function EpicGroups({ groups, renderRow, cursor, newStep, background = [] }: { groups: EpicGroup[]; renderRow: (r: Row) => React.ReactNode; cursor: string | null; newStep: (epic: string) => void; background?: Session[] }) {
+export function EpicGroups({ groups, renderRow, isHere = () => false, cursor, newStep, background = [] }: { groups: EpicGroup[]; renderRow: (r: Row) => React.ReactNode; isHere?: (r: Row) => boolean; cursor: string | null; newStep: (epic: string) => void; background?: Session[] }) {
     // An epic with nothing under it (Reviews, Elmah between errands) folds to one line, kept apart
     // at the bottom.
     const bgOf = (g: EpicGroup) => (g.epic ? background.filter((s) => s.epic === g.epic!.id) : []);
-    const empty = (g: EpicGroup) => !!g.epic && !g.rows.length && !bgOf(g).length && g.agent?.band !== "needs";
+    const empty = (g: EpicGroup) => !!g.epic && !g.rows.length && !bgOf(g).length && g.agent?.band !== "needs" && !(g.agent && isHere(g.agent));
     const header = (g: EpicGroup, folded: boolean) => {
         const look = lookOf(g.epic!);
         const waiting = g.rows.filter((r) => r.band === "needs").length;
+        // In the agent's pane, its heading is where you are: lit like a focused row.
+        const here = !!g.agent && isHere(g.agent);
         return (
             <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
                 <button
                     type="button"
                     data-row={`epic:${g.epic!.id}`}
+                    data-on={here || undefined}
                     tabIndex={-1}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => openEpic(g.epic!.id)}
-                    style={{ flexGrow: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 9, padding: folded ? "3px 8px" : "5px 8px", borderRadius: 8, background: "transparent", border: `1px solid ${cursor === `epic:${g.epic!.id}` ? T.apricot : "transparent"}`, cursor: "pointer", textAlign: "left", fontFamily: T.ui }}
+                    style={{ flexGrow: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 9, padding: folded ? "3px 8px" : "5px 8px", borderRadius: 8, background: "transparent", border: `1px solid ${cursor === `epic:${g.epic!.id}` ? T.apricot : "transparent"}`, cursor: "pointer", textAlign: "left", fontFamily: T.ui, ...(here ? { ...ACTIVE, background: look.bg, boxShadow: `inset 3px 0 0 ${look.fg}` } : {}) }}
                 >
                     <EpicAvatar look={look} size={folded ? 16 : 20} running={g.agent?.sessions[0]?.state === "working"} />
                     <span style={{ flexGrow: 1, minWidth: 0, fontSize: folded ? 12 : 12.5, fontWeight: folded ? 500 : 700, letterSpacing: "0.02em", color: folded ? T.muted : look.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(g.epic!)}</span>

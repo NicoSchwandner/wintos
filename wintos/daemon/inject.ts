@@ -87,12 +87,13 @@ export const AGENT_CAN = `You can, yourself, without asking first:
 - tell a session something: \`wintos tell <session> "<text>"\`; recommend on its question: \`wintos suggest\`
 - look closer at a session: \`wintos peek <session>\`; rename one: \`wintos rename <session> "<name>"\`; take a stray session in: \`wintos adopt\`; stop one you started: \`wintos stop\`
 - keep the roadmap: \`wintos unit\` (start, done, rename, move, remove)
+Reach a session only through these \`wintos\` commands, by its WintOS name: never Claude's SendMessage, whose names (work-67) change when a session restarts.
 Never ask the developer to open a session, a tab or paste a brief for a roadmap step: start it.`;
 // Queued for a session the developer has just made a new epic's agent (⌥⌘E, ⌘⏎), as its first report.
 export const promotedNote = (title: string) =>
     `the developer made you the agent of the new epic "${title}". Until now you were a session doing your own task; from now on you keep this epic's plan and roadmap. Write the plan into epic.md and set the roadmap from what you have done and what is left. Work you have in flight (an open PR, a running check) you may finish; start a session for anything new (wintos start).`;
 // Told once to an agent whose conversation began before these existed: what it learned then is wrong now.
-export const AGENT_NEWS = "[WintOS: new since this conversation began] A follow-up the developer gives you on work a session did (its PR, its step) goes to that session with wintos relay: it has the context. Do not dig into it yourself. Your sessions' list now includes those running in the background. You can also start sessions for roadmap steps (wintos start), tell, peek, adopt, stop and rename them, and edit single roadmap steps.";
+export const AGENT_NEWS = "[WintOS: new since this conversation began] A follow-up the developer gives you on work a session did (its PR, its step) goes to that session with wintos relay: it has the context. Do not dig into it yourself. Reach sessions only through wintos (tell, relay, suggest, peek), never SendMessage: its names change on a restart. Your sessions' list now includes those running in the background. You can also start sessions for roadmap steps (wintos start), tell, peek, adopt, stop and rename them, and edit single roadmap steps.";
 export function epicAgentInjection(epic: { title: string; dir: string; steps: string }, workers: WorkerLine[], news?: string): string {
     const digest = workers.length
         ? workers.map((w) => `- ${w.name}: ${w.state}${w.step ? `, at ${w.step}` : ""}${w.status ? ` · ${w.status}` : ""}${w.ask ? ` · asks: ${w.ask}` : ""}${w.prs.length ? ` · ${w.prs.join(", ")}` : ""}`).join("\n")

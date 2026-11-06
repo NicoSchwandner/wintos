@@ -14,7 +14,9 @@ export function reportLine(s: Session): string {
     const name = s.name?.text ?? s.label ?? "a session";
     const step = s.lane ? ` (at ${s.lane.steps[s.lane.at]?.replace(/^\?\s*/, "")})` : "";
     const ended = s.state === "waiting" && s.ask ? `${ASKS[s.ask.kind]}: ${s.ask.text ?? s.outcome?.text ?? "see its pane"}` : s.state === "parked" ? `waits on ${s.parkedOn ?? "something outside"}` : s.state === "done" ? "is done" : (s.outcome?.text ?? "ended its turn");
-    return `${name}${step} ${ended}`;
+    // The ask is a dozen words: the agent reads the question in full before recommending on it.
+    const question = s.state === "waiting" && s.ask ? ` (in full: \`wintos peek "${name}"\`; your recommendation: \`wintos suggest "${name}" "…"\`)` : "";
+    return `${name}${step} ${ended}${question}`;
 }
 
 // Only a turn end that changes something for the epic goes up: a question for you, done, or parked

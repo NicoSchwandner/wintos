@@ -7,7 +7,7 @@ const s = (more: Partial<Session>): Session => ({ id: "w", tabId: "t", blockId: 
 describe("reportLine", () => {
     test("a turn that asks: who, where in its lane, what it asks", () =>
         expect(reportLine(s({ name: { text: "Drafts mapping", by: "you", at: 0 } as Session["name"], state: "waiting", lane: { name: "feature", steps: ["Build", "?Your OK"], at: 1 } as Session["lane"], ask: { kind: "decide", text: "DraftId or hash?" } as Session["ask"] }))).toBe(
-            "Drafts mapping (at Your OK) needs a decision: DraftId or hash?"
+            "Drafts mapping (at Your OK) needs a decision: DraftId or hash? (in full: `wintos peek \"Drafts mapping\"`; your recommendation: `wintos suggest \"Drafts mapping\" \"…\"`)"
         ));
     test("parked, done, or a plain end with what it said", () => {
         expect(reportLine(s({ label: "export", state: "parked", parkedOn: "CI on #418" }))).toBe("export waits on CI on #418");

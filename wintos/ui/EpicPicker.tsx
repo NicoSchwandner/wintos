@@ -10,6 +10,7 @@ import { sessionName } from "./view";
 
 // ⌥⌘E: the epic the focused session is a step of. Typing narrows the list; ⏎ takes the one
 // marked, or starts a new epic of that name when none matches. 1-9 pick, 0 takes it out of any.
+// ⌘⏎ promotes it: a new epic (the typed name, else the session's) with this session as its agent.
 export const EpicPicker = memo(() => {
     const ref = useFocusOnMount<HTMLInputElement>();
     const { state } = useWintos();
@@ -31,6 +32,12 @@ export const EpicPicker = memo(() => {
         if (id) assign(id);
         else closeOverlay();
     };
+    const promote = async () => {
+        if (open.some((e) => e.agent === session.id)) return closeOverlay();
+        await daemonFetch("/epics", { method: "POST", body: { title: (text.trim() || sessionName(session)).slice(0, 80), agent: session.id } }).catch(() => undefined);
+        closeOverlay();
+    };
+    const isAgent = open.some((e) => e.agent === session.id);
     const pick = () => (shown[at] ? assign(shown[at].id) : q ? void create(text.trim()) : closeOverlay());
     return (
         <div style={{ position: "absolute", inset: 0, zIndex: 100, background: `color-mix(in srgb, ${T.ground} 70%, transparent)`, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "16vh" }} onClick={closeOverlay}>
@@ -49,6 +56,7 @@ export const EpicPicker = memo(() => {
                         if (digit !== undefined && open[digit - 1]) return e.preventDefault(), assign(open[digit - 1].id);
                         if (e.key === "ArrowDown") e.preventDefault(), setAt((i) => Math.min(i + 1, Math.max(shown.length - 1, 0)));
                         if (e.key === "ArrowUp") e.preventDefault(), setAt((i) => Math.max(i - 1, 0));
+                        if (e.key === "Enter" && e.metaKey) return e.preventDefault(), void promote();
                         if (e.key === "Enter") e.preventDefault(), pick();
                         if (e.key === "Escape") e.preventDefault(), e.stopPropagation(), closeOverlay();
                     }}
@@ -85,6 +93,12 @@ export const EpicPicker = memo(() => {
                         </div>
                     )}
                 </div>
+                {!isAgent && (
+                    <button type="button" data-wintos="epic-promote" tabIndex={-1} onMouseDown={(ev) => ev.preventDefault()} onClick={() => void promote()} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 8, border: `1px solid ${T.border}`, cursor: "pointer", textAlign: "left", background: "transparent", color: T.text, fontFamily: T.ui, fontSize: 13 }}>
+                        <span style={{ flexGrow: 1 }}>Make it the agent of a new epic “{text.trim() || sessionName(session)}”</span>
+                        <Key k="⌘⏎" label="" />
+                    </button>
+                )}
                 <div style={{ display: "flex", gap: 22, fontSize: 12, color: T.muted, flexWrap: "wrap" }}>
                     <Key k="⏎" label={shown[at] ? "move it there" : q ? "start the epic" : "close"} />
                     <Key k="⌘1–9" label="pick" />

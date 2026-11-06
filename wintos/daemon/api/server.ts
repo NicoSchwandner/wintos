@@ -5,7 +5,7 @@ import http from "http";
 import type { AddressInfo } from "net";
 import { basename, dirname, join } from "path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { AGENT_NEWS, epicAgentInjection, epicInjection, injection } from "../inject";
+import { AGENT_NEWS, epicAgentInjection, epicInjection, injection, promotedNote } from "../inject";
 import { EpicStore, EPIC_TITLE_MAX, findEpic, SHORT_MAX } from "../epics/epics";
 import { impliedEpic } from "../epics/assign";
 import { addTime, adjustMonth, epicHistory, lastWorkdays, mergeBackfill, monthByEpic, type TimeLog } from "../epics/time";
@@ -1044,12 +1044,27 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 }));
             }
             if (req.method === "POST" && url.pathname === "/epics") {
-                const b = (await body(req)) as { title?: unknown; short?: unknown; lane?: unknown };
+                const b = (await body(req)) as { title?: unknown; short?: unknown; lane?: unknown; agent?: unknown };
                 const title = typeof b?.title === "string" ? b.title.trim() : "";
                 const short = typeof b?.short === "string" ? b.short.trim() : "";
-                if (!title || !isSafe(title) || title.length > EPIC_TITLE_MAX || (short && (!isSafe(short) || short.length > SHORT_MAX)) || (b.lane !== undefined && !isSafe(b.lane)))
+                if (!title || !isSafe(title) || title.length > EPIC_TITLE_MAX || (short && (!isSafe(short) || short.length > SHORT_MAX)) || (b.lane !== undefined && !isSafe(b.lane)) || (b.agent !== undefined && !isSafe(b.agent)))
                     return send(res, 400, `need a one-line title up to ${EPIC_TITLE_MAX} characters, and an optional short name up to ${SHORT_MAX}`);
-                const e = epics.create(title, { ...(short ? { short } : {}), ...(typeof b.lane === "string" ? { lane: b.lane } : {}) });
+                // agent: a session promoted to be the new epic's agent. A background session gets no
+                // WintOS context, so it could not act as one.
+                const agent = typeof b.agent === "string" ? sessions.get(b.agent) : undefined;
+                if (b.agent !== undefined && (!agent || agent.state === "ended" || agent.background)) return send(res, 409, "the agent must be a live session in a pane");
+                if (agent && epics.list().some((x) => !x.done && x.agent === agent.id)) return send(res, 409, "that session is already an epic's agent");
+                const e = epics.create(title, { ...(short ? { short } : {}), ...(typeof b.lane === "string" ? { lane: b.lane } : {}), ...(agent ? { agent: agent.id } : {}) });
+                if (agent) {
+                    sessions = setEpic(sessions, agent.id, e.id);
+                    saveSessions();
+                    // Its first report says what changed; the generic news for old agents would mislead it.
+                    agentNews = { ...agentNews, [agent.id]: AGENT_NEWS };
+                    writeFileSync(agentNewsFile, JSON.stringify(agentNews));
+                    reports = addReport(reports, agent.id, promotedNote(e.title), Date.now());
+                    writeFileSync(reportsFile, JSON.stringify(reports));
+                    logEvent("promote", { agent: agent.id, epic: e.id });
+                }
                 broadcast();
                 return send(res, 200, e.id);
             }

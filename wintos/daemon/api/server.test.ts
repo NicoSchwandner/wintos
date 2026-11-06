@@ -87,6 +87,18 @@ describe("wintosd API", () => {
         expect((await post("/epics", { title: "a\nb" })).status).toBe(400);
     });
 
+    test("a session promoted to a new epic's agent: in the epic, its agent, told so in its first report; once only, and never a background one", async () => {
+        await event(prompt);
+        const id = await (await post("/epics", { title: "Ledger import", agent: prompt.session_id })).text();
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.epics).toMatchObject([{ id, agent: prompt.session_id }]);
+        expect(state.sessions[0].epic).toBe(id);
+        expect(state.epicReports[prompt.session_id][0].text).toContain('the agent of the new epic "Ledger import"');
+        expect((await post("/epics", { title: "Another", agent: prompt.session_id })).status).toBe(409);
+        expect((await post("/epics", { title: "Nobody's", agent: "no-such-session" })).status).toBe(409);
+        expect((await (await fetch(base + "/state")).json()).epics).toHaveLength(1);
+    });
+
     test("the epic agent passes on only your words, to its own sessions; and suggests on a session's open question", async () => {
         const id = await (await post("/epics", { title: "Route" })).text();
         const at = (blockId: string, payload: object) => post("/events", { tabId: "tab-1", blockId, payload });

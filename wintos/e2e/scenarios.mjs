@@ -1198,6 +1198,26 @@ await scenario("clean-up · the panes this run opened are closed", async () => {
     })()`);
 });
 
+await scenario("54 · ⌥⌘E, a name and ⌘⏎ promote a session in no epic to the agent of a new epic: its pane shows the epic, and its first report says so", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    await press(t, "d", { mods: ["meta"] });
+    const pane = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
+    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-promo", hook_event_name: "UserPromptSubmit", prompt: "e2e promo" } });
+    await until("its session known", async () => !!(await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((s) => s.id === "e2e-promo"));
+    await press(t, "e", { code: "KeyE", mods: ["meta", "alt"] });
+    await until("the epic picker, offering the promotion", () => evalIn(t, `!!document.querySelector("[data-wintos=epic-picker] [data-wintos=epic-promote]")`));
+    await cdp(t, "Input.insertText", { text: "E2E promoted" });
+    for (const type of ["rawKeyDown", "keyUp"]) await cdp(t, "Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, modifiers: MODS.meta });
+    const st = async () => (await fetch("http://127.0.0.1:7731/state")).json();
+    const epic = await until("a new epic with the session as its agent", async () => (await st()).epics.find((e) => e.title === "E2E promoted" && e.agent === "e2e-promo"));
+    await until("the session in it, told in a report", async () => { const x = await st(); return x.sessions.find((s) => s.id === "e2e-promo")?.epic === epic.id && (x.epicReports?.["e2e-promo"] ?? []).some((r) => r.text.includes("agent of the new epic")); });
+    await until("the strip over its pane is the agent's", () => evalIn(t, `document.querySelector("[data-wintos=epic-strip][data-epic='${epic.id}']")?.dataset.role === "agent"`));
+    await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(pane)}).id)`);
+});
+
 clearInterval(heldTimer);
 for (const r of results) console.log(r.join("  "));
 process.exit(results.some((r) => r[0] === "FAIL") ? 1 : 0);

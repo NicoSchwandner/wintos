@@ -60,8 +60,10 @@ export const PaneStrip = memo(({ tabId }: { tabId: string }) => {
     }, [attachKey]);
     const sessions = state ? liveSessions(state.sessions, { [tabId]: ids }) : [];
     const chips = stripPanes(blocks, sessions);
-    // The strip is where every pane's controls live, so it shows whenever there is a pane.
-    if (!chips.length) return null;
+    // The strip is where every pane's controls live. A project view of one pane needs no chip to
+    // pick it by: the epic strip and the session header already name it, and ⌘W still closes it.
+    const lone = chips.length === 1 && !isInboxTab(tab) && !magnified && !armed && !closeArmed;
+    if (!chips.length || lone) return null;
     const unread = new Set(unreadSessions(sessions, tabId, state?.seen).map((s) => s.id));
     const on = magnified ?? focused?.id;
     const inProject = !isInboxTab(tab);

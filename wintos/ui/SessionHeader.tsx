@@ -45,6 +45,9 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     const inView = (state?.sessions ?? []).filter((x) => x.tabId === s.tabId && x.state !== "ended" && !x.background);
     const oneEpic = inView.every((x) => x.epic === s.epic);
     const isAgent = !!epic && epic.agent === s.id;
+    // Alone in its view, the epic strip above carries the session's name (the agent's, the epic's):
+    // here it would be a third title.
+    const named = inView.length > 1;
     return (
         <div data-wintos="session-header" data-epic={epic?.id ?? ""} data-epic-color={epic ? look.color : undefined} style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", gap: 5, padding: "7px 10px 8px 12px", borderTop: epic && !oneEpic ? `3px solid ${look.fg}` : undefined, borderBottom: `1px solid ${T.border}`, background: epic && !oneEpic ? `linear-gradient(90deg, ${look.bg} 0%, transparent 60%)` : undefined, fontFamily: T.ui, fontSize: 12, minWidth: 0 }}>
             {!oneEpic && <button type="button" data-wintos="session-epic" data-key="⌥⌘E" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("epic")} title={epic?.title ?? "put this session in an epic"} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, padding: 0, background: "transparent", border: "none", cursor: "pointer", minWidth: 0, maxWidth: "100%" }}>
@@ -63,7 +66,7 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                     {STATE_WORD[shown]}
                     {shown !== s.state ? ` · ${agents} subagent${agents === 1 ? "" : "s"}` : s.state !== "working" && ` ${relTime(now - s.since)}`}
                 </span>
-                <span data-wintos="session-name" style={{ color: T.emphasis, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>{sessionName(s)}</span>
+                {named && <span data-wintos="session-name" style={{ color: T.emphasis, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>{sessionName(s)}</span>}
                 {s.name?.by === "session" && now - s.name.at < NAME_PROPOSAL_MS && <NameButton label={`change the name · ${Math.min(60, Math.ceil((NAME_PROPOSAL_MS - (now - s.name.at)) / 1000))}s`} />}
                 {s.name?.suggested && <NameButton label={`it suggests “${s.name.suggested}”`} />}
                 {more > 0 && (

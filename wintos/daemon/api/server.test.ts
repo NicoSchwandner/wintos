@@ -604,6 +604,10 @@ describe("wintosd API", () => {
         }
         expect(state.sessions.find((x) => x.id === "430f7f7e-9d03")).toMatchObject({ state: "working", bgId: "430f7f7e" });
         expect(state.epics[0].links?.Cutover).toEqual(["430f7f7e-9d03"]);
+        // Its agent sees it among its sessions, so a follow-up on its work can go to it.
+        const told = await (await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "and the review?" } })).text();
+        expect(told).toContain("- Route: Cutover: working, in the background");
+        expect(told).toContain("hand a follow-up to the session that did the work");
         // The agent tells it something: no pane, so it goes in through the background service once it is free.
         const sent: { id: string; cwd?: string; prompt: string }[] = [];
         srvBgSend.fn = async (id, cwd, prompt) => (sent.push({ id, cwd, prompt }), true);

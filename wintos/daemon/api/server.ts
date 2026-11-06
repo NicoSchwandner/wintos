@@ -169,8 +169,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const epic = e ? epics.byId(e) : undefined;
         if (epic && epic.agent === sessionId) {
             const workers = [...sessions.values()]
-                .filter((w) => w.epic === epic.id && w.id !== sessionId && w.state !== "ended" && !w.background)
-                .map((w) => ({ name: w.name?.text ?? w.label ?? "a session", state: w.state, step: w.lane?.steps[w.lane.at], status: freshStatus(w)?.text, prs: w.prs ?? [], ask: w.state === "waiting" ? (w.ask?.text ?? w.outcome?.text) : undefined }));
+                .filter((w) => w.epic === epic.id && w.id !== sessionId && w.state !== "ended")
+                .map((w) => ({ name: w.name?.text ?? w.label ?? "a session", state: w.background ? `${w.state}, in the background` : w.restored ? `${w.state}, not started until the developer opens it` : w.state, step: w.lane?.steps[w.lane.at], status: freshStatus(w)?.text, prs: w.prs ?? [], ask: w.state === "waiting" ? (w.ask?.text ?? w.outcome?.text) : undefined }));
             // The news once per agent (inject.ts AGENT_NEWS), kept across restarts.
             const told = agentNews[sessionId] === AGENT_NEWS;
             if (!told) (agentNews = { ...agentNews, [sessionId]: AGENT_NEWS }), writeFileSync(agentNewsFile, JSON.stringify(agentNews));
@@ -1366,7 +1366,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 logEvent("relay", { agent: live.id, to: to.id, text: b.text.trim(), note: b.note });
                 if (to.bgId) setTimeout(() => void pollBg(), 2_000);
                 broadcast();
-                return send(res, 200, to.name?.text ?? to.label ?? to.id);
+                // A restored session's Claude starts only when its pane is opened: the agent says so.
+                return send(res, 200, `${to.name?.text ?? to.label ?? to.id}${to.restored ? " (not started: it gets this when the developer opens it)" : ""}`);
             }
             // `wintos adopt <session>`: a session in no epic joins the agent's (one in another epic stays
             // there: moving it is the developer's call). `wintos stop <session>`: one the agent started

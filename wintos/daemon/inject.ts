@@ -83,7 +83,8 @@ export type WorkerLine = { name: string; state: string; step?: string; status?: 
 // had learned it could not start sessions kept asking the developer to open them by hand.
 export const AGENT_CAN = `You can, yourself, without asking first:
 - start a session for a roadmap step: \`wintos start [--cwd <repo>] <step> "<first prompt>"\` (it runs in the background and shows in the epic)
-- tell a session something: \`wintos tell <session> "<text>"\`; pass on the developer's answer: \`wintos relay\`; recommend on its question: \`wintos suggest\`
+- hand a follow-up to the session that did the work (its PR, its step, what it found): \`wintos relay <session> "<the developer's words>" --note "<your context>"\`. It has the context you lack; do the work yourself only when no session owns it, and start a new session only for new work
+- tell a session something: \`wintos tell <session> "<text>"\`; recommend on its question: \`wintos suggest\`
 - look closer at a session: \`wintos peek <session>\`; rename one: \`wintos rename <session> "<name>"\`; take a stray session in: \`wintos adopt\`; stop one you started: \`wintos stop\`
 - keep the roadmap: \`wintos unit\` (start, done, rename, move, remove)
 Never ask the developer to open a session, a tab or paste a brief for a roadmap step: start it.`;
@@ -91,7 +92,7 @@ Never ask the developer to open a session, a tab or paste a brief for a roadmap 
 export const promotedNote = (title: string) =>
     `the developer made you the agent of the new epic "${title}". Until now you were a session doing your own task; from now on you keep this epic's plan and roadmap. Write the plan into epic.md and set the roadmap from what you have done and what is left. Work you have in flight (an open PR, a running check) you may finish; start a session for anything new (wintos start).`;
 // Told once to an agent whose conversation began before these existed: what it learned then is wrong now.
-export const AGENT_NEWS = "[WintOS: new since this conversation began] You can now start sessions for roadmap steps (wintos start), tell sessions things in your own words (wintos tell), peek at them, adopt and stop them, and edit single roadmap steps. Anything earlier in this conversation saying you cannot open or start sessions is out of date.";
+export const AGENT_NEWS = "[WintOS: new since this conversation began] A follow-up the developer gives you on work a session did (its PR, its step) goes to that session with wintos relay: it has the context. Do not dig into it yourself. Your sessions' list now includes those running in the background. You can also start sessions for roadmap steps (wintos start), tell, peek, adopt, stop and rename them, and edit single roadmap steps.";
 export function epicAgentInjection(epic: { title: string; dir: string; steps: string }, workers: WorkerLine[], news?: string): string {
     const digest = workers.length
         ? workers.map((w) => `- ${w.name}: ${w.state}${w.step ? `, at ${w.step}` : ""}${w.status ? ` · ${w.status}` : ""}${w.ask ? ` · asks: ${w.ask}` : ""}${w.prs.length ? ` · ${w.prs.join(", ")}` : ""}`).join("\n")

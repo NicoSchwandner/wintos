@@ -1,4 +1,6 @@
-export type ProjectMeta = { id: string; title?: string; titleLocked: boolean; next?: string; pr: string[] };
+import { parseUnits, serializeUnits, type Unit } from "./units";
+
+export type ProjectMeta = { id: string; title?: string; titleLocked: boolean; next?: string; pr: string[]; units?: Unit[] };
 export type Parsed = { meta: ProjectMeta; body: string } | { error: string };
 
 // ponytail: a line-based reader, not YAML. The front matter is ours and flat; a real
@@ -20,6 +22,7 @@ export function parseProjectMd(raw: string): Parsed {
     };
     if (kv.title) meta.title = kv.title;
     if (kv.next) meta.next = kv.next;
+    if (kv.units && parseUnits(kv.units).length) meta.units = parseUnits(kv.units);
     return { meta, body: m[2] };
 }
 
@@ -29,5 +32,6 @@ export function serializeProjectMd(meta: ProjectMeta, body: string): string {
     if (meta.titleLocked) lines.push("title_locked: true");
     if (meta.next) lines.push(`next: ${meta.next}`);
     if (meta.pr.length) lines.push(`pr: ${meta.pr.join(", ")}`);
+    if (meta.units?.length) lines.push(`units: ${serializeUnits(meta.units)}`);
     return `---\n${lines.join("\n")}\n---\n${body}`;
 }

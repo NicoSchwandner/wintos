@@ -23,7 +23,7 @@ import { delay, ensureBoundsAreVisible, waveKeyToElectronKey } from "./emain-uti
 import { ElectronWshClient } from "./emain-wsh";
 import { updater } from "./updater";
 
-const DevInitTimeoutMs = 5000;
+const DevInitTimeoutMs = 30_000;
 
 export type WindowOpts = {
     unamePlatform: NodeJS.Platform;
@@ -130,6 +130,9 @@ type WindowActionQueueEntry =
       }
     | {
           op: "createtab";
+          // WintOS: reopening a project on a session: the tab's first pane is this one, and no
+          // Claude of its own starts there.
+          first?: MetaType;
       }
     | {
           op: "closetab";
@@ -148,6 +151,11 @@ export class WaveBrowserWindow extends BaseWindow {
     waveWindowId: string;
     workspaceId: string;
     allLoadedTabViews: Map<string, WaveTabView>;
+    // WintOS: whether this window has the keys, for the focus frame. A page focused inside it
+    // blurs the renderer's own window, so the renderer cannot tell by itself.
+    sendWintosWindowFocus(focused: boolean) {
+        for (const tv of this.allLoadedTabViews.values()) if (!tv.webContents.isDestroyed()) tv.webContents.send("wintos-window-focus", focused);
+    }
     activeTabView: WaveTabView;
     private canClose: boolean;
     private deleteAllowed: boolean;
@@ -259,20 +267,18 @@ export class WaveBrowserWindow extends BaseWindow {
                 return;
             }
             console.log("enter-full-screen event", this.getContentBounds());
-            const tabView = this.activeTabView;
-            if (tabView) {
-                tabView.webContents.send("fullscreen-change", true);
-            }
+            // WintOS: every loaded tab, not only the active one; a cached tab shown later would
+            // otherwise lay out for the wrong mode (window buttons that are not there).
+            for (const tv of this.allLoadedTabViews.values()) if (!tv.webContents.isDestroyed()) tv.webContents.send("fullscreen-change", true);
             this.activeTabView?.positionTabOnScreen(this.getContentBounds());
         });
         this.on("leave-full-screen", async () => {
             if (this.isDestroyed()) {
                 return;
             }
-            const tabView = this.activeTabView;
-            if (tabView) {
-                tabView.webContents.send("fullscreen-change", false);
-            }
+            // WintOS: every loaded tab, not only the active one; a cached tab shown later would
+            // otherwise lay out for the wrong mode (window buttons that are not there).
+            for (const tv of this.allLoadedTabViews.values()) if (!tv.webContents.isDestroyed()) tv.webContents.send("fullscreen-change", false);
             this.activeTabView?.positionTabOnScreen(this.getContentBounds());
         });
         this.on("focus", () => {
@@ -288,9 +294,11 @@ export class WaveBrowserWindow extends BaseWindow {
             setWasInFg(true);
             setWasActive(true);
             setTimeout(() => globalEvents.emit("windows-updated"), 50);
+            this.sendWintosWindowFocus(true);
         });
         this.on("blur", () => {
             setTimeout(() => globalEvents.emit("windows-updated"), 50);
+            this.sendWintosWindowFocus(false);
         });
         this.on("close", (e) => {
             if (this.canClose) {
@@ -450,27 +458,23 @@ export class WaveBrowserWindow extends BaseWindow {
         console.log("wave-ready init time", Date.now() - startTime + "ms");
     }
 
+    // WintOS: a slow start is only reported, never abandoned. A cold Vite (after dev-reset) takes
+    // longer than the timeout to load the renderer, and rejecting left the window blank for good.
     private async awaitWithDevTimeout<T>(promise: Promise<T>, name: string, tabId: string): Promise<T> {
         if (!isDev) {
             return promise;
         }
-        let timeoutHandle: ReturnType<typeof setTimeout> = null;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutHandle = setTimeout(() => {
-                console.log(
-                    `[dev] ${name} timed out after ${DevInitTimeoutMs}ms for tab ${tabId}, showing window for devtools`
-                );
-                if (!this.isDestroyed() && !this.isVisible()) {
-                    this.show();
-                }
-                if (this.activeTabView?.webContents && !this.activeTabView.webContents.isDevToolsOpened()) {
-                    this.activeTabView.webContents.openDevTools();
-                }
-                reject(new Error(`[dev] ${name} timed out after ${DevInitTimeoutMs}ms`));
-            }, DevInitTimeoutMs);
-        });
+        const timeoutHandle = setTimeout(() => {
+            console.log(`[dev] ${name} still waiting after ${DevInitTimeoutMs}ms for tab ${tabId}, showing window for devtools`);
+            if (!this.isDestroyed() && !this.isVisible()) {
+                this.show();
+            }
+            if (this.activeTabView?.webContents && !this.activeTabView.webContents.isDevToolsOpened()) {
+                this.activeTabView.webContents.openDevTools();
+            }
+        }, DevInitTimeoutMs);
         try {
-            return await Promise.race([promise, timeoutPromise]);
+            return await promise;
         } finally {
             clearTimeout(timeoutHandle);
         }
@@ -486,6 +490,8 @@ export class WaveBrowserWindow extends BaseWindow {
             oldActiveView.isActiveTab = false;
         }
         this.activeTabView = tabView;
+        // WintOS: a tab loaded after the switch to or from full screen learns the mode here.
+        if (!tabView.webContents.isDestroyed()) tabView.webContents.send("fullscreen-change", this.isFullScreen());
         this.allLoadedTabViews.set(tabView.waveTabId, tabView);
         if (!tabInitialized) {
             console.log("initializing a new tab", primaryStartupTab ? "(primary startup)" : "");
@@ -525,8 +531,8 @@ export class WaveBrowserWindow extends BaseWindow {
         }
     }
 
-    async queueCreateTab() {
-        await this._queueActionInternal({ op: "createtab" });
+    async queueCreateTab(first?: MetaType) {
+        await this._queueActionInternal({ op: "createtab", first });
     }
 
     async queueCloseTab(tabId: string) {
@@ -566,7 +572,7 @@ export class WaveBrowserWindow extends BaseWindow {
                 // have to use "===" here to get the typechecker to work :/
                 switch (entry.op) {
                     case "createtab":
-                        tabId = await WorkspaceService.CreateTab(this.workspaceId, null, true);
+                        tabId = entry.first ? await WorkspaceService.CreatePlainTab(this.workspaceId, true, entry.first) : await WorkspaceService.CreateTab(this.workspaceId, null, true);
                         break;
                     case "switchtab":
                         tabId = entry.tabId;
@@ -747,11 +753,11 @@ ipcMain.on("set-active-tab", async (event, tabId) => {
     await ww?.setActiveTab(tabId, true);
 });
 
-ipcMain.on("create-tab", async (event, _opts) => {
+ipcMain.on("create-tab", async (event, opts?: { first?: MetaType }) => {
     const senderWc = event.sender;
     const ww = getWaveWindowByWebContentsId(senderWc.id);
     if (ww != null) {
-        await ww.queueCreateTab();
+        await ww.queueCreateTab(opts?.first);
     }
     event.returnValue = true;
     return null;

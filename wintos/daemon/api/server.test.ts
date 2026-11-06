@@ -1,8 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "fs";
 import type { AddressInfo } from "net";
 import { tmpdir } from "os";
-import { join } from "path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { dirname, join } from "path";
+import { execFileSync } from "child_process";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import WebSocket from "ws";
 import prompt from "../fixtures/user-prompt-submit.json";
 import stop from "../fixtures/stop.json";
@@ -22,15 +23,511 @@ afterEach(() => srv.close());
 const JSON_HEADERS = { "Content-Type": "application/json" };
 const post = (path: string, body: unknown, headers: Record<string, string> = JSON_HEADERS) =>
     fetch(base + path, { method: "POST", headers, body: typeof body === "string" ? body : JSON.stringify(body) });
+const put = (text: string | undefined) => fetch(base + "/day/recap", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ text }) });
 const event = (payload: object, tabId = "tab-1") => post("/events", { tabId, blockId: "blk-1", payload });
 
 describe("wintosd API", () => {
+    test("⌘Z after a park: /sessions/:id/unpark makes the turn yours again", async () => {
+        await event({ ...prompt, hook_event_name: "Stop" });
+        await post("/blocks/blk-1/wait", { reason: "CI" });
+        expect((await post(`/sessions/${prompt.session_id}/unpark`, {})).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).sessions[0]).toMatchObject({ state: "waiting" });
+    });
+
+    test("`wintos lane` then `wintos step` show in /state; an unknown step is a 400", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/lane", { name: "fast", steps: ["Test", "Fix", "?Your OK"] })).status).toBe(200);
+        expect((await post("/blocks/blk-1/step", { step: "fix" })).status).toBe(200);
+        expect((await post("/blocks/blk-1/step", { step: "Deploy" })).status).toBe(400);
+        expect((await post("/blocks/blk-1/lane", { name: "x", steps: [] })).status).toBe(400);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].lane).toEqual({ name: "fast", steps: ["Test", "Fix", "?Your OK"], at: 1 });
+    });
+
+    test("`wintos todo` lists the step's to-dos and ticks them; without a lane it is a 400", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/todo", { items: ["Narrow list"] })).status).toBe(400);
+        await post("/blocks/blk-1/lane", { name: "fast", steps: ["Test", "Fix"] });
+        expect((await post("/blocks/blk-1/todo", { items: ["Narrow list", "Name search"] })).status).toBe(200);
+        expect((await post("/blocks/blk-1/todo", { done: "name" })).status).toBe(200);
+        expect((await post("/blocks/blk-1/todo", { done: "Deploy" })).status).toBe(400);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].lane.todos).toEqual([{ text: "Narrow list", done: false }, { text: "Name search", done: true }]);
+    });
+
+    test("`wintos unit` sets the project's units, starts one and ticks one; in project.md and /state", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/units", { items: ["ABC-41 fields check"] })).status).toBe(409);
+        await post("/projects/tab-1/title", { title: "Ledger import", manual: true });
+        expect((await post("/blocks/blk-1/units", { items: ["ABC-41 fields check", "ABC-42 phase 1", "ABC-43 match log"] })).status).toBe(200);
+        expect((await post("/blocks/blk-1/units", { start: "abc-42" })).status).toBe(200);
+        const done = await post("/blocks/blk-1/units", { done: "ABC-41" });
+        expect(await done.text()).toBe("[x] ABC-41 fields check | [>] ABC-42 phase 1 | [ ] ABC-43 match log");
+        expect((await post("/blocks/blk-1/units", { start: "ABC-9" })).status).toBe(400);
+        expect((await post("/blocks/blk-1/units", { items: ["a | b"] })).status).toBe(400);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.projects[0].units.map((u: { state: string }) => u.state)).toEqual(["done", "current", "todo"]);
+        expect(readFileSync(join(state.projects[0].dir, "project.md"), "utf8")).toContain("units: [x] ABC-41 fields check | [>] ABC-42 phase 1 | [ ] ABC-43 match log");
+    });
+
+    test("epics: one is started, a session joins it by name or by id, and leaves it; /state shows both", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/epic", { epic: "route" })).status).toBe(404);
+        const id = await (await post("/epics", { title: "Route documents", short: "Route DO" })).text();
+        expect(id).toBe("route-documents");
+        const named = await post("/blocks/blk-1/epic", { epic: "route do" });
+        expect(await named.text()).toBe("Route documents");
+        let state = await (await fetch(base + "/state")).json();
+        expect(state.epics).toMatchObject([{ id, title: "Route documents", short: "Route DO" }]);
+        expect(state.sessions[0].epic).toBe(id);
+        expect((await post(`/sessions/${prompt.session_id}/epic`, { epic: null })).status).toBe(200);
+        state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].epic).toBeUndefined();
+        expect((await post(`/sessions/${prompt.session_id}/epic`, { epic: "route" })).status).toBe(404);
+        expect((await post("/epics", { title: "a\nb" })).status).toBe(400);
+    });
+
+    test("a session promoted to a new epic's agent: in the epic, its agent, told so in its first report; once only, and never a background one", async () => {
+        await event(prompt);
+        const id = await (await post("/epics", { title: "Ledger import", agent: prompt.session_id })).text();
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.epics).toMatchObject([{ id, agent: prompt.session_id }]);
+        expect(state.sessions[0].epic).toBe(id);
+        expect(state.epicReports[prompt.session_id][0].text).toContain('the agent of the new epic "Ledger import"');
+        expect((await post("/epics", { title: "Another", agent: prompt.session_id })).status).toBe(409);
+        expect((await post("/epics", { title: "Nobody's", agent: "no-such-session" })).status).toBe(409);
+        expect((await (await fetch(base + "/state")).json()).epics).toHaveLength(1);
+    });
+
+    test("an epic renamed: its title and short name change, its id stays, its agent hears of it", async () => {
+        await event(prompt);
+        const id = await (await post("/epics", { title: "Ledger import", short: "Ledger", agent: prompt.session_id })).text();
+        expect((await post(`/epics/${id}/title`, { title: "Ledger import v2" })).status).toBe(200);
+        let state = await (await fetch(base + "/state")).json();
+        expect(state.epics).toMatchObject([{ id, title: "Ledger import v2", short: "Ledger" }]);
+        expect(state.epicReports[prompt.session_id].map((r: { text: string }) => r.text)).toContain('the developer renamed the epic from "Ledger import" to "Ledger import v2"');
+        await post(`/epics/${id}/title`, { title: "Ledger import v2", short: "" });
+        state = await (await fetch(base + "/state")).json();
+        expect(state.epics[0].short).toBeUndefined();
+        expect((await post(`/epics/${id}/title`, { title: "a\nb" })).status).toBe(400);
+        expect((await post("/epics/nope/title", { title: "x" })).status).toBe(404);
+    });
+
+    test("the epic agent passes on only your words, to its own sessions; and suggests on a session's open question", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        const at = (blockId: string, payload: object) => post("/events", { tabId: "tab-1", blockId, payload });
+        await at("blk-a", { session_id: "ag", hook_event_name: "SessionStart" });
+        await at("blk-w", { session_id: "wk", hook_event_name: "UserPromptSubmit", prompt: "go" });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/ag/epic", { epic: id });
+        await post("/sessions/wk/epic", { epic: id });
+        await post("/sessions/wk/name", { text: "#14715 todo review" });
+        expect((await post("/blocks/blk-w/relay", { to: "ag", text: "x" })).status).toBe(403);
+        await at("blk-a", { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "Write the checklist first,\nthen walk it" });
+        expect((await post("/blocks/blk-a/relay", { to: "#14715", text: "merge it now" })).status).toBe(403);
+        expect((await post("/blocks/blk-a/relay", { to: "nobody", text: "checklist first" })).status).toBe(404);
+        const ok = await post("/blocks/blk-a/relay", { to: "#14715", text: "write the checklist first, then walk it", note: "re the test-plan review" });
+        expect(await ok.text()).toBe("#14715 todo review");
+        expect((await (await fetch(base + "/state")).json()).relays.wk).toMatchObject([{ text: "write the checklist first, then walk it", note: "re the test-plan review", from: "ag" }]);
+        await at("blk-a", { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "[WintOS report] wk asks something" });
+        expect((await post("/blocks/blk-a/relay", { to: "#14715", text: "write the checklist first" })).status).toBe(200);
+        expect((await post("/sessions/wk/relays/delivered", { n: 2 })).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).relays).toEqual({});
+        expect((await post("/blocks/blk-a/suggest", { to: "#14715", text: "checklist first" })).status).toBe(409);
+        await post("/blocks/blk-w/ask", { kind: "decide", text: "when to rewrite the test plan" });
+        await at("blk-w", { session_id: "wk", hook_event_name: "Stop" });
+        expect((await post("/blocks/blk-a/suggest", { to: "#14715", text: "checklist first" })).status).toBe(200);
+        const wk = (await (await fetch(base + "/state")).json()).sessions.find((x: { id: string }) => x.id === "wk");
+        expect(wk.ask).toMatchObject({ kind: "decide", suggestion: "checklist first" });
+    });
+
+    test("the epic agent starting a step moves the roadmap but is no step's session", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/ag/epic", { epic: id });
+        await post(`/epics/${id}/roadmap`, { add: "Cutover" });
+        expect((await post("/blocks/blk-a/units?session=ag", { start: "Cutover" })).status).toBe(200);
+        const epic = (await (await fetch(base + "/state")).json()).epics[0];
+        expect(epic.steps).toEqual([{ name: "Cutover", state: "current" }]);
+        expect(epic.links).toBeUndefined();
+    });
+
+    test("wintos unit rename, move and remove edit an epic's roadmap step by step; the sessions stay with their step", async () => {
+        await event(prompt);
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/blocks/blk-1/epic", { epic: id });
+        await post("/blocks/blk-1/units", { items: ["Cutover", "Backfill", "Flag off"] });
+        await post("/blocks/blk-1/units", { start: "Cutover" });
+        expect(await (await post("/blocks/blk-1/units", { rename: { from: "cut", to: "Cutover per group" } })).text()).toBe("[>] Cutover per group | [ ] Backfill | [ ] Flag off");
+        expect(await (await post("/blocks/blk-1/units", { move: { name: "Flag", by: -1 } })).text()).toBe("[>] Cutover per group | [ ] Flag off | [ ] Backfill");
+        expect(await (await post("/blocks/blk-1/units", { remove: "Backfill" })).text()).toBe("[>] Cutover per group | [ ] Flag off");
+        expect((await post("/blocks/blk-1/units", { remove: "Nope" })).status).toBe(404);
+        expect((await (await fetch(base + "/state")).json()).epics[0].links).toEqual({ "Cutover per group": [prompt.session_id] });
+    });
+
+    test("a background session registers a wake by its own id, and the daemon delivers it when due", async () => {
+        let listing = "[]";
+        const sent: string[] = [];
+        const boot = async () => {
+            srv.close();
+            srv = await startServer({ root, port: 0, token: "t0ken", listAgents: async () => listing, bgSend: async (_id, _cwd, p) => (sent.push(p), true) });
+            base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        };
+        await boot();
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/ag/epic", { epic: id });
+        await post(`/epics/${id}/roadmap`, { add: "Cutover" });
+        await post("/blocks/blk-a/start", { step: "Cutover", bgId: "430f7f7e" });
+        listing = JSON.stringify([{ id: "430f7f7e", sessionId: "430f7f7e-9d03", state: "working", status: "busy" }]);
+        for (let i = 0; i < 100 && !(await (await fetch(base + "/state")).json()).sessions.some((x: { id: string }) => x.id === "430f7f7e-9d03"); i++) await new Promise((r) => setTimeout(r, 50));
+        // wintos wake from the background session: no pane, so the CLI sends "-" and its own id.
+        expect((await post("/blocks/-/wake?session=430f7f7e-9d03", { until: "merged", pr: "https://github.com/o/r/pull/9", prompt: "carry on after the merge" })).status).toBe(200);
+        const wakesFile = join(root, ".wakes.json");
+        const wakes = JSON.parse(readFileSync(wakesFile, "utf8"));
+        for (const w of Object.values(wakes) as { due?: number }[]) w.due = Date.now();
+        writeFileSync(wakesFile, JSON.stringify(wakes));
+        listing = JSON.stringify([{ id: "430f7f7e", sessionId: "430f7f7e-9d03", state: "done", status: "idle" }]);
+        await boot();
+        for (let i = 0; i < 400 && !sent.length; i++) await new Promise((r) => setTimeout(r, 50));
+        expect(sent.join("\n")).toContain("carry on after the merge");
+        expect(Object.keys(JSON.parse(readFileSync(wakesFile, "utf8")))).toEqual([]);
+    }, 30_000);
+
+    test("the epic agent renames its sessions; a name the developer gave stays, the agent's waits as a suggestion", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post("/events", { tabId: "tab-1", blockId: "blk-w", payload: { session_id: "wk", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post("/events", { tabId: "tab-1", blockId: "blk-y", payload: { session_id: "yours", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        for (const x of ["ag", "wk", "yours"]) await post(`/sessions/${x}/epic`, { epic: id });
+        await post("/blocks/blk-w/name", { text: "drafts" });
+        await post("/sessions/yours/name", { text: "My review" });
+        expect((await post("/blocks/blk-w/rename", { to: "ag", name: "x" })).status).toBe(403);
+        expect(await (await post("/blocks/blk-a/rename", { to: "drafts", name: "Drafts mapping" })).text()).toBe("Drafts mapping");
+        expect(await (await post("/blocks/blk-a/rename", { to: "My review", name: "Review" })).text()).toContain("waits beside it as a suggestion");
+        const st = (await (await fetch(base + "/state")).json()).sessions as { id: string; name?: { text: string; suggested?: string } }[];
+        expect(st.find((x) => x.id === "wk")?.name?.text).toBe("Drafts mapping");
+        expect(st.find((x) => x.id === "yours")?.name).toMatchObject({ text: "My review", suggested: "Review" });
+    });
+
+    test("the epic agent adopts a session in no epic; one in another epic stays", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        const other = await (await post("/epics", { title: "Other" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post("/events", { tabId: "tab-2", blockId: "blk-l", payload: { session_id: "loose", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post("/events", { tabId: "tab-2", blockId: "blk-o", payload: { session_id: "elsewhere", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/ag/epic", { epic: id });
+        await post("/sessions/loose/name", { text: "Drafts cleanup" });
+        await post("/sessions/elsewhere/name", { text: "Drafts other" });
+        await post("/sessions/elsewhere/epic", { epic: other });
+        expect((await post("/blocks/blk-l/adopt", { to: "Drafts" })).status).toBe(403);
+        expect(await (await post("/blocks/blk-a/adopt", { to: "Drafts" })).text()).toBe("Drafts cleanup");
+        expect((await post("/blocks/blk-a/adopt", { to: "Drafts other" })).status).toBe(404);
+        const st = (await (await fetch(base + "/state")).json()).sessions as { id: string; epic?: string }[];
+        expect(st.find((x) => x.id === "loose")?.epic).toBe(id);
+        expect(st.find((x) => x.id === "elsewhere")?.epic).toBe(other);
+    });
+
+    test("the epic agent peeks at a session: its question, PRs and last reply from its transcript", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        const tp = join(root, "wk.jsonl");
+        writeFileSync(tp, JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Pushed it. Which id should the drafts use?" }] } }) + "\n");
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post("/events", { tabId: "tab-1", blockId: "blk-w", payload: { session_id: "wk", hook_event_name: "UserPromptSubmit", prompt: "go", transcript_path: tp } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/ag/epic", { epic: id });
+        await post("/sessions/wk/epic", { epic: id });
+        await post("/sessions/wk/name", { text: "Drafts mapping" });
+        await post("/blocks/blk-w/ask", { kind: "decide", text: "which id" });
+        await post("/events", { tabId: "tab-1", blockId: "blk-w", payload: { session_id: "wk", hook_event_name: "Stop", transcript_path: tp } });
+        expect((await post("/blocks/blk-w/peek", { to: "ag" })).status).toBe(403);
+        const text = await (await post("/blocks/blk-a/peek", { to: "Drafts" })).text();
+        expect(text).toContain("Drafts mapping: waiting");
+        expect(text).toContain("asks you (decide): which id");
+        expect(text).toContain("its last reply:\nPushed it. Which id should the drafts use?");
+    });
+
+    test("the event log: a session's changes with their cause, and roadmap edits, one JSON line each", async () => {
+        await event(prompt);
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post(`/epics/${id}/roadmap`, { add: "Cutover" });
+        const day = new Date();
+        const file = join(root, ".events", `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}.jsonl`);
+        const lines = readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+        expect(lines.find((l) => l.kind === "session" && l.id === prompt.session_id)).toMatchObject({ cause: expect.stringContaining("UserPromptSubmit"), changes: [expect.stringMatching(/^new, /)] });
+        expect(lines.find((l) => l.kind === "roadmap")).toMatchObject({ epic: id, by: "developer", note: 'added "Cutover"' });
+    });
+
+    test("the roadmap edited by hand: add, rename, move, done and remove; the epic agent hears of each", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post(`/epics/${id}/agent`, { sessionId: "agent" });
+        expect((await post(`/epics/${id}/roadmap`, { add: "Drafts mapping" })).status).toBe(200);
+        expect((await post(`/epics/${id}/roadmap`, { add: " Export " })).status).toBe(200);
+        expect((await post(`/epics/${id}/roadmap`, { add: "export" })).status).toBe(409);
+        expect((await post(`/epics/${id}/roadmap`, { add: "a | b" })).status).toBe(400);
+        expect((await post(`/epics/${id}/roadmap`, { rename: { from: "Export", to: "Export to DO" } })).status).toBe(200);
+        expect((await post(`/epics/${id}/roadmap`, { move: { name: "Export to DO", by: -1 } })).status).toBe(200);
+        expect((await post(`/epics/${id}/roadmap`, { done: "Drafts mapping", on: true })).status).toBe(200);
+        expect((await post(`/epics/${id}/roadmap`, { remove: "Nope" })).status).toBe(404);
+        expect((await post(`/epics/${id}/roadmap`, { move: { name: "Export to DO", by: 2 } })).status).toBe(400);
+        expect((await post("/epics/nope/roadmap", { add: "x" })).status).toBe(404);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.epics[0].steps).toEqual([{ name: "Export to DO", state: "todo" }, { name: "Drafts mapping", state: "done" }]);
+        expect(state.epicReports.agent.map((r: { text: string }) => r.text.replace(/^.*page: /, ""))).toEqual(['added "Drafts mapping"', 'added "Export"', 'renamed "Export" to "Export to DO"', 'moved "Export to DO" up, before "Drafts mapping"', 'marked "Drafts mapping" done']);
+    });
+
+    test("a session started from a planned step is linked to it, and the link follows a rename", async () => {
+        await event(prompt);
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post(`/epics/${id}/roadmap`, { add: "Cutover" });
+        expect((await post(`/sessions/${prompt.session_id}/unit`, { unit: "Cutover" })).status).toBe(409);
+        await post("/blocks/blk-1/epic", { epic: id });
+        expect((await post(`/sessions/${prompt.session_id}/unit`, { unit: "Nope" })).status).toBe(404);
+        expect((await post(`/sessions/${prompt.session_id}/unit`, { unit: "Cutover" })).status).toBe(200);
+        await post(`/epics/${id}/roadmap`, { rename: { from: "Cutover", to: "Cutover per group" } });
+        const epic = (await (await fetch(base + "/state")).json()).epics[0];
+        expect(epic.steps).toEqual([{ name: "Cutover per group", state: "current" }]);
+        expect(epic.links).toEqual({ "Cutover per group": [prompt.session_id] });
+        await post(`/epics/${id}/roadmap`, { add: "Backfill" });
+        expect((await post("/blocks/blk-1/units", { start: "Backfill" })).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).epics[0].links.Backfill).toEqual([prompt.session_id]);
+    });
+
+    test("an epic's mine.md is read and saved, and a save over a newer file is refused; done finishes it", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        expect(await (await fetch(`${base}/epics/${id}/mine`)).json()).toEqual({ text: "", mtime: 0 });
+        expect((await post(`/epics/${id}/mine`, { text: "- cutover per group" })).status).toBe(200);
+        const { text, mtime } = await (await fetch(`${base}/epics/${id}/mine`)).json();
+        expect(text).toContain("cutover per group");
+        expect((await post(`/epics/${id}/mine`, { text: "x", baseMtime: mtime - 1 })).status).toBe(409);
+        expect((await post("/epics/nope/mine", { text: "x" })).status).toBe(404);
+        expect((await post(`/epics/${id}/pin`, { pinned: true })).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).epics[0].pinned).toBe(true);
+        expect((await post(`/epics/${id}/pin`, { pinned: "yes" })).status).toBe(400);
+        expect((await post(`/epics/${id}/done`, { done: true })).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).epics[0].done).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        await post(`/epics/${id}/done`, { done: false });
+        expect((await (await fetch(base + "/state")).json()).epics[0].done).toBeUndefined();
+    });
+
+    test("the epic's agent gets its job and a digest of the epic's sessions on every prompt", async () => {
+        const id = await (await post("/epics", { title: "Route documents" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } });
+        await post("/sessions/worker/epic", { epic: id });
+        await post("/sessions/worker/name", { text: "Drafts mapping" });
+        expect((await post(`/epics/${id}/agent`, { sessionId: "agent" })).status).toBe(200);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.epics[0].agent).toBe("agent");
+        expect(state.sessions.find((s: { id: string }) => s.id === "agent").epic).toBe(id);
+        const told = await (await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } })).text();
+        expect(told).toContain("[WintOS epic agent: Route documents]");
+        expect(told).toContain("- Drafts mapping: working");
+        // What it can do comes first; the news that it can start sessions, once.
+        expect(told).toContain("[WintOS: new since this conversation began]");
+        expect(told.indexOf("You can, yourself")).toBeLessThan(told.indexOf("The details:"));
+        const again = await (await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } })).text();
+        expect(again).not.toContain("[WintOS: new since this conversation began]");
+        expect(again).toContain("Never ask the developer to open a session");
+        const worker = await (await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } })).text();
+        expect(worker).not.toContain("[WintOS epic agent:");
+        expect((await post(`/epics/${id}/agent`, { sessionId: 3 })).status).toBe(400);
+    });
+
+    test("a worker's turn end is queued for its epic's agent, and delivered ones leave the queue", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } });
+        await post(`/epics/${id}/agent`, { sessionId: "agent" });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } });
+        await post("/sessions/worker/epic", { epic: id });
+        await post("/sessions/worker/name", { text: "Drafts mapping" });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker", hook_event_name: "Stop", last_assistant_message: "Still waiting on CI." } });
+        let state = await (await fetch(base + "/state")).json();
+        expect(state.epicReports).toEqual({}); // a status turn stays in the digest
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } });
+        await post("/blocks/blk-2/ask", { kind: "decide", text: "Use DraftId?" });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker", hook_event_name: "Stop", last_assistant_message: "Pushed the fix." } });
+        await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent", hook_event_name: "Stop" } });
+        state = await (await fetch(base + "/state")).json();
+        expect(state.epicReports.agent.map((r: { text: string }) => r.text)).toEqual([expect.stringMatching(/^Drafts mapping .*Use DraftId\?/)]);
+        expect((await post("/agents/agent/reports/delivered", { n: 1 })).status).toBe(200);
+        state = await (await fetch(base + "/state")).json();
+        expect(state.epicReports).toEqual({});
+    });
+
+    test("a question found by reading a worker's turn goes up to the agent once it is read", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } });
+        await post(`/epics/${id}/agent`, { sessionId: "agent" });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } });
+        await post("/sessions/worker/epic", { epic: id });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker", hook_event_name: "Stop", last_assistant_message: "Pushed it. Should I merge now?" } });
+        let reports: { text: string }[] = [];
+        for (let i = 0; i < 50 && !reports.length; i++) {
+            reports = (await (await fetch(base + "/state")).json()).epicReports?.agent ?? [];
+            if (!reports.length) await new Promise((r) => setTimeout(r, 20));
+        }
+        expect(reports.map((r) => r.text)).toEqual([expect.stringContaining("Should I merge now?")]);
+    });
+
+    test("a refused epic name lists the open ones", async () => {
+        await event(prompt);
+        await post("/epics", { title: "Reviews" });
+        expect(await (await post("/blocks/blk-1/epic", { epic: "coder" })).text()).toBe("no epic matches coder; open epics: Reviews (reviews)");
+    });
+
+    test("a new session beside one in an epic joins it; a review lane joins the epic that claims it", async () => {
+        const route = await (await post("/epics", { title: "Route" })).text();
+        await post("/epics", { title: "Reviews", lane: "review" });
+        await event(prompt);
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: route });
+        await post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { ...prompt, session_id: "beside" } });
+        await post("/events", { tabId: "tab-9", blockId: "blk-9", payload: { ...prompt, session_id: "alone" } });
+        await post("/blocks/blk-9/lane?session=alone", { name: "review", steps: ["Read", "Submit"] });
+        const byId = Object.fromEntries((await (await fetch(base + "/state")).json()).sessions.map((s: { id: string; epic?: string }) => [s.id, s.epic]));
+        expect(byId).toMatchObject({ beside: route, alone: "reviews" });
+    });
+
+    test("a session keeps its epic through its next events, and through the shelf when it is resumed", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await event(prompt);
+        await post("/projects/tab-1/title", { title: "Ledger import", manual: true });
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+        await event({ ...prompt, hook_event_name: "Stop" });
+        const epicNow = async () => (await (await fetch(base + "/state")).json()).sessions.find((s: { id: string }) => s.id === prompt.session_id)?.epic;
+        expect(await epicNow()).toBe(id);
+        await post("/projects/tab-1/shelf", { script: `cd '/w' && claude --resume '${prompt.session_id}'`, label: "x" });
+        // A restart drops the ended session; only the shelf still knows its epic.
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect(await epicNow()).toBeUndefined();
+        await post("/events", { tabId: "tab-1", blockId: "blk-3", payload: { ...prompt, hook_event_name: "SessionStart" } });
+        expect(await epicNow()).toBe(id);
+    });
+
+    test("an epic's history: its sessions with time and PRs; a correction changes the month", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        const today = new Date();
+        const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        await event(prompt);
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+        await post(`/sessions/${prompt.session_id}/name`, { text: "Drafts mapping" });
+        await post("/time/backfill", { log: { [day]: { [prompt.session_id]: { epic: id, ms: 600_000 } } } });
+        const h = await (await fetch(`${base}/epics/${id}/history`)).json();
+        expect(h.steps).toEqual([{ sessionId: prompt.session_id, ms: 600_000, last: day, name: "Drafts mapping", prs: [], live: true }]);
+        expect(h.days.length).toBe(8);
+        const month = day.slice(0, 7);
+        expect((await post("/time/adjust", { month, epic: id, ms: 3_000_000 })).status).toBe(200);
+        const row = (await (await fetch(`${base}/time/month?month=${month}`)).json())[0];
+        expect([row.ms, row.adjusted, row.prs]).toEqual([3_600_000, 3_000_000, 0]);
+        expect((await post("/time/adjust", { month: "nov", epic: id, ms: 1 })).status).toBe(400);
+    });
+
+    test("the month's meeting time comes from the calendar; without one it says so", async () => {
+        expect((await fetch(base + "/time/meetings?month=2026-11")).status).toBe(404);
+        const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "BEGIN:VEVENT", "UID:a", "SUMMARY:Sync", "DTSTART:20261103T090000Z", "DTEND:20261103T100000Z", "END:VEVENT", "BEGIN:VEVENT", "UID:b", "SUMMARY:October", "DTSTART:20261030T090000Z", "DTEND:20261030T100000Z", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+        const cal = (await import("http")).createServer((_q, r) => r.end(ics));
+        await new Promise<void>((r) => cal.listen(0, "127.0.0.1", r));
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", calendarIcs: `http://127.0.0.1:${(cal.address() as AddressInfo).port}/secret.ics` });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect(await (await fetch(base + "/time/meetings?month=2026-11")).json()).toEqual({ ms: 3_600_000 });
+        expect((await fetch(base + "/time/meetings?month=nov")).status).toBe(400);
+        cal.close();
+    });
+
+    test("a backfill adds estimated past days to the month, and a malformed one is refused", async () => {
+        expect((await post("/time/backfill", { log: { "2026-10-21": { s1: { epic: "route", ms: 3_600_000 } } } })).status).toBe(200);
+        expect(await (await fetch(base + "/time/month?month=2026-10")).json()).toEqual([{ epic: "route", ms: 3_600_000, sessions: 1, days: 1, prs: 0, adjusted: 0 }]);
+        expect((await post("/time/backfill", { log: { oct: {} } })).status).toBe(400);
+    });
+
+    test("every prompt carries the session's epic and its mine.md; one without an epic is asked to name it", async () => {
+        const id = await (await post("/epics", { title: "Route documents" })).text();
+        const first = await (await event(prompt)).text();
+        expect(first).toContain("wintos epic <name>");
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+        writeFileSync(join(root, ".epics", id, "mine.md"), "cutover per group");
+        expect(await (await event(prompt)).text()).toContain("[WintOS epic: Route documents]");
+        expect(await (await event(prompt)).text()).toContain("cutover per group");
+    });
+
+    test("time counts for the focused session's epic on the idle tick while the Mac is in use", async () => {
+        vi.useFakeTimers({ now: new Date(2026, 10, 4, 10), toFake: ["Date"] });
+        try {
+            const id = await (await post("/epics", { title: "Route" })).text();
+            await event(prompt);
+            await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+            expect((await post("/focus", { sessionId: prompt.session_id })).status).toBe(200);
+            vi.setSystemTime(new Date(2026, 10, 4, 10, 0, 30));
+            await post("/rhythm/idle", { idleMs: 1000 });
+            vi.setSystemTime(new Date(2026, 10, 4, 10, 1, 0));
+            await post("/rhythm/idle", { idleMs: 10 * 60_000 }); // away: not counted
+            vi.setSystemTime(new Date(2026, 10, 4, 10, 1, 20));
+            await post("/rhythm/idle", { idleMs: 1000 });
+            vi.setSystemTime(new Date(2026, 10, 4, 10, 1, 30));
+            await post("/focus", { sessionId: null }); // the last 10 s, at the last idle reading
+            await post("/focus", { sessionId: null });
+            expect(await (await fetch(base + "/time/month?month=2026-11")).json()).toEqual([{ epic: id, ms: 60_000, sessions: 1, days: 1, prs: 0, adjusted: 0 }]);
+            expect((await fetch(base + "/time/month?month=nov")).status).toBe(400);
+            expect((await post("/focus", { sessionId: 7 })).status).toBe(400);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    test("`wintos unit` in a session of an epic moves the epic's roadmap, which the project keeps out of", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await event(prompt);
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+        const set = await post("/blocks/blk-1/units", { items: ["ABC-41 fields check", "ABC-42 phase 1"] });
+        expect(await set.text()).toBe("[ ] ABC-41 fields check | [ ] ABC-42 phase 1");
+        await post("/blocks/blk-1/units", { done: "ABC-41" });
+        await post("/blocks/blk-1/units", { start: "ABC-42" });
+        expect((await post("/blocks/blk-1/units", { start: "ABC-9" })).status).toBe(400);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.epics[0].steps.map((u: { state: string }) => u.state)).toEqual(["done", "current"]);
+        expect(state.projects).toEqual([]);
+    });
+
+    test("`wintos status` sets the session's line, shown in /state", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/status", { text: "Walking the test plan" })).status).toBe(200);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].status).toEqual({ text: "Walking the test plan", at: expect.any(Number) });
+        expect((await post("/blocks/blk-1/status", { text: "a\nb" })).status).toBe(400);
+    });
+
     test("`wintos wait` then Stop parks the session on what it waits for", async () => {
         await event(prompt);
         expect((await post("/blocks/blk-1/wait", { reason: "CI on #1479" })).status).toBe(200);
         await event(stop);
         const state = await (await fetch(base + "/state")).json();
         expect(state.sessions).toEqual([expect.objectContaining({ state: "parked", parkedOn: "CI on #1479" })]);
+    });
+
+    test("what a session does, and every prompt you send it, leaves a line in the log, never the prompt's text", async () => {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        await event(prompt);
+        await post("/blocks/blk-1/wait", { reason: "CI on #1479" });
+        await event(stop);
+        await event(prompt);
+        await event(prompt);
+        const lines = log.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("] session "));
+        log.mockRestore();
+        expect(lines.map((l) => l.replace(/^.*← /, ""))).toEqual([
+            `hook UserPromptSubmit (you sent ${prompt.prompt.length} characters): new, working`,
+            'wintos wait: parked on "CI on #1479"; wait pending none → yes',
+            "hook Stop: state working → parked; wait pending yes → none",
+            `hook UserPromptSubmit (you sent ${prompt.prompt.length} characters): state parked → working; parked on none`,
+            `hook UserPromptSubmit (you sent ${prompt.prompt.length} characters): unchanged, working`,
+        ]);
+        expect(lines.join("\n")).not.toContain(prompt.prompt);
     });
 
     test("`wintos done` then Stop ends the session done", async () => {
@@ -47,9 +544,148 @@ describe("wintosd API", () => {
     });
 
     test("a Stop shows up in /state as a waiting session", async () => {
-        await event(stop);
+        await event({ ...stop, last_assistant_message: "" });
         const state = await (await fetch(base + "/state")).json();
         expect(state.sessions).toEqual([expect.objectContaining({ tabId: "tab-1", state: "waiting" })]);
+    });
+
+    test("`wintos ask` then Stop waits on the developer for what it asked; a bad kind is a 400", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/ask", { kind: "ponder" })).status).toBe(400);
+        expect((await post("/blocks/blk-1/ask", { kind: "decide", text: "two bands or one" })).status).toBe(200);
+        await event(stop);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions).toEqual([expect.objectContaining({ state: "waiting", ask: { kind: "decide", text: "two bands or one", by: "session" } })]);
+    });
+
+    const settled = async (until: (s: { state: string; ask?: unknown }) => boolean) => {
+        for (let i = 0; i < 50; i++) {
+            const s = (await (await fetch(base + "/state")).json()).sessions[0];
+            if (until(s)) return s;
+            await new Promise((r) => setTimeout(r, 50));
+        }
+        return (await (await fetch(base + "/state")).json()).sessions[0];
+    };
+
+    test("a turn that said nothing is read by the model: an ask, or done for a report", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: `cat > ${join(root, "ask-prompt.txt")}; echo 'approve: the migration plan'` });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        await event(prompt);
+        await event({ ...stop, last_assistant_message: "Here is the plan. Go?" });
+        expect(await settled((s) => !!s.ask)).toMatchObject({ state: "waiting", ask: { kind: "approve", text: "the migration plan", by: "model" } });
+        expect(readFileSync(join(root, "ask-prompt.txt"), "utf8")).toContain("Here is the plan. Go?");
+    });
+
+    test("the epic agent starts a session for a step in the background: it shows in the epic, linked, and reports up", async () => {
+        let listing = "[]";
+        srv.close();
+        const srvBgSend = { fn: async (_id: string, _cwd: string | undefined, _p: string) => false };
+        const stopped: string[] = [];
+        srv = await startServer({ root, port: 0, token: "t0ken", listAgents: async () => listing, bgSend: (id, cwd, p) => srvBgSend.fn(id, cwd, p), bgStop: async (bg) => (stopped.push(bg), true) });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        const id = await (await post("/epics", { title: "Route", short: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post("/events", { tabId: "tab-1", blockId: "blk-w", payload: { session_id: "wk", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/ag/epic", { epic: id });
+        await post("/sessions/wk/epic", { epic: id });
+        await post(`/epics/${id}/roadmap`, { add: "Cutover" });
+        expect((await post("/blocks/blk-w/start", { step: "Cutover", check: true })).status).toBe(403);
+        expect((await post("/blocks/blk-a/start", { step: "Nope", check: true })).status).toBe(404);
+        expect(await (await post("/blocks/blk-a/start", { step: "cut", check: true })).text()).toBe("Route: Cutover");
+        expect((await post("/blocks/blk-a/start", { step: "Cutover", bgId: "not-an-id" })).status).toBe(400);
+        expect((await post("/blocks/blk-a/start", { step: "Cutover", bgId: "430f7f7e" })).status).toBe(200);
+        listing = JSON.stringify([{ id: "430f7f7e", sessionId: "430f7f7e-9d03", kind: "background", state: "working", status: "busy" }]);
+        let state: { sessions: { id: string; state: string; bgId?: string }[]; epics: { links?: Record<string, string[]> }[]; epicReports?: Record<string, { text: string }[]> } = { sessions: [], epics: [] };
+        for (let i = 0; i < 80 && !state.sessions.some((x) => x.id === "430f7f7e-9d03"); i++) {
+            await new Promise((r) => setTimeout(r, 50));
+            state = await (await fetch(base + "/state")).json();
+        }
+        expect(state.sessions.find((x) => x.id === "430f7f7e-9d03")).toMatchObject({ state: "working", bgId: "430f7f7e" });
+        expect(state.epics[0].links?.Cutover).toEqual(["430f7f7e-9d03"]);
+        // Its agent sees it among its sessions, so a follow-up on its work can go to it.
+        const told = await (await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "and the review?" } })).text();
+        expect(told).toContain("- Route: Cutover: working, in the background");
+        expect(told).toContain("hand a follow-up to the session that did the work");
+        // The agent tells it something: no pane, so it goes in through the background service once it is free.
+        const sent: { id: string; cwd?: string; prompt: string }[] = [];
+        srvBgSend.fn = async (id, cwd, prompt) => (sent.push({ id, cwd, prompt }), true);
+        listing = JSON.stringify([{ id: "430f7f7e", sessionId: "430f7f7e-9d03", kind: "background", state: "done", status: "idle", cwd: "/w/core" }]);
+        expect((await post("/blocks/blk-a/tell", { to: "Route: Cut", text: "the review thread first" })).status).toBe(200);
+        for (let i = 0; i < 400 && !sent.length; i++) await new Promise((r) => setTimeout(r, 50));
+        expect(sent).toEqual([{ id: "430f7f7e-9d03", cwd: "/w/core", prompt: "[The Route agent, not the developer] the review thread first" }]);
+        // Stopped by the agent: claude stop, and it is over in WintOS at once; a pane session is not its to stop.
+        expect((await post("/blocks/blk-a/stop", { to: "wk" })).status).toBe(404);
+        expect(await (await post("/blocks/blk-a/stop", { to: "Route: Cut" })).text()).toBe("Route: Cutover");
+        expect(stopped).toEqual(["430f7f7e"]);
+        expect((await (await fetch(base + "/state")).json()).sessions.find((x: { id: string }) => x.id === "430f7f7e-9d03")?.state).toBe("ended");
+        for (let n = 0; n < 3; n++) await post("/blocks/blk-a/start", { step: "Cutover", bgId: `00000${n}aa` });
+        expect((await post("/blocks/blk-a/start", { step: "Cutover", check: true })).status).toBe(409);
+    }, 30_000);
+
+    test("a turn the model reads as carrying on by itself parks on that, and is not your move", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "echo 'waits: the CI retry loop on test'" });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        await event(prompt);
+        await event({ ...stop, last_assistant_message: "The retry loop runs; I'll be woken when it finishes. After the deploy: set the flags." });
+        expect(await settled((s) => s.state === "parked")).toMatchObject({ state: "parked", parkedOn: "the CI retry loop on test" });
+    });
+
+    test("when the model fails, a guess: a question asks, a report is done", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "exit 1" });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        await event(prompt);
+        await event({ ...stop, last_assistant_message: "Shall I merge it?" });
+        expect(await settled((s) => !!s.ask)).toMatchObject({ state: "waiting", ask: { kind: "answer", text: "Shall I merge it?", by: "guess" } });
+        await event(prompt);
+        await event({ ...stop, last_assistant_message: "Merged." });
+        expect(await settled((s) => s.state === "done")).toMatchObject({ state: "done" });
+    });
+
+    test("a turn that ends with its subagents still running is not read: it is not over, and the stop leaves it yours", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "exit 1" });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        await event(prompt);
+        await event({ ...stop, hook_event_name: "SubagentStart", agent_id: "a1" });
+        await event({ ...stop, last_assistant_message: "Merged." });
+        await new Promise((r) => setTimeout(r, 300));
+        await event({ ...stop, hook_event_name: "SubagentStop", agent_id: "a1" });
+        await new Promise((r) => setTimeout(r, 300));
+        const s = (await (await fetch(base + "/state")).json()).sessions[0];
+        expect(s).toMatchObject({ state: "waiting" });
+        expect(s.ask).toBeUndefined();
+    });
+
+    test("the rhythm: idle time makes a break, ⌥⌘B starts one, a snooze holds the nudge, a prompt leaves its length", async () => {
+        const rhythm = async () => (await (await fetch(base + "/state")).json()).rhythm;
+        expect(await rhythm()).toMatchObject({ breaks: [], everyMs: 30 * 60_000 });
+        await post("/rhythm/idle", { idleMs: 5 * 60_000 });
+        expect((await rhythm()).awayFrom).toEqual(expect.any(Number));
+        await post("/rhythm/idle", { idleMs: 0 });
+        expect((await rhythm()).breaks).toHaveLength(1);
+        expect((await post("/rhythm/break", {})).status).toBe(200);
+        expect((await rhythm()).onBreak).toEqual(expect.any(Number));
+        expect((await post("/rhythm/snooze", { minutes: 10 })).status).toBe(200);
+        expect((await rhythm()).snoozedUntil).toBeGreaterThan(Date.now() + 9 * 60_000);
+        expect((await post("/rhythm/snooze", { minutes: 0 })).status).toBe(400);
+        expect((await post("/rhythm/idle", { idleMs: "x" })).status).toBe(400);
+        await event(prompt);
+        expect((await rhythm()).lastPrompt).toEqual({ at: expect.any(Number), chars: prompt.prompt.length });
+    });
+
+    test("coming back to a session: what you asked last, what it did, what it needs", async () => {
+        const tp = join(root, "t.jsonl");
+        writeFileSync(tp, [JSON.stringify({ type: "user", message: { content: "review #7" } }), JSON.stringify({ type: "user", message: { content: "approve if good" } }), JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Looks good.\n\nOne comment on the cache." }] } })].join("\n"));
+        await event({ ...prompt, transcript_path: tp });
+        await post("/blocks/blk-1/ask", { kind: "approve", text: "approve with 1 comment?" });
+        await event({ ...stop, transcript_path: tp, last_assistant_message: "Looks good." });
+        const r = await (await fetch(base + `/sessions/${prompt.session_id}/reentry`)).json();
+        expect(r).toMatchObject({ asked: "approve if good", needs: "Approve · approve with 1 comment?", reply: "Looks good.\n\nOne comment on the cache." });
+        expect((await fetch(base + "/sessions/nope/reentry")).status).toBe(404);
     });
 
     test("the prompt injection asks for a title only while there is none", async () => {
@@ -80,7 +716,7 @@ describe("wintosd API", () => {
         const ws = new WebSocket(base.replace("http", "ws") + "/ws?token=t0ken", { origin: "http://localhost:5173" });
         const frames: string[] = [];
         await new Promise<void>((resolve) => ws.on("message", (m) => (frames.push(String(m)), frames.length === 1 && resolve())));
-        await event(stop);
+        await event({ ...stop, last_assistant_message: "Ship it?" });
         await new Promise((r) => setTimeout(r, 50));
         expect(JSON.parse(frames[frames.length - 1]).sessions[0].state).toBe("waiting");
         ws.close();
@@ -103,6 +739,138 @@ describe("wintosd API", () => {
         const ok = await fetch(base + "/state", { headers: { Origin: "http://localhost:5173", "X-Wintos-Token": "t0ken" } });
         expect(ok.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
     });
+
+    test("the preflight allows every method the UI sends, PUT for the day's list too", async () => {
+        const r = await fetch(base + "/day/recap", { method: "OPTIONS", headers: { Origin: "http://localhost:5173", "Access-Control-Request-Method": "PUT" } });
+        expect(r.headers.get("access-control-allow-methods")?.split(/,\s*/)).toEqual(expect.arrayContaining(["GET", "POST", "PUT"]));
+    });
+});
+
+describe("search and reopen", () => {
+    test("GET texts gives every project's notes and mine.md, for the palette's search", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        await post("/projects/tab-2/title", { title: "Y", manual: false });
+        writeFileSync(join(root, "x", "mine.md"), "rules\n");
+        const t = await (await fetch(base + "/projects/texts")).json();
+        expect(t).toEqual({ "tab-1": { body: "", mine: "rules\n" }, "tab-2": { body: "", mine: "" } });
+    });
+
+    test("reopening a closed project binds its folder to the new tab", async () => {
+        await post("/projects/tab-old/title", { title: "X", manual: false });
+        expect((await post("/projects/tab-old/reopen", { tabId: "tab-new" })).status).toBe(200);
+        const n = await (await fetch(base + "/projects/tab-new/notes")).json();
+        expect(n.dir).toBe(join(root, "x"));
+        expect(require("fs").readFileSync(join(root, "x", "project.md"), "utf8")).toContain("id: tab-new");
+        expect((await fetch(base + "/projects/tab-old/notes")).status).toBe(404);
+    });
+
+    test("reopen refuses an unknown project, and a tab that already has one", async () => {
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        await post("/projects/tab-2/title", { title: "Y", manual: false });
+        expect((await post("/projects/nope/reopen", { tabId: "tab-3" })).status).toBe(404);
+        expect((await post("/projects/tab-1/reopen", { tabId: "tab-2" })).status).toBe(409);
+    });
+});
+
+describe("the keyboard game", () => {
+    test("keys and clicks are scored, kept across a restart, and in the state", async () => {
+        for (const kind of ["key", "key", "click"]) expect((await post("/keyboard", { kind, key: "⌘J" })).status).toBe(200);
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        const k = (await (await fetch(base + "/state")).json()).keyboard;
+        expect([k.points, k.streak, k.keys["⌘J"], k.clicks["⌘J"]]).toEqual([1, 0, 2, 1]);
+    });
+
+    test("anything else is refused", async () => expect((await post("/keyboard", { kind: "scroll", key: "x" })).status).toBe(400));
+});
+
+describe("the day", () => {
+    const withJournal = async () => {
+        srv.close();
+        const dir = join(root, "journal");
+        mkdirSync(dir);
+        writeFileSync(join(root, "tpl.md"), "# $date\n\n## Today's focus (1-3 items)\n\n- [ ] ...\n");
+        const { Journal } = await import("../journal/journal");
+        srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")), lunch: "11:30-13:00" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+    };
+
+    test("today's focus is written from the steps you prompted, under their epics, and follows a rename", async () => {
+        await withJournal();
+        const id = await (await post("/epics", { title: "Route documents", short: "Route DO" })).text();
+        await event(prompt);
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+        await post(`/sessions/${prompt.session_id}/name`, { text: "Drafts mapping" });
+        await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "other" } });
+        await post("/sessions/other/name", { text: "Fix the export" });
+        const focus = async () => ((await (await fetch(base + "/state")).json()) as { day: { focus: string } }).day.focus;
+        expect(await focus()).toBe("- Route DO\n  - Drafts mapping\n- Outside the epics\n  - Fix the export");
+    });
+
+    test("the state carries today's plan and the lunch break; saving and planning update it", async () => {
+        await withJournal();
+        const day = async () => (await (await fetch(base + "/state")).json()) as { day: { focus: string; planned: boolean }; lunch: string };
+        expect([(await day()).day.focus, (await day()).day.planned, (await day()).lunch]).toEqual(["", false, "11:30-13:00"]);
+        expect((await post("/day/focus", { text: "- [ ] Pair on the flaky test" })).status).toBe(200);
+        expect((await post("/day/planned", {})).status).toBe(200);
+        expect([(await day()).day.focus, (await day()).day.planned]).toEqual(["- [ ] Pair on the flaky test", true]);
+    });
+
+    test("today's focus is saved tidied, its nesting kept", async () => {
+        await withJournal();
+        await post("/day/focus", { text: "-  [ ] Ship it\n\t- [ ] the fallback" });
+        const d = (await (await fetch(base + "/state")).json()) as { day: { focus: string } };
+        expect(d.day.focus).toBe("- [ ] Ship it\n  - [ ] the fallback");
+    });
+
+    test("an edit to the journal outside WintOS is pushed to the windows", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-journal-"));
+        const { Journal } = await import("../journal/journal");
+        srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")) });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        const ws = new WebSocket(base.replace("http", "ws") + "/ws?token=t0ken", { origin: "http://localhost:5173" });
+        let first: () => void;
+        const connected = new Promise<void>((r) => (first = r));
+        const pushed = new Promise<string>((resolve) => ws.on("message", (m) => (first(), String(m).includes("Edited elsewhere") && resolve(String(m)))));
+        await connected;
+        const d = new Date();
+        const ymd = [String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")];
+        mkdirSync(join(dir, ymd[0], ymd[1]), { recursive: true });
+        writeFileSync(join(dir, ymd[0], ymd[1], `${ymd.join("-")}.md`), "# Today\n\n## Today's focus (1-3 items)\n\n- [ ] Edited elsewhere\n");
+        expect(JSON.parse(await pushed).day.focus).toBe("- [ ] Edited elsewhere");
+        ws.close();
+    });
+
+    test("a change in the journal is handed to the journal's sync", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-journal-"));
+        const { Journal } = await import("../journal/journal");
+        let changed: () => void;
+        const synced = new Promise<void>((r) => (changed = r));
+        writeFileSync(join(root, "tpl.md"), "# $date\n\n## Today's focus (1-3 items)\n\n- [ ] ...\n");
+        srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")), onJournalChange: () => changed() });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect((await post("/day/focus", { text: "- [ ] Ship it" })).status).toBe(200);
+        await synced;
+    });
+
+    test("a reflection is read with its look-back and saved into the day's file", async () => {
+        await withJournal();
+        const file = join(root, "journal", "2026", "10", "2026-10-23.md");
+        mkdirSync(dirname(file), { recursive: true });
+        writeFileSync(file, "# Friday\n\n## Today's focus (1-3 items)\n\n- [x] Ship it\n\n## Weekly reflection - Week 43/2026\n\n- **Goals Review**\n");
+        const r = await (await fetch(base + "/reflection?date=2026-10-23")).json();
+        expect([r.title, r.days]).toEqual(["Weekly reflection - Week 43/2026", [{ date: "2026-10-23", focus: "- [x] Ship it", readOut: [] }]]);
+        expect((await post("/reflection", { date: "2026-10-23", body: "- **Goals Review**\n  - All", baseMtime: r.mtime - 1 })).status).toBe(409);
+        expect((await post("/reflection", { date: "2026-10-23", body: "- **Goals Review**\n  - All", baseMtime: r.mtime })).status).toBe(200);
+        expect(readFileSync(file, "utf8").endsWith("- **Goals Review**\n  - All\n")).toBe(true);
+        expect((await post("/reflection", { date: "2026-10-22", body: "x", baseMtime: 0 })).status).toBe(404);
+        expect((await fetch(base + "/reflection?date=2026-10-22")).status).toBe(404);
+    });
+
+    test("without a journal the day endpoints say how to get one", async () => expect((await post("/day/focus", { text: "x" })).status).toBe(404));
 });
 
 describe("notes", () => {
@@ -116,7 +884,7 @@ describe("notes", () => {
     test("saving mine.md writes the file in the project folder", async () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });
         expect((await post("/projects/tab-1/mine", { text: "## Promised\nmetric\n" })).status).toBe(200);
-        expect(require("fs").readFileSync(join(root, "x", "mine.md"), "utf8")).toBe("## Promised\nmetric\n");
+        expect(require("fs").readFileSync(join(root, "x", "mine.md"), "utf8")).toBe("## Promised\n\nmetric\n");
     });
 
     test("a save based on an older mine.md is refused, never overwriting an outside edit", async () => {
@@ -152,6 +920,182 @@ describe("notes", () => {
     test("mine.md must be a string", async () => {
         await post("/projects/tab-1/title", { title: "X", manual: false });
         expect((await post("/projects/tab-1/mine", { text: 5 })).status).toBe(400);
+    });
+});
+
+describe("forgetting shelved sessions", () => {
+    test("/shelf/forget takes them off the shelf; anything but session ids is refused", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await post("/projects/tab-1/shelf", { script: `cd '/w' && claude --resume 'dead'`, label: "x" });
+        await post("/projects/tab-1/shelf", { script: `cd '/w' && claude --resume 'kept'`, label: "y" });
+        expect((await post("/shelf/forget", { sessionIds: ["dead"] })).status).toBe(200);
+        expect((await (await fetch(base + "/state")).json()).shelf["tab-1"].map((i: { sessionId: string }) => i.sessionId)).toEqual(["kept"]);
+        expect((await post("/shelf/forget", { sessionIds: "dead" })).status).toBe(400);
+    });
+});
+
+describe("rebuilding PR ownership", () => {
+    test("/prs/owners moves each PR to its owner, live or shelved, or to nobody; anything else is refused", async () => {
+        const A = "https://github.com/o/r/pull/1", B = "https://github.com/o/r/pull/2";
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A, B] });
+        await post("/projects/tab-1/shelf", { script: `cd '/w' && claude --resume 'z'`, label: "x" });
+        expect((await post("/prs/owners", { owners: { [A]: "z", [B]: null } })).status).toBe(200);
+        const st = await (await fetch(base + "/state")).json();
+        expect([st.sessions[0].prs, st.shelf["tab-1"][0].prs]).toEqual([[], [A]]);
+        expect((await post("/prs/owners", { owners: { "rm -rf": "z" } })).status).toBe(400);
+    });
+});
+
+describe("a session's name", () => {
+    const state = async () => (await (await fetch(base + "/state")).json());
+    const id = prompt.session_id;
+
+    test("the session names itself, you rename it, and its next one waits as a suggestion you can take", async () => {
+        await event(prompt);
+        expect((await post(`/blocks/blk-1/name?session=${id}`, { text: "Retention backfill" })).status).toBe(200);
+        expect((await state()).sessions[0].name).toMatchObject({ text: "Retention backfill", by: "session" });
+        await post(`/sessions/${id}/name`, { text: "My own" });
+        await post(`/blocks/blk-1/name?session=${id}`, { text: "Its next" });
+        expect((await state()).sessions[0].name).toMatchObject({ text: "My own", by: "you", suggested: "Its next" });
+        await post(`/sessions/${id}/name/accept`, {});
+        expect((await state()).sessions[0].name).toMatchObject({ text: "Its next", by: "you" });
+        expect((await post(`/sessions/${id}/name`, { text: "" })).status).toBe(400);
+    });
+
+    test("a session nobody named gets one from what you asked it; one that named itself keeps its own", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-name-"));
+        writeFileSync(join(dir, "model"), `#!/bin/sh\ncat > "${dir}/prompt"\necho '"Retention backfill review fixes"'\n`, { mode: 0o755 });
+        const transcript = join(dir, "t.jsonl");
+        writeFileSync(transcript, JSON.stringify({ type: "user", message: { content: "Fix the review comments on the retention backfill" } }) + "\n");
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: join(dir, "model") });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event(prompt);
+        await event({ ...prompt, hook_event_name: "Stop", transcript_path: transcript });
+        for (let i = 0; i < 50 && !(await state()).sessions[0].name; i++) await new Promise((r) => setTimeout(r, 50));
+        expect((await state()).sessions[0].name).toMatchObject({ text: "Retention backfill review fixes", by: "model" });
+        expect(readFileSync(join(dir, "prompt"), "utf8")).toContain("- Fix the review comments on the retention backfill");
+        await event({ ...prompt, session_id: "own" });
+        await post(`/blocks/blk-1/name?session=own`, { text: "Its own" });
+        await event({ ...prompt, session_id: "own", hook_event_name: "Stop", transcript_path: transcript });
+        await new Promise((r) => setTimeout(r, 300));
+        expect((await state()).sessions.find((x: { id: string }) => x.id === "own").name).toMatchObject({ text: "Its own", by: "session" });
+    });
+
+    test("shelved, it keeps its name, and resumed it has it again", async () => {
+        const script = `cd '/w' && claude --resume '${id}'`;
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await post(`/sessions/${id}/name`, { text: "My own" });
+        await post("/projects/tab-1/shelf", { script, label: "x" });
+        expect((await state()).shelf["tab-1"][0].named).toMatchObject({ text: "My own", by: "you" });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event({ ...prompt, hook_event_name: "SessionStart", source: "resume" });
+        expect((await state()).sessions[0].name).toMatchObject({ text: "My own", by: "you" });
+    });
+});
+
+describe("the PR fixer", () => {
+    const CONFLICTED = "https://github.com/o/r/pull/5", RED = "https://github.com/o/r/pull/6";
+    const prs = [
+        { repo: "o/r", number: 5, url: CONFLICTED, title: "t", author: "me", isDraft: false, createdAt: "", conflict: true, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b5", base: "main", head: "h5" },
+        { repo: "o/r", number: 9, url: "https://github.com/o/r/pull/9", title: "t", author: "me", isDraft: false, createdAt: "", conflict: true, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b9", base: "main", head: "h9" },
+        { repo: "o/r", number: 6, url: RED, title: "t", author: "me", isDraft: false, createdAt: "", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b6", head: "h6", checks: "FAILURE" },
+        { repo: "o/r", number: 4, url: `${RED.slice(0, -1)}4`, title: "t", author: "me", isDraft: false, createdAt: "", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b4", head: "h4", checks: "SUCCESS", reviewDecision: "APPROVED" },
+        { repo: "o/r", number: 3, url: `${RED.slice(0, -1)}3`, title: "t", author: "ana", isDraft: false, createdAt: "", conflict: false, requestedMe: true, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b3", head: "h3" },
+        { repo: "o/r", number: 2, url: `${RED.slice(0, -1)}2`, title: "t", author: "ana", isDraft: false, createdAt: "", conflict: false, requestedMe: true, requestedTeam: false, reviewedByMe: true, reviewers: [], additions: 1, deletions: 1, branch: "b2", head: "h2" },
+        { repo: "o/r", number: 1, url: `${RED.slice(0, -1)}1`, title: "t", author: "me", isDraft: false, createdAt: "", conflict: true, mergedAt: "2026-10-28T10:00:00Z", requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "b1", head: "h1" },
+    ];
+    const until = async <T>(f: () => Promise<T>) => {
+        for (let i = 0; i < 100; i++) {
+            const v = await f();
+            if (v) return v;
+            await new Promise((r) => setTimeout(r, 50));
+        }
+        throw new Error("timed out");
+    };
+    const fixerOf = async () => (await (await fetch(base + "/state")).json()).fixer;
+    // A fake gh-prs plugin and a fake claude that records its arguments and says it is done.
+    const start = async (conflictsOff = false) => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-fix-"));
+        writeFileSync(join(dir, "gh"), `#!/bin/sh\necho '${JSON.stringify({ me: "me", prs })}'\n`, { mode: 0o755 });
+        writeFileSync(join(dir, "claude"), `#!/bin/sh\nprintf '%s\\n' "$@" >> "${dir}/args"\necho '{"type":"result","result":"Resolved and pushed."}'\n`, { mode: 0o755 });
+        if (conflictsOff) {
+            mkdirSync(join(root, ".fixer"), { recursive: true });
+            writeFileSync(join(root, ".fixer", "settings.json"), JSON.stringify({ conflicts: false }));
+        }
+        srv = await startServer({ root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fixCmd: join(dir, "claude"), fixCwd: dir });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        return dir;
+    };
+
+    test("a conflict on my PR is resolved by itself, once per head commit, one run at a time, logged", async () => {
+        const dir = await start();
+        const runs = await until(async () => {
+            const rs = (await fixerOf()).runs;
+            return rs.length === 2 && rs.every((r: { exit?: number }) => r.exit === 0) && rs;
+        });
+        const [second, first] = runs;
+        expect(second.startedAt).toBeGreaterThanOrEqual(first.endedAt);
+        const run = runs.find((r: { url: string }) => r.url === CONFLICTED);
+        expect(run).toMatchObject({ kind: "conflict", url: CONFLICTED, head: "h5", route: "fresh", result: "Resolved and pushed." });
+        expect(readFileSync(join(dir, "args"), "utf8")).toContain(`${CONFLICTED} has merge conflicts`);
+        expect(readFileSync(run.log, "utf8")).toContain("Resolved and pushed.");
+        expect(readFileSync(join(root, ".fixer", "runs.jsonl"), "utf8").trim().split("\n").length).toBe(6); // queued, started, ended, twice
+        await post("/plugins/gh-prs/run", {});
+        await new Promise((r) => setTimeout(r, 200));
+        expect((await fixerOf()).runs).toHaveLength(2);
+    });
+
+    test("turned off, a conflict waits for you", async () => {
+        await start(true);
+        await post("/plugins/gh-prs/run", {});
+        await new Promise((r) => setTimeout(r, 200));
+        expect((await fixerOf())).toMatchObject({ conflicts: false, runs: [] });
+        expect((await post("/fixer/settings", { conflicts: "yes" })).status).toBe(400);
+        await post("/fixer/settings", { conflicts: true });
+        await post("/plugins/gh-prs/run", {});
+        await until(async () => (await fixerOf()).runs.length === 2);
+    });
+
+    test("f: each row's next step, a review opened by the window, nothing for a merged PR", async () => {
+        const dir = await start(true);
+        await until(async () => (await (await fetch(base + "/state")).json()).plugins["gh-prs"]);
+        const next = (n: number) => post("/fixer/next", { url: `${RED.slice(0, -1)}${n}` });
+        expect((await (await next(4)).json()).run).toMatchObject({ kind: "merge", route: "fresh" });
+        await until(async () => (await fixerOf()).runs.some((r: { kind: string; exit?: number }) => r.kind === "merge" && r.exit === 0));
+        expect(readFileSync(join(dir, "args"), "utf8")).toContain("asked to merge");
+        expect(await (await next(3)).json()).toEqual({ review: true });
+        expect(await (await next(2)).json()).toEqual({ review: true });
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [`${RED.slice(0, -1)}2`] });
+        expect(await (await next(2)).json()).toMatchObject({ blockId: "blk-1", run: { kind: "rereview", route: "pane" } });
+        expect((await next(1)).status).toBe(409);
+        expect((await post("/fixer/next", { url: "https://github.com/o/r/pull/77" })).status).toBe(404);
+    });
+
+    test("red CI, dispatched: typed into the live owning session's pane; not red is refused", async () => {
+        await start(true);
+        await until(async () => (await (await fetch(base + "/state")).json()).plugins["gh-prs"]);
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [RED] });
+        const r = await (await post("/fixer/ci", { url: RED })).json();
+        expect(r).toMatchObject({ blockId: "blk-1", tabId: "tab-1", run: { kind: "ci", route: "pane", sessionId: prompt.session_id } });
+        expect(r.prompt).toContain(`CI is red on ${RED}`);
+        expect((await post("/fixer/ci", { url: CONFLICTED })).status).toBe(409);
+    });
+
+    test("red CI with no owner: a fresh headless run", async () => {
+        const dir = await start(true);
+        await until(async () => (await (await fetch(base + "/state")).json()).plugins["gh-prs"]);
+        expect((await (await post("/fixer/ci", { url: RED })).json()).run.route).toBe("fresh");
+        await until(async () => (await fixerOf()).runs.some((r: { exit?: number }) => r.exit === 0));
+        expect(readFileSync(join(dir, "args"), "utf8")).toContain("gh run rerun");
     });
 });
 
@@ -283,10 +1227,10 @@ describe("sessions across a restart", () => {
 });
 
 describe("seen", () => {
-    const seenOf = async () => (await (await fetch(base + "/state")).json()).seen["tab-1"];
+    const seenOf = async (id = "sess-1") => (await (await fetch(base + "/state")).json()).seen[id];
 
-    test("the UI marks a project seen; it survives a restart", async () => {
-        expect((await post("/projects/tab-1/seen", {})).status).toBe(200);
+    test("the UI marks a session seen; it survives a restart", async () => {
+        expect((await post("/sessions/sess-1/seen", {})).status).toBe(200);
         const at = await seenOf();
         expect(at).toBeGreaterThan(0);
         srv.close();
@@ -297,6 +1241,477 @@ describe("seen", () => {
 
     test("prompting a session means you read what came before", async () => {
         await event(prompt);
-        expect(await seenOf()).toBeGreaterThan(0);
+        expect(await seenOf(prompt.session_id)).toBeGreaterThan(0);
     });
 });
+
+describe("the daily recap", () => {
+    const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    test("a session's events note its project and transcript for the day", async () => {
+        await event({ ...prompt, transcript_path: "/t/s.jsonl" });
+        const activity = JSON.parse(readFileSync(join(root, ".activity.json"), "utf8"));
+        expect(activity[iso(new Date())]["tab-1"]).toMatchObject({ prompts: 1, sessions: { [prompt.session_id]: "/t/s.jsonl" } });
+    });
+
+    test("a prompt counts how long its session waited for it, in the day's activity per project", async () => {
+        await event({ ...prompt, transcript_path: "/t/s.jsonl" });
+        await event({ ...prompt, hook_event_name: "Stop", transcript_path: "/t/s.jsonl", last_assistant_message: "Which one?" });
+        await new Promise((r) => setTimeout(r, 30));
+        await event({ ...prompt, transcript_path: "/t/s.jsonl" });
+        const today = JSON.parse(readFileSync(join(root, ".activity.json"), "utf8"))[iso(new Date())]["tab-1"];
+        expect([today.prompts, today.waitedMs >= 30]).toEqual([2, true]);
+    });
+
+    test("the last worked day before today, one bullet per project it spent time on, from its recap", async () => {
+        const day = "2026-10-06";
+        // Busy from 12:00 to 12:20 (minutes 0 to 20, four apart); a 2-minute project is noise.
+        const work = (minutes: number[]) => minutes.map((m) => JSON.stringify({ timestamp: `${day}T12:${String(m).padStart(2, "0")}:00Z`, type: "assistant" }));
+        const transcript = join(root, "t.jsonl"), brief = join(root, "b.jsonl");
+        writeFileSync(transcript, [...work([0, 4, 8, 12, 16, 20]), JSON.stringify({ timestamp: `${day}T15:00:00Z`, type: "system", subtype: "away_summary", content: "We merged the two lanes. Next, rerun it." })].join("\n"));
+        writeFileSync(brief, [...work([30, 32]), JSON.stringify({ timestamp: `${day}T15:00:00Z`, type: "system", subtype: "away_summary", content: "Looked at one thing." })].join("\n"));
+        writeFileSync(join(root, ".activity.json"), JSON.stringify({ [day]: { "tab-1": { title: "Idea skill", prompts: 3, sessions: { s: transcript } }, "tab-2": { title: "Quick look", prompts: 9, sessions: { b: brief } } } }));
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect(await (await fetch(base + "/day/recap")).json()).toEqual({ date: day, items: [{ id: "0", project: "Idea skill", text: "Idea skill: We merged the two lanes.", details: [], dropped: false, edited: false }] });
+    });
+
+    describe("from a summarizer, curated", () => {
+        const day = "2026-10-06";
+        const restart = async (recapCmd?: string) => {
+            srv.close();
+            srv = await startServer({ root, port: 0, token: "t0ken", recapCmd });
+            base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        };
+        beforeEach(async () => {
+            const work = (minutes: number[]) => minutes.map((m) => JSON.stringify({ timestamp: `${day}T12:${String(m).padStart(2, "0")}:00Z`, type: "assistant" }));
+            const long = join(root, "long.jsonl"), mine = join(root, "mine.jsonl");
+            writeFileSync(long, [...work([0, 4, 8, 12, 16, 20, 24, 28]), JSON.stringify({ timestamp: `${day}T15:00:00Z`, type: "system", subtype: "away_summary", content: "Claude tested it." })].join("\n"));
+            writeFileSync(mine, [...work([0, 4, 8, 12]), JSON.stringify({ timestamp: `${day}T15:00:00Z`, type: "system", subtype: "away_summary", content: "We built it." })].join("\n"));
+            writeFileSync(join(root, ".activity.json"), JSON.stringify({ [day]: { "tab-1": { title: "Agent ran", prompts: 1, sessions: { a: long } }, "tab-2": { title: "Intake", prompts: 12, sessions: { b: mine } } } }));
+            const model = join(root, "model.sh");
+            writeFileSync(model, `cat > ${join(root, "recap-prompt.txt")}\nprintf -- '- [Intake] Ready for review: Document intake\\n  - Register-only intake (DEV-1)\\n- [Agent ran] Merged: Benefit-tax fix\\n'`, { mode: 0o755 });
+            await restart(model);
+        });
+
+        test("its items, with project and details; the developer's own effort leads the prompt", async () => {
+            const r = await (await fetch(base + "/day/recap")).json();
+            expect(r.items.map((i: { project: string; text: string; details: string[] }) => [i.project, i.text, i.details])).toEqual([["Intake", "Ready for review: Document intake", ["Register-only intake"]], ["Agent ran", "Merged: Benefit-tax fix", []]]);
+            const prompt = readFileSync(join(root, "recap-prompt.txt"), "utf8");
+            expect(prompt.indexOf("## Intake (")).toBeLessThan(prompt.indexOf("## Agent ran ("));
+        });
+
+        test("a weekly reflection shows what you read out about each of its days, dropped items left out", async () => {
+            const dir = join(root, "journal");
+            mkdirSync(join(dir, "2026", "10"), { recursive: true });
+            writeFileSync(join(dir, "2026", "10", "2026-10-06.md"), "# Tuesday\n\n## Today's focus (1-3 items)\n\n- [ ] a\n");
+            writeFileSync(join(dir, "2026", "10", "2026-10-09.md"), "# Friday\n\n## Weekly reflection - Week 41/2026\n\n- **Goals Review**\n");
+            const { Journal } = await import("../journal/journal");
+            srv.close();
+            srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: join(root, "model.sh"), journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")) });
+            base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+            await fetch(base + "/day/recap");
+            await put("- Ready for review: Document intake");
+            const r = await (await fetch(base + "/reflection?date=2026-10-09")).json();
+            expect(r.days.find((d: { date: string }) => d.date === "2026-10-06").readOut).toEqual(["Ready for review: Document intake"]);
+        });
+
+        test("an edit of the list drops, moves and rewrites; it stays so after a restart, and the rewrite teaches the next prompt", async () => {
+            await fetch(base + "/day/recap");
+            const r = await (await put("- Merged: Benefit-tax fix\n- Ready for review: DO holds every document\n  - Register-only")).json();
+            expect(r.items.map((i: { id: string; dropped: boolean; text: string }) => [i.id, i.dropped, i.text])).toEqual([["1", false, "Merged: Benefit-tax fix"], ["0", false, "Ready for review: DO holds every document"]]);
+            await put("- Merged: Benefit-tax fix");
+            await restart(join(root, "model.sh"));
+            expect((await (await fetch(base + "/day/recap")).json()).items.map((i: { id: string; dropped: boolean }) => [i.id, i.dropped])).toEqual([["1", false], ["0", true]]);
+            writeFileSync(join(root, ".recaps.json"), "{}");
+            await fetch(base + "/day/recap");
+            expect(readFileSync(join(root, "recap-prompt.txt"), "utf8")).toContain("Theirs:\nReady for review: DO holds every document\n- Register-only");
+        });
+
+        test("an edit without text is a 400", async () => {
+            expect((await put(undefined)).status).toBe(400);
+            expect((await put("x".repeat(8001))).status).toBe(400);
+        });
+    });
+});
+
+describe("the shelf", () => {
+    const script = (id: string) => `cd '/w' && claude --resume '${id}'`;
+    const shelfOf = async () => (await (await fetch(base + "/state")).json()).shelf;
+
+    test("a shelved session keeps its PRs whoever touches them later (they are also in that session), and takes them back when it runs", async () => {
+        const A = "https://github.com/o/r/pull/1", B = "https://github.com/o/r/pull/2";
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A, B] });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
+        await post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { hook_event_name: "PostToolUse", session_id: "other", prs: [A] } });
+        const st = await (await fetch(base + "/state")).json();
+        expect([(await shelfOf())["tab-1"][0].prs, st.sessions.find((x: { id: string }) => x.id === "other").touched]).toEqual([[A, B], [A]]);
+        await event({ ...prompt, hook_event_name: "SessionStart" });
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions.find((x: { id: string }) => x.id === prompt.session_id).prs).toEqual([A, B]);
+    });
+
+    test("reading a PR (gh pr view) touches nothing; `wintos pr --own` takes it over and the old owner keeps it as also-in", async () => {
+        const A = "https://github.com/o/r/pull/1";
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A], pr_verb: "view" });
+        expect((await (await fetch(base + "/state")).json()).sessions[0].prs ?? []).toEqual([]);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A], pr_verb: "edit" });
+        await post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { ...prompt, session_id: "taker" } });
+        expect((await post("/blocks/blk-2/pr?session=taker", { ref: "o/r#1", own: true })).status).toBe(200);
+        const st = await (await fetch(base + "/state")).json();
+        const by = (id: string) => st.sessions.find((x: { id: string }) => x.id === id);
+        expect([by("taker").prs, by(prompt.session_id).prs, by(prompt.session_id).touched]).toEqual([[A], [], [A]]);
+    });
+
+    test("`wintos pr` claims a PR named by link or owner/repo#n for the pane's session", async () => {
+        await event(prompt);
+        expect((await post("/blocks/blk-1/pr", { ref: "o/r#7" })).status).toBe(200);
+        expect((await post("/blocks/blk-1/pr", { ref: "#7" })).status).toBe(400);
+        expect((await post("/blocks/nope/pr", { ref: "o/r#7" })).status).toBe(400);
+        const state = await (await fetch(base + "/state")).json();
+        expect(state.sessions[0].prs).toEqual(["https://github.com/o/r/pull/7"]);
+    });
+
+    test("a closed session is kept with its project, its label and what it was last about", async () => {
+        const transcript = join(root, "t.jsonl");
+        writeFileSync(transcript, JSON.stringify({ timestamp: "2026-10-06T15:00:00Z", type: "system", subtype: "away_summary", content: "We merged the two lanes. Next, rerun it." }));
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, transcript_path: transcript });
+        expect((await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "merge the lanes" })).status).toBe(200);
+        expect(await shelfOf()).toEqual({ "tab-1": [expect.objectContaining({ sessionId: prompt.session_id, label: "merge the lanes", gist: "We merged the two lanes." })] });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id) });
+        expect((await shelfOf())["tab-1"][0].label).toBe("We merged the two lanes.");
+    });
+
+    test("it follows the project's folder into a reopened tab, and survives a restart", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await post("/projects/tab-1/shelf", { script: script("s1"), label: "x" });
+        await post("/projects/tab-1/reopen", { tabId: "tab-2" });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect(Object.keys(await shelfOf())).toEqual(["tab-2"]);
+    });
+
+    test("its name is the status line the session last set, when it set one", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await post("/blocks/blk-1/status", { text: "deploying the stack to test" });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "I'm back now, go ahead!" });
+        expect((await shelfOf())["tab-1"][0]).toMatchObject({ name: "deploying the stack to test", label: "I'm back now, go ahead!" });
+    });
+
+    test("a 3-6 word title is written for it in the background, and shown first", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: `cat > ${join(root, "title-prompt.txt")}; echo '"Merge the two lanes."'` });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "I'm back now, go ahead!" });
+        for (let i = 0; i < 50 && !(await shelfOf())["tab-1"]?.[0]?.title; i++) await new Promise((r) => setTimeout(r, 50));
+        expect((await shelfOf())["tab-1"][0].title).toBe("Merge the two lanes");
+        expect(readFileSync(join(root, "title-prompt.txt"), "utf8")).toContain("Its first prompt: I'm back now, go ahead!");
+    });
+
+    test("a session that runs again leaves the shelf", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
+        await event({ ...prompt, hook_event_name: "SessionStart" });
+        expect(await shelfOf()).toEqual({});
+    });
+
+    test("closing its pane ends the session, and that keeps it on the shelf", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
+        await event({ ...prompt, hook_event_name: "SessionEnd", reason: "other" });
+        expect((await shelfOf())["tab-1"]).toHaveLength(1);
+    });
+
+    test("the pane switched to another session (a fork, /resume): the one it ran goes on the shelf with its status and PRs", async () => {
+        const A = "https://github.com/o/r/pull/1";
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, session_id: "fork", resume: script("fork") });
+        await post(`/blocks/blk-1/status?session=fork`, { text: "explaining the drop" });
+        await event({ hook_event_name: "PostToolUse", session_id: "fork", prs: [A] });
+        await event({ ...prompt, hook_event_name: "Stop", session_id: "fork" });
+        await event({ ...prompt, session_id: "main", resume: script("main") });
+        const st = await (await fetch(base + "/state")).json();
+        expect(st.sessions.map((x: { id: string }) => x.id)).toEqual(["main"]);
+        expect(st.shelf["tab-1"]).toEqual([expect.objectContaining({ sessionId: "fork", script: script("fork"), name: "explaining the drop", prs: [A] })]);
+    });
+
+    test("a session saved at the last quit that another one replaces in its pane goes on the shelf, resumed from its directory", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, session_id: "old", cwd: "/w/it's" });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event({ ...prompt, session_id: "new", resume: script("new") });
+        expect((await shelfOf())["tab-1"]).toEqual([expect.objectContaining({ sessionId: "old", script: "cd '/w/it'\\''s' && claude --resume 'old'" })]);
+    });
+
+    test("a session never prompted has no conversation to resume, so closing its project shelves nothing", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ hook_event_name: "SessionStart", source: "startup", session_id: "empty", cwd: "/w" });
+        await post("/projects/tab-1/shelve-all", {});
+        expect(await shelfOf()).toEqual({});
+    });
+
+    test("closing the project (⇧⌘W) shelves every session it runs first, and a second time changes nothing", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, session_id: "a", resume: script("a") });
+        await post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { ...prompt, session_id: "b", resume: script("b") } });
+        expect((await post("/projects/tab-1/shelve-all", {})).status).toBe(200);
+        await post("/projects/tab-1/shelve-all", {});
+        expect((await shelfOf())["tab-1"].map((i: { sessionId: string }) => i.sessionId).sort()).toEqual(["a", "b"]);
+        expect((await post("/projects/tab-9/shelve-all", {})).status).toBe(404);
+    });
+
+    test("a restart keeps a session's PRs: quitting ends nothing, the resumed session finds them again", async () => {
+        const A = "https://github.com/o/r/pull/1";
+        await event({ ...prompt, resume: script(prompt.session_id) });
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A] });
+        await event({ ...prompt, hook_event_name: "SessionEnd", reason: "other" });
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken" });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event({ ...prompt, hook_event_name: "SessionStart", source: "resume", resume: script(prompt.session_id) });
+        expect((await (await fetch(base + "/state")).json()).sessions).toEqual([expect.objectContaining({ id: prompt.session_id, prs: [A] })]);
+    });
+
+    test("⌘W's shelving ends the session: its pane is going", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event(prompt);
+        await post("/projects/tab-1/shelf", { script: script(prompt.session_id), label: "x" });
+        expect((await (await fetch(base + "/state")).json()).sessions[0].state).toBe("ended");
+    });
+
+    test("a background fork's events (no resume command) shelve nothing", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        await event({ ...prompt, session_id: "main", resume: script("main") });
+        await event({ ...prompt, session_id: "bg" });
+        expect((await (await fetch(base + "/state")).json()).sessions.map((x: { id: string }) => x.id).sort()).toEqual(["bg", "main"]);
+        expect(await shelfOf()).toEqual({});
+    });
+
+    test("only the hook's resume command, and only for a project", async () => {
+        await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
+        expect((await post("/projects/tab-1/shelf", { script: "rm -rf ~", label: "x" })).status).toBe(400);
+        expect((await post("/projects/tab-9/shelf", { script: script("s1"), label: "x" })).status).toBe(404);
+    });
+});
+
+describe("repo short names", () => {
+    test("saved to your file, shown in the state, a hand edit too; empty removes one; bad input is a 400", async () => {
+        const file = join(root, "cfg", "repos.json");
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", repoNamesFile: file });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        const names = async () => (await (await fetch(base + "/state")).json()).repoNames;
+        expect((await post("/repos/name", { repo: "o/Acme.Docs.Service", short: " DS " })).status).toBe(200);
+        expect([await names(), JSON.parse(readFileSync(file, "utf8"))]).toEqual([{ "o/Acme.Docs.Service": "DS" }, { "o/Acme.Docs.Service": "DS" }]);
+        writeFileSync(file, JSON.stringify({ "o/Acme.Docs.Service": "DS", "o/Core": "C" }));
+        utimesSync(file, new Date(), new Date(Date.now() + 5000));
+        expect(await names()).toEqual({ "o/Acme.Docs.Service": "DS", "o/Core": "C" });
+        await post("/repos/name", { repo: "o/Core", short: "" });
+        expect(await names()).toEqual({ "o/Acme.Docs.Service": "DS" });
+        expect((await post("/repos/name", { repo: "nope", short: "x" })).status).toBe(400);
+        expect((await post("/repos/name", { repo: "o/r", short: "x".repeat(17) })).status).toBe(400);
+    });
+});
+
+describe("wakes", () => {
+    const URL7 = "https://github.com/o/r/pull/7";
+    let pr: { state: "OPEN" | "MERGED" | "CLOSED"; checks: "green" | "red" | "pending" | "none"; released: boolean } | undefined;
+    const st = async () => (await fetch(base + "/state")).json();
+    beforeEach(async () => {
+        pr = { state: "OPEN", checks: "pending", released: false };
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", prNow: async () => pr, wakeEveryMs: 20 });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event(prompt);
+    });
+    const until = async (f: () => Promise<boolean>) => {
+        for (let i = 0; i < 100 && !(await f()); i++) await new Promise((r) => setTimeout(r, 10));
+    };
+    const id = (until: string) => `${prompt.session_id} ${until} ${URL7}`;
+    const delivered = (until: string) => post(`/wakes/${encodeURIComponent(id(until))}/delivered`, {});
+
+    test("set: the session parks on it; it turns due when the event comes, once delivered it is gone", async () => {
+        expect((await post("/blocks/blk-1/wake", { until: "released", pr: "o/r#7", prompt: "check the re-embed in prod" })).status).toBe(200);
+        const s = await st();
+        // Mid-turn, as a session runs it: the turn ends parked.
+        expect([s.wakes[id("released")].pr, s.sessions[0].parkPending, s.sessions[0].parkedOn]).toEqual([URL7, true, "o/r#7 to be released"]);
+        pr = { state: "MERGED", checks: "green", released: true };
+        await until(async () => !!(await st()).wakes[id("released")]?.due);
+        expect((await st()).wakes[id("released")].due).toBeGreaterThan(0);
+        expect((await delivered("released")).status).toBe(200);
+        expect((await delivered("released")).status).toBe(409);
+        expect((await st()).wakes).toEqual({});
+    });
+
+    test("not due before its event, and dropped when it can't happen any more", async () => {
+        await post("/blocks/blk-1/wake", { until: "merged", pr: URL7, prompt: "update the docs" });
+        expect((await delivered("merged")).status).toBe(409);
+        pr = { state: "CLOSED", checks: "none", released: false };
+        await until(async () => !(await st()).wakes[id("merged")]);
+        expect((await st()).wakes).toEqual({});
+    });
+
+    test("a session waits for feedback and the merge at once; the same PR and event again replaces it", async () => {
+        await post("/blocks/blk-1/wake", { until: "comments", pr: URL7, prompt: "work the comments" });
+        await post("/blocks/blk-1/wake", { until: "merged", pr: URL7, prompt: "run /pr-merged" });
+        await post("/blocks/blk-1/wake", { until: "merged", pr: URL7, prompt: "run /pr-merged now" });
+        expect(Object.keys((await st()).wakes).sort()).toEqual([id("comments"), id("merged")]);
+        expect((await st()).wakes[id("merged")].prompt).toBe("run /pr-merged now");
+        pr = { state: "MERGED", checks: "green", released: false };
+        await until(async () => !!(await st()).wakes[id("merged")]?.due);
+        // A merged PR gets no more feedback: that wake goes, the merge's waits to be typed.
+        expect(Object.keys((await st()).wakes)).toEqual([id("merged")]);
+        expect(await (await post("/blocks/blk-1/wake/cancel", {})).text()).toBe("cancelled");
+        expect((await st()).wakes).toEqual({});
+    });
+
+    test("cancel; and every mistake says how to get it right", async () => {
+        await post("/blocks/blk-1/wake", { until: "green", pr: URL7, prompt: "approve" });
+        expect(await (await post("/blocks/blk-1/wake/cancel", {})).text()).toBe("cancelled");
+        expect((await st()).wakes).toEqual({});
+        const err = async (b: object) => (await post("/blocks/blk-1/wake", b)).text();
+        expect(await err({ until: "deployed", pr: URL7, prompt: "x" })).toContain("use one of green, merged, released");
+        expect(await err({ until: "green", pr: "#7", prompt: "x" })).toContain("owner/repo#123");
+        expect(await err({ until: "green", pr: URL7, prompt: " " })).toContain("need the prompt");
+        expect(await (await post("/blocks/nope/wake", { until: "green", pr: URL7, prompt: "x" })).text()).toContain("no live Claude session");
+    });
+});
+
+test("a pane attached to a session moves it there, and the service's later events keep it there", async () => {
+    await event({ ...prompt, hook_event_name: "UserPromptSubmit" });
+    expect((await post(`/sessions/${prompt.session_id}/attach`, { tabId: "tab-2", blockId: "viewer" })).status).toBe(200);
+    await event({ ...prompt, hook_event_name: "Stop" });
+    const s = (await (await fetch(base + "/state")).json()).sessions.find((x: { id: string }) => x.id === prompt.session_id);
+    expect([s.blockId, s.tabId, s.state]).toEqual(["viewer", "tab-2", "waiting"]);
+    expect((await post(`/sessions/${prompt.session_id}/attach`, { tabId: 1 })).status).toBe(400);
+});
+
+describe("heads-ups", () => {
+    const until = async (ok: () => Promise<boolean>) => {
+        for (let i = 0; i < 100 && !(await ok()); i++) await new Promise((r) => setTimeout(r, 20));
+    };
+    const offer = (sessionId: string, line: string) => ({ seen: [line], sessions: [{ id: sessionId, view: { kind: "offer", line, explanation: "why", shownAt: 7 } }] });
+    test("the plugin's offer shows on its session's project, stays after the plugin clears it, and closes with dismiss", async () => {
+        const claude = mkdtempSync(join(tmpdir(), "wintos-claude-"));
+        const dir = join(claude, "plugins", "store");
+        mkdirSync(dir, { recursive: true });
+        const file = join(dir, "cc-plugin-you-should-know_builtin-abc.json");
+        writeFileSync(file, JSON.stringify({ seen: [], sessions: [] }));
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", claudeDirs: [claude] });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        await event({ ...prompt, session_id: "s-1" });
+        const projectId = (await (await fetch(base + "/state")).json()).projects[0].id;
+        const shown = async () => (await (await fetch(base + "/state")).json()).headsUps?.[projectId];
+        writeFileSync(file, JSON.stringify(offer("s-1", "Merging won't deploy it.")));
+        await until(async () => !!(await shown()));
+        expect(await shown()).toEqual([{ id: "s-1:7", sessionId: "s-1", project: "x", text: "Merging won't deploy it.", explanation: "why", at: 7 }]);
+        writeFileSync(file, JSON.stringify({ seen: ["Merging won't deploy it."], sessions: [{ id: "s-1" }] }));
+        await new Promise((r) => setTimeout(r, 150));
+        expect(await shown()).toHaveLength(1);
+        expect((await post("/headsups/s-1%3A7/dismiss", {})).status).toBe(200);
+        expect(await shown()).toBeUndefined();
+        expect((await post("/headsups/s-1%3A7/dismiss", {})).status).toBe(404);
+        rmSync(claude, { recursive: true });
+    });
+
+    test("a session from another Claude config dir brings that dir's store in", async () => {
+        const claude = mkdtempSync(join(tmpdir(), "wintos-claude-"));
+        mkdirSync(join(claude, "plugins", "store"), { recursive: true });
+        writeFileSync(join(claude, "plugins", "store", "cc-plugin-you-should-know_builtin-abc.json"), JSON.stringify(offer("s-1", "Heads up from the other account.")));
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", claudeDirs: [] });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await post("/projects/tab-1/title", { title: "X", manual: false });
+        await event({ ...prompt, session_id: "s-1" });
+        expect((await (await fetch(base + "/state")).json()).headsUps).toEqual({});
+        await event({ ...stop, session_id: "s-1", config_dir: claude });
+        expect(Object.values((await (await fetch(base + "/state")).json()).headsUps).flat()).toMatchObject([{ text: "Heads up from the other account." }]);
+        rmSync(claude, { recursive: true });
+    });
+
+    test("a store whose shape changed is reported in /state", async () => {
+        const claude = mkdtempSync(join(tmpdir(), "wintos-claude-"));
+        mkdirSync(join(claude, "plugins", "store"), { recursive: true });
+        writeFileSync(join(claude, "plugins", "store", "cc-plugin-you-should-know_builtin-abc.json"), JSON.stringify({ seen: [], entries: [] }));
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", claudeDirs: [claude] });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect((await (await fetch(base + "/state")).json()).headsUpProblem).toBe("the store's shape changed: no sessions list");
+        rmSync(claude, { recursive: true });
+    });
+});
+
+describe("done PRs", () => {
+    const OPEN = "https://github.com/o/r/pull/1", MERGED = "https://github.com/o/r/pull/2";
+    test("a session's PR the PR list doesn't hold is looked up once, and its done state is on the state", async () => {
+        const asked: string[][] = [];
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-done-"));
+        writeFileSync(join(dir, "gh"), `#!/bin/sh\necho '${JSON.stringify({ me: "me", prs: [{ url: OPEN }] })}'\n`, { mode: 0o755 });
+        srv = await startServer({ root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fetchDone: async (urls) => (asked.push(urls), [{ url: MERGED, number: 2, repo: "o/r", merged: true }]) });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event(prompt);
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [OPEN, MERGED] });
+        await post("/plugins/gh-prs/run", {});
+        for (let i = 0; i < 100 && !(await (await fetch(base + "/state")).json()).donePrs?.[MERGED]; i++) await new Promise((r) => setTimeout(r, 20));
+        expect((await (await fetch(base + "/state")).json()).donePrs[MERGED]).toEqual({ url: MERGED, number: 2, repo: "o/r", merged: true });
+        await post("/plugins/gh-prs/run", {});
+        await new Promise((r) => setTimeout(r, 200));
+        expect(asked).toEqual([[MERGED]]);
+    });
+    test("a roadmap step naming a PR that merged is done by itself, and the epic's agent hears of it", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-done-"));
+        writeFileSync(join(dir, "gh"), `#!/bin/sh\necho '${JSON.stringify({ me: "me", prs: [{ url: OPEN }] })}'\n`, { mode: 0o755 });
+        srv = await startServer({ root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fetchDone: async () => [{ url: MERGED, number: 2, repo: "o/r", merged: true }] });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event(prompt);
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/blocks/blk-1/epic", { epic: id });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post(`/epics/${id}/roadmap`, { add: "r#2 merged" });
+        await post(`/epics/${id}/roadmap`, { add: "r#1 merged" });
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [OPEN, MERGED] });
+        await post("/plugins/gh-prs/run", {});
+        let state: { epics: { steps: { name: string; state: string }[] }[]; epicReports?: Record<string, { text: string }[]> } = { epics: [] };
+        for (let i = 0; i < 100 && state.epics[0]?.steps[0]?.state !== "done"; i++) {
+            await new Promise((r) => setTimeout(r, 20));
+            state = await (await fetch(base + "/state")).json();
+        }
+        expect(state.epics[0].steps).toEqual([{ name: "r#2 merged", state: "done" }, { name: "r#1 merged", state: "todo" }]);
+        expect(state.epicReports?.ag?.map((r) => r.text)).toContain('roadmap: "r#2 merged" is done by itself, its PR merged');
+    });
+});
+
+describe("update", () => {
+    test("the state counts the checkout's new commits, and /update restarts from it only then", async () => {
+        const repo = mkdtempSync(join(tmpdir(), "wintos-checkout-"));
+        const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, encoding: "utf8" });
+        git("init", "-q");
+        for (const [k, v] of [["user.name", "t"], ["user.email", "t@example.com"], ["commit.gpgsign", "false"]]) git("config", k, v);
+        git("commit", "-q", "--allow-empty", "-m", "running");
+        const restart = vi.fn();
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", checkout: repo, updateEveryMs: 50, restart });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        expect((await post("/update", {})).status).toBe(409);
+        git("commit", "-q", "--allow-empty", "-m", "new");
+        await vi.waitFor(async () => expect((await (await fetch(`${base}/state`)).json()).update).toEqual({ behind: 1 }), { timeout: 5_000, interval: 100 });
+        expect((await post("/update", {})).status).toBe(202);
+        expect(restart).toHaveBeenCalledWith(execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: repo, encoding: "utf8" }).trim());
+    });
+});
+

@@ -1,4 +1,5 @@
-import type { Session } from "../daemon/sessions/reduce";
+import { sessionName } from "./view";
+import { liveSessionIn, type Session } from "../daemon/sessions/reduce";
 
 // The pane strip, in projects and the Inbox alike: one chip per pane of the tab.
 export type PaneChip = { blockId: string; kind: "session" | "terminal" | "web" | "other"; label: string; session?: Session };
@@ -18,10 +19,16 @@ function pageLabel(url: string): string {
 export function stripPanes(blocks: (Block | undefined)[], sessions: Session[]): PaneChip[] {
     return blocks.filter((b): b is Block => !!b).map((b): PaneChip => {
         const view = b.meta?.view;
-        const session = sessions.find((s) => s.blockId === b.oid && s.state !== "ended");
-        if (view === "term" && session) return { blockId: b.oid, kind: "session", label: session.label ?? "session", session };
+        const session = liveSessionIn(sessions, b.oid);
+        if (view === "term" && session) return { blockId: b.oid, kind: "session", label: sessionName(session), session };
         if (view === "term") return { blockId: b.oid, kind: "terminal", label: "terminal" };
         if (view === "web") return { blockId: b.oid, kind: "web", label: pageLabel(b.meta?.url ?? "") };
         return { blockId: b.oid, kind: "other", label: String(view ?? "pane") };
     });
+}
+
+// The tab's panes in layout order (the order on screen), then any not laid out yet.
+export function paneOrder(leafOrder: LeafOrderEntry[], blockIds: string[]): string[] {
+    const laid = leafOrder.map((l) => l.blockid).filter((id) => blockIds.includes(id));
+    return [...laid, ...blockIds.filter((id) => !laid.includes(id))];
 }

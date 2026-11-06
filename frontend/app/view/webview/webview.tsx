@@ -28,6 +28,8 @@ import type { WebViewEnv } from "./webviewenv";
 // User agent strings for mobile emulation
 const USER_AGENT_IPHONE =
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+import { chromeUserAgent } from "./chromeua";
+
 const USER_AGENT_ANDROID =
     "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.43 Mobile Safari/537.36";
 
@@ -196,10 +198,17 @@ export class WebViewModel implements ViewModel {
                 });
             }
 
+            // WintOS: the page's own controls live in its address bar, where a mouse looks for them.
+            buttons.push({
+                elemtype: "iconbutton",
+                icon: "copy",
+                title: "Copy URL (⇧⌘C)",
+                click: () => void navigator.clipboard.writeText(url ?? ""),
+            });
             buttons.push({
                 elemtype: "iconbutton",
                 icon: "arrow-up-right-from-square",
-                title: "Open in External Browser",
+                title: "Open in External Browser (⇧⌘U)",
                 click: () => {
                     console.log("open external", url);
                     if (url != null && url != "") {
@@ -563,7 +572,8 @@ export class WebViewModel implements ViewModel {
     }
 
     keyDownHandler(e: WaveKeyboardEvent): boolean {
-        if (checkKeyPressed(e, "Cmd:l")) {
+        // WintOS: ⌘U, as ⌘L is the notes (the right area).
+        if (checkKeyPressed(e, "Cmd:u")) {
             this.urlInputRef?.current?.focus();
             this.urlInputRef?.current?.select();
             return true;
@@ -865,6 +875,9 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
         userAgent = USER_AGENT_IPHONE;
     } else if (userAgentType === "mobile:android") {
         userAgent = USER_AGENT_ANDROID;
+    } else {
+        // WintOS: Google refuses sign-in from a browser naming itself Electron or the app.
+        userAgent = chromeUserAgent(navigator.userAgent);
     }
 
     // Search
@@ -955,9 +968,11 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
     useLayoutEffect(() => {
         return () => {
             const webview = model.webviewRef.current;
-            if (webview?.isDevToolsOpened()) {
-                webview.closeDevTools();
-            }
+            // WintOS: a page that closed itself (a sign-in popup) is gone before its pane unmounts,
+            // and asking a destroyed guest throws "Invalid guestInstanceId", which unmounts everything.
+            try {
+                if (webview?.isDevToolsOpened()) webview.closeDevTools();
+            } catch {}
         };
     }, []);
 
@@ -1071,6 +1086,9 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
             globalStore.set(model.domReady, true);
             setBgColor();
         };
+        // WintOS: a page that closes itself (a sign-in popup once it is done) closes its pane, else
+        // a dead page stays behind that takes no focus or key, and so cannot be closed.
+        const closeHandler = () => model.nodeModel.onClose();
         const handleMediaPlaying = () => {
             model.setMediaPlaying(true);
         };
@@ -1091,6 +1109,7 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
         webview.addEventListener("media-started-playing", handleMediaPlaying);
         webview.addEventListener("media-paused", handleMediaPaused);
         webview.addEventListener("found-in-page", onFoundInPage);
+        webview.addEventListener("close", closeHandler);
 
         // Clean up event listeners on component unmount
         return () => {
@@ -1107,6 +1126,7 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
             webview.removeEventListener("media-started-playing", handleMediaPlaying);
             webview.removeEventListener("media-paused", handleMediaPaused);
             webview.removeEventListener("found-in-page", onFoundInPage);
+            webview.removeEventListener("close", closeHandler);
         };
     }, []);
 

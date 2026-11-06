@@ -1,18 +1,14 @@
-import { describe, expect, test, vi } from "vitest";
-import { globalStore } from "@/app/store/jotaiStore";
-import { allowedInInbox, blockDefFor, focusedPageUrl, newSessionScript, paneShowing, wintosClose } from "./menu";
-import { mainViewAtom } from "./notes/state";
+import { describe, expect, test } from "vitest";
+import { allowedInInbox, blockDefFor, focusedPageUrl, paneShowing, shelvable, WINTOS_KEYS } from "./menu";
 
 const widgets = {
     "defwidget@terminal": { blockdef: { meta: { view: "term", controller: "shell" } } },
-    "defwidget@web": { blockdef: { meta: { view: "web" } } },
-    "defwidget@files": { blockdef: { meta: { view: "preview", file: "~" } } },
+    "defwidget@sysinfo": { blockdef: { meta: { view: "sysinfo" } } },
 } as unknown as Record<string, WidgetConfigType>;
 
 describe("blockDefFor", () => {
     test("menu actions open the same blocks the widget bar did", () => {
-        expect(blockDefFor("browser", widgets)).toEqual({ def: { meta: { view: "web" } }, ephemeral: false });
-        expect(blockDefFor("files", widgets)).toEqual({ def: { meta: { view: "preview", file: "~" } }, ephemeral: false });
+        expect(blockDefFor("sysinfo", widgets)).toEqual({ def: { meta: { view: "sysinfo" } }, ephemeral: false });
     });
 
     test("settings opens the config view as a transient block", () => {
@@ -28,31 +24,6 @@ describe("blockDefFor", () => {
     });
 });
 
-describe("newSessionScript", () => {
-    test("starts Claude in the focused session's directory, safely quoted", () => {
-        expect(newSessionScript("/Users/n/it's here")).toBe("cd '/Users/n/it'\\''s here' && claude");
-    });
-
-    test("with no session to copy from it just starts Claude", () => {
-        expect(newSessionScript(undefined)).toBe("claude");
-    });
-});
-
-describe("wintosClose", () => {
-    test("⌘W in the notes view goes back to the terminals and closes nothing hidden", () => {
-        vi.stubGlobal("requestAnimationFrame", () => 0);
-        globalStore.set(mainViewAtom, "notes");
-        expect(wintosClose()).toBe(true);
-        expect(globalStore.get(mainViewAtom)).toBe("terminal");
-    });
-
-    test("in the terminals ⌘W stays Wave's close", () => {
-        globalStore.set(mainViewAtom, "terminal");
-        expect(wintosClose()).toBe(false);
-    });
-});
-
-
 describe("paneShowing", () => {
     const blocks = [{ oid: "b1", meta: { view: "term" } }, { oid: "b2", meta: { view: "web", url: "https://github.com/acme/api/pull/9" } }] as unknown as Block[];
 
@@ -62,6 +33,10 @@ describe("paneShowing", () => {
         const moved = [{ oid: "b3", meta: { view: "web", url: "https://github.com/acme/api/pull/9/files#diff-1" } }] as unknown as Block[];
         expect(paneShowing(moved, "https://github.com/acme/api/pull/9")).toBe("b3");
         expect(paneShowing(moved, "https://github.com/acme/api/pull/90")).toBeUndefined();
+    });
+    test("a page that redirected (a sign-in, a viewer's own address) is still the page it was opened for", () => {
+        const moved = [{ oid: "b5", meta: { view: "web", url: "https://accounts.example.com/signin?x=1", "wintos:opened": "https://errors.example.com/team/x" } }] as unknown as Block[];
+        expect(paneShowing(moved, "https://errors.example.com/team/x")).toBe("b5");
     });
     test("other pages match only exactly", () =>
         expect(paneShowing([{ oid: "b4", meta: { view: "web", url: "https://example.com/a/b" } }] as unknown as Block[], "https://example.com/a")).toBeUndefined());
@@ -76,8 +51,25 @@ describe("focusedPageUrl", () => {
 });
 
 describe("allowedInInbox", () => {
-    test("the Inbox opens pages and moves between them; it starts no terminals or Claude sessions", () => {
-        for (const a of ["palette", "keymap", "prs", "panel", "open-page:https://github.com/acme/api/pull/1", "switch-next", "project", "copy-url", "pane-next", "browser"]) expect([a, allowedInInbox(a)]).toEqual([a, true]);
-        for (const a of ["session", "terminal", "files", "sysinfo", "processes", "rename", "edit-mine", "notes", "focus-notes"]) expect([a, allowedInInbox(a)]).toEqual([a, false]);
+    test("the Inbox opens pages and moves between them; it starts no terminals", () => {
+        for (const a of ["palette", "keymap", "prs", "panel", "open-page:https://github.com/acme/api/pull/1", "switch-next", "project", "copy-url", "focus-left", "focus-right"]) expect([a, allowedInInbox(a)]).toEqual([a, true]);
+        for (const a of ["terminal", "sysinfo", "processes", "rename", "edit-mine"]) expect([a, allowedInInbox(a)]).toEqual([a, false]);
     });
+});
+
+describe("shelvable", () => {
+    test("a session pane with the hook's resume command goes on the shelf", () =>
+        expect(shelvable({ "cmd:initscript": "cd '/w' && claude --resume 'abc'" })).toBe("cd '/w' && claude --resume 'abc'"));
+    test("a fresh session, one ended with /exit, a plain terminal or a page just close", () => {
+        for (const meta of [{ "cmd:initscript": "cd '/w' && claude" }, { "cmd:initscript": "" }, { view: "term" }, { view: "web", url: "https://x" }, undefined])
+            expect(shelvable(meta as MetaType)).toBeUndefined();
+    });
+});
+
+// ⌥ changes the character a key types on a Mac (⌥D is ∂), so a ⌥ shortcut matched by its
+// character never fires from a real keyboard; it names the physical key, c{KeyD}.
+test("every ⌥ shortcut names its physical key", () => {
+    const option = WINTOS_KEYS.map(([k]) => k).filter((k) => k.includes("Option"));
+    expect(option.length).toBeGreaterThan(10);
+    expect(option.filter((k) => !/:c\{(Key[A-Z]|Digit\d)\}$|:(Arrow\w+|\d)$/.test(k))).toEqual([]);
 });

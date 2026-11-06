@@ -31,3 +31,30 @@ export function useNotes(tabId: string): { notes: NotesData | null; project: { t
     };
     return { notes, project, save };
 }
+
+// An epic's mine.md, re-read whenever the daemon says the file changed (EpicView.mineMtime).
+export function useEpicMine(epicId: string | undefined): { mine: { text: string; mtime: number } | null; save: (text: string, baseMtime: number) => Promise<SaveResult> } {
+    const { state } = useWintos();
+    const mtime = epicId ? state?.epics?.find((e) => e.id === epicId)?.mineMtime : undefined;
+    const [mine, setMine] = useState<{ text: string; mtime: number } | null>(null);
+    useEffect(() => {
+        if (!epicId) return setMine(null);
+        let live = true;
+        daemonFetch(`/epics/${encodeURIComponent(epicId)}/mine`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((m) => live && setMine(m))
+            .catch(() => live && setMine(null));
+        return () => void (live = false);
+    }, [epicId, mtime]);
+    const save = async (text: string, baseMtime: number): Promise<SaveResult> => {
+        if (!epicId) return "error";
+        try {
+            const r = await daemonFetch(`/epics/${encodeURIComponent(epicId)}/mine`, { method: "POST", body: { text, baseMtime } });
+            if (r.status === 409) return "conflict";
+            return r.ok ? "ok" : "error";
+        } catch {
+            return "error";
+        }
+    };
+    return { mine, save };
+}

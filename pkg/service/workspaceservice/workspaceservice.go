@@ -126,6 +126,33 @@ func (svc *WorkspaceService) CreateTab_Meta() tsgenmeta.MethodMeta {
 	}
 }
 
+func (svc *WorkspaceService) CreatePlainTab_Meta() tsgenmeta.MethodMeta {
+	return tsgenmeta.MethodMeta{
+		ArgNames:   []string{"workspaceId", "activateTab", "first"},
+		ReturnDesc: "tabId",
+	}
+}
+
+// WintOS: a new tab whose first pane is given and starts no Claude of its own (reopening a
+// project on a session).
+func (svc *WorkspaceService) CreatePlainTab(workspaceId string, activateTab bool, first waveobj.MetaMapType) (string, waveobj.UpdatesRtnType, error) {
+	ctx, cancelFn := context.WithTimeout(context.Background(), DefaultTimeout)
+	defer cancelFn()
+	ctx = waveobj.ContextWithUpdates(ctx)
+	tabId, err := wcore.CreatePlainTab(ctx, workspaceId, activateTab, first)
+	if err != nil {
+		return "", nil, fmt.Errorf("error creating tab: %w", err)
+	}
+	updates := waveobj.ContextGetUpdatesRtn(ctx)
+	go func() {
+		defer func() {
+			panichandler.PanicHandler("WorkspaceService:CreatePlainTab:SendUpdateEvents", recover())
+		}()
+		wps.Broker.SendUpdateEvents(updates)
+	}()
+	return tabId, updates, nil
+}
+
 func (svc *WorkspaceService) GetColors_Meta() tsgenmeta.MethodMeta {
 	return tsgenmeta.MethodMeta{
 		ReturnDesc: "colors",

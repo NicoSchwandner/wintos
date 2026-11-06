@@ -31,6 +31,12 @@ function loadJetBrainsMonoFont() {
     addToFontFaceSet(document.fonts, jbmFontNormal);
     addToFontFaceSet(document.fonts, jbmFont200);
     addToFontFaceSet(document.fonts, jbmFont700);
+    // WintOS: the terminal draws at Medium; without these faces 500 falls back to 400.
+    for (const style of ["normal", "italic"]) {
+        const f = new FontFace("JetBrains Mono", `url('fonts/jetbrains-mono-latin-500-${style}.woff2')`, { style, weight: "500" });
+        addToFontFaceSet(document.fonts, f);
+        f.load();
+    }
     // WintOS: real italics. Without them the browser slants the upright face, and Claude's
     // *emphasis* (italic only) is barely visible in the terminal.
     for (const weight of ["400", "700"]) {

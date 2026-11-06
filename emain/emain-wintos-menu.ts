@@ -5,9 +5,13 @@ import * as electron from "electron";
 type Send = (window: electron.BaseWindow | undefined, action: string) => void;
 
 export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[] {
+    // The menu shows each key but does not take it (registerAccelerator: false): every key goes
+    // through the renderer's one key path (zones, the ⌘-hold project walk, text fields, the focus
+    // trail). A menu that took ⌘J switched at once and left no walk for Esc to cancel.
     const item = (label: string, action: string, accelerator?: string): Electron.MenuItemConstructorOptions => ({
         label,
         accelerator,
+        registerAccelerator: false,
         click: (_, window) => send(window, action),
     });
     // Mirrors WINTOS_KEYS (wintos/ui/menu.ts), which the renderer handles first.
@@ -17,21 +21,35 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         { type: "separator" },
         item("Next Project", "switch-next", "Cmd+J"),
         item("Previous Project", "switch-prev", "Cmd+K"),
-        item("New Project", "project", "Cmd+N"),
-        item("Rename Project", "rename", "Cmd+R"),
+        item("New Step…", "new-step", "Cmd+N"),
+        item("Name This Step", "rename", "Cmd+R"),
         item("Close Project", "close-project", "Shift+Cmd+W"),
+        item("Park Session (nothing for me)", "park-session", "Alt+Cmd+P"),
+        item("Session's Epic…", "epic", "Alt+Cmd+E"),
+        item("Epic's Page", "epic-page", "Shift+Alt+Cmd+E"),
+        item("Sidebar by Epic / by State", "sidebar-view", "Alt+Cmd+V"),
+        item("Move Session…", "move-session", "Alt+Cmd+M"),
+        item("Take Session Out", "take-out", "Alt+Cmd+T"),
+        item("Join Meeting", "join-meeting", "Shift+Cmd+J"),
+        item("Epics", "day", "Shift+Cmd+Y"),
+        item("Reflect", "reflect", "Alt+Cmd+Y"),
+        item("Keyboard Game", "keyboard", "Shift+Cmd+I"),
+        item("Copy Page URL", "copy-url", "Shift+Cmd+C"),
+        item("Restart Terminal", "restart-terminal", "Alt+Cmd+R"),
+        item("Update WintOS", "update", "Alt+Cmd+U"),
+        item("Take a Break", "break", "Alt+Cmd+B"),
+        item("Move Nudge Later", "break-later", "Shift+Alt+Cmd+B"),
+        item("Decisions", "release", "Alt+Cmd+O"),
+        item("Show the Quiet Projects", "quiet", "Alt+Cmd+S"),
         { type: "separator" },
-        item("Focus Terminal", "focus-terminal", "Cmd+2"),
-        item("Focus Notes", "focus-notes", "Cmd+3"),
+        item("Focus Left", "focus-left", "Cmd+H"),
+        item("Focus Right", "focus-right", "Cmd+L"),
         { type: "separator" },
         item("New Terminal", "terminal", "Cmd+T"),
-        item("New Claude Session", "session", "Shift+Cmd+T"),
-        item("New Browser", "browser", "Shift+Cmd+B"),
-        item("Files", "files", "Shift+Cmd+E"),
-        item("Notes", "notes", "Shift+Cmd+J"),
+        item("Notes", "notes", "Shift+Cmd+L"),
         item("Edit mine.md", "edit-mine", "Cmd+E"),
         item("PRs Need Attention", "prs", "Shift+Cmd+G"),
-        item("Plugin Panel", "panel", "Shift+Cmd+O"),
+        item("On Call", "panel", "Shift+Cmd+O"),
         { type: "separator" },
         item("System Info", "sysinfo"),
         item("Processes", "processes"),

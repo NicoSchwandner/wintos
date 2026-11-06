@@ -1224,6 +1224,32 @@ await scenario("54 · ⌥⌘E, a name and ⌘⏎ promote a session in no epic to
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(pane)}).id)`);
 });
 
+await scenario("55 · r on an epic's page renames it in place: title and short name; esc leaves them", async () => {
+    const t = await toProject();
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const id = await (await api("/epics", { title: "E2E old name" })).text();
+    await evalIn(t, `import("/wintos/ui/menu.ts").then((m) => m.openEpic("${id}"))`);
+    await until("its page", () => evalIn(t, `document.querySelector("[data-wintos=epic-page]")?.dataset.epic === "${id}" && !!document.querySelector("[data-wintos=epic-page] [data-wintos=epic-rename]")`));
+    await press(t, "r");
+    await until("the title field", () => evalIn(t, `!!document.querySelector("[data-wintos=epic-retitle] input")`));
+    await cdpFocus(t, "[data-wintos=epic-retitle] input");
+    await evalIn(t, `document.querySelector("[data-wintos=epic-retitle] input").select()`);
+    await cdp(t, "Input.insertText", { text: "E2E new name" });
+    await cdpFocus(t, "[data-wintos=epic-retitle] input + input");
+    await cdp(t, "Input.insertText", { text: "New" });
+    for (const type of ["rawKeyDown", "keyUp"]) await cdp(t, "Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    await until("renamed, its id kept", async () => { const e = (await (await fetch("http://127.0.0.1:7731/state")).json()).epics.find((x) => x.id === id); return e?.title === "E2E new name" && e.short === "New"; });
+    await until("the page shows it", () => evalIn(t, `document.querySelector("[data-wintos=epic-page] h1")?.innerText === "E2E new name"`));
+    await press(t, "r");
+    await until("the field again", () => evalIn(t, `!!document.querySelector("[data-wintos=epic-retitle] input")`));
+    await cdpFocus(t, "[data-wintos=epic-retitle] input");
+    await cdp(t, "Input.insertText", { text: " typo" });
+    for (const type of ["rawKeyDown", "keyUp"]) await cdp(t, "Input.dispatchKeyEvent", { type, key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    await until("esc leaves it", () => evalIn(t, `!document.querySelector("[data-wintos=epic-retitle]")`));
+    if ((await (await fetch("http://127.0.0.1:7731/state")).json()).epics.find((x) => x.id === id)?.title !== "E2E new name") throw new Error("esc changed the title");
+    await press(t, "Escape", { code: "Escape", keyCode: 27 });
+});
+
 clearInterval(heldTimer);
 for (const r of results) console.log(r.join("  "));
 process.exit(results.some((r) => r[0] === "FAIL") ? 1 : 0);

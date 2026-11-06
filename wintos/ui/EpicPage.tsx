@@ -124,11 +124,20 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
         if (removing && removing !== name) setRemoving(undefined);
         return f(name), true;
     };
+    // r: the epic's title and short name, edited in place; ⏎ in either field keeps both, esc leaves them.
+    const [retitling, setRetitling] = useState(false);
+    const titleRef = useRef<HTMLInputElement>(null);
+    const shortRef = useRef<HTMLInputElement>(null);
+    const retitle = () => {
+        if (epic && titleRef.current?.value.trim()) void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/title`, { method: "POST", body: { title: titleRef.current.value, short: shortRef.current?.value ?? "" } });
+        setRetitling(false);
+        ref.current?.focus();
+    };
     const togglePin = () => epic && void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/pin`, { method: "POST", body: { pinned: !epic.pinned } });
     // Enter and ⌫ reach this table from the page's own fields too; there they belong to the field.
     const cursor = cursorKeys(() => ref.current);
     const notInField = (run: KeyTable[string]): KeyTable[string] => (e) => (isTextField(document.activeElement) ? false : run(e));
-    useZoneKeys(ref, { ...cursor, Enter: notInField(cursor.Enter), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true),
+    useZoneKeys(ref, { ...cursor, Enter: notInField(cursor.Enter), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true), r: () => (setRetitling(true), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true),
         d: onStep((name) => edit({ done: name, on: epic?.steps.find((u) => u.name === name)?.state !== "done" })),
         // The cursor goes along with the step it moves.
         "Shift:j": (e) => onStep((name) => (edit({ move: { name, by: 1 } }), cursor.j(e)))(),
@@ -191,7 +200,18 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
             <div style={{ display: "flex", alignItems: "center", gap: column ? 10 : 16, flexWrap: "wrap", padding: column ? "8px 10px" : "14px 16px", borderRadius: 12, background: `linear-gradient(90deg, ${look.bg} 0%, transparent 70%)`, borderTop: `3px solid ${look.fg}` }}>
                 <EpicAvatar look={look} size={column ? 30 : 56} running={agentWorking(epic, state?.sessions)} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, flexGrow: 1, minWidth: 0 }}>
-                    <h1 style={{ margin: 0, fontFamily: T.display, fontSize: column ? 18 : 30, fontWeight: 400, lineHeight: 1.1, color: T.emphasis }}>{column ? shortName(epic) : epic.title}</h1>
+                    {retitling ? (
+                        <span data-wintos="epic-retitle" style={{ display: "flex", gap: 6, flexWrap: "wrap" }} onKeyDown={(ev) => {
+                            ev.stopPropagation();
+                            if (ev.key === "Enter") ev.preventDefault(), retitle();
+                            if (ev.key === "Escape") ev.preventDefault(), setRetitling(false), ref.current?.focus();
+                        }}>
+                            <input ref={titleRef} autoFocus aria-label="the epic's title" placeholder="title" defaultValue={epic.title} maxLength={80} style={{ flex: "1 1 220px", minWidth: 0, padding: "2px 8px", background: T.card, border: `1px solid ${T.borderActive}`, borderRadius: 6, outline: "none", color: T.emphasis, fontFamily: T.display, fontSize: column ? 16 : 22 }} />
+                            <input ref={shortRef} aria-label="its short name, for the sidebar" placeholder="short name (optional)" defaultValue={epic.short ?? ""} maxLength={20} style={{ flex: "0 1 150px", minWidth: 0, padding: "2px 8px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 6, outline: "none", color: T.text, fontFamily: T.ui, fontSize: 13 }} />
+                        </span>
+                    ) : (
+                        <h1 style={{ margin: 0, fontFamily: T.display, fontSize: column ? 18 : 30, fontWeight: 400, lineHeight: 1.1, color: T.emphasis }}>{column ? shortName(epic) : epic.title}</h1>
+                    )}
                     <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>
                         {[epic.done ? `done ${epic.done}` : `${sessions.length} session${sessions.length === 1 ? "" : "s"} open`, month && month.ms >= 60_000 && `${spent(month.ms)} this month`, epic.lane && `${epic.lane} sessions land here`].filter(Boolean).join(" · ")}
                     </span>
@@ -199,6 +219,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                 <span style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                     {column && <Key k="⌘L ⌘H" label="into the epic · back to the agent" hold />}
                     {!column && <Act wintos="epic-agent" k="a" label={epic.agent ? "Epic agent" : "Start the epic agent"} onClick={toAgent} primary />}
+                    <Act wintos="epic-rename" k="r" label="Rename" onClick={() => setRetitling(true)} />
                     <Act wintos="epic-pin" k="p" label={epic.pinned ? "Unpin" : "Pin"} onClick={togglePin} />
                     <Act wintos="epic-done" k="x" label={epic.done ? "Open again" : "Epic done"} onClick={toggleDone} />
                     {!column && <Key k="esc" label="back" />}

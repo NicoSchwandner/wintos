@@ -99,6 +99,20 @@ describe("wintosd API", () => {
         expect((await (await fetch(base + "/state")).json()).epics).toHaveLength(1);
     });
 
+    test("an epic renamed: its title and short name change, its id stays, its agent hears of it", async () => {
+        await event(prompt);
+        const id = await (await post("/epics", { title: "Ledger import", short: "Ledger", agent: prompt.session_id })).text();
+        expect((await post(`/epics/${id}/title`, { title: "Ledger import v2" })).status).toBe(200);
+        let state = await (await fetch(base + "/state")).json();
+        expect(state.epics).toMatchObject([{ id, title: "Ledger import v2", short: "Ledger" }]);
+        expect(state.epicReports[prompt.session_id].map((r: { text: string }) => r.text)).toContain('the developer renamed the epic from "Ledger import" to "Ledger import v2"');
+        await post(`/epics/${id}/title`, { title: "Ledger import v2", short: "" });
+        state = await (await fetch(base + "/state")).json();
+        expect(state.epics[0].short).toBeUndefined();
+        expect((await post(`/epics/${id}/title`, { title: "a\nb" })).status).toBe(400);
+        expect((await post("/epics/nope/title", { title: "x" })).status).toBe(404);
+    });
+
     test("the epic agent passes on only your words, to its own sessions; and suggests on a session's open question", async () => {
         const id = await (await post("/epics", { title: "Route" })).text();
         const at = (blockId: string, payload: object) => post("/events", { tabId: "tab-1", blockId, payload });

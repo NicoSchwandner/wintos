@@ -803,6 +803,25 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     return send(res, 200, "");
                 }
             }
+            // Renamed (its page's r): the title, and the short name ("" drops it). Its folder and id
+            // stay, so links and sessions keep pointing at it. Its agent hears of it.
+            const epicTitle = /^\/epics\/([^/]+)\/title$/.exec(url.pathname);
+            if (req.method === "POST" && epicTitle) {
+                const b = (await body(req)) as { title?: unknown; short?: unknown };
+                const title = typeof b?.title === "string" ? b.title.trim() : "";
+                const short = typeof b?.short === "string" ? b.short.trim() : undefined;
+                if (!title || !isSafe(title) || title.length > EPIC_TITLE_MAX || (b.short !== undefined && typeof b.short !== "string") || (short && (!isSafe(short) || short.length > SHORT_MAX)))
+                    return send(res, 400, `need a one-line title up to ${EPIC_TITLE_MAX} characters, and an optional short name up to ${SHORT_MAX}`);
+                const before = epics.byId(decodeURIComponent(epicTitle[1]));
+                const e = epics.update(decodeURIComponent(epicTitle[1]), ({ short: was, ...rest }) => ({ ...rest, title, ...(short === undefined ? (was ? { short: was } : {}) : short ? { short } : {}) }));
+                if (!e || !before) return send(res, 404, "no such epic");
+                if (e.agent && before.title !== e.title) {
+                    reports = addReport(reports, e.agent, `the developer renamed the epic from "${before.title}" to "${e.title}"`, Date.now());
+                    writeFileSync(reportsFile, JSON.stringify(reports));
+                }
+                broadcast();
+                return send(res, 200, "");
+            }
             // Pinned (its page's p): kept in sight at the top of the sidebar, or not.
             const epicPin = /^\/epics\/([^/]+)\/pin$/.exec(url.pathname);
             if (req.method === "POST" && epicPin) {

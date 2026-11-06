@@ -2,7 +2,7 @@ import { chmodSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { describe, expect, test, vi } from "vitest";
-import { discoverPlugins, PluginRunner } from "./runner";
+import { failureLine, discoverPlugins, PluginRunner } from "./runner";
 
 const script = (body: string) => {
     const dir = mkdtempSync(join(tmpdir(), "wintos-plug-"));
@@ -34,7 +34,7 @@ describe("PluginRunner", () => {
         const r = new PluginRunner([{ name: "x", cmd: [script(`printf '\\ngh: HTTP 502\\nnode:child_process:978 throw err;\\n' >&2; exit 1`)], everyMs: 0 }], () => {});
         await r.run("x");
         spy.mockRestore();
-        expect(r.results.x.error).toBe("gh: HTTP 502");
+        expect(r.results.x.error).toBe("GitHub is having trouble (HTTP 502); it tries again by itself");
         expect(logged.join("\n")).toContain("node:child_process:978");
     });
 
@@ -107,4 +107,12 @@ describe("discoverPlugins", () => {
     });
 
     test("a missing folder means no user plugins", () => expect(discoverPlugins("/nonexistent/wintos")).toEqual([]));
+});
+
+test("failureLine: gh's line wherever it is, GitHub's own trouble named as such, a run cut off by its limit", () => {
+    const err = { message: "Command failed: /x/Electron /x/gh-prs.cjs" };
+    expect(failureLine("node:internal\n  stderr: 'gh: HTTP 504\\n'\n}", err, 150_000)).toBe("GitHub is having trouble (HTTP 504); it tries again by itself");
+    expect(failureLine("gh: Not Found (HTTP 404)\n", err, 150_000)).toBe("gh: Not Found (HTTP 404)");
+    expect(failureLine("", { ...err, killed: true, signal: "SIGTERM" }, 150_000)).toBe("no answer within 150 s; it tries again by itself");
+    expect(failureLine("", err, 150_000)).toBe("Command failed: /x/Electron /x/gh-prs.cjs");
 });

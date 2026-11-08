@@ -7,12 +7,12 @@ in the commit that finishes it.
 
 ### The rest of the 7 November audit
 
-The audit (https://claude.ai/artifact/USocwE8oxQLRmDBPdmacNF, "Open only") still lists, largest
-first: one queue for everything typed into sessions (wakes, reports, relays: STATE-2), PR
-ownership on sessions only (STATE-19), one quiet state with a reason (STATE-13), the ~20 state
-files (STATE-20), splitting `daemon/api/server.ts` by domain with a persisted-state helper
-(CODE-5), building before ⌥⌘U stops WintOS (CODE-4), hermetic unit tests and CI (CODE-7, CODE-20),
-and the smaller UI and key items. Retiring "project" is its own item below.
+The audit (https://claude.ai/artifact/USocwE8oxQLRmDBPdmacNF, "Open only") still lists: retiring
+"project" past its first slice (the shelf and heads-ups are keyed by the project folder, PR
+ownership reads project.md `pr:`, the palette ranks per view: STATE-10, 19, 21), splitting
+`daemon/api/server.ts` by domain with a persisted-state helper (CODE-5), the ~20 state files
+(STATE-20), the PR-link regex and the date format written several times over (CODE-14, CODE-15),
+and the token on every daemon route but /events (CODE-11: the CLI would need the token too).
 
 ### "Needs you" reasons that resolve themselves
 
@@ -92,6 +92,10 @@ Start after the reasons queue. Look at `daemon/inject.ts` (what a session is tol
   `daemon/api/server.test.ts`. Both pass on a rerun.
 
 ## Decided against
+
+- **One quiet state with a reason (audit STATE-13).** The sidebar already shows every quiet row
+  with its reason (paused on X, done, held); merging done, idle and paused in the model would
+  touch the reducer, the ranking and the turn reader for no visible change.
 
 - **A "next up" queue across epics on the home.** Each epic's roadmap, with `d` to mark a step
   done, is enough.

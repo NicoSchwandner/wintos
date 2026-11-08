@@ -1,3 +1,4 @@
+import { readJson, writeJsonAtomic } from "../persist";
 import { execFile } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "fs";
 import { AsyncLocalStorage } from "async_hooks";
@@ -92,7 +93,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // Each wake's PR is asked about on its own: a PR merged into main has left the PR list.
     const wakesFile = join(opts.root, ".wakes.json");
     let wakes = rekeyed(readJson<Wakes>(wakesFile, {}));
-    const saveWakes = () => writeFileSync(wakesFile, JSON.stringify(wakes));
+    const saveWakes = () => writeJsonAtomic(wakesFile, wakes);
     let checking = false;
     const checkWakes = async () => {
         const waiting = [...new Set(Object.values(wakes).filter((w) => !w.due).map((w) => w.pr))];
@@ -133,7 +134,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         }
         for (const id of logged.keys()) if (!sessions.has(id)) logEvent("session", { id, cause: why, changes: ["gone"] });
         logged = sessions;
-        writeFileSync(sessionFile, JSON.stringify([...sessions.values()]));
+        writeJsonAtomic(sessionFile, [...sessions.values()]);
     };
     // Time at each epic (epics/time.ts): the session whose pane has focus in WintOS (POST /focus),
     // counted on the idle tick while the Mac is in use.
@@ -146,7 +147,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         if (!focused) return;
         if (idleMs < AWAY_MS) timeLog = addTime(timeLog, localDay(now), focused.sessionId, sessions.get(focused.sessionId)?.epic, now - focused.since);
         focused = { ...focused, since: now };
-        writeFileSync(timeFile, JSON.stringify(timeLog));
+        writeJsonAtomic(timeFile, timeLog);
     };
     // A session nobody put in an epic takes the one beside it, or its lane's (epics/assign.ts).
     const placeInEpic = (sessionId: string) => {
@@ -173,7 +174,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 .map((w) => ({ name: w.name?.text ?? w.label ?? "a session", state: w.background ? `${w.state}, in the background` : w.restored ? `${w.state}, not started until the developer opens it` : w.state, step: w.lane?.steps[w.lane.at], status: freshStatus(w)?.text, prs: w.prs ?? [], ask: w.state === "waiting" ? (w.ask?.text ?? w.outcome?.text) : undefined }));
             // The news once per agent (inject.ts AGENT_NEWS), kept across restarts.
             const told = agentNews[sessionId] === AGENT_NEWS;
-            if (!told) (agentNews = { ...agentNews, [sessionId]: AGENT_NEWS }), writeFileSync(agentNewsFile, JSON.stringify(agentNews));
+            if (!told) (agentNews = { ...agentNews, [sessionId]: AGENT_NEWS }), writeJsonAtomic(agentNewsFile, agentNews);
             return epicAgentInjection({ title: epic.title, dir: epic.dir, steps: serializeUnits(epic.steps) }, workers, told ? undefined : AGENT_NEWS);
         }
         // A session already linked to a step is not asked to claim one.
@@ -191,7 +192,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         if (!s || !agent || agent === s.id || !worthReporting(s)) return;
         const text = reportLine(s);
         reports = addReport(reports, agent, text, Date.now());
-        writeFileSync(reportsFile, JSON.stringify(reports));
+        writeJsonAtomic(reportsFile, reports);
         logEvent("report", { agent, from: s.id, epic: s.epic, text });
     };
     // What you told each epic agent last, so a relay passes only your own words (epics/relay.ts);
@@ -201,7 +202,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const transcripts = new Map<string, string>();
     const relaysFile = join(opts.root, ".relays.json");
     let relays = readJson<Relays>(relaysFile, {});
-    const saveRelays = (next: Relays) => ((relays = next), writeFileSync(relaysFile, JSON.stringify(relays)));
+    const saveRelays = (next: Relays) => ((relays = next), writeJsonAtomic(relaysFile, relays));
     // Sessions the epic agents started in the background (epics/bgstart.ts), followed through
     // `claude agents --json`: polled only while some are tracked.
     const bgFile = join(opts.root, ".bg-starts.json");
@@ -218,7 +219,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
             const r = mergeBg(sessions, bgStarts, listed, Date.now());
             sessions = r.sessions;
             const kept = pruneStarts(bgStarts, sessions, Date.now());
-            if (Object.keys(kept).length !== Object.keys(bgStarts).length) (bgStarts = kept), writeFileSync(bgFile, JSON.stringify(bgStarts));
+            if (Object.keys(kept).length !== Object.keys(bgStarts).length) {
+                bgStarts = kept;
+                writeJsonAtomic(bgFile, bgStarts);
+            }
             await deliverToBackground(listed);
             if (!r.moved.length) return;
             for (const f of r.fresh) {
@@ -271,7 +275,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         if (worked.day !== day) worked = { day, ids: [] };
         if (prompted && !worked.ids.includes(prompted)) {
             worked = { day, ids: [...worked.ids, prompted] };
-            writeFileSync(workedFile, JSON.stringify(worked));
+            writeJsonAtomic(workedFile, worked);
         }
         const steps = worked.ids.flatMap((id) => {
             const s = sessions.get(id);
@@ -287,7 +291,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // When the developer last looked at each project: a reply after that is unread.
     const seenFile = join(opts.root, ".seen.json");
     const seen = readJson<Record<string, number>>(seenFile, {});
-    const markSeen = (id: string) => ((seen[id] = Date.now()), writeFileSync(seenFile, JSON.stringify(seen)));
+    const markSeen = (id: string) => ((seen[id] = Date.now()), writeJsonAtomic(seenFile, seen));
     // The keyboard game's score, per instance like the rest of this folder.
     const keyboardFile = join(opts.root, ".keyboard.json");
     let keyboard = readJson<KeyStats>(keyboardFile, emptyStats());
@@ -297,12 +301,12 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const setRhythm = (next: Rhythm) => {
         if (next === rhythm) return;
         rhythm = next;
-        writeFileSync(rhythmFile, JSON.stringify(rhythm));
+        writeJsonAtomic(rhythmFile, rhythm);
         broadcast();
     };
     const shelfFile = join(opts.root, ".shelf.json");
     let shelf = readJson<Shelf>(shelfFile, {});
-    const saveShelf = (next: Shelf) => ((shelf = next), writeFileSync(shelfFile, JSON.stringify(shelf)));
+    const saveShelf = (next: Shelf) => ((shelf = next), writeJsonAtomic(shelfFile, shelf));
     // One at a time: a title is one model call, and a backlog of them must not run at once.
     let titling = Promise.resolve();
     const titleShelved = (item: Shelved, project?: string) => {
@@ -423,7 +427,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const next = "offers" in read ? capture(headsUps, read.offers, projectOf) : headsUps;
         if (next === headsUps && now.problem === was.problem) return;
         headsUps = next;
-        writeFileSync(headsFile, JSON.stringify(headsUps));
+        writeJsonAtomic(headsFile, headsUps);
         broadcast();
     };
     const watchStore = (configDir: string) => {
@@ -522,7 +526,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 logEvent("roadmap", { epic: epic.id, by: "a merged PR", note: r.note });
                 if (epic.agent) {
                     reports = addReport(reports, epic.agent, `roadmap: "${name}" is done by itself, its PR merged`, Date.now());
-                    writeFileSync(reportsFile, JSON.stringify(reports));
+                    writeJsonAtomic(reportsFile, reports);
                 }
                 broadcast();
             }
@@ -539,7 +543,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             const found = await (opts.fetchDone ?? fetchDone)(ask);
             if (!found.length) return;
             donePrs = { ...donePrs, ...Object.fromEntries(found.map((d) => [d.url, d])) };
-            writeFileSync(doneFile, JSON.stringify(donePrs));
+            writeJsonAtomic(doneFile, donePrs);
             closeMergedSteps();
             broadcast();
         } finally {
@@ -707,7 +711,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const b = (await body(req)) as { kind?: unknown; key?: unknown };
                 if ((b?.kind !== "key" && b?.kind !== "click") || typeof b.key !== "string" || !b.key || b.key.length > 24) return send(res, 400, "need kind key|click and the key");
                 keyboard = (b.kind === "key" ? recordKey : recordClick)(keyboard, b.key, Date.now());
-                writeFileSync(keyboardFile, JSON.stringify(keyboard));
+                writeJsonAtomic(keyboardFile, keyboard);
                 broadcast();
                 return send(res, 200, "");
             }
@@ -721,7 +725,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 // All of today's focus ticked: the keyboard game's day-done bonus (once a day).
                 if (/\[[xX]\]/.test(text) && !/^\s*[-*] \[[ ~]\]/m.test(text)) {
                     keyboard = recordDayDone(keyboard, Date.now());
-                    writeFileSync(keyboardFile, JSON.stringify(keyboard));
+                    writeJsonAtomic(keyboardFile, keyboard);
                 }
                 broadcast();
                 return send(res, 200, "");
@@ -824,7 +828,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!e || !before) return send(res, 404, "no such epic");
                 if (e.agent && before.title !== e.title) {
                     reports = addReport(reports, e.agent, `the developer renamed the epic from "${before.title}" to "${e.title}"`, Date.now());
-                    writeFileSync(reportsFile, JSON.stringify(reports));
+                    writeJsonAtomic(reportsFile, reports);
                 }
                 broadcast();
                 return send(res, 200, "");
@@ -853,7 +857,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (r.note) logEvent("roadmap", { epic: epic.id, by: "developer", note: r.note });
                 if (r.note && epic.agent) {
                     reports = addReport(reports, epic.agent, `roadmap edited by the developer on the epic page: ${r.note}`, Date.now());
-                    writeFileSync(reportsFile, JSON.stringify(reports));
+                    writeJsonAtomic(reportsFile, reports);
                 }
                 broadcast();
                 return send(res, 200, "");
@@ -880,7 +884,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (typeof b?.n !== "number" || !(b.n >= 0)) return send(res, 400, "need n, how many were typed in");
                 reports = reportsDelivered(reports, decodeURIComponent(reportsDone[1]), b.n);
                 logEvent("reports-delivered", { agent: decodeURIComponent(reportsDone[1]), n: b.n });
-                writeFileSync(reportsFile, JSON.stringify(reports));
+                writeJsonAtomic(reportsFile, reports);
                 broadcast();
                 return send(res, 200, "");
             }
@@ -915,7 +919,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 else return send(res, 400, "need until (a time, or null to wake) and movedAt");
                 const now = Date.now();
                 snoozes = Object.fromEntries(Object.entries(snoozes).filter(([, s]) => s.until > now));
-                writeFileSync(snoozeFile, JSON.stringify(snoozes));
+                writeJsonAtomic(snoozeFile, snoozes);
                 broadcast();
                 return send(res, 200, "");
             }
@@ -963,7 +967,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const next = dismiss(headsUps, decodeURIComponent(closeHeadsUp[1]));
                 if (next === headsUps) return send(res, 404, "no such heads-up");
                 headsUps = next;
-                writeFileSync(headsFile, JSON.stringify(headsUps));
+                writeJsonAtomic(headsFile, headsUps);
                 broadcast();
                 return send(res, 200, "");
             }
@@ -1011,7 +1015,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const ok = b?.log && typeof b.log === "object" && Object.entries(b.log as object).every(([day, ss]) => /^\d{4}-\d{2}-\d{2}$/.test(day) && ss && typeof ss === "object" && Object.values(ss as object).every((e) => typeof e?.ms === "number" && (e.epic === undefined || isSafe(e.epic))));
                 if (!ok) return send(res, 400, "need log: { YYYY-MM-DD: { sessionId: { epic?, ms } } }");
                 timeLog = mergeBackfill(timeLog, b.log as TimeLog);
-                writeFileSync(timeFile, JSON.stringify(timeLog));
+                writeJsonAtomic(timeFile, timeLog);
                 return send(res, 200, "");
             }
             // Your own correction of one epic's time in a month (the report's ⏎), never the log itself.
@@ -1020,7 +1024,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (typeof b?.month !== "string" || !/^\d{4}-\d{2}$/.test(b.month) || typeof b.ms !== "number" || !Number.isFinite(b.ms) || (b.epic !== null && !isSafe(b.epic)))
                     return send(res, 400, "need month YYYY-MM, epic (or null) and ms");
                 timeLog = adjustMonth(timeLog, b.month, typeof b.epic === "string" ? b.epic : undefined, Math.round(b.ms));
-                writeFileSync(timeFile, JSON.stringify(timeLog));
+                writeJsonAtomic(timeFile, timeLog);
                 return send(res, 200, "");
             }
             // An epic's page: its time over the last eight workdays, and every session that worked in
@@ -1086,9 +1090,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     saveSessions();
                     // Its first report says what changed; the generic news for old agents would mislead it.
                     agentNews = { ...agentNews, [agent.id]: AGENT_NEWS };
-                    writeFileSync(agentNewsFile, JSON.stringify(agentNews));
+                    writeJsonAtomic(agentNewsFile, agentNews);
                     reports = addReport(reports, agent.id, promotedNote(e.title), Date.now());
-                    writeFileSync(reportsFile, JSON.stringify(reports));
+                    writeJsonAtomic(reportsFile, reports);
                     logEvent("promote", { agent: agent.id, epic: e.id });
                 }
                 broadcast();
@@ -1449,7 +1453,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (b.check === true) return send(res, 200, name);
                 if (typeof b.bgId !== "string" || !BG_ID.test(b.bgId)) return send(res, 400, "need bgId, the short id claude --bg printed");
                 bgStarts = { ...bgStarts, [b.bgId]: { epic: epic.id, step: step.name, name, agent: live.id, tabId: live.tabId, at: Date.now() } };
-                writeFileSync(bgFile, JSON.stringify(bgStarts));
+                writeJsonAtomic(bgFile, bgStarts);
                 logEvent("bg-start", { agent: live.id, epic: epic.id, step: step.name, bgId: b.bgId });
                 setTimeout(() => void pollBg(), 3_000);
                 return send(res, 200, name);
@@ -1572,13 +1576,6 @@ const json = (res: http.ServerResponse, v: unknown) => (res.writeHead(200, { "Co
 
 const PR_URL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/;
 
-function readJson<T>(file: string, fallback: T): T {
-    try {
-        return JSON.parse(readFileSync(file, "utf8"));
-    } catch {
-        return fallback;
-    }
-}
 
 // A PR as the session names it: its link, or owner/repo#number.
 function prLink(ref: string): string | undefined {

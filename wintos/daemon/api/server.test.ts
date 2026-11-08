@@ -126,6 +126,17 @@ describe("wintosd API", () => {
         expect((await post("/blocks/blk-a/epic", { epic: null })).status).toBe(409);
     });
 
+    test("moved out of an epic, a session is no longer its agent nor linked to its steps; an agent is one epic's", async () => {
+        const a = await (await post("/epics", { title: "Route" })).text();
+        const b = await (await post("/epics", { title: "Backfill" })).text();
+        await event(prompt);
+        await post(`/epics/${a}/agent`, { sessionId: prompt.session_id });
+        expect((await post(`/epics/${b}/agent`, { sessionId: prompt.session_id })).status).toBe(409);
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: b });
+        const ea = (await (await fetch(base + "/state")).json()).epics.find((e: { id: string }) => e.id === a);
+        expect(ea.agent).toBeUndefined();
+    });
+
     test("the epic agent passes on only your words, to its own sessions; and suggests on a session's open question", async () => {
         const id = await (await post("/epics", { title: "Route" })).text();
         const at = (blockId: string, payload: object) => post("/events", { tabId: "tab-1", blockId, payload });

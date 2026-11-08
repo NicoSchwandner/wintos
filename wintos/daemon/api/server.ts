@@ -692,7 +692,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 // Shelved before the reduce drops them, while their status and PRs are still on hand.
                 for (const l of left) shelveLive(l);
                 sessions = reduceSession(sessions, ev, Date.now());
-                placeInEpic(p.session_id);
                 const typed = typeof p.prompt === "string" ? ` (you sent ${p.prompt.length} characters)` : "";
                 const hook = `hook ${p.hook_event_name}${p.tool_name ? ` ${p.tool_name}` : ""}${p.kind === "bg" ? " from the background service" : ""}${typed}`;
                 // Running again: started or prompted. Closing its pane ends it (SessionEnd) on the way onto the shelf.
@@ -710,6 +709,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     const union = (a: string[] = [], b: string[] = []) => [...new Set([...a, ...b])];
                     if (again) sessions = new Map(sessions).set(again.id, { ...again, prs: union(again.prs, shelved.prs), touched: union(again.touched, shelved.touched) });
                 }
+                // After the shelf gave back its epic: the epic beside it only places one that has none.
+                placeInEpic(p.session_id);
                 // A gh pr command that acts on a PR touches it; reading one (gh pr view) does not.
                 if (p.hook_event_name === "PostToolUse" && p.pr_verb !== "view") applyTouch(touchPrs(sessions, shelf, p.session_id, prLinks(p.prs)));
                 saveSessions(hook, p.hook_event_name === "UserPromptSubmit" ? p.session_id : undefined);
@@ -956,6 +957,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const b = (await body(req)) as { sessionId?: unknown };
                 if (b?.sessionId !== null && !isSafe(b?.sessionId)) return send(res, 400, "need sessionId, a session's id or null");
                 const id = decodeURIComponent(epicAgent[1]);
+                if (typeof b.sessionId === "string" && epics.list().some((x) => !x.done && x.id !== id && x.agent === b.sessionId)) return send(res, 409, "that session is already another epic's agent");
                 const e = epics.update(id, ({ agent: _, ...rest }) => (typeof b.sessionId === "string" ? { ...rest, agent: b.sessionId } : rest));
                 if (!e) return send(res, 404, "no such epic");
                 if (typeof b.sessionId === "string") sessions = setEpic(sessions, b.sessionId, id);
@@ -1171,6 +1173,12 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const epic = b.epic === null ? undefined : epicOfBlock ? findEpic(open, b.epic as string) : open.find((e) => e.id === b.epic);
                 if (b.epic !== null && !epic)
                     return send(res, 404, `no epic matches ${b.epic}; ${open.length ? `open epics: ${open.map((e) => `${e.title} (${e.id})`).join(", ")}` : "there are no epics yet"}`);
+                // Out of an epic, it is no longer its agent nor linked to its steps (STATE-7).
+                for (const old of open.filter((e) => e.id !== epic?.id && (e.agent === s.id || Object.values(e.links ?? {}).some((ids) => ids.includes(s.id)))))
+                    epics.update(old.id, ({ agent, links, ...rest }) => {
+                        const kept = Object.fromEntries(Object.entries(links ?? {}).map(([k, ids]) => [k, ids.filter((x) => x !== s.id)]).filter(([, ids]) => ids.length));
+                        return { ...rest, ...(agent && agent !== s.id ? { agent } : {}), ...(Object.keys(kept).length ? { links: kept } : {}) };
+                    });
                 sessions = setEpic(sessions, s.id, epic?.id);
                 saveSessions();
                 writeWorked();

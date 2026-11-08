@@ -8,13 +8,12 @@ import { T } from "./tokens";
 import { daemonFetch } from "./useWintos";
 
 export const AWAY_FROM_SESSION_MS = 15 * 60_000;
-const SHOWN_MS = 30_000;
 
 // Whether looking at a pane again is a return: you last looked at it this long ago.
 export const isReturn = (lastLook: number | undefined, now: number) => lastLook !== undefined && now - lastLook >= AWAY_FROM_SESSION_MS;
 
 // Back in a session you left a while ago: three lines under its header, so you pick up the
-// thread before reading the scrollback. Once per return; any key or 30 seconds closes it.
+// thread before reading the scrollback. Once per return; any key closes it.
 export const WhereWasI = memo(({ sessionId, focused }: { sessionId: string; focused: boolean }) => {
     const view = useAtomValue(mainViewAtom);
     const active = useAtomValue(atoms.workspace)?.activetabid === globalStore.get(atoms.staticTabId);
@@ -35,9 +34,8 @@ export const WhereWasI = memo(({ sessionId, focused }: { sessionId: string; focu
     useEffect(() => {
         if (!card) return;
         const close = () => setCard(null);
-        const timer = setTimeout(close, SHOWN_MS);
         window.addEventListener("keydown", close, true);
-        return () => (clearTimeout(timer), window.removeEventListener("keydown", close, true));
+        return () => window.removeEventListener("keydown", close, true);
     }, [card]);
     if (!card) return null;
     const line = (label: string, text: string | undefined, tone?: string) =>

@@ -204,10 +204,10 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     };
 
     const bgCard = (s: Session) => (
-        <CardRow key={`bg:${s.id}`} rowKey={`bg:${s.id}`} tabId={`bg:${s.id}`} v={{ title: sessionName(s), next: s.ask?.text ?? "it waits for you", tone: "apricot", age: relTime(Date.now() - s.since), meta: "background · ⏎ or a click opens it in a pane" }} active={false} cursor={switchTarget === `bg:${s.id}`} renaming={false} onOpen={() => openBackground(s.bgId!)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
+        <CardRow key={`bg:${s.id}`} rowKey={`bg:${s.id}`} tabId={`bg:${s.id}`} v={{ title: sessionName(s), next: s.ask?.text ?? "it waits for you", tone: "apricot", age: relTime(Date.now() - s.since), meta: "background session · a click opens it in a pane" }} active={false} cursor={switchTarget === `bg:${s.id}`} renaming={false} onOpen={() => openBackground(s.bgId!)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
     );
     const wakeCard = (w: ClosedWake) => (
-        <CardRow key={`wake:${w.sessionId}`} rowKey={`wake:${w.projectId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: w.news ? "blue" : "apricot", age: relTime(Date.now() - w.due), meta: "closed · ⌃⇥ or ⌘J/⌘K opens it" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
+        <CardRow key={`wake:${w.sessionId}`} rowKey={`wake:${w.projectId}`} tabId={`wake:${w.projectId}`} v={{ title: w.title, next: w.line, tone: w.news ? "blue" : "apricot", age: relTime(Date.now() - w.due), meta: "closed view · opening it resumes the session" }} active={false} cursor={switchTarget === `wake:${w.projectId}`} renaming={false} onOpen={() => reopenWoke(w)} onMenu={(e) => e.preventDefault()} onRename={() => {}} />
     );
 
     return (

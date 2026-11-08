@@ -162,7 +162,6 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                 </div>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11, color: result && !result.ok ? T.brick : T.faint }}>
                     <span style={{ color: fixer?.conflicts ? T.moss : T.faint }}>{fixer?.conflicts ? "conflicts fix themselves" : "conflicts wait for you"}</span>
-                    <Key k="a" label="" />
                     <span style={{ width: 8 }} />
                     {refreshing ? "refreshing…" : result ? (result.ok ? `GitHub · ${relTime(now - result.at)} ago` : `GitHub failed ${relTime(now - result.at)} ago: ${result.error}`) : "fetching from GitHub…"}
                     <Key k="r" label="" />

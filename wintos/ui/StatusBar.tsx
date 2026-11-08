@@ -45,7 +45,8 @@ export const StatusBar = memo(({ inbox }: { inbox?: boolean }) => {
                     <Key k={k} label={label} always />
                 </button>
             ))}
-            <span data-wintos="key-tip" style={{ fontSize: 11.5, color: T.faint }}>hold ⌘ for every shortcut</span>
+            {/* Pages show their keys; the tip is for the terminals, whose chrome hides them. */}
+            {view === "terminal" && <span data-wintos="key-tip" style={{ fontSize: 11.5, color: T.faint }}>hold ⌘ for every shortcut</span>}
             {onBreak && (
                 <span data-wintos="on-break" style={{ fontFamily: T.mono, fontSize: 11, color: T.moss }}>
                     on a break · {clock(now - onBreak)}

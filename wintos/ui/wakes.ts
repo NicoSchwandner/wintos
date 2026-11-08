@@ -42,8 +42,9 @@ export function useWakeDelivery(wakes: Wakes | undefined, sessions: Session[] | 
                 continue;
             }
             busy.add(d.sessionId);
-            void daemonFetch(`/wakes/${encodeURIComponent(d.id)}/delivered`, { method: "POST", body: {} })
-                .then((r) => (r.ok ? typeIntoPane(d.blockId, d.text) : undefined))
+            // Typed first, marked delivered after: a pane that can't take it keeps the wake.
+            void typeIntoPane(d.blockId, d.text)
+                .then(() => daemonFetch(`/wakes/${encodeURIComponent(d.id)}/delivered`, { method: "POST", body: {} }))
                 .catch(() => {})
                 .finally(() => busy.delete(d.sessionId));
         }

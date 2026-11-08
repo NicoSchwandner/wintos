@@ -11,7 +11,8 @@ export function deliverable(wakes: Wakes, sessions: Session[], shelf: Shelved[],
     return Object.values(wakes).flatMap((w): Delivery[] => {
         if (!w.due) return [];
         const s = sessions.find((x) => x.id === w.sessionId && x.state !== "ended");
-        if (s) return s.tabId === tabId && s.blockId && s.state !== "working" ? [{ kind: "type", id: wakeId(w), sessionId: s.id, blockId: s.blockId, text: wakePrompt(w) }] : [];
+        // A restored session's Claude starts only when its pane is opened: until then nothing can take it.
+        if (s) return s.tabId === tabId && s.blockId && s.state !== "working" && !s.restored ? [{ kind: "type", id: wakeId(w), sessionId: s.id, blockId: s.blockId, text: wakePrompt(w) }] : [];
         const shelved = shelf.find((x) => x.sessionId === w.sessionId);
         return shelved ? [{ kind: "resume", sessionId: w.sessionId, script: shelved.script }] : [];
     });

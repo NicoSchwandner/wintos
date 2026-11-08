@@ -1082,13 +1082,15 @@ await scenario("49 · the epic agent relays your words to a session: refused unl
     const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const st = async () => (await fetch("http://127.0.0.1:7731/state")).json();
     const id = await (await api("/epics", { title: "E2E relay" })).text();
+    // A real pane: one that can't take the text keeps it queued.
+    const pane = sql(`select json_extract(data, '$.blockids[0]') from db_tab where oid='${tabId}'`);
     await api("/events", { tabId: "e2e-elsewhere", blockId: "e2e-relay-ag", payload: { session_id: "e2e-relay-ag", hook_event_name: "SessionStart" } });
     await api(`/epics/${id}/agent`, { sessionId: "e2e-relay-ag" });
     await api("/sessions/e2e-relay-ag/epic", { epic: id });
-    await api("/events", { tabId, blockId: "e2e-relay-wk", payload: { session_id: "e2e-relay-wk", hook_event_name: "UserPromptSubmit", prompt: "e2e worker" } });
+    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-relay-wk", hook_event_name: "UserPromptSubmit", prompt: "e2e worker" } });
     await api("/sessions/e2e-relay-wk/epic", { epic: id });
     await api("/sessions/e2e-relay-wk/name", { text: "E2E cutover check" });
-    await api("/events", { tabId, blockId: "e2e-relay-wk", payload: { session_id: "e2e-relay-wk", hook_event_name: "Stop" } });
+    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-relay-wk", hook_event_name: "Stop" } });
     await api("/events", { tabId: "e2e-elsewhere", blockId: "e2e-relay-ag", payload: { session_id: "e2e-relay-ag", hook_event_name: "UserPromptSubmit", prompt: "Tell it: cut over group A first" } });
     const refused = await api("/blocks/e2e-relay-ag/relay", { to: "E2E cutover", text: "cut over everything" });
     if (refused.status !== 403) throw new Error(`words you never said went through: ${refused.status}`);

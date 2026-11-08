@@ -14,7 +14,7 @@ export type ReportDelivery = { agent: string; blockId: string; text: string; n: 
 export function reportDeliveries(reports: Reports, sessions: Session[], tabId: string, now: number, lookingAt?: string): ReportDelivery[] {
     return Object.entries(reports).flatMap(([agent, list]) => {
         const s = sessions.find((x) => x.id === agent && x.state !== "ended");
-        if (!s || s.tabId !== tabId || s.state === "working" || s.blockId === lookingAt || !list.length || now - list[0].at < GATHER_MS) return [];
+        if (!s || s.tabId !== tabId || s.state === "working" || s.restored || s.blockId === lookingAt || !list.length || now - list[0].at < GATHER_MS) return [];
         return [{ agent, blockId: s.blockId, n: list.length, text: `[WintOS report] ${list.map((r) => r.text).join(" · ")}` }];
     });
 }
@@ -25,7 +25,7 @@ export function relayDeliveries(relays: Relays, sessions: Session[], epics: { id
     return Object.entries(relays).flatMap(([to, list]) => {
         const s = sessions.find((x) => x.id === to && x.state !== "ended");
         // A background session (no pane) gets it from the daemon, through the background service.
-        if (!s || s.tabId !== tabId || s.state === "working" || s.blockId === lookingAt || !list.length || (s.bgId && !s.attachedTo)) return [];
+        if (!s || s.tabId !== tabId || s.state === "working" || s.restored || s.blockId === lookingAt || !list.length || (s.bgId && !s.attachedTo)) return [];
         const e = epics.find((x) => x.id === s.epic);
         return [{ agent: to, blockId: s.blockId, n: list.length, text: list.map((r) => relayPrompt(r, e ? (e.short ?? e.title) : "epic")).join("\n") }];
     });
@@ -40,16 +40,17 @@ export function useEpicReports(reports: Reports | undefined, sessions: Session[]
         for (const d of due) {
             if (busy.has(d.agent)) continue;
             busy.add(d.agent);
-            void daemonFetch(`/agents/${encodeURIComponent(d.agent)}/reports/delivered`, { method: "POST", body: { n: d.n } })
-                .then((r) => (r.ok ? typeIntoPane(d.blockId, d.text) : undefined))
+            // Typed first, marked delivered after: a pane that can't take it keeps the queue.
+            void typeIntoPane(d.blockId, d.text)
+                .then(() => daemonFetch(`/agents/${encodeURIComponent(d.agent)}/reports/delivered`, { method: "POST", body: { n: d.n } }))
                 .catch(() => {})
                 .finally(() => busy.delete(d.agent));
         }
         for (const d of relayed) {
             if (busy.has(`relay:${d.agent}`)) continue;
             busy.add(`relay:${d.agent}`);
-            void daemonFetch(`/sessions/${encodeURIComponent(d.agent)}/relays/delivered`, { method: "POST", body: { n: d.n } })
-                .then((r) => (r.ok ? typeIntoPane(d.blockId, d.text) : undefined))
+            void typeIntoPane(d.blockId, d.text)
+                .then(() => daemonFetch(`/sessions/${encodeURIComponent(d.agent)}/relays/delivered`, { method: "POST", body: { n: d.n } }))
                 .catch(() => {})
                 .finally(() => busy.delete(`relay:${d.agent}`));
         }

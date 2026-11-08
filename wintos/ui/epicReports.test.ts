@@ -14,6 +14,10 @@ describe("reportDeliveries", () => {
         expect(reportDeliveries(reports, [agent()], "t1", GATHER_MS, "b-ag")).toEqual([]);
         expect(reportDeliveries(reports, [agent()], "t2", GATHER_MS)).toEqual([]);
     });
+    test("a restored session, its Claude not started until you open it, keeps them too", () => {
+        expect(reportDeliveries(reports, [agent({ restored: true })], "t1", GATHER_MS)).toEqual([]);
+        expect(relayDeliveries({ ag: [{ text: "x", from: "a", at: 0 }] }, [agent({ restored: true })], [], "t1")).toEqual([]);
+    });
     test("an agent whose pane is gone keeps its reports", () => expect(reportDeliveries(reports, [agent({ state: "ended" })], "t1", GATHER_MS)).toEqual([]));
 });
 

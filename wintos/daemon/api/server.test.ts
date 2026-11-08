@@ -157,7 +157,7 @@ describe("wintosd API", () => {
         await event(prompt);
         const id = await (await post("/epics", { title: "Route" })).text();
         await post("/blocks/blk-1/epic", { epic: id });
-        await post("/blocks/blk-1/units", { items: ["Cutover", "Backfill", "Flag off"] });
+        for (const add of ["Cutover", "Backfill", "Flag off"]) await post(`/epics/${id}/roadmap`, { add });
         await post("/blocks/blk-1/units", { start: "Cutover" });
         expect(await (await post("/blocks/blk-1/units", { rename: { from: "cut", to: "Cutover per group" } })).text()).toBe("[>] Cutover per group | [ ] Backfill | [ ] Flag off");
         expect(await (await post("/blocks/blk-1/units", { move: { name: "Flag", by: -1 } })).text()).toBe("[>] Cutover per group | [ ] Flag off | [ ] Backfill");
@@ -481,11 +481,14 @@ describe("wintosd API", () => {
         }
     });
 
-    test("`wintos unit` in a session of an epic moves the epic's roadmap, which the project keeps out of", async () => {
+    test("`wintos unit` in an epic moves its roadmap, which the project keeps out of; only the agent sets the whole list", async () => {
         const id = await (await post("/epics", { title: "Route" })).text();
         await event(prompt);
         await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
-        const set = await post("/blocks/blk-1/units", { items: ["ABC-41 fields check", "ABC-42 phase 1"] });
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        expect((await post("/blocks/blk-1/units", { items: ["Mine only"] })).status).toBe(403);
+        const set = await post("/blocks/blk-a/units", { items: ["ABC-41 fields check", "ABC-42 phase 1"] });
         expect(await set.text()).toBe("[ ] ABC-41 fields check | [ ] ABC-42 phase 1");
         await post("/blocks/blk-1/units", { done: "ABC-41" });
         await post("/blocks/blk-1/units", { start: "ABC-42" });

@@ -183,6 +183,9 @@ unit)
         verb="$1"
         shift
         body=$(jq -n --arg v "$verb" --arg u "$*" '{($v): $u}')
+    elif [ "$1" = rename ] || [ "$1" = move ] || [ "$1" = remove ] || [ "$1" = start ] || [ "$1" = done ]; then
+        # A verb with the wrong arguments must never fall through to setting the whole list.
+        die "usage: wintos unit rename \"<step>\" \"<new name>\" | move \"<step>\" up|down | remove \"<step>\" | start <step> | done <step> (quote names with spaces)"
     else
         body=$(jq -n '{items: $ARGS.positional}' --args "$@")
     fi
@@ -283,6 +286,7 @@ todo)
     shift
     [ $# -gt 0 ] || die "usage: wintos todo <to-do>… | wintos todo done <to-do>"
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    [ "$1" = done ] && [ $# -eq 1 ] && die "usage: wintos todo done <to-do>"
     if [ "$1" = done ] && [ $# -gt 1 ]; then
         shift
         jq -n --arg d "$*" '{done: $d}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/todo$SESSION_Q" >/dev/null ||

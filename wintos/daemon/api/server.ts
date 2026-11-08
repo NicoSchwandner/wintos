@@ -1312,8 +1312,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const live = liveIn(sessions, blockId, sid);
                 if (!live) return send(res, 409, "no session in this pane");
                 const change = (was: Unit[]) => (okItems ? setUnits(was, (items as string[]).map((s) => s.trim())) : okName(b.start) ? startUnit(was, b.start) : doneUnit(was, b.done as string));
-                // A session in an epic moves the epic's roadmap, which every session in it shares.
+                // A session in an epic moves the epic's roadmap, which every session in it shares. Setting
+                // the whole list is the agent's: from a step's session it would drop the other steps' links.
                 const epic = live.epic ? epics.byId(live.epic) : undefined;
+                if (epic && okItems && epic.agent !== live.id) return send(res, 403, "the epic's agent keeps the roadmap; a session starts and finishes its step: wintos unit start|done <step>");
                 if (epic) {
                     // The epic's agent moves the roadmap; it is no step's session, so it is never linked.
                     const linked = okName(b.start) && !okItems && live.id !== epic.agent ? linkStep({ steps: epic.steps, links: epic.links ?? {} }, b.start, live.id) : undefined;

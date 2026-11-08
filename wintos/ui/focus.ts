@@ -165,10 +165,12 @@ export function takeHandoff(): void {
 
 export function focusedSession(): Session | undefined {
     const lm = getLayoutModelForStaticTab();
-    const blockId = lm && globalStore.get(lm.focusedNode)?.data?.blockId;
-    const sessions = latestSessions();
-    return sessions.find((s) => s.blockId === blockId) ?? sessions.find((s) => s.tabId === globalStore.get(atoms.staticTabId));
+    return sessionInPane(latestSessions(), lm && globalStore.get(lm.focusedNode)?.data?.blockId);
 }
+
+// The focused pane's own session, or none: a key that acts on "this session" (⌘R, ⌥⌘E, ⌥⌘P,
+// ⌥⌘M) must never reach another session in the same view because the focused pane has none.
+export const sessionInPane = (sessions: Session[], blockId: string | undefined) => (blockId ? sessions.find((s) => s.blockId === blockId) : undefined);
 
 // ⌘H ⌘L in a project: the focused terminal, the notes rail. The sidebar never takes focus (⌘J/⌘K switch).
 export function focusArea(area: "terminal" | "notes"): void {

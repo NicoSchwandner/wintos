@@ -130,7 +130,7 @@ body {
    and holding ⌘ badges each button with its key (KeyBadges.tsx) without moving anything. A key
    with no button of its own (.w-hold) shows inline while ⌘ is held. Pages, footers and the nudge
    keep their caps: there a key is the instruction. */
-:is([data-wintos="sidebar"], [data-wintos="pane-strip"], [data-wintos="session-header"], [data-wintos="notes-rail"], [data-wintos="notes-drawer"], [data-wintos="epic-column"]) .w-keycap:not(.w-always):not(.w-hold),
+:is([data-wintos="sidebar"], [data-wintos="pane-strip"], [data-wintos="session-header"], [data-wintos="notes-rail"], [data-wintos="notes-drawer"], [data-wintos="epic-column"], [data-wintos="epic-strip"]) .w-keycap:not(.w-always):not(.w-hold),
 body:not(.w-show-keys) .w-hold {
     display: none !important;
 }

@@ -130,6 +130,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
         j: () => step(1),
         k: () => step(-1),
         // Some layouts type / with shift (Swedish ⇧7), which Wave's matcher tells apart.
+        s: () => void openFilter(),
         "/": () => void openFilter(),
         "Shift:/": () => void openFilter(),
         f: (e) => void (e.repeat || doNext()),
@@ -231,7 +232,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
                     <Key k="f" label={next ? (next === "merge" && mergeArmed === r?.pr.url ? `again: merge #${r.pr.number}` : next === "review" && r?.pr.pendingComments ? `review with your ${r.pr.pendingComments} comments` : NEXT_LABEL[next]) : "next step"} off={!next} />
                 </span>
                 <Key k="c" label="fix red CI" off={!canFixCi} />
-                <Key k="/" label="filter" />
+                <Key k="s" label="filter" />
                 <Key k="a" label={fixer?.conflicts ? "conflicts: stop fixing them" : "conflicts: fix them"} />
                 {pageOpen && <KeyOr keys={["esc", "⌘L"]} label="to the page" />}
             </div>

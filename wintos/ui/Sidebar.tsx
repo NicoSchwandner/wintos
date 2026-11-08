@@ -4,12 +4,13 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { getWaveObjectAtom, makeORef, reloadWaveObject } from "@/app/store/wos";
 import type { Session } from "../daemon/sessions/reduce";
-import { atoms, getApi } from "@/store/global";
+import { atoms } from "@/store/global";
 import { fireAndForget } from "@/util/util";
 import { atom, useAtom, useAtomValue } from "jotai";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import type { Row } from "../daemon/ranking/rank";
 import { Key } from "./Key";
+import { setLatestStreak } from "./keyGame";
 import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
 import { closedWakes, useWakeDelivery, type ClosedWake } from "./wakes";
@@ -25,11 +26,11 @@ import { isPage, mainViewAtom, newStepEpicAtom, renamingAtom, yourMoveAtom } fro
 import { inFlight, liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
 import { attention, plain } from "./attention";
-import { ghPrs, inboxKind, isInboxTab, type InboxList, prRef, projectTabIds, relTime, RowView, sessionName, type WintosState } from "./view";
+import { ghPrs, inboxKind, type InboxList, prRef, projectTabIds, relTime, RowView, sessionName, type WintosState } from "./view";
 import { queueModel } from "./prs";
 import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
-import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
+import { cardValue, loadingPanels, pluginPanels } from "./panels";
 import { EpicAvatar } from "./EpicAvatar";
 import { EpicGroups, groupByEpic } from "./EpicGroups";
 import { useEpicReports } from "./epicReports";
@@ -115,6 +116,8 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const tabOfRow = Object.fromEntries(listed.map((r) => [r.key, r.tabId]));
 
     useEffect(registerWintosMenu, []);
+    // A click on a button that has a key costs the streak, and the slip notice says so (keyGame.ts).
+    useEffect(() => void setLatestStreak(raw?.keyboard?.streak ?? 0), [raw?.keyboard?.streak]);
 
     // By epic, an agent's row is its epic's header: ⌃⇥ stops there when the agent needs you.
     const asStop = Object.fromEntries(groups.flatMap((g) => (g.agent && g.epic ? [[g.agent.key, `epic:${g.epic.id}`]] : [])));
@@ -496,37 +499,6 @@ function Drumming() {
                 <span key={i} style={{ width: 3, height: 3, borderRadius: "50%", background: T.muted, animation: `wintos-drum 1.2s ${i * 0.15}s infinite ease-in-out` }} />
             ))}
         </span>
-    );
-}
-
-// A title over its numbers, each number stacked on its own label; the note is only for what
-// the numbers can't say (late, updating, loading).
-function SummaryCard({ label, keys, stats, note, noteColor, busy, active, cursor, onClick }: { label: string; keys: string; stats: CardStat[]; note?: string; noteColor: string; busy?: boolean; active?: boolean; cursor?: boolean; onClick: () => void }) {
-    return (
-        <div data-key={active ? "" : keys} onClick={onClick} style={{ flexGrow: 1, flexBasis: 0, padding: "11px 13px", background: T.card, border: `1px solid ${cursor ? T.apricot : active ? T.borderActive : T.border}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", ...(active ? ACTIVE : {}) }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, fontWeight: 600, color: T.secondary }}>
-                {label}
-                {busy && <Drumming />}
-                <span style={{ marginLeft: "auto" }}>
-                    <Key k={keys} label="" />
-                </span>
-            </span>
-            <span style={{ display: "flex", gap: 18 }}>
-                {stats.map((s) => (
-                    <span key={s.label} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                        <span style={{ fontFamily: T.display, fontSize: 24, lineHeight: 1, color: T.text }}>{s.value}</span>
-                        <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted }}>{s.label}</span>
-                    </span>
-                ))}
-            </span>
-            {note && <span style={{ fontFamily: T.mono, fontSize: 10.5, color: noteColor }}>{note}</span>}
-            {/* In PRs or On call no project row is open: the walk keys sit on this card instead. */}
-            {active && (
-                <span style={{ alignSelf: "flex-start" }}>
-                    <WalkKeys />
-                </span>
-            )}
-        </div>
     );
 }
 

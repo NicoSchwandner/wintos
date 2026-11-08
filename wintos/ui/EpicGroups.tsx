@@ -100,7 +100,7 @@ export function EpicGroups({ groups, renderRow, isHere = () => false, cursor, ne
 // The + at the end of an epic's heading: ⌘N's sheet on that epic.
 function NewSession({ epic, newStep }: { epic: string; newStep: (epic: string) => void }) {
     return (
-        <button type="button" data-wintos="epic-new-step" title="New session in this epic (⌘N)" aria-label="New session in this epic" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => newStep(epic)} style={{ flexShrink: 0, padding: "2px 8px", background: "transparent", border: "none", borderRadius: 5, cursor: "pointer", fontFamily: T.ui, fontSize: 14, lineHeight: 1, color: T.faint }}>
+        <button type="button" data-wintos="epic-new-step" data-key="⌘N" title="New session in this epic (⌘N)" aria-label="New session in this epic" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => newStep(epic)} style={{ flexShrink: 0, padding: "2px 8px", background: "transparent", border: "none", borderRadius: 5, cursor: "pointer", fontFamily: T.ui, fontSize: 14, lineHeight: 1, color: T.faint }}>
             +
         </button>
     );

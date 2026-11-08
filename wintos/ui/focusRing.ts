@@ -27,7 +27,6 @@ export function inputAfter(e: InputEvent): "mouse" | "keyboard" | undefined {
     if (["Meta", "Alt", "Control", "Shift"].includes(e.key)) return undefined;
     return e.mods || !e.typing ? "keyboard" : undefined;
 }
-export const usingMouse = () => document.documentElement.dataset.wintosInput === "mouse";
 
 export function installFocusRing(): void {
     const style = document.createElement("style");

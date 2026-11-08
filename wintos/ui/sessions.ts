@@ -16,7 +16,7 @@ export function liveSessions(sessions: Session[], blocksByTab: Record<string, st
 // ⇧⌘W asks first only when closing would stop Claude sessions; closing a tab kills its panes.
 export function closeWarning(sessions: Session[], tabId: string): string | null {
     const n = sessions.filter((s) => s.tabId === tabId && s.state !== "ended").length;
-    return n ? `${n} Claude session${n === 1 ? "" : "s"} will stop` : null;
+    return n ? `${n} Claude session${n === 1 ? "" : "s"} will stop and go to the shelf (⇧⌘P resumes)` : null;
 }
 
 // Closing a pane ends its Claude session; while one is working, the first ⌘W only warns.

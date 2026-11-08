@@ -48,7 +48,7 @@ export function startCursor(root: HTMLElement, match: (el: HTMLElement) => boole
 }
 
 // The item under the cursor, if it is of this kind; its clickable part is itself or the first
-// [data-act] inside it (a task's box, a row's carry button).
+// [data-act] inside it (a task's box).
 function act(root: HTMLElement, kind: string): boolean {
     const at = marked.get(root);
     const el = at === undefined ? undefined : items(root)[at];
@@ -71,7 +71,6 @@ export const cursorKeys = (root: () => HTMLElement | null): KeyTable => {
         j: on((r) => move(r, 1)),
         k: on((r) => move(r, -1)),
         x: on((r) => act(r, "check") || act(r, "headsup")),
-        c: on((r) => act(r, "carry")),
         Enter: on((r) => act(r, "link")),
         // m unfolds every folded list in view (yesterday's items, the daily), or folds
         // them all back when none is folded.

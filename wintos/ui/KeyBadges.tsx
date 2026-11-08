@@ -2,7 +2,7 @@ import { memo, useEffect, useState } from "react";
 import { capStyle } from "./Key";
 
 // The chrome whose buttons are badged: the surfaces that hide their inline caps (theme.css).
-const SURFACES = ["sidebar", "pane-strip", "session-header", "notes-rail", "notes-drawer", "epic-column"].map((s) => `[data-wintos="${s}"]`).join(",");
+const SURFACES = ["sidebar", "pane-strip", "session-header", "notes-rail", "notes-drawer", "epic-column", "epic-strip"].map((s) => `[data-wintos="${s}"]`).join(",");
 const TARGETS = `:is(${SURFACES}) [data-key]:not([data-key=""]):not([data-nobadge]), [data-wintos="notes-drawer"][data-key]`;
 
 type Badge = { k: string; x: number; y: number };

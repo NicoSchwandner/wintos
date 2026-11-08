@@ -101,8 +101,10 @@ function commit(why = `${hold === "Meta" ? "⌘" : "⌃"} released`): void {
     const target = globalStore.get(switchTargetAtom);
     const from = here();
     end(why);
+    // Esc takes back a ⌘J/⌘K walk. After ⌃⇥ it stays the terminal's: you land on what needs you,
+    // and Esc there interrupts Claude or closes its prompt.
     try {
-        if (target && target !== from) localStorage.setItem(UNDO, JSON.stringify({ from, at: Date.now() }));
+        if (target && target !== from && hold === "Meta") localStorage.setItem(UNDO, JSON.stringify({ from, at: Date.now() }));
     } catch {} // no storage, no undo; the walk itself goes on
     go(target);
 }
@@ -137,10 +139,12 @@ export const walking = () => globalStore.get(switchTargetAtom) != null;
 // chooses a project, so any other key with it held (⌘H/⌘L moving focus in the project you are
 // leaving) is swallowed. A key without it means its release never reached us: the walk
 // switches, and the key goes on.
-export function walkKey(e: { cmd?: boolean; control?: boolean; key: string }): boolean {
+export function walkKey(e: { cmd?: boolean; control?: boolean; shift?: boolean; key: string }): boolean {
     if (!walking()) return false;
     if (e.key === "Escape") return end("esc"), true;
     if (!(hold === "Meta" ? e.cmd : e.control)) return commit(`${hold === "Meta" ? "⌘" : "⌃"} was already up`), false;
+    // ⇧ pressed by accident during a ⌘J/⌘K walk would make it ⇧⌘J (join a meeting) or ⇧⌘K: swallowed.
+    if (hold === "Meta" && e.shift) return true;
     return !(hold === "Meta" ? ["j", "k"] : ["tab"]).includes(e.key.toLowerCase());
 }
 

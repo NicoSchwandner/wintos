@@ -72,7 +72,7 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                 {s.name?.suggested && <NameButton label={`it suggests “${s.name.suggested}”`} />}
                 {more > 0 && (
                     <button type="button" data-wintos="walk-next" data-key="⌃⇥" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => switchProject(1, false, "top")} style={{ flexShrink: 0, marginLeft: "auto", order: 9, padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>
-                        <Key k="⌃⇥" label={`next that needs you · ${more} more`} always />
+                        <Key k="⌃⇥" label={`next that needs you · ${more} more`} />
                     </button>
                 )}
                 {h.task && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.title }}>{h.task}</span>}

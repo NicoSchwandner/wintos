@@ -4,7 +4,7 @@ import type { EpicTime } from "../daemon/epics/time";
 import { EpicAvatar } from "./EpicAvatar";
 import { agentWorking, lookOf, shortName } from "./epicLook";
 import { globalStore } from "@/app/store/jotaiStore";
-import { editMine, focusSession, openBackground } from "./focus";
+import { focusSession, openBackground } from "./focus";
 import { runAction, runKey } from "./menu";
 import { offerStep } from "./newproject";
 import { capStyle, Key } from "./Key";
@@ -146,7 +146,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
     // Enter and ⌫ reach this table from the page's own fields too; there they belong to the field.
     const cursor = cursorKeys(() => ref.current);
     const notInField = (run: KeyTable[string]): KeyTable[string] => (e) => (isTextField(document.activeElement) ? false : run(e));
-    useZoneKeys(ref, { ...cursor, Enter: notInField(cursor.Enter), "Cmd:e": () => editMine(true), x: () => (pressX(), true), p: () => (togglePin(), true), r: () => (setRetitling(true), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true),
+    useZoneKeys(ref, { ...cursor, Enter: notInField(cursor.Enter), x: () => (pressX(), true), p: () => (togglePin(), true), r: () => (setRetitling(true), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true),
         d: onStep((name) => edit({ done: name, on: epic?.steps.find((u) => u.name === name)?.state !== "done" })),
         // The cursor goes along with the step it moves.
         "Shift:j": (e) => onStep((name) => (edit({ move: { name, by: 1 } }), cursor.j(e)))(),
@@ -319,10 +319,11 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                 </Panel>
                 <Panel label="PRs" note={prs.length ? undefined : "none yet"}>
                     {prs.map((p) => (
-                        <a key={p.url} href={p.url} data-wintos="epic-pr" style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12.5, color: T.secondary, textDecoration: "none" }}>
+                        // In a WintOS pane like every other PR, in the header's colours (open aqua, merged purple).
+                        <button key={p.url} type="button" data-wintos="epic-pr" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runAction(`open-page:${p.url}`)} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: 0, fontSize: 12.5, color: T.secondary, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
                             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.ref}{p.title ? ` · ${p.title}` : ""}</span>
-                            <span style={{ fontFamily: T.mono, fontSize: 11, color: p.state === "merged" ? T.moss : p.state === "draft" ? T.faint : T.blue, flexShrink: 0 }}>{p.state}</span>
-                        </a>
+                            <span style={{ fontFamily: T.mono, fontSize: 11, color: p.state === "merged" ? T.purple : p.state === "open" ? T.aqua : T.faint, flexShrink: 0 }}>{p.state}</span>
+                        </button>
                     ))}
                 </Panel>
                 {!column && (

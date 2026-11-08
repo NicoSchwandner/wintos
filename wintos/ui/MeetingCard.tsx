@@ -1,5 +1,5 @@
 import { memo, useEffect } from "react";
-import { Key } from "./Key";
+import { runKey } from "./menu";
 import { clock, countdown, nextMeetings, setLatestMeetings, WARN_MS, type Meeting } from "./meetings";
 import { T } from "./tokens";
 import { useNow } from "./useNow";
@@ -46,7 +46,11 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
             {(then || joinable) && (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 11, color: T.faint }}>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{then ? `then ${clock(then.start)} ${then.title}` : ""}</span>
-                    {joinable && <Key k="⇧⌘J" label="join" />}
+                    {joinable && (
+                        <button type="button" data-key="⇧⌘J" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("join-meeting")} style={{ padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 11, color: T.secondary }}>
+                            join
+                        </button>
+                    )}
                 </div>
             )}
             {on && <div aria-hidden style={{ position: "absolute", left: 0, bottom: 0, height: 2, width: `${Math.min(100, ((now - shown.start) / (shown.end - shown.start)) * 100)}%`, background: T.emphasis, opacity: 0.5 }} />}

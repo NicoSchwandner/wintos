@@ -762,13 +762,9 @@ function registerGlobalKeys() {
         }
         return false;
     });
-    globalKeyMap.set("Cmd:Shift:a", () => {
-        const currentVisible = WorkspaceLayoutModel.getInstance().getAIPanelVisible();
-        WorkspaceLayoutModel.getInstance().setAIPanelVisible(!currentVisible);
-        return true;
-    });
+    // WintOS: ⇧⌘A no longer toggles Wave's AI panel, which WintOS doesn't show.
     // WintOS: the sidebar replaces the tab bar, so ⌘1–9 no longer mean "tab N" and ⌘[ ⌘] no
-    // longer walk tabs (a page goes back and forward with ⌘← ⌘→). Panes are ⌘H/⌘L and ⌥⌘J/K,
+    // longer walk tabs (a page goes back and forward with ⌘← ⌘→). Panes are ⌘H/⌘L,
     // so every ⌃⇧ key goes back to the terminal: ⌘ is WintOS's, the rest the terminal's.
     for (let idx = 1; idx <= 9; idx++) globalKeyMap.delete(`Cmd:${idx}`);
     for (const k of ["Cmd:[", "Cmd:]", "Shift:Cmd:[", "Shift:Cmd:]"]) globalKeyMap.delete(k);

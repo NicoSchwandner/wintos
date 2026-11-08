@@ -18,8 +18,8 @@ describe("liveSessions", () => {
 describe("closeWarning", () => {
     test("names the Claude sessions a close would stop", () => {
         const all = [s("a", "t1", "working"), s("b", "t1", "waiting"), s("c", "t2", "working"), s("d", "t1", "ended")];
-        expect(closeWarning(all, "t1")).toBe("2 Claude sessions will stop");
-        expect(closeWarning([s("a", "t1", "idle")], "t1")).toBe("1 Claude session will stop");
+        expect(closeWarning(all, "t1")).toBe("2 Claude sessions will stop and go to the shelf (⇧⌘P resumes)");
+        expect(closeWarning([s("a", "t1", "idle")], "t1")).toBe("1 Claude session will stop and go to the shelf (⇧⌘P resumes)");
     });
 
     test("nothing to lose means no question", () => {

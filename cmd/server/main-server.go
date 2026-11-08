@@ -38,6 +38,7 @@ import (
 	"github.com/wavetermdev/waveterm/pkg/wconfig"
 	"github.com/wavetermdev/waveterm/pkg/wcore"
 	"github.com/wavetermdev/waveterm/pkg/web"
+	"github.com/wavetermdev/waveterm/pkg/wintostmux"
 	"github.com/wavetermdev/waveterm/pkg/wps"
 	"github.com/wavetermdev/waveterm/pkg/wshrpc"
 	"github.com/wavetermdev/waveterm/pkg/wshrpc/wshclient"
@@ -535,6 +536,11 @@ func main() {
 			log.Printf("error initializing wsh and shell-integration files: %v\n", err)
 		}
 	}()
+	// WintOS: end the tmux sessions of panes closed while WintOS couldn't end them (pkg/wintostmux).
+	go wintostmux.Sweep(func(blockId string) bool {
+		block, err := wstore.DBGet[*waveobj.Block](context.Background(), blockId)
+		return err != nil || block != nil // unsure: keep it
+	})
 	firstLaunch, err := wcore.EnsureInitialData()
 	if err != nil {
 		log.Printf("error ensuring initial data: %v\n", err)

@@ -16,6 +16,7 @@ import (
 	"github.com/wavetermdev/waveterm/pkg/telemetry/telemetrydata"
 	"github.com/wavetermdev/waveterm/pkg/util/utilfn"
 	"github.com/wavetermdev/waveterm/pkg/waveobj"
+	"github.com/wavetermdev/waveterm/pkg/wintostmux"
 	"github.com/wavetermdev/waveterm/pkg/wps"
 	"github.com/wavetermdev/waveterm/pkg/wshrpc"
 	"github.com/wavetermdev/waveterm/pkg/wstore"
@@ -178,6 +179,8 @@ func DeleteBlock(ctx context.Context, blockId string, recursive bool) error {
 	// WintOS: a tab is a project and outlives its last pane (Wave deleted the empty tab here,
 	// and the window with the last one). Only closing the project removes it.
 	sendBlockCloseEvent(blockId)
+	// WintOS: a closed pane ends its shell's tmux session; quitting WintOS leaves it running.
+	go wintostmux.Kill(blockId)
 	return nil
 }
 

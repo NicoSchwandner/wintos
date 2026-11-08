@@ -7,6 +7,8 @@ cd "$(dirname "$0")/.."
 D="$HOME/.local/share/wintos-dev"
 pkill -f "remoteDebuggingPort 9224" || true
 pkill -f "remote-debugging-port=9224" || true
+# Its shells run in tmux sessions of their own (pkg/wintostmux): a clean slate ends them too.
+tmux -L wintos-dev kill-server 2>/dev/null || true
 for _ in $(seq 1 20); do pgrep -f "remote-debugging-port=9224" >/dev/null || break; sleep 0.5; done
 rm -rf "$D/data" "$D/projects" "$D/epics" "$D/journal" "$D/claude" "$D/bg-agents.json"
 mkdir -p "$D/journal/templates"

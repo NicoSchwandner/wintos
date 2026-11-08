@@ -1,4 +1,5 @@
 import { readJson, writeJsonAtomic } from "../persist";
+import { tmuxPanes } from "../sessions/tmux";
 import { execFile } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "fs";
 import { AsyncLocalStorage } from "async_hooks";
@@ -75,7 +76,7 @@ const isRoadmapOp = (o: unknown): o is RoadmapOp => {
 };
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined>; bgStop?: (bgId: string) => Promise<boolean> }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined>; bgStop?: (bgId: string) => Promise<boolean>; tmuxPanes?: () => Set<string> }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // Beside the projects in main.ts; a hidden folder in them by default, which the project store skips.
     const epics = new EpicStore(opts.epicsRoot ?? join(opts.root, ".epics"));
@@ -134,7 +135,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const uiOrigins = new Set(opts.uiOrigins ?? [...DEFAULT_UI_ORIGINS, ...(process.env.WINTOS_UI_ORIGINS?.split(",") ?? [])]);
     // Saved on every change and restored at start, so a restart doesn't forget who waits on you.
     const sessionFile = join(opts.root, ".sessions.json");
-    let sessions = restoreSessions(readJson<Session[]>(sessionFile, []), Date.now());
+    let sessions = restoreSessions(readJson<Session[]>(sessionFile, []), Date.now(), (opts.tmuxPanes ?? tmuxPanes)());
     // Every change to a session leaves a line in the log, with what caused it: the request being
     // served (cause), or the reading that ran after one.
     let logged = sessions;

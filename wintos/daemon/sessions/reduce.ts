@@ -222,13 +222,19 @@ export function endSessions(sessions: Map<string, Session>, ids: string[], now: 
 // Sessions saved at the last quit. The restart cut off any turn in progress; ended ones are gone,
 // and, given the time, those not seen for two weeks: a pane closed outside WintOS left them behind.
 const RESTORE_MAX_AGE_MS = 14 * 86_400_000;
-export function restoreSessions(saved: Session[], now?: number): Map<string, Session> {
+// alive: the panes whose tmux session still runs (sessions/tmux.ts): their Claude never stopped, so
+// they are not "not started". A turn that ended while WintOS was down sent its Stop nowhere: one
+// left working is quiet until its next event says otherwise.
+export function restoreSessions(saved: Session[], now?: number, alive: Set<string> = new Set()): Map<string, Session> {
     const out = new Map<string, Session>();
     for (const s of saved) {
         if (s.state === "ended" || (now !== undefined && now - s.lastAt > RESTORE_MAX_AGE_MS)) continue;
         const { subagents: _gone, ...rest } = s;
+        const state = s.state === "working" ? "idle" : s.state;
         // One its epic's agent started runs on in Claude's background service: nothing waits to restart.
-        out.set(s.id, s.bgId ? rest : { ...rest, state: s.state === "working" ? "idle" : s.state, restored: true });
+        if (s.bgId) out.set(s.id, rest);
+        else if (alive.has(s.blockId)) out.set(s.id, { ...rest, state, restored: undefined });
+        else out.set(s.id, { ...rest, state, restored: true });
     }
     return out;
 }

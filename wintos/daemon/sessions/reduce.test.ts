@@ -467,3 +467,9 @@ test("⌥⌘P on a session whose turn ended quietly pauses it at once, not on a 
     const done = new Map([["s", { id: "s", tabId: "t", blockId: "b", state: "done", since: 0, lastAt: 0 } as Session]]);
     expect(parkSession(done, "b", "parked by you", 5).get("s")).toMatchObject({ state: "parked", parkedOn: "parked by you" });
 });
+
+test("restored at a restart: a session whose pane's tmux session still runs never stopped; the others wait to start", () => {
+    const saved = [{ id: "a", tabId: "t", blockId: "b1", state: "waiting", since: 0, lastAt: 0 }, { id: "b", tabId: "t", blockId: "b2", state: "working", since: 0, lastAt: 0 }] as Session[];
+    const m = restoreSessions(saved, undefined, new Set(["b1"]));
+    expect([m.get("a")?.restored, m.get("a")?.state, m.get("b")?.restored, m.get("b")?.state]).toEqual([undefined, "waiting", true, "idle"]);
+});

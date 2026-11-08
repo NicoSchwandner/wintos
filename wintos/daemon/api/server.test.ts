@@ -416,11 +416,12 @@ describe("wintosd API", () => {
         expect(byId).toMatchObject({ beside: route, alone: "reviews" });
     });
 
-    test("a session keeps its epic through its next events, and through the shelf when it is resumed", async () => {
+    test("a session keeps its epic and lane through its next events, and through the shelf when it is resumed", async () => {
         const id = await (await post("/epics", { title: "Route" })).text();
         await event(prompt);
         await post("/projects/tab-1/title", { title: "Ledger import", manual: true });
         await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+        await post("/blocks/blk-1/lane", { name: "fast", steps: ["Test", "Fix"] });
         await event({ ...prompt, hook_event_name: "Stop" });
         const epicNow = async () => (await (await fetch(base + "/state")).json()).sessions.find((s: { id: string }) => s.id === prompt.session_id)?.epic;
         expect(await epicNow()).toBe(id);
@@ -432,6 +433,7 @@ describe("wintosd API", () => {
         expect(await epicNow()).toBeUndefined();
         await post("/events", { tabId: "tab-1", blockId: "blk-3", payload: { ...prompt, hook_event_name: "SessionStart" } });
         expect(await epicNow()).toBe(id);
+        expect((await (await fetch(base + "/state")).json()).sessions.find((s: { id: string }) => s.id === prompt.session_id)?.lane?.name).toBe("fast");
     });
 
     test("an epic's history: its sessions with time and PRs; a correction changes the month", async () => {

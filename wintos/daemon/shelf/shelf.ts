@@ -1,4 +1,4 @@
-import type { SessionName } from "../sessions/reduce";
+import type { Lane, SessionName } from "../sessions/reduce";
 // Claude sessions closed in a project, kept to resume: ⌘W on a session pane puts it here, and a
 // session that runs again (resumed from here or by hand) leaves. Keyed by the project's folder,
 // so a project closed and reopened in a new tab keeps its shelf.
@@ -9,7 +9,8 @@ import type { SessionName } from "../sessions/reduce";
 // named: the session's own name when shelved (`wintos name`, ⌘R), which comes back with it.
 // epic: the epic it was a step of, which it rejoins when resumed.
 // touched: PRs it worked on that another session owns ("also in").
-export type Shelved = { sessionId: string; script: string; label: string; title?: string; name?: string; named?: SessionName; epic?: string; gist?: string; prs?: string[]; touched?: string[]; at: number };
+// lane: the process it was in and where, which comes back with it as after a move (STATE-14).
+export type Shelved = { sessionId: string; script: string; label: string; title?: string; name?: string; named?: SessionName; epic?: string; gist?: string; prs?: string[]; touched?: string[]; lane?: Lane; at: number };
 export const shelvedName = (s: Shelved) => s.named?.text ?? s.title ?? s.name ?? s.gist ?? s.label;
 
 export const withTitle = (shelf: Shelf, sessionId: string, title: string): Shelf =>

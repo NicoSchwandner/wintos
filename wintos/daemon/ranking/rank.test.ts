@@ -106,8 +106,9 @@ describe("unread", () => {
     });
 
     test("once seen, it falls to where it belongs: done and parked are quiet", () => {
-        expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
-        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
+        const done = ended("t", "done", NOW - 50);
+        expect(rank(["t"], [done], NOW, {}, { [done.id]: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
+        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, {}).quiet.map((x) => x.tabId)).toEqual(["t"]);
     });
 
     test("a parked turn is quiet unseen too: it carries on by itself, nothing to read yet", () => {

@@ -233,8 +233,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const saidFile = join(opts.root, ".agent-said.json");
     let saidTo = readJson<Record<string, string[]>>(saidFile, {});
     const SAID_KEPT = 5;
-    // Each session's transcript, from its hook events, for wintos peek's last reply.
-    const transcripts = new Map<string, string>();
     const relaysFile = join(opts.root, ".relays.json");
     let relays = readJson<Relays>(relaysFile, {});
     const saveRelays = (next: Relays) => ((relays = next), writeJsonAtomic(relaysFile, relays));
@@ -326,6 +324,9 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // When the developer last looked at each project: a reply after that is unread.
     const seenFile = join(opts.root, ".seen.json");
     const seen = readJson<Record<string, number>>(seenFile, {});
+    // Seen used to be kept per tab: a session with only its tab's time takes that as its own, once,
+    // so dropping the tab fallback (STATE-22) shows no old turn as unread.
+    for (const s of sessions.values()) if (seen[s.id] === undefined && seen[s.tabId] !== undefined) seen[s.id] = seen[s.tabId];
     const markSeen = (id: string) => ((seen[id] = Date.now()), writeJsonAtomic(seenFile, seen));
     // The keyboard game's score, per instance like the rest of this folder.
     const keyboardFile = join(opts.root, ".keyboard.json");
@@ -431,7 +432,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const given = sessions.get(sessionId)?.name;
         const touched = sessions.get(sessionId)?.touched;
         const epic = sessions.get(sessionId)?.epic;
-        const item: Shelved = { sessionId, script, label: label ?? gist ?? "session", ...(name ? { name } : {}), ...(given ? { named: given } : {}), ...(epic ? { epic } : {}), ...(touched?.length ? { touched } : {}), gist, ...(owned?.length ? { prs: owned } : {}), at: Date.now() };
+        const lane = sessions.get(sessionId)?.lane;
+        const item: Shelved = { sessionId, script, label: label ?? gist ?? "session", ...(name ? { name } : {}), ...(given ? { named: given } : {}), ...(epic ? { epic } : {}), ...(lane ? { lane } : {}), ...(touched?.length ? { touched } : {}), gist, ...(owned?.length ? { prs: owned } : {}), at: Date.now() };
         saveShelf(shelve(shelf, basename(p.dir), item, 14));
         titleShelved(item, p.title);
         return true;
@@ -707,7 +709,15 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     if (shelved.epic && home && !home.epic) sessions = setEpic(sessions, home.id, shelved.epic);
                     const again = sessions.get(p.session_id);
                     const union = (a: string[] = [], b: string[] = []) => [...new Set([...a, ...b])];
-                    if (again) sessions = new Map(sessions).set(again.id, { ...again, prs: union(again.prs, shelved.prs), touched: union(again.touched, shelved.touched) });
+                    // Its lane and last status line too: after a restart only the shelf has them.
+                    if (again)
+                        sessions = new Map(sessions).set(again.id, {
+                            ...again,
+                            prs: union(again.prs, shelved.prs),
+                            touched: union(again.touched, shelved.touched),
+                            ...(!again.lane && shelved.lane ? { lane: shelved.lane } : {}),
+                            ...(!again.status && shelved.name ? { status: { text: shelved.name, at: shelved.at } } : {}),
+                        });
                 }
                 // After the shelf gave back its epic: the epic beside it only places one that has none.
                 placeInEpic(p.session_id);
@@ -717,7 +727,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const configDir = (p as { config_dir?: unknown }).config_dir;
                 if (opts.claudeDirs && typeof configDir === "string" && configDir.startsWith("/")) watchStore(configDir);
                 const tp = (p as { transcript_path?: unknown }).transcript_path;
-                if (typeof tp === "string" && tp.startsWith("/")) transcripts.set(p.session_id, tp);
                 if (p.hook_event_name === "Stop" && typeof tp === "string") nameByModel(p.session_id, tp, store.byTab(ev.tabId)?.title);
                 if (p.hook_event_name === "Stop" && typeof p.last_assistant_message === "string" && p.last_assistant_message.trim()) readEndedTurn(p.session_id, p.last_assistant_message);
                 // Yours: a prompt you typed, not one WintOS typed in (a report, a wake, a relay).
@@ -1508,7 +1517,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!to) return send(res, 404, "no open session in the epic matches");
                 const step = Object.entries(epic.links ?? {}).find(([, ids]) => ids.includes(to.id))?.[0];
                 const prs = (to.prs ?? []).map((u) => ({ url: u, state: donePrs[u] ? (donePrs[u].merged ? "merged" : "closed") : "open or unknown" }));
-                const tp = transcripts.get(to.id);
+                // From the recap's activity, which keeps it across restarts (peek said "none read" after one).
+                const tp = recapper.transcriptOf(to.id);
                 const reply = to.bgId && !to.attachedTo ? await bgLogs(to.bgId) : tp ? lastReplyIn(readTail(tp) ?? "") : undefined;
                 return send(res, 200, peekText(to, { step, prs, reply }));
             }

@@ -15,7 +15,7 @@ let root: string;
 
 beforeEach(async () => {
     root = mkdtempSync(join(tmpdir(), "wintos-api-"));
-    srv = await startServer({ root, port: 0, token: "t0ken" });
+    srv = await startServer({ ...INERT, root, port: 0, token: "t0ken" });
     base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
 });
 afterEach(() => srv.close());
@@ -25,6 +25,18 @@ const post = (path: string, body: unknown, headers: Record<string, string> = JSO
     fetch(base + path, { method: "POST", headers, body: typeof body === "string" ? body : JSON.stringify(body) });
 const put = (text: string | undefined) => fetch(base + "/day/recap", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ text }) });
 const event = (payload: object, tabId = "tab-1") => post("/events", { tabId, blockId: "blk-1", payload });
+
+// Every call out of the daemon a test doesn't make itself goes nowhere: no real gh, claude or
+// tmux (a test that needs one passes its own after this).
+const INERT = {
+    prNow: async () => undefined,
+    fetchDone: async () => [],
+    listAgents: async () => "[]",
+    bgSend: async () => false,
+    bgLogs: async () => undefined,
+    bgStop: async () => false,
+    tmuxPanes: () => new Set<string>(),
+};
 
 describe("wintosd API", () => {
     test("⌘Z after a park: /sessions/:id/unpark makes the turn yours again", async () => {
@@ -195,7 +207,7 @@ describe("wintosd API", () => {
         const sent: string[] = [];
         const boot = async () => {
             srv.close();
-            srv = await startServer({ root, port: 0, token: "t0ken", listAgents: async () => listing, bgSend: async (_id, _cwd, p) => (sent.push(p), true) });
+            srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", bgEveryMs: 100, listAgents: async () => listing, bgSend: async (_id, _cwd, p) => (sent.push(p), true) });
             base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
         };
         await boot();
@@ -428,7 +440,7 @@ describe("wintosd API", () => {
         await post("/projects/tab-1/shelf", { script: `cd '/w' && claude --resume '${prompt.session_id}'`, label: "x" });
         // A restart drops the ended session; only the shelf still knows its epic.
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         expect(await epicNow()).toBeUndefined();
         await post("/events", { tabId: "tab-1", blockId: "blk-3", payload: { ...prompt, hook_event_name: "SessionStart" } });
@@ -460,7 +472,7 @@ describe("wintosd API", () => {
         const cal = (await import("http")).createServer((_q, r) => r.end(ics));
         await new Promise<void>((r) => cal.listen(0, "127.0.0.1", r));
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", calendarIcs: `http://127.0.0.1:${(cal.address() as AddressInfo).port}/secret.ics` });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", calendarIcs: `http://127.0.0.1:${(cal.address() as AddressInfo).port}/secret.ics` });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         expect(await (await fetch(base + "/time/meetings?month=2026-11")).json()).toEqual({ ms: 3_600_000 });
         expect((await fetch(base + "/time/meetings?month=nov")).status).toBe(400);
@@ -601,7 +613,7 @@ describe("wintosd API", () => {
 
     test("a turn that said nothing is read by the model: an ask, or done for a report", async () => {
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: `cat > ${join(root, "ask-prompt.txt")}; echo 'approve: the migration plan'` });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", recapCmd: `cat > ${join(root, "ask-prompt.txt")}; echo 'approve: the migration plan'` });
         base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
         await event(prompt);
         await event({ ...stop, last_assistant_message: "Here is the plan. Go?" });
@@ -614,7 +626,7 @@ describe("wintosd API", () => {
         srv.close();
         const srvBgSend = { fn: async (_id: string, _cwd: string | undefined, _p: string) => false };
         const stopped: string[] = [];
-        srv = await startServer({ root, port: 0, token: "t0ken", listAgents: async () => listing, bgSend: (id, cwd, p) => srvBgSend.fn(id, cwd, p), bgStop: async (bg) => (stopped.push(bg), true) });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", bgEveryMs: 100, listAgents: async () => listing, bgSend: (id, cwd, p) => srvBgSend.fn(id, cwd, p), bgStop: async (bg) => (stopped.push(bg), true) });
         base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
         const id = await (await post("/epics", { title: "Route", short: "Route" })).text();
         await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
@@ -658,7 +670,7 @@ describe("wintosd API", () => {
 
     test("a turn the model reads as done or paused goes up to the epic's agent too, not only a question", async () => {
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "echo 'waits: CI on #7'" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", recapCmd: "echo 'waits: CI on #7'" });
         base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
         const id = await (await post("/epics", { title: "Route" })).text();
         await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
@@ -671,7 +683,7 @@ describe("wintosd API", () => {
 
     test("while the model reads how a turn ended it is not your move; then it is what the read says", async () => {
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "sleep 0.4; echo 'read: shipped'" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", recapCmd: "sleep 0.4; echo 'read: shipped'" });
         base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
         await event(prompt);
         await event({ ...stop, last_assistant_message: "Shipped the fix." });
@@ -682,7 +694,7 @@ describe("wintosd API", () => {
 
     test("a turn the model reads as carrying on by itself parks on that, and is not your move", async () => {
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "echo 'waits: the CI retry loop on test'" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", recapCmd: "echo 'waits: the CI retry loop on test'" });
         base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
         await event(prompt);
         await event({ ...stop, last_assistant_message: "The retry loop runs; I'll be woken when it finishes. After the deploy: set the flags." });
@@ -691,7 +703,7 @@ describe("wintosd API", () => {
 
     test("when the model fails, a guess: a question asks, a report is done", async () => {
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "exit 1" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", recapCmd: "exit 1" });
         base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
         await event(prompt);
         await event({ ...stop, last_assistant_message: "Shall I merge it?" });
@@ -703,7 +715,7 @@ describe("wintosd API", () => {
 
     test("a turn that ends with its subagents still running is not read: it is not over, and the stop leaves it yours", async () => {
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "exit 1" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", recapCmd: "exit 1" });
         base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
         await event(prompt);
         await event({ ...stop, hook_event_name: "SubagentStart", agent_id: "a1" });
@@ -840,7 +852,7 @@ describe("the keyboard game", () => {
     test("keys and clicks are scored, kept across a restart, and in the state", async () => {
         for (const kind of ["key", "key", "click"]) expect((await post("/keyboard", { kind, key: "⌘J" })).status).toBe(200);
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         const k = (await (await fetch(base + "/state")).json()).keyboard;
         expect([k.points, k.streak, k.keys["⌘J"], k.clicks["⌘J"]]).toEqual([1, 0, 2, 1]);
@@ -856,7 +868,7 @@ describe("the day", () => {
         mkdirSync(dir);
         writeFileSync(join(root, "tpl.md"), "# $date\n\n## Today's focus (1-3 items)\n\n- [ ] ...\n");
         const { Journal } = await import("../journal/journal");
-        srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")), lunch: "11:30-13:00" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")), lunch: "11:30-13:00" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
     };
 
@@ -892,7 +904,7 @@ describe("the day", () => {
         srv.close();
         const dir = mkdtempSync(join(tmpdir(), "wintos-journal-"));
         const { Journal } = await import("../journal/journal");
-        srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")) });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")) });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         const ws = new WebSocket(base.replace("http", "ws") + "/ws?token=t0ken", { origin: "http://localhost:5173" });
         let first: () => void;
@@ -914,7 +926,7 @@ describe("the day", () => {
         let changed: () => void;
         const synced = new Promise<void>((r) => (changed = r));
         writeFileSync(join(root, "tpl.md"), "# $date\n\n## Today's focus (1-3 items)\n\n- [ ] ...\n");
-        srv = await startServer({ root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")), onJournalChange: () => changed() });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")), onJournalChange: () => changed() });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         expect((await post("/day/focus", { text: "- [ ] Ship it" })).status).toBe(200);
         await synced;
@@ -1034,7 +1046,7 @@ describe("a session's name", () => {
         writeFileSync(join(dir, "model"), `#!/bin/sh\ncat > "${dir}/prompt"\necho '"Retention backfill review fixes"'\n`, { mode: 0o755 });
         const transcript = join(dir, "t.jsonl");
         writeFileSync(transcript, JSON.stringify({ type: "user", message: { content: "Fix the review comments on the retention backfill" } }) + "\n");
-        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: join(dir, "model") });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", recapCmd: join(dir, "model") });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         await event(prompt);
         await event({ ...prompt, hook_event_name: "Stop", transcript_path: transcript });
@@ -1056,7 +1068,7 @@ describe("a session's name", () => {
         await post("/projects/tab-1/shelf", { script, label: "x" });
         expect((await state()).shelf["tab-1"][0].named).toMatchObject({ text: "My own", by: "you" });
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         await event({ ...prompt, hook_event_name: "SessionStart", source: "resume" });
         expect((await state()).sessions[0].name).toMatchObject({ text: "My own", by: "you" });
@@ -1093,7 +1105,7 @@ describe("the PR fixer", () => {
             mkdirSync(join(root, ".fixer"), { recursive: true });
             writeFileSync(join(root, ".fixer", "settings.json"), JSON.stringify({ conflicts: false }));
         }
-        srv = await startServer({ root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fixCmd: join(dir, "claude"), fixCwd: dir });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fixCmd: join(dir, "claude"), fixCwd: dir });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         return dir;
     };
@@ -1169,7 +1181,7 @@ describe("plugins", () => {
         const dir = mkdtempSync(join(tmpdir(), "wintos-p-"));
         const f = join(dir, "count");
         writeFileSync(f, `#!/bin/sh\nn=$(cat "$0.n" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$0.n"; echo "{\\"n\\":$n}"\n`, { mode: 0o755 });
-        srv = await startServer({ root, port: 0, token: "t0ken", plugins: [{ name: "count", cmd: [f], everyMs: 0 }] });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", plugins: [{ name: "count", cmd: [f], everyMs: 0 }] });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         let first;
         for (let i = 0; i < 50 && !first; i++) (first = (await (await fetch(base + "/state")).json()).plugins.count) || (await new Promise((r) => setTimeout(r, 50)));
@@ -1262,7 +1274,7 @@ describe("PR snoozes", () => {
         expect((await post("/prs/snooze", { url: U, until: 2e12, movedAt: "2026-09-28T08:00:00Z" })).status).toBe(200);
         expect((await (await fetch(base + "/state")).json()).snoozes).toEqual({ [U]: { until: 2e12, movedAt: "2026-09-28T08:00:00Z" } });
         await srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         expect((await (await fetch(base + "/state")).json()).snoozes[U]).toBeDefined();
     });
@@ -1283,7 +1295,7 @@ describe("sessions across a restart", () => {
     test("a session waiting on you at quit is still shown waiting, marked not started", async () => {
         await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { hook_event_name: "Stop", session_id: "s-1" } });
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         const { sessions } = await (await fetch(base + "/state")).json();
         expect(sessions).toMatchObject([{ id: "s-1", state: "waiting", restored: true }]);
@@ -1298,7 +1310,7 @@ describe("seen", () => {
         const at = await seenOf();
         expect(at).toBeGreaterThan(0);
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         expect(await seenOf()).toBe(at);
     });
@@ -1336,7 +1348,7 @@ describe("the daily recap", () => {
         writeFileSync(brief, [...work([30, 32]), JSON.stringify({ timestamp: `${day}T15:00:00Z`, type: "system", subtype: "away_summary", content: "Looked at one thing." })].join("\n"));
         writeFileSync(join(root, ".activity.json"), JSON.stringify({ [day]: { "tab-1": { title: "Idea skill", prompts: 3, sessions: { s: transcript } }, "tab-2": { title: "Quick look", prompts: 9, sessions: { b: brief } } } }));
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         expect(await (await fetch(base + "/day/recap")).json()).toEqual({ date: day, items: [{ id: "0", project: "Idea skill", text: "Idea skill: We merged the two lanes.", details: [], dropped: false, edited: false }] });
     });
@@ -1345,7 +1357,7 @@ describe("the daily recap", () => {
         const day = "2026-10-06";
         const restart = async (recapCmd?: string) => {
             srv.close();
-            srv = await startServer({ root, port: 0, token: "t0ken", recapCmd });
+            srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", recapCmd });
             base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         };
         beforeEach(async () => {
@@ -1373,7 +1385,7 @@ describe("the daily recap", () => {
             writeFileSync(join(dir, "2026", "10", "2026-10-09.md"), "# Friday\n\n## Weekly reflection - Week 41/2026\n\n- **Goals Review**\n");
             const { Journal } = await import("../journal/journal");
             srv.close();
-            srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: join(root, "model.sh"), journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")) });
+            srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", recapCmd: join(root, "model.sh"), journal: new Journal(dir, join(root, "tpl.md"), join(root, ".day-planned.json")) });
             base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
             await fetch(base + "/day/recap");
             await put("- Ready for review: Document intake");
@@ -1456,7 +1468,7 @@ describe("the shelf", () => {
         await post("/projects/tab-1/shelf", { script: script("s1"), label: "x" });
         await post("/projects/tab-1/reopen", { tabId: "tab-2" });
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         expect(Object.keys(await shelfOf())).toEqual(["tab-2"]);
     });
@@ -1471,7 +1483,7 @@ describe("the shelf", () => {
 
     test("a 3-6 word title is written for it in the background, and shown first", async () => {
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: `cat > ${join(root, "title-prompt.txt")}; echo '"Merge the two lanes."'` });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", recapCmd: `cat > ${join(root, "title-prompt.txt")}; echo '"Merge the two lanes."'` });
         base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
         await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
         await event(prompt);
@@ -1512,7 +1524,7 @@ describe("the shelf", () => {
         await post("/projects/tab-1/title", { title: "Idea skill", manual: true });
         await event({ ...prompt, session_id: "old", cwd: "/w/it's" });
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         await event({ ...prompt, session_id: "new", resume: script("new") });
         expect((await shelfOf())["tab-1"]).toEqual([expect.objectContaining({ sessionId: "old", script: "cd '/w/it'\\''s' && claude --resume 'old'" })]);
@@ -1541,7 +1553,7 @@ describe("the shelf", () => {
         await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [A] });
         await event({ ...prompt, hook_event_name: "SessionEnd", reason: "other" });
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken" });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken" });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         await event({ ...prompt, hook_event_name: "SessionStart", source: "resume", resume: script(prompt.session_id) });
         expect((await (await fetch(base + "/state")).json()).sessions).toEqual([expect.objectContaining({ id: prompt.session_id, prs: [A] })]);
@@ -1573,7 +1585,7 @@ describe("repo short names", () => {
     test("saved to your file, shown in the state, a hand edit too; empty removes one; bad input is a 400", async () => {
         const file = join(root, "cfg", "repos.json");
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", repoNamesFile: file });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", repoNamesFile: file });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         const names = async () => (await (await fetch(base + "/state")).json()).repoNames;
         expect((await post("/repos/name", { repo: "o/Acme.Docs.Service", short: " DS " })).status).toBe(200);
@@ -1595,7 +1607,7 @@ describe("wakes", () => {
     beforeEach(async () => {
         pr = { state: "OPEN", checks: "pending", released: false };
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", prNow: async () => pr, wakeEveryMs: 20 });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", prNow: async () => pr, wakeEveryMs: 20 });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         await event(prompt);
     });
@@ -1686,7 +1698,7 @@ describe("heads-ups", () => {
         const file = join(dir, "cc-plugin-you-should-know_builtin-abc.json");
         writeFileSync(file, JSON.stringify({ seen: [], sessions: [] }));
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", claudeDirs: [claude] });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", claudeDirs: [claude] });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         await post("/projects/tab-1/title", { title: "X", manual: false });
         await event({ ...prompt, session_id: "s-1" });
@@ -1709,7 +1721,7 @@ describe("heads-ups", () => {
         mkdirSync(join(claude, "plugins", "store"), { recursive: true });
         writeFileSync(join(claude, "plugins", "store", "cc-plugin-you-should-know_builtin-abc.json"), JSON.stringify(offer("s-1", "Heads up from the other account.")));
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", claudeDirs: [] });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", claudeDirs: [] });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         await post("/projects/tab-1/title", { title: "X", manual: false });
         await event({ ...prompt, session_id: "s-1" });
@@ -1724,7 +1736,7 @@ describe("heads-ups", () => {
         mkdirSync(join(claude, "plugins", "store"), { recursive: true });
         writeFileSync(join(claude, "plugins", "store", "cc-plugin-you-should-know_builtin-abc.json"), JSON.stringify({ seen: [], entries: [] }));
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", claudeDirs: [claude] });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", claudeDirs: [claude] });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         expect((await (await fetch(base + "/state")).json()).headsUpProblem).toBe("the store's shape changed: no sessions list");
         rmSync(claude, { recursive: true });
@@ -1738,7 +1750,7 @@ describe("done PRs", () => {
         srv.close();
         const dir = mkdtempSync(join(tmpdir(), "wintos-done-"));
         writeFileSync(join(dir, "gh"), `#!/bin/sh\necho '${JSON.stringify({ me: "me", prs: [{ url: OPEN }] })}'\n`, { mode: 0o755 });
-        srv = await startServer({ root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fetchDone: async (urls) => (asked.push(urls), [{ url: MERGED, number: 2, repo: "o/r", merged: true }]) });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fetchDone: async (urls) => (asked.push(urls), [{ url: MERGED, number: 2, repo: "o/r", merged: true }]) });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         await event(prompt);
         await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [OPEN, MERGED] });
@@ -1753,7 +1765,7 @@ describe("done PRs", () => {
         srv.close();
         const dir = mkdtempSync(join(tmpdir(), "wintos-done-"));
         writeFileSync(join(dir, "gh"), `#!/bin/sh\necho '${JSON.stringify({ me: "me", prs: [{ url: OPEN }] })}'\n`, { mode: 0o755 });
-        srv = await startServer({ root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fetchDone: async () => [{ url: MERGED, number: 2, repo: "o/r", merged: true }] });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }], fetchDone: async () => [{ url: MERGED, number: 2, repo: "o/r", merged: true }] });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         await event(prompt);
         const id = await (await post("/epics", { title: "Route" })).text();
@@ -1782,7 +1794,7 @@ describe("update", () => {
         git("commit", "-q", "--allow-empty", "-m", "running");
         const restart = vi.fn();
         srv.close();
-        srv = await startServer({ root, port: 0, token: "t0ken", checkout: repo, updateEveryMs: 50, restart });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", checkout: repo, updateEveryMs: 50, restart });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         expect((await post("/update", {})).status).toBe(409);
         git("commit", "-q", "--allow-empty", "-m", "new");

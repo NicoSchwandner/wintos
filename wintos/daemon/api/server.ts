@@ -76,7 +76,7 @@ const isRoadmapOp = (o: unknown): o is RoadmapOp => {
 };
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined>; bgStop?: (bgId: string) => Promise<boolean>; tmuxPanes?: () => Set<string> }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined>; bgStop?: (bgId: string) => Promise<boolean>; tmuxPanes?: () => Set<string>; bgEveryMs?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // Beside the projects in main.ts; a hidden folder in them by default, which the project store skips.
     const epics = new EpicStore(opts.epicsRoot ?? join(opts.root, ".epics"));
@@ -271,7 +271,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             bgPolling = false;
         }
     };
-    const bgTimer = setInterval(() => void pollBg(), 15_000);
+    const bgTimer = setInterval(() => void pollBg(), opts.bgEveryMs ?? 15_000);
     bgTimer.unref?.();
     // A background session has no pane to type into: what is passed on to it goes in as a prompt
     // through the background service, from the directory it runs in, once it is not at work.

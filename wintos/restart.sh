@@ -1,5 +1,5 @@
 #!/bin/bash
-# Restarts the WintOS running from this checkout and proves it: stops it, rebuilds, starts it,
+# Restarts the WintOS running from this checkout and proves it: builds, stops it, starts it,
 # and waits until a new daemon and window answer. Fails loudly instead of leaving the old one
 # running, which a pkill that matched nothing would.
 #   wintos/restart.sh            the everyday instance (debug port 9223, daemon 7730)
@@ -17,6 +17,13 @@ ok() { printf '  ✓ %s\n' "$*"; }
 # electron-vite is started with --remoteDebuggingPort N, Electron with --remote-debugging-port=N.
 running() { pgrep -f "remoteDebuggingPort $DEBUG_PORT|remote-debugging-port=$DEBUG_PORT" || true; }
 
+# Built before anything stops: a checkout that doesn't build leaves the running WintOS alone,
+# instead of leaving nothing running (⌥⌘U on a broken commit did). Sessions run on in tmux.
+task build:server:quickdev >/dev/null || fail "the server doesn't build; WintOS keeps running as it was"
+ok "server built"
+node wintos/build.mjs >/dev/null || fail "the daemon or CLI doesn't build; WintOS keeps running as it was"
+ok "daemon built"
+
 old="$(running | tr '\n' ' ')"
 if [ -n "$old" ]; then
     pkill -f "remoteDebuggingPort $DEBUG_PORT" || true
@@ -27,8 +34,6 @@ if [ -n "$old" ]; then
     ok "stopped (was $old)"
 fi
 
-task build:server:quickdev >/dev/null
-ok "server built"
 
 started="$(date +%s)"
 nohup "$START" >"$LOG" 2>&1 &

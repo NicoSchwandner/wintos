@@ -21,4 +21,7 @@ export const DefaultFullConfig: FullConfigType = {
     waveai: waveaiJson as unknown as { [key: string]: AIModeConfigType },
     backgrounds: backgroundsJson as { [key: string]: BackgroundConfigType },
     configerrors: [],
+    // WintOS: required by the type, unused in the preview.
+    version: "",
+    buildtime: "",
 };

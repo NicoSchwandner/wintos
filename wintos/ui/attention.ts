@@ -30,7 +30,7 @@ export function prsByTab(tabIds: string[], state: WintosState): Record<string, A
     return out;
 }
 
-// bySession: a row for each session (the sidebar), else one per project (the palette, Herdr).
+// bySession: a row for each session (the sidebar), else one per project (the palette).
 export function sidebarModel(tabIds: string[], state: WintosState, bySession = false): Ranking {
     const touched = Object.fromEntries(state.projects.filter((p) => p.id).map((p) => [p.id!, p.mtime]));
     return (bySession ? rankSessions : rank)(tabIds, state.sessions, state.now, touched, state.seen);

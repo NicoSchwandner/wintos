@@ -57,7 +57,9 @@ Why: the 2026-11-07 transcript analysis counted 21 status pings and 111 resumes 
 idle in one week; the Friday /evolve scorecard (`status_pings`, `resumes_after_1h`) shows whether
 this moved them.
 
-Start: try Herdr by hand first, then decide between it and tmux. Pane creation and teardown are
+Start: try Herdr by hand first, then decide between it and tmux. WintOS's own Herdr front end
+(mods, model, its wintosd on 7732, the hook and CLI branches) was retired on 2026-11-08; it is in
+git history at 657a1710 (`wintos/herdr/`), to bring back from there if Herdr becomes the backend. Pane creation and teardown are
 in `emain/` and the session state in `daemon/sessions/`; a reattach must keep the session's
 WintOS ids, or it loses its context like the background sessions in Known gaps.
 

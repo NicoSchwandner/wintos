@@ -125,33 +125,6 @@ describe("wintos-hook.sh tells the daemon which session the pane runs", () => {
     });
 });
 
-describe("wintos-hook.sh in a Herdr terminal", () => {
-    // A fake hc that answers `hc get --json <t>` with the terminal's Herdr labels.
-    const fakeHc = (tab: string) => {
-        const dir = tmp();
-        writeFileSync(join(dir, "hc"), `#!/bin/sh\necho '{"address":"'"$3"'","labels":{"herdr.space":"sp1","herdr.tab":"${tab}"}}'\n`, { mode: 0o755 });
-        return dir;
-    };
-
-    test("reports to the Herdr daemon, its tab the Herdr tab and its pane the terminal, with the resume command", async () => {
-        const d = await fakeDaemon("");
-        await runHookAsync({ PATH: `${fakeHc("tb1")}:${process.env.PATH}`, HC_TERMINAL_ID: "t7", WINTOS_HERDR_PORT: String(d.port) }, JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/x" }));
-        expect(d.seen[0]).toEqual({ url: "/events", body: { tabId: "tb1", blockId: "t7", payload: { hook_event_name: "UserPromptSubmit", session_id: "s-1", cwd: "/x", resume: "cd '/x' && claude --resume 's-1'", config_dir: "/home/dev/.claude" } } });
-    });
-
-    test("a terminal Herdr shows in no tab sends nothing", async () => {
-        const d = await fakeDaemon("");
-        await runHookAsync({ PATH: `${fakeHc("")}:${process.env.PATH}`, HC_TERMINAL_ID: "t7", WINTOS_HERDR_PORT: String(d.port) });
-        expect(d.seen).toEqual([]);
-    });
-
-    test("inside WintOS, Wave's ids win and nothing asks Herdr", async () => {
-        const d = await fakeDaemon("");
-        await runHookAsync({ PATH: `${fakeHc("tb1")}:${process.env.PATH}`, HC_TERMINAL_ID: "t7", WAVETERM_TABID: "tab-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(d.port), WINTOS_HERDR_PORT: "1" });
-        expect([d.seen[0].body.tabId, d.seen[0].body.blockId]).toEqual(["tab-1", "blk-1"]);
-    });
-});
-
 describe("wintos-hook.sh keeps the block's resume command", () => {
     // A fake wsh that records its arguments, one call per line.
     const fakeWsh = () => {
@@ -588,15 +561,6 @@ describe("wintos wake", () => {
         );
         return { ...r, seen };
     };
-
-    test("in a Herdr terminal it goes to Herdr's daemon, for that terminal", async () => {
-        const seen: string[] = [];
-        server = http.createServer((req, res) => (seen.push(req.url!), res.end('{"pr":"https://github.com/o/r/pull/7","until":"released","prompt":"go"}')));
-        const port = await new Promise<number>((r) => server!.listen(0, "127.0.0.1", () => r((server!.address() as AddressInfo).port)));
-        const env = { PATH: process.env.PATH!, HOME: "/home/dev", CLAUDE_CODE_SESSION_ID: "s-1", HC_TERMINAL_ID: "t7", WINTOS_HERDR_PORT: String(port) };
-        await new Promise((resolve) => require("child_process").execFile(CLI, ["wake", "released", "o/r#7", "go"], { env }, resolve));
-        expect(seen).toEqual(["/blocks/t7/wake?session=s-1"]);
-    });
 
     test("sends the event, the PR and the prompt, and tells the session to end its turn", async () => {
         const r = await wake(["released", "o/r#7", "check", "prod"]);

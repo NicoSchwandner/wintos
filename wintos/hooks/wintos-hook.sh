@@ -2,15 +2,7 @@
 # Forwards a Claude Code hook event to wintosd, tagged with the Wave tab and block it came
 # from, and prints the daemon's answer (the prompt injection for UserPromptSubmit).
 # Never fails and never waits long: a missing daemon must not slow Claude down.
-# In Herdr the tab is the project and the terminal its pane, reported to Herdr's own wintosd, so
-# a session there never shows in WintOS and WintOS's data is never touched.
 port="${WINTOS_PORT:-7730}"
-if [ -z "$WAVETERM_TABID" ] && [ -n "${HC_TERMINAL_ID:-}" ]; then
-    WAVETERM_TABID="$(hc get --json "$HC_TERMINAL_ID" 2>/dev/null | jq -r '.labels["herdr.tab"] // empty' 2>/dev/null)"
-    WAVETERM_BLOCKID="$HC_TERMINAL_ID"
-    port="${WINTOS_HERDR_PORT:-7732}"
-    herdr=1
-fi
 [ -n "$WAVETERM_TABID" ] || exit 0
 # A headless `claude -p` run started from inside a session inherits its pane but is part of that
 # session's work: shown as a session of its own it has no pane to open, and one cut off (the Mac
@@ -38,8 +30,6 @@ fi
 resume=""
 if [ -n "$WAVETERM_BLOCKID" ] && [ "$background" != "bg" ]; then
     wsh="${WAVETERM_WSHBINDIR:+$WAVETERM_WSHBINDIR/}wsh"
-    # Herdr keeps its terminals running itself; only Wave needs the block's init script.
-    [ -n "${herdr:-}" ] && wsh=true
     case "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.reason // .source // "")' 2>/dev/null)" in
     UserPromptSubmit:* | SessionStart:resume)
         # Transcripts are keyed by the launch directory; the payload's cwd follows the session.

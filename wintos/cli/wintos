@@ -35,12 +35,6 @@
 #                                      one account each, named explicitly
 set -eu
 PORT="${WINTOS_PORT:-7730}"
-# In a Herdr terminal the pane is the terminal, and Herdr has a wintosd of its own.
-if [ -z "${WAVETERM_BLOCKID:-}" ] && [ -n "${HC_TERMINAL_ID:-}" ]; then
-    WAVETERM_BLOCKID="$HC_TERMINAL_ID"
-    WAVETERM_TABID="$(hc get --json "$HC_TERMINAL_ID" 2>/dev/null | jq -r '.labels["herdr.tab"] // empty' 2>/dev/null || true)"
-    PORT="${WINTOS_HERDR_PORT:-7732}"
-fi
 # In Claude's background service there is no pane: a session its epic's agent started is found
 # by its own id instead, so its wintos commands (status, wake, ask…) work there too.
 if [ -z "${WAVETERM_BLOCKID:-}" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && [ "${CLAUDE_CODE_SESSION_KIND:-}" = bg ]; then

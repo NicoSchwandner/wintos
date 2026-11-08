@@ -257,7 +257,7 @@ describe("attention by session (the sidebar)", () => {
         expect(a.targets["s:r"]).toEqual({ tabId: "t1", blockId: "b-r" });
         expect(a.targets["t1"]).toEqual({ tabId: "t1", blockId: "b-w" });
     });
-    test("by project, as the palette and Herdr ask, a tab is one row as before", () => expect(attention(["t1"], state, {}, 10).needs.map((r) => r.key)).toEqual(["t1"]));
+    test("by project, as the palette asks, a tab is one row as before", () => expect(attention(["t1"], state, {}, 10).needs.map((r) => r.key)).toEqual(["t1"]));
 });
 
 test("plain: a Markdown link keeps its words, code and bold lose their marks", () => {

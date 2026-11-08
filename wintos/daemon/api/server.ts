@@ -28,12 +28,12 @@ import { localDay, prFact, waitedFor } from "../recap/recap";
 import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from "../keyboard/keyboard";
 import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
-import { doneUnit, serializeUnits, setUnits, startUnit, UNIT_MAX, UNITS_MAX, type Unit } from "../projects/units";
+import { doneUnit, serializeUnits, setUnits, startUnit, unitIndex, UNIT_MAX, UNITS_MAX, type Unit } from "../projects/units";
 import { fixJob, fixPrompt, nextAction, type FixJob } from "../fixer/plan";
 import { reassignPrs, touchPrs } from "../prs/owners";
 import { groupOf, type DonePr, type PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
-import { namePrompt, nameKey, userPrompts } from "../sessions/naming";
+import { isWintosPrompt, namePrompt, nameKey, userPrompts } from "../sessions/naming";
 import { finishSession, freshStatus, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setEpic, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
 import { askCard, askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { changes, trail } from "../sessions/trail";
@@ -667,12 +667,14 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (typeof tp === "string" && tp.startsWith("/")) transcripts.set(p.session_id, tp);
                 if (p.hook_event_name === "Stop" && typeof tp === "string") nameByModel(p.session_id, tp, store.byTab(ev.tabId)?.title);
                 if (p.hook_event_name === "Stop" && typeof p.last_assistant_message === "string" && p.last_assistant_message.trim()) readEndedTurn(p.session_id, p.last_assistant_message);
-                recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, p.hook_event_name === "UserPromptSubmit", Date.now(), p.hook_event_name === "UserPromptSubmit" ? waitedFor(before, Date.now()) : 0);
-                if (p.hook_event_name === "UserPromptSubmit") markSeen(p.session_id); // you read it to answer it
-                if (p.hook_event_name === "UserPromptSubmit" && typeof p.prompt === "string" && !/^\[(WintOS|You, via)/.test(p.prompt) && epics.list().some((e) => e.agent === p.session_id)) lastSaid.set(p.session_id, p.prompt);
-                if (p.hook_event_name === "UserPromptSubmit" && p.kind !== "bg") writeWorked(p.session_id);
+                // Yours: a prompt you typed, not one WintOS typed in (a report, a wake, a relay).
+                const yours = p.hook_event_name === "UserPromptSubmit" && typeof p.prompt === "string" && !isWintosPrompt(p.prompt);
+                recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, yours, Date.now(), yours ? waitedFor(before, Date.now()) : 0);
+                if (yours) markSeen(p.session_id); // you read it to answer it
+                if (yours && epics.list().some((e) => e.agent === p.session_id)) lastSaid.set(p.session_id, p.prompt as string);
+                if (yours && p.kind !== "bg") writeWorked(p.session_id);
                 if (p.hook_event_name === "Stop" && p.kind !== "bg") reportUp(p.session_id);
-                if (p.hook_event_name === "UserPromptSubmit" && typeof p.prompt === "string" && p.kind !== "bg") setRhythm(prompted(rhythm, Date.now(), p.prompt.length));
+                if (yours && p.kind !== "bg") setRhythm(prompted(rhythm, Date.now(), (p.prompt as string).length));
                 const text =
                     p.hook_event_name === "UserPromptSubmit" ? [injection(store.byTab(ev.tabId), store.mineDiff(ev.tabId, p.session_id)), epicText(p.session_id)].filter(Boolean).join("\n\n") : "";
                 broadcast();
@@ -1300,7 +1302,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     const live = liveIn(sessions, blockId, sid);
                     const epic = live?.epic ? epics.byId(live.epic) : undefined;
                     if (!live || !epic) return send(res, 409, "rename, move and remove are for an epic's roadmap; this session is in no epic");
-                    const want = (q: unknown) => (typeof q === "string" ? (epic.steps.find((u) => u.name.toLowerCase() === q.trim().toLowerCase()) ?? epic.steps.find((u) => u.name.toLowerCase().startsWith(q.trim().toLowerCase())))?.name : undefined);
+                    const want = (q: unknown) => (typeof q === "string" && unitIndex(epic.steps, q) >= 0 ? epic.steps[unitIndex(epic.steps, q)].name : undefined);
                     const op: RoadmapOp | undefined = b.rename ? (want(b.rename.from) && typeof b.rename.to === "string" ? { rename: { from: want(b.rename.from)!, to: b.rename.to } } : undefined) : b.move ? (want(b.move.name) && (b.move.by === 1 || b.move.by === -1) ? { move: { name: want(b.move.name)!, by: b.move.by } } : undefined) : want(b.remove) ? { remove: want(b.remove)! } : undefined;
                     if (!op) return send(res, 404, `no such step; the roadmap: ${epic.steps.map((u) => u.name).join(" · ") || "empty"}`);
                     const r = editRoadmap({ steps: epic.steps, links: epic.links ?? {} }, op);
@@ -1351,7 +1353,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const to = findWorker([...sessions.values()], epic.id, live.id, b.to, epic.links);
                 if (!to) {
                     const names = [...sessions.values()].filter((x) => x.epic === epic.id && x.id !== live.id && x.state !== "ended").map((x) => x.name?.text ?? x.label ?? x.id.slice(0, 8));
-                    return send(res, 404, `no open session in the epic matches; its sessions: ${names.join(", ") || "none"}`);
+                    return send(res, 404, `no single open session in the epic matches (name one by more of its name); its sessions: ${names.join(", ") || "none"}`);
                 }
                 if (agentTo[2] === "suggest") {
                     if (!to.ask) return send(res, 409, "that session asks nothing now");
@@ -1439,7 +1441,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const live = liveIn(sessions, decodeURIComponent(bgStart[1]), sid);
                 const epic = live?.epic ? epics.byId(live.epic) : undefined;
                 if (!live || !epic || epic.agent !== live.id) return send(res, 403, "only an epic's agent starts sessions for its steps");
-                const step = typeof b?.step === "string" ? epic.steps.find((u) => u.name.toLowerCase() === b.step!.toString().trim().toLowerCase()) ?? epic.steps.find((u) => u.name.toLowerCase().startsWith(String(b.step).trim().toLowerCase())) : undefined;
+                const at = typeof b?.step === "string" ? unitIndex(epic.steps, b.step) : -1;
+                const step = at >= 0 ? epic.steps[at] : undefined;
                 if (!step) return send(res, 404, `no such step in the roadmap; its steps: ${epic.steps.map((u) => u.name).join(" · ") || "none, wintos unit sets them"}`);
                 if (liveStarts(bgStarts, sessions, epic.id) >= BG_MAX) return send(res, 409, `${BG_MAX} sessions you started still run; wait for one to finish`);
                 const name = `${epic.short ?? epic.title}: ${step.name}`.slice(0, 80);

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { namePrompt, nameKey, userPrompts } from "./naming";
+import { isWintosPrompt, namePrompt, nameKey, userPrompts } from "./naming";
 
 const line = (o: object) => JSON.stringify(o);
 
@@ -37,4 +37,10 @@ describe("namePrompt and nameKey", () => {
         expect(nameKey({ ...s, prs: ["a"] })).not.toBe(nameKey({ ...s, prs: ["a", "b"] }));
         expect(nameKey({ ...s, lane: { name: "fast", steps: [], at: 0 } })).not.toBe(nameKey(s));
     });
+});
+
+test("isWintosPrompt: what WintOS types in is not the developer's, and is no name for a session", () => {
+    expect(["[WintOS report] x", "[WintOS wake: merged] y", "[You, via the Route agent] z", "[The Route agent, not the developer] w", "Fix the [WintOS] link"].map(isWintosPrompt)).toEqual([true, true, true, true, false]);
+    const line = (t: string) => JSON.stringify({ type: "user", message: { content: t } });
+    expect(userPrompts([line("Fix the flaky test"), line("[WintOS report] Drafts mapping is done")].join("\n"))).toEqual(["Fix the flaky test"]);
 });

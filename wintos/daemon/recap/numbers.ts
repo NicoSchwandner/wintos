@@ -1,3 +1,4 @@
+import { isWintosPrompt } from "../sessions/naming";
 // A day in numbers, from the prompts you sent that day: how many sessions you worked with, the
 // longest stretch without a 10-minute gap, the breaks (gaps of 20 minutes or more), when you
 // stopped, and how often the next prompt went to another session.
@@ -33,7 +34,7 @@ export function promptTimes(jsonl: string, day: string, localDay: (t: number) =>
             const e = JSON.parse(line) as { type?: string; isMeta?: boolean; isSidechain?: boolean; timestamp?: string; message?: { content?: unknown } };
             const at = Date.parse(e.timestamp ?? "");
             const text = typeof e.message?.content === "string" ? e.message.content.trim() : "";
-            if (at && !e.isMeta && !e.isSidechain && text && !text.startsWith("<") && !text.startsWith("[WintOS wake") && localDay(at) === day) out.push(at);
+            if (at && !e.isMeta && !e.isSidechain && text && !text.startsWith("<") && !isWintosPrompt(text) && localDay(at) === day) out.push(at);
         } catch {}
     }
     return out;

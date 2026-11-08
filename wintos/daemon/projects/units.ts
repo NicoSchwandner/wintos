@@ -18,11 +18,14 @@ export const serializeUnits = (units: Unit[]) => units.map((x) => `${BOX[x.state
 
 export const setUnits = (was: Unit[], names: string[]): Unit[] => names.map((name) => ({ name, state: was.find((x) => x.name === name)?.state ?? "todo" }));
 
-// The same matching as `wintos step`: the exact name, else the first that starts with it.
+// The same matching as `wintos step`: the exact name, else the only one that starts with it.
+// "Build" with both "Build API" and "Build UI" there is none, not the first.
 function find(units: Unit[], q: string): number {
     const want = q.trim().toLowerCase();
     const exact = units.findIndex((x) => x.name.toLowerCase() === want);
-    return exact >= 0 ? exact : units.findIndex((x) => x.name.toLowerCase().startsWith(want));
+    if (exact >= 0) return exact;
+    const starts = units.flatMap((x, i) => (x.name.toLowerCase().startsWith(want) ? [i] : []));
+    return starts.length === 1 ? starts[0] : -1;
 }
 
 // Several can be under way at once (a pilot and the hand-off after it): starting one leaves the others.

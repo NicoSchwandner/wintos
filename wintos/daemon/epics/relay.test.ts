@@ -43,3 +43,11 @@ test("queued per session, taken off once typed in", () => {
     expect(relaysDelivered(r, "w2", 1)).toEqual({ w2: [{ text: "b", from: "agent", at: 2 }] });
     expect(relaysDelivered(r, "w2", 2)).toEqual({});
 });
+
+test("findWorker: several sessions starting with the words is none, not the first", async () => {
+    const { findWorker } = await import("./relay");
+    const s = (id: string, name: string) => ({ id, tabId: "t", blockId: id, state: "working", epic: "e", name: { text: name, by: "you", at: 0 } }) as never;
+    const two = [s("a", "Route: Cutover"), s("b", "Route: Backfill")];
+    expect(findWorker(two, "e", "ag", "Route")).toBeUndefined();
+    expect(findWorker(two, "e", "ag", "Route: Back")?.id).toBe("b");
+});

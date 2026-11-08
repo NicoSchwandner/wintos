@@ -9,13 +9,17 @@ export type Relay = { text: string; note?: string; from: string; at: number; own
 export type Relays = Record<string, Relay[]>;
 
 // The session meant: by its name, its id's start, or a roadmap step it is linked to; exact first,
-// then the first that starts with it. Only the epic's own open sessions, never the agent itself.
+// then the one that starts with it. Several starting with it is none: the sessions an agent starts
+// all begin with the epic's name, and the first of them was often the wrong one. Only the epic's own open sessions, never the agent itself.
 // epic undefined: the sessions in no epic (wintos adopt takes one of them in).
 export function findWorker(sessions: Session[], epic: string | undefined, agent: string, q: string, links: Links = {}): Session | undefined {
     const want = q.trim().toLowerCase();
     const open = sessions.filter((s) => s.epic === epic && s.id !== agent && s.state !== "ended");
     const names = (s: Session) => [s.name?.text, s.label, s.id, ...Object.entries(links).filter(([, ids]) => ids.includes(s.id)).map(([step]) => step)].filter((x): x is string => !!x).map((x) => x.toLowerCase());
-    return open.find((s) => names(s).includes(want)) ?? (want.length >= 3 ? open.find((s) => names(s).some((n) => n.startsWith(want))) : undefined);
+    const exact = open.find((s) => names(s).includes(want));
+    if (exact || want.length < 3) return exact;
+    const starts = open.filter((s) => names(s).some((n) => n.startsWith(want)));
+    return starts.length === 1 ? starts[0] : undefined;
 }
 
 const plain = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();

@@ -5,13 +5,17 @@ const PROMPT_MAX = 240;
 
 // The prompts you wrote in a session, from its transcript: what it is about, in your words. Tool
 // results and the harness's own messages (tagged, or marked meta) are not yours.
+// A prompt WintOS typed itself (a report, a wake, a relay, an agent's word), not the developer's:
+// it must not count as them working, reading or naming a session.
+export const isWintosPrompt = (text: string) => /^\[(WintOS|You, via|The .{1,80} agent)/.test(text.trim());
+
 export function userPrompts(jsonl: string): string[] {
     const out: string[] = [];
     for (const line of jsonl.split("\n")) {
         try {
             const e = JSON.parse(line) as { type?: string; isMeta?: boolean; message?: { content?: unknown } };
             const text = e.type === "user" && !e.isMeta && typeof e.message?.content === "string" ? e.message.content.trim() : "";
-            if (text && !text.startsWith("<")) out.push(text.replace(/<pasted_content[\s\S]*?<\/pasted_content[^>]*>/g, "[pasted]").replace(/\s+/g, " ").slice(0, PROMPT_MAX));
+            if (text && !text.startsWith("<") && !isWintosPrompt(text)) out.push(text.replace(/<pasted_content[\s\S]*?<\/pasted_content[^>]*>/g, "[pasted]").replace(/\s+/g, " ").slice(0, PROMPT_MAX));
         } catch {}
     }
     // The first ones set the subject, the last ones where it went.

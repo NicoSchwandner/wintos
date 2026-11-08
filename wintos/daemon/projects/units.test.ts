@@ -34,3 +34,10 @@ describe("the unit commands", () => {
         expect(doneUnit(list, "nope")).toBeUndefined();
     });
 });
+
+test("a prefix two steps share names neither: Build with Build API and Build UI there", async () => {
+    const { startUnit } = await import("./units");
+    const units = [{ name: "Build API", state: "todo" as const }, { name: "Build UI", state: "todo" as const }];
+    expect(startUnit(units, "Build")).toBeUndefined();
+    expect(startUnit(units, "Build U")?.[1].state).toBe("current");
+});

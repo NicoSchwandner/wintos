@@ -46,6 +46,21 @@ and an old project.md's content should move into its epic.
 Start after the reasons queue. Look at `daemon/inject.ts` (what a session is told to write) and
 `daemon/projects/` (where project.md is read).
 
+### Sessions that survive closing WintOS
+
+Closing WintOS, or a crash, ends every session in it, and with them the Monitors that watch CI,
+Copilot and deploys. You then relay "CI red", "merged" and "status?" by hand, and resume sessions
+cold. Run each session in a persistent backend (tmux or Herdr) and have WintOS attach to it, so a
+closed window only detaches.
+
+Why: the 2026-11-07 transcript analysis counted 21 status pings and 111 resumes after an hour
+idle in one week; the Friday /evolve scorecard (`status_pings`, `resumes_after_1h`) shows whether
+this moved them.
+
+Start: try Herdr by hand first, then decide between it and tmux. Pane creation and teardown are
+in `emain/` and the session state in `daemon/sessions/`; a reattach must keep the session's
+WintOS ids, or it loses its context like the background sessions in Known gaps.
+
 ## Known gaps
 
 - **The epic column needs a 700px pane.** Beside a narrower pane (a split), the agent's view has

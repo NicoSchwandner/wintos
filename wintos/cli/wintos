@@ -5,10 +5,7 @@
 #   wintos wake <event> <pr> <prompt…> park until a PR is green, merged, released, re-requested or commented on, then get the prompt (used by Claude)
 #   wintos wake cancel                 drop this session's wakes
 #   wintos ask <kind> [<what…>]       end this turn waiting on the developer: answer, decide, approve or unblock;
-#                                     with a card for the decision: --context "<what this is about>"
-#                                     --why "<why you ask>" --option "<label>: <what it leads to>" (2-4)
-#                                     --recommend <n> --final (it can't be undone)
-#                                     --pick-on / --pick "<finding>" (up to 8, on or off to start) to toggle before answering
+#                                     --context "<what this is about>", --option "<label>: <what it leads to>" (2-4)
 #   wintos done                        end this turn done: nothing waits on the developer (used by Claude)
 #   wintos name <words…>               name this session, as shown in the sidebar (⌘R changes it)
 #   wintos todo <to-do>… | todo done <to-do>
@@ -299,31 +296,28 @@ todo)
     ;;
 ask)
     shift
-    case "${1:-}" in answer | decide | approve | unblock) ;; *) die "usage: wintos ask answer|decide|approve|unblock [<what you need from them>] [--context <line>] [--why <line>] [[--question <which>] --option \"<label>: <then>\"...]... [--recommend <n>] [--final] [--pick-on|--pick <finding>]..." ;; esac
+    case "${1:-}" in answer | decide | approve | unblock) ;; *) die "usage: wintos ask answer|decide|approve|unblock [<what you need from them>] [--context <line>] [[--question <which>] --option \"<label>: <then>\"...]..." ;; esac
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     kind="$1"
     shift
-    # The decision card: --context, --why, --option "label: what it leads to" (2-4), --recommend N, --final,
-    # --pick-on / --pick for what the developer toggles before answering. Asking several things:
-    # --question <which> before the options of each (2-4 each, 8 in all).
-    words=() context="" why="" recommend="" final=false options='[]' picks='[]' question=""
+    # What the question is about (--context) and its choices (--option "label: what it leads to",
+    # 2-4; --question <which> before the options of each when it asks several). --why, --recommend,
+    # --final and --pick are taken and dropped: older instructions still send them, and the card
+    # that showed them is gone.
+    words=() context="" options='[]' question=""
     while [ $# -gt 0 ]; do
         case "$1" in
         --context) context="${2:-}"; shift 2 ;;
-        --why) why="${2:-}"; shift 2 ;;
+        --why | --recommend | --pick | --pick-on) shift 2 ;;
+        --final) shift ;;
         --question) question="${2:-}"; shift 2 ;;
         --option) options="$(jq -c --arg o "${2:-}" --arg q "$question" '. + [($o | capture("^(?<label>.*?)(: (?<then>.*))?$") | with_entries(select(.value != null))) + (if $q != "" then {q: $q} else {} end)]' <<<"$options")"; shift 2 ;;
-        --recommend) recommend="${2:-}"; shift 2 ;;
-        --final) final=true; shift ;;
-        --pick | --pick-on) picks="$(jq -c --arg l "${2:-}" --argjson on "$([ "$1" = --pick-on ] && echo true || echo false)" '. + [{label: $l, on: $on}]' <<<"$picks")"; shift 2 ;;
         *) words+=("$1"); shift ;;
         esac
     done
     text="${words[*]:-}"
-    reply="$(jq -n --arg k "$kind" --arg t "$text" --arg c "$context" --arg w "$why" --argjson o "$options" --arg r "$recommend" --argjson f "$final" --argjson p "$picks" \
-        '{kind: $k, text: $t} + (if $c != "" then {context: $c} else {} end) + (if $w != "" then {why: $w} else {} end)
-         + (if ($o | length) > 0 then {options: $o} else {} end) + (if $r != "" then {recommend: ($r | tonumber)} else {} end) + (if $f then {final: true} else {} end)
-         + (if ($p | length) > 0 then {picks: $p} else {} end)' |
+    reply="$(jq -n --arg k "$kind" --arg t "$text" --arg c "$context" --argjson o "$options" \
+        '{kind: $k, text: $t} + (if $c != "" then {context: $c} else {} end) + (if ($o | length) > 0 then {options: $o} else {} end)' |
         curl -s -m 2 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/ask$SESSION_Q")" || die "wintosd not reachable on port $PORT"
     [ "${reply##*$'\n'}" = 200 ] || die "wintosd refused the ask: ${reply%$'\n'*}"
     echo "asks the developer to $kind${text:+: $text}"

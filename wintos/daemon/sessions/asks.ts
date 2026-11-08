@@ -76,17 +76,15 @@ export function optionGroups(options: AskOption[]): { q?: string; from: number; 
     });
     return out;
 }
-// One key each on the card, a to i without e (your own answer).
-const PICK_MAX = 8;
 const oneLine = (v: unknown, max: number) => typeof v === "string" && v.trim() !== "" && !/[\n\r]/.test(v) && v.trim().length <= max;
 
-// A decision card from `wintos ask` (context, why, options, recommend, final), or why it is refused.
-export function askCard(b: { context?: unknown; why?: unknown; options?: unknown; recommend?: unknown; final?: unknown; picks?: unknown }): AskCard | string {
+// What a `wintos ask` question is about and its choices, or why it is refused. Anything else
+// (why, recommend, final, picks: the card that showed them is gone) is dropped.
+export function askCard(b: { context?: unknown; options?: unknown }): AskCard | string {
     const card: AskCard = {};
-    for (const k of ["context", "why"] as const) {
-        if (b[k] === undefined) continue;
-        if (!oneLine(b[k], LINE_MAX)) return `${k}: one line, up to ${LINE_MAX} characters`;
-        card[k] = (b[k] as string).trim();
+    if (b.context !== undefined) {
+        if (!oneLine(b.context, LINE_MAX)) return `context: one line, up to ${LINE_MAX} characters`;
+        card.context = (b.context as string).trim();
     }
     if (b.options !== undefined) {
         const options = Array.isArray(b.options) ? b.options : [];
@@ -95,17 +93,6 @@ export function askCard(b: { context?: unknown; why?: unknown; options?: unknown
         const ok = fields && options.length <= (groups.length > 1 ? GROUPED_MAX : OPTION_MAX) && groups.every((g) => g.to - g.from >= 1 && g.to - g.from < OPTION_MAX);
         if (!ok) return `options: 2 to ${OPTION_MAX} per question (q), up to ${GROUPED_MAX} in all, each a label up to 80 characters and an optional "then" up to 160`;
         card.options = options.map((o) => ({ label: o.label.trim(), ...(o.then ? { then: o.then.trim() } : {}), ...(groups.length > 1 && o.q ? { q: o.q.trim() } : {}) }));
-    }
-    if (b.recommend !== undefined) {
-        if (optionGroups(card.options ?? []).length > 1) return "recommend: not on a card that asks several questions";
-        if (!Number.isInteger(b.recommend) || (b.recommend as number) < 1 || (b.recommend as number) > (card.options?.length ?? 0)) return "recommend: the number of one of the options, from 1";
-        card.recommend = b.recommend as number;
-    }
-    if (b.final === true) card.final = true;
-    if (b.picks !== undefined) {
-        const picks = Array.isArray(b.picks) ? b.picks : [];
-        if (!(picks.length >= 1 && picks.length <= PICK_MAX && picks.every((p) => p && oneLine(p.label, 160)))) return `picks: 1 to ${PICK_MAX}, each a label up to 160 characters`;
-        card.picks = picks.map((p) => ({ label: p.label.trim(), on: p.on === true }));
     }
     return card;
 }

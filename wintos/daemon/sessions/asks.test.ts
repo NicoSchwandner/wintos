@@ -35,26 +35,19 @@ test("askPrompt sends the end of a long message", () => {
 });
 
 describe("askCard", () => {
-    test("context, why, options with what they lead to, the recommended one, and whether it can be undone", () =>
-        expect(askCard({ context: "Routes all documents", why: "CI green", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }], recommend: 1, final: true })).toEqual({
-            context: "Routes all documents", why: "CI green", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }], recommend: 1, final: true,
+    test("what it is about, and options with what they lead to; why, recommend, final and picks are dropped", () =>
+        expect(askCard({ context: "Routes all documents", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }], why: "CI green", recommend: 1, final: true } as never)).toEqual({
+            context: "Routes all documents", options: [{ label: "Merge now", then: "live Monday" }, { label: "Hold" }],
         }));
     test("several questions: each option names its question, 2 to 4 per question, up to 8 in all", () =>
         expect(askCard({ options: [{ label: "Keep", q: "KR1" }, { label: "Drop", q: "KR1" }, { label: "Open", q: "Denominator" }, { label: "47,300", q: "Denominator" }] })).toEqual({
             options: [{ label: "Keep", q: "KR1" }, { label: "Drop", q: "KR1" }, { label: "Open", q: "Denominator" }, { label: "47,300", q: "Denominator" }],
         }));
     test("nothing given is an empty card", () => expect(askCard({})).toEqual({}));
-    test("picks: findings to toggle, some on to start with", () =>
-        expect(askCard({ picks: [{ label: "Missing test for 0% VAT", on: true }, { label: "Rename feeVat" }] })).toEqual({ picks: [{ label: "Missing test for 0% VAT", on: true }, { label: "Rename feeVat", on: false }] }));
     test.each([
         [{ context: "a\nb" }, /^context/],
         [{ options: [{ label: "only one" }] }, /^options/],
-        [{ options: [{ label: "a" }, { label: "b" }], recommend: 3 }, /^recommend/],
-        [{ recommend: 1 }, /^recommend/],
-        [{ picks: [] }, /^picks/],
         [{ options: [{ label: "a", q: "x" }, { label: "b", q: "x" }, { label: "c", q: "y" }] }, /^options/],
-        [{ options: [{ label: "a", q: "x" }, { label: "b", q: "x" }, { label: "c", q: "y" }, { label: "d", q: "y" }], recommend: 1 }, /^recommend/],
-        [{ picks: Array.from({ length: 9 }, (_, i) => ({ label: `p${i}` })) }, /^picks/],
     ])("a bad card is refused: %j", (b, why) => expect(askCard(b)).toMatch(why));
 });
 

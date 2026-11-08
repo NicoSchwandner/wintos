@@ -2,7 +2,6 @@ import { getLayoutModelForStaticTab } from "@/layout/index";
 import { useAtomValue } from "jotai";
 import { GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft } from "lucide-react";
 import { memo } from "react";
-import { decisions } from "./decisions";
 import { Key } from "./Key";
 import { runAction, runKey } from "./menu";
 import { switchProject } from "./switcher";
@@ -16,6 +15,7 @@ import { shownState, STATE_WORD } from "./sessions";
 import { WhereWasI } from "./WhereWasI";
 import { EpicAvatar } from "./EpicAvatar";
 import { EpicBody } from "./EpicPage";
+import { yourMoveAtom } from "./notes/state";
 import { lookOf, NO_EPIC, shortName } from "./epicLook";
 import { prRef, relTime, roadmapOf, sessionHeader, stepOf, sessionName, urgentPr, type PrChip, type PrStatus } from "./view";
 
@@ -25,6 +25,8 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     const { state } = useWintos();
     const now = useNow();
     const focused = useAtomValue(getLayoutModelForStaticTab().focusedNode)?.data?.blockId === blockId;
+    // How many wait on you, by the sidebar's own count: one place decides what needs you.
+    const yourMove = useAtomValue(yourMoveAtom);
     const h = state ? sessionHeader(state, blockId) : undefined;
     if (!h) return null;
     const s = h.session;
@@ -33,8 +35,7 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
     const agents = liveSubagents(s, now);
     const urgent = urgentPr(h);
     // In a session waiting on you: how many more wait, and the key to the next.
-    const waiting = focused && state ? decisions(state, now, () => "") : [];
-    const more = waiting.some((d) => d.sessionId === s.id) ? waiting.length - 1 : 0;
+    const more = focused && shown === "waiting" ? Math.max(0, yourMove - 1) : 0;
     const units = state ? roadmapOf(state, s).units : [];
     const at = state ? stepOf(state, s) : -1;
     const unitAt = at >= 0 ? { i: at + 1, n: units.length, name: units[at].name } : undefined;

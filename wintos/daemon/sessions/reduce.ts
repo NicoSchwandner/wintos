@@ -8,13 +8,10 @@ export type SessionState = "idle" | "working" | "waiting" | "parked" | "done" | 
 // question tool, the session itself (`wintos ask`), or a reading of its last message.
 export const ASK_KINDS = ["answer", "decide", "approve", "unblock"] as const;
 export type AskKind = (typeof ASK_KINDS)[number];
-// The card a decision shows: context, a line on what it is about; why, the reason it
-// asks; options with what each leads to, the recommended one by number from 1; final: it can't be
-// undone (a merge, a deploy, a delete).
-export type AskOption = { label: string; then?: string; q?: string }; // q: the question it answers, on a card that asks several
-// picks: findings or parts the developer toggles before answering (which review comments to post).
-export type AskPick = { label: string; on: boolean };
-export type AskCard = { context?: string; why?: string; options?: AskOption[]; recommend?: number; final?: boolean; picks?: AskPick[] };
+// What a question is about (context), and its choices with what each leads to, grouped by q when
+// it asks several. peek shows them to the epic agent.
+export type AskOption = { label: string; then?: string; q?: string }; // q: the question it answers, when it asks several
+export type AskCard = { context?: string; options?: AskOption[] };
 // suggestion: the epic agent's recommendation on it (wintos suggest), shown with the question.
 export type Ask = { kind: AskKind; text?: string; by: "tool" | "session" | "model" | "guess"; suggestion?: string } & AskCard;
 // How a turn that ended without a word from the session reads (sessions/asks.ts): a question for

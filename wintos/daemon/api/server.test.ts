@@ -44,9 +44,9 @@ describe("wintosd API", () => {
         expect(state.sessions[0].lane).toEqual({ name: "fast", steps: ["Test", "Fix", "?Your OK"], at: 1 });
     });
 
-    test("`wintos todo` lists the step's to-dos and ticks them; without a lane it is a 400", async () => {
+    test("`wintos todo` lists the step's to-dos and ticks them; without a lane they get one of their own", async () => {
         await event(prompt);
-        expect((await post("/blocks/blk-1/todo", { items: ["Narrow list"] })).status).toBe(400);
+        expect((await post("/blocks/blk-1/todo", { items: ["Narrow list"] })).status).toBe(200);
         await post("/blocks/blk-1/lane", { name: "fast", steps: ["Test", "Fix"] });
         expect((await post("/blocks/blk-1/todo", { items: ["Narrow list", "Name search"] })).status).toBe(200);
         expect((await post("/blocks/blk-1/todo", { done: "name" })).status).toBe(200);

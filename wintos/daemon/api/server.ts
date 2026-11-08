@@ -1510,7 +1510,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const okItems = items && items.length > 0 && items.length <= MAX_STEPS && items.every((s) => s && isSafe(s) && s.length <= MAX_TODO);
                 if (!isSafe(blockId) || (!okItems && !isSafe(b?.done))) return send(res, 400, `need 1-${MAX_STEPS} one-line to-dos up to ${MAX_TODO} characters, or the one done`);
                 const next = okItems ? setTodo(sessions, blockId, items!, sid) : tickTodo(sessions, blockId, b.done as string, sid);
-                if (!next) return send(res, 400, okItems ? "no lane in this session; run wintos lane first" : "no such to-do in this step");
+                if (!next) return send(res, 400, okItems ? "no session in this pane" : "no such to-do in this step");
                 sessions = next;
                 saveSessions();
                 broadcast();

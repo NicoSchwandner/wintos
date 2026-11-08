@@ -316,10 +316,13 @@ export function setStep(sessions: Map<string, Session>, blockId: string, step: s
 }
 
 // undefined: the session has no lane yet, so the caller can say so.
+// Without a lane the to-dos get one of their own, one step long: a skill listing its open items
+// (iterate's rounds) need not invent a process first.
 export function setTodo(sessions: Map<string, Session>, blockId: string, items: string[], sessionId?: string): Map<string, Session> | undefined {
     const live = liveIn(sessions, blockId, sessionId);
-    if (!live?.lane) return undefined;
-    return new Map(sessions).set(live.id, { ...live, lane: { ...live.lane, todos: items.map((text) => ({ text, done: false })) } });
+    if (!live) return undefined;
+    const lane = live.lane ?? { name: "to-dos", steps: ["to-dos"], at: 0 };
+    return new Map(sessions).set(live.id, { ...live, lane: { ...lane, todos: items.map((text) => ({ text, done: false })) } });
 }
 
 // Matched like a step: by name in any case, else by its start. undefined: no such to-do.

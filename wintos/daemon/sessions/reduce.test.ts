@@ -373,7 +373,8 @@ describe("the current step's to-dos (`wintos todo`)", () => {
         expect(todos(tickTodo(t, "blk-1", "name")!)).toEqual([{ text: "Narrow list", done: false }, { text: "Name search", done: true }]);
         expect(tickTodo(t, "blk-1", "Deploy")).toBeUndefined();
     });
-    test("without a lane there is nothing to list", () => expect(setTodo(run([ev(prompt)]), "blk-1", ["x"])).toBeUndefined());
+    test("without a lane the to-dos get a one-step lane of their own", () =>
+        expect(setTodo(run([ev(prompt)]), "blk-1", ["x"])!.get(prompt.session_id)?.lane).toEqual({ name: "to-dos", steps: ["to-dos"], at: 0, todos: [{ text: "x", done: false }] }));
     test("the next step starts without them; the same step again keeps them", () => {
         const t = setTodo(m, "blk-1", ["Narrow list"])!;
         expect(todos(setStep(t, "blk-1", "Test path")!)).toHaveLength(1);

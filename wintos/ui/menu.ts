@@ -61,7 +61,6 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Shift:Cmd:c", "copy-url"],
     ["Option:Cmd:c{KeyP}", "park-session"],
     ["Option:Cmd:c{KeyE}", "epic"],
-    ["Option:Cmd:c{KeyV}", "sidebar-view"],
     ["Shift:Option:Cmd:c{KeyE}", "epic-page"],
     ["Option:Cmd:c{KeyM}", "move-session"],
     ["Option:Cmd:c{KeyT}", "take-out"],
@@ -76,7 +75,6 @@ export const WINTOS_KEYS: [string, string][] = [
     ["Option:Cmd:c{KeyU}", "update"],
     ["Option:Cmd:c{KeyB}", "break"],
     ["Shift:Option:Cmd:c{KeyB}", "break-later"],
-    ["Option:Cmd:c{KeyS}", "quiet"],
     ["Option:Cmd:c{KeyL}", "rail"],
     // ⌥ turns a digit into another character too, so these match the key's place.
     ...Array.from({ length: 9 }, (_, i): [string, string] => [`Option:Cmd:c{Digit${i + 1}}`, `session-${i + 1}`]),
@@ -187,7 +185,6 @@ export function runAction(action: string): void {
     if (action === "switch-next" || action === "switch-prev") return switchProject(action === "switch-next" ? 1 : -1, false);
     if (action === "project") return void createTab();
     if (action === "new-step") return toggleOverlay("new-step");
-    if (action === "sidebar-view") return toggleStoredFlag(SIDEBAR_BY_EPIC);
     if (action === "close-project") return closeProject();
     if (action === "undo") return undo();
     if (action === "edit-mine") return editMine(true);
@@ -245,7 +242,6 @@ export function runAction(action: string): void {
     if (action === "day") return toggleView("day");
     if (action === "reflect") return toggleView("reflect");
     if (action === "keyboard") return toggleView("keyboard");
-    if (action === "quiet") return void document.querySelector<HTMLElement>("[data-wintos=quiet-fold]")?.click();
     if (action === "restart-terminal") return restartTerminal();
     if (action === "update") return updateWintos();
     if (action === "break") return void (flog("break: started"), daemonFetch("/rhythm/break", { method: "POST", body: {} }));
@@ -483,14 +479,6 @@ export function toggleView(view: MainView): void {
 
 // A click on a card opens its page and never closes it: a second click on what is already open
 // does nothing. Only the key, pressed again, goes back.
-// The sidebar by epic instead of by state (⌥⌘V); one setting for every project's renderer.
-export const SIDEBAR_BY_EPIC = "wintos:sidebar-by-epic";
-function toggleStoredFlag(key: string): void {
-    try {
-        localStorage.setItem(key, localStorage.getItem(key) === "1" ? "0" : "1");
-    } catch {} // no storage: the view stays as it is
-    window.dispatchEvent(new StorageEvent("storage"));
-}
 
 // An epic's page, from its card on the epics home.
 // An epic opens as its agent's view: the agent's terminal with the epic beside it (its mine.md in

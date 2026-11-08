@@ -13,17 +13,15 @@ import type { EpicView } from "./view";
 // going to the epic and going to its agent are the same.
 export type EpicGroup = { epic?: EpicView; rows: Row[]; agent?: Row };
 
-// The sidebar by epic (⌥⌘V): each open epic with its sessions under it, pinned epics first, then
-// those where something waits on you, reads, runs, then the quiet ones. Sessions in no epic, and
-// tabs without a session, come last. Rows keep the order the state list gave them.
-const BAND_RANK = { needs: 0, read: 1, running: 2, quiet: 3 } as const;
+// The sidebar: each open epic with its sessions under it, in an order that holds still: pinned
+// epics first, then by name. What needs you is found by ⌃⇥, not by epics jumping around.
+// Sessions in no epic, and tabs without a session, come last. Rows keep the state list's order.
 export function groupByEpic(rows: Row[], epics: EpicView[]): EpicGroup[] {
     const open = epics.filter((e) => !e.done);
     const of = (r: Row) => (r.key !== r.tabId ? r.sessions[0]?.epic : undefined);
     const isAgent = (r: Row, e: EpicView) => !!e.agent && r.key === `s:${e.agent}`;
     const groups = open.map((epic) => ({ epic, rows: rows.filter((r) => of(r) === epic.id && !isAgent(r, epic)), agent: rows.find((r) => isAgent(r, epic)) }));
-    const best = (g: EpicGroup) => Math.min(4, ...[...g.rows, ...(g.agent ? [g.agent] : [])].map((r) => BAND_RANK[r.band]));
-    groups.sort((a, b) => Number(!!b.epic?.pinned) - Number(!!a.epic?.pinned) || best(a) - best(b) || b.rows.length - a.rows.length);
+    groups.sort((a, b) => Number(!!b.epic.pinned) - Number(!!a.epic.pinned) || shortName(a.epic).localeCompare(shortName(b.epic), undefined, { sensitivity: "base" }));
     const known = new Set(open.map((e) => e.id));
     const agents = new Set(groups.flatMap((g) => (g.agent ? [g.agent.key] : [])));
     const loose = rows.filter((r) => (!of(r) || !known.has(of(r)!)) && !agents.has(r.key));

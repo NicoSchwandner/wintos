@@ -20,7 +20,7 @@ import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, focusSession, openBackground, reopenProject, resumePane, setLatestSessions } from "./focus";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { cycleOrder, setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
-import { closeProjectTab, openView, registerWintosMenu, runKey, SIDEBAR_BY_EPIC } from "./menu";
+import { closeProjectTab, openView, registerWintosMenu, runKey } from "./menu";
 import { isPage, mainViewAtom, newStepEpicAtom, renamingAtom, yourMoveAtom } from "./notes/state";
 import { inFlight, liveSessions } from "./sessions";
 import { instance, setProjectTitle, useWintos } from "./useWintos";
@@ -31,10 +31,9 @@ import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels, type CardStat } from "./panels";
 import { EpicAvatar } from "./EpicAvatar";
-import { PinnedEpics } from "./PinnedEpics";
 import { EpicGroups, groupByEpic } from "./EpicGroups";
 import { useEpicReports } from "./epicReports";
-import { lookOf, NO_EPIC, withoutEpic, type Look } from "./epicLook";
+import { withoutEpic, type Look } from "./epicLook";
 
 const BAND_STYLE = {
     needs: { label: "Your move", color: T.apricot },
@@ -92,8 +91,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const now = useNow();
     const fullScreen = useAtomValue(atoms.isFullScreen);
     const mainView = useAtomValue(mainViewAtom);
-    const [showAll, setShowAll] = useStoredFlag("wintos:quiet-unfolded");
-    const [byEpic] = useStoredFlag(SIDEBAR_BY_EPIC);
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 
@@ -106,21 +103,14 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const loading = state ? loadingPanels(state, lastPanelTitles(panels)) : [];
     const running = new Set(state?.pluginsRunning ?? []);
     const meetings = useMemo(() => meetingsFrom(state?.plugins), [state?.plugins]);
-    // The open tab is always visible even when it is stale; walking with ⌘J/⌘K or renaming
-    // (the row must exist to hold the input) shows them all.
-    const expanded = showAll || switchTarget != null || renaming != null;
-    // Quiet folds to one line, the open project kept: what is not for you now steps back.
-    const allQuiet = model ? [...model.quiet, ...model.quietMore, ...model.quietStale] : [];
-    const quiet = expanded ? allQuiet : allQuiet.filter((r) => r.tabId === activeTabId);
     // The cards above the projects are walked too, in the order they show: PRs, On call, Today.
     const openEpics = (state?.epics ?? []).filter((e) => !e.done).length;
     const epicsWaiting = new Set((state?.sessions ?? []).filter((x) => x.epic && x.state === "waiting").map((x) => x.epic)).size;
-    const pinned = (state?.epics ?? []).filter((e) => e.pinned && !e.done);
     const cards = [...(state ? ["card:today"] : []), ...(gh || state ? ["card:prs"] : []), ...(panels.length || loading.length ? ["card:oncall"] : [])];
     const byState = model ? [...model.needs, ...model.read, ...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale] : [];
-    const groups = byEpic ? groupByEpic(byState, state?.epics ?? []) : [];
-    const listed = byEpic ? groups.flatMap((g) => g.rows) : byState;
-    const stops = byEpic ? groups.flatMap((g) => [...(g.epic ? [`epic:${g.epic.id}`] : []), ...g.rows.map((r) => r.key)]) : [...pinned.map((e) => `epic:${e.id}`), ...listed.map((r) => r.key)];
+    const groups = groupByEpic(byState, state?.epics ?? []);
+    const listed = groups.flatMap((g) => g.rows);
+    const stops = groups.flatMap((g) => [...(g.epic ? [`epic:${g.epic.id}`] : []), ...g.rows.map((r) => r.key)]);
     const switchOrder = model ? [...cards, ...bgNeeds.map((s) => `bg:${s.id}`), ...wokeClosed.map((w) => `wake:${w.projectId}`), ...stops] : [];
     const tabOfRow = Object.fromEntries(listed.map((r) => [r.key, r.tabId]));
 
@@ -190,13 +180,11 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             key: row.key,
             rowKey: row.key,
             rowNo: listed.indexOf(row) + 1,
-            // By epic, the group's heading and rail already name the epic: a row repeats neither its
-            // face nor its name.
-            look: own && !byEpic ? (epic ? lookOf(epic) : NO_EPIC) : undefined,
-            // By epic the rows lose the state bands that head them by state, so each says its own.
-            band: byEpic ? row.band : undefined,
+            // The group's heading and rail already name the epic: a row repeats neither its face nor
+            // its name, and says its own state, as no band heads it.
+            band: row.band,
             tabId: row.tabId,
-            v: byEpic && epic ? { ...v, title: withoutEpic(v.title, epic) } : v,
+            v: epic ? { ...v, title: withoutEpic(v.title, epic) } : v,
             active: here,
             cursor: switchTarget === row.key,
             renaming: !own && renaming === row.tabId,
@@ -246,12 +234,6 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                         {loading.map((p) => <Tile key={p.name} label={p.title} keys="⇧⌘O" value="…" active={shows("oncall")} cursor={switchTarget === "card:oncall"} onClick={() => goToInbox("oncall")} />)}
                     </div>
                 )}
-                {state && (
-                    <button type="button" data-wintos="sidebar-view" data-key="⌥⌘V" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey("sidebar-view")} style={{ alignSelf: "flex-start", margin: "-8px 4px -6px", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 11.5, color: T.faint }}>
-                        {byEpic ? "by epic · show by state" : "by state · show by epic"}
-                    </button>
-                )}
-                {state && !byEpic && <PinnedEpics epics={pinned} sessions={state.sessions.filter((x) => x.state !== "ended" && !x.background)} now={now} cursor={switchTarget} />}
                 {state?.day?.reflection && (
                     <button type="button" data-wintos="reflect-nudge" data-key="⌥⌘Y" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openView("reflect")} style={{ display: "flex", justifyContent: "space-between", gap: 8, margin: "-8px 2px 0", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontFamily: T.ui, fontSize: 12.5, color: T.apricot, textAlign: "left" }}>
                         Write your {state.day.reflection.level} reflection
@@ -266,42 +248,13 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     </div>
                 ) : (
                     <>
-                        <Band kind="needs" count={(byEpic ? 0 : model.needs.length) + wakeNeeds.length + bgNeeds.length}>
+                        {/* Above the epics: what has no row in them, a closed view's wake and a background session. */}
+                        <Band kind="needs" count={wakeNeeds.length + bgNeeds.length}>
                             {bgNeeds.map(bgCard)}
                             {wakeNeeds.map(wakeCard)}
-                            {!byEpic && model.needs.map(renderRow)}
                         </Band>
-                        {byEpic ? (
-                            <>
-                                <Band kind="read" count={wakeNews.length}>{wakeNews.map(wakeCard)}</Band>
-                                <EpicGroups groups={groups} renderRow={renderRow} isHere={isHere} cursor={switchTarget} newStep={(epic) => (globalStore.set(newStepEpicAtom, epic), runKey("new-step"))} background={background} />
-                            </>
-                        ) : (
-                        <>
-                        <Band kind="read" count={model.read.length + wakeNews.length}>
-                            {wakeNews.map(wakeCard)}
-                            {model.read.map(renderRow)}
-                        </Band>
-                        <Band kind="running" count={model.running.length}>{model.running.map(renderRow)}</Band>
-                        <Band kind="quiet" count={model.quiet.length + model.quietMore.length} shown={quiet.length}>
-                            {quiet.map(renderRow)}
-                            {allQuiet.length > quiet.length || showAll ? (
-                                <button
-                                    type="button"
-                                    data-wintos="quiet-fold"
-                                    data-key="⌥⌘S"
-                                    tabIndex={-1}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => setShowAll(!showAll)}
-                                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "2px 4px 0", padding: "5px 0", background: "transparent", border: "none", textAlign: "left", fontFamily: T.ui, fontSize: 12.5, color: T.faint, cursor: "pointer" }}
-                                >
-                                    <span>{showAll ? "Fold the quiet ones" : `${allQuiet.length - quiet.length} quiet`}</span>
-                                    <Key k="⌥⌘S" label="" />
-                                </button>
-                            ) : null}
-                        </Band>
-                        </>
-                        )}
+                        <Band kind="read" count={wakeNews.length}>{wakeNews.map(wakeCard)}</Band>
+                        <EpicGroups groups={groups} renderRow={renderRow} isHere={isHere} cursor={switchTarget} newStep={(epic) => (globalStore.set(newStepEpicAtom, epic), runKey("new-step"))} background={background} />
                     </>
                 )}
             </div>
@@ -577,30 +530,3 @@ function SummaryCard({ label, keys, stats, note, noteColor, busy, active, cursor
     );
 }
 
-// A sidebar toggle kept in localStorage, which every project's renderer shares: one setting for
-// all projects, like the notes rail's width.
-function useStoredFlag(key: string): [boolean, (on: boolean) => void] {
-    const read = () => {
-        try {
-            return localStorage.getItem(key) === "1";
-        } catch {
-            return false;
-        }
-    };
-    const [on, setOn] = useState(read);
-    useEffect(() => {
-        const sync = () => setOn(read());
-        window.addEventListener("storage", sync);
-        document.addEventListener("visibilitychange", sync);
-        return () => (window.removeEventListener("storage", sync), document.removeEventListener("visibilitychange", sync));
-    }, []);
-    return [
-        on,
-        (next) => {
-            setOn(next);
-            try {
-                localStorage.setItem(key, next ? "1" : "0");
-            } catch {}
-        },
-    ];
-}

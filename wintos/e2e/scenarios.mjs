@@ -77,6 +77,9 @@ async function cdpFocus(t, ...selectors) {
 
 // modifiers: Alt 1, Ctrl 2, Meta 4, Shift 8 (CDP's bitmask).
 const MODS = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
+// A tab's sidebar rows whose own state mark says <band> (needs, read, running, quiet): the
+// sidebar groups rows by epic, and each row carries its state.
+const rowsIn = (band, tabId) => `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-tabid='${tabId}']")].filter((e) => e.querySelector("[data-wintos=row-state][data-state=${band}]"))`;
 async function press(t, key, { code, keyCode, mods = [] } = {}) {
     const modifiers = mods.reduce((m, k) => m | MODS[k], 0);
     if (modifiers) await focusOut(t);
@@ -385,7 +388,7 @@ await scenario("14b · a session that parks itself goes quiet at once, saying wh
     await post("UserPromptSubmit");
     await fetch(`http://127.0.0.1:7731/blocks/${blockId}/wait?session=e2e-ack`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason: "CI on #1" }) });
     await post("Stop", { last_assistant_message: "## Done\n\nPushed the **fix**; CI is running." });
-    const row = (band) => `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-band-group=${band}] [data-tabid='${tabId}']")].map((e) => e.innerText).join(" ")`;
+    const row = (band) => `${rowsIn(band, tabId)}.map((e) => e.innerText).join(" ")`;
     // The active row shows the walk keys instead of its line, so read it in another tab's sidebar.
     const others = [];
     for (const r of await renderers()) if ((await evalIn(r, "window.wintosTabId?.()")) !== tabId) others.push(r);
@@ -408,7 +411,7 @@ await scenario("16 · a shelved session owning a red PR: the project stays out o
     await fetch(`http://127.0.0.1:7731/projects/${tabId}/shelf`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ script: "cd '/tmp' && claude --resume 'e2e-own'", label: "e2e own" }) });
     await ev("SessionEnd");
     await until("its PR on the shelved row", () => evalIn(t, `[...document.querySelectorAll("[data-wintos=shelf-dock]")].some((e) => e.innerText.includes("#${red.number}"))`));
-    const needs = await evalIn(t, `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-tabid='${tabId}']")].some((e) => e.closest("[data-band-group=needs]"))`);
+    const needs = await evalIn(t, `${rowsIn("needs", tabId)}.length > 0`);
     if (needs) throw new Error("a red PR put the project in Needs you");
     // The resumed Claude has no such session on dev and exits, clearing the pane's resume
     // command (the hook does on exit), so the new pane is counted rather than its command read.
@@ -431,7 +434,7 @@ await scenario("17 · a click on WintOS itself is mouse mode: no pane frame; a c
     await press(t, "l", { code: "KeyL", keyCode: 76, mods: ["alt", "meta"] });
     await press(t, "l", { code: "KeyL", keyCode: 76, mods: ["alt", "meta"] });
     await until("keyboard mode", async () => (await mode()) === "keyboard");
-    await click("[data-band-group] > div");
+    await click("[data-wintos=epic-groups] [data-row]");
     await until("mouse mode", async () => (await mode()) === "mouse");
     await until("no pane frame", async () => (await frame()) === "rgba(0, 0, 0, 0)");
     await click(".block.block-focused .block-content");
@@ -601,7 +604,7 @@ await scenario("25 · a turn that asks you to decide sits in Your move saying so
     await post("UserPromptSubmit");
     await fetch(`http://127.0.0.1:7731/blocks/${blockId}/ask?session=e2e-ask`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "decide", text: "two bands or one" }) });
     await post("Stop", { last_assistant_message: "Two ways to show it. Which one?" });
-    const row = (band) => `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-band-group=${band}] [data-tabid='${tabId}']")].map((e) => e.innerText).join(" ")`;
+    const row = (band) => `${rowsIn(band, tabId)}.map((e) => e.innerText).join(" ")`;
     const others = [];
     for (const r of await renderers()) if ((await evalIn(r, "window.wintosTabId?.()")) !== tabId) others.push(r);
     await until("Decide in Your move in another sidebar", async () => { for (const r of others) { const text = await evalIn(r, row("needs")); if (/Decide\s+two bands or one/.test(text)) return true; } return false; });
@@ -678,7 +681,7 @@ await scenario("28 · ⌃⇥ held walks to the first session that needs you, pas
     const top = await until("the first row in Your move outside this view", async () => {
         for (const r of await renderers()) {
             if (!(await evalIn(r, "innerWidth > 0"))) continue;
-            const first = await evalIn(r, `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-band-group=needs] [data-tabid]")].map((e) => e.dataset.tabid).filter((id) => !id.includes(":") && id !== "${here}")[0] ?? false`);
+            const first = await evalIn(r, `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-tabid]")].filter((e) => e.querySelector("[data-wintos=row-state][data-state=needs]")).map((e) => e.dataset.tabid).filter((id) => !id.includes(":") && id !== "${here}")[0] ?? false`);
             if (first) return first;
         }
         return false;
@@ -729,7 +732,7 @@ await scenario("32 · a turn that ends with its subagent still running sits in R
     await post("UserPromptSubmit");
     await post("SubagentStart", { agent_id: "e2e-a1" });
     await post("Stop", { last_assistant_message: "Waiting for the review agent." });
-    const row = (band) => `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-band-group=${band}] [data-tabid='${tabId}']")].map((e) => e.innerText).join(" ")`;
+    const row = (band) => `${rowsIn(band, tabId)}.map((e) => e.innerText).join(" ")`;
     const others = [];
     for (const r of await renderers()) if ((await evalIn(r, "window.wintosTabId?.()")) !== tabId) others.push(r);
     const elsewhere = (band, line) => until(`"${line}" in ${band} in another sidebar`, async () => { for (const r of others) if ((await evalIn(r, row(band))).includes(line)) return true; return false; });
@@ -739,7 +742,7 @@ await scenario("32 · a turn that ends with its subagent still running sits in R
         await until("the project in Your move", async () => { for (const r of others) if (await evalIn(r, row("needs"))) return true; return false; });
     } catch (e) {
         const st = (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((x) => x.id === "e2e-agent");
-        const bands = await Promise.all(others.map((r) => evalIn(r, `[...document.querySelectorAll("[data-band-group]")].map((g) => g.dataset.bandGroup + ":" + g.querySelectorAll("[data-tabid='${tabId}']").length).join(" ")`)));
+        const bands = await Promise.all(others.map((r) => evalIn(r, `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-tabid='${tabId}'] [data-wintos=row-state]")].map((m) => m.dataset.state).join(" ")`)));
         throw new Error(`${e.message}; session ${JSON.stringify(st && { state: st.state, subagents: st.subagents, turnEndedAt: st.turnEndedAt })}; sidebars ${JSON.stringify(bands)}`);
     }
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(blockId)}).id)`);
@@ -908,7 +911,7 @@ await scenario("43 · a worker's turn end reaches its epic's agent: typed into t
     await until("typed into the agent and off the queue", async () => !(await st()).epicReports?.["e2e-ag"], 120_000);
 });
 
-await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sessions; + new session opens ⌘N's sheet on that epic; a row drops the epic it sits under; an epic with no session folds to one line with its +; ⌥⌘V again goes back", async () => {
+await scenario("44 · the sidebar is by epic: each epic with its sessions; + new session opens ⌘N's sheet on that epic; a row drops the epic it sits under; an epic with no session folds to one line with its +", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const pane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
@@ -916,8 +919,6 @@ await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sess
     const id = await (await api("/epics", { title: "E2E grouped" })).text();
     await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-grouped", hook_event_name: "UserPromptSubmit", prompt: "e2e grouped" } });
     await api("/sessions/e2e-grouped/epic", { epic: id });
-    await evalIn(t, `localStorage.setItem("wintos:sidebar-by-epic", "0"); window.dispatchEvent(new StorageEvent("storage"))`);
-    await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
     const group = `document.querySelector("[data-wintos=epic-groups] [data-epic-group='${id}']")`;
     await api("/sessions/e2e-grouped/name", { text: "E2E grouped: the worker" });
     await until("its group with its session, which says its state", () => evalIn(t, `!!${group}?.querySelector("[data-row='s:e2e-grouped'] [data-wintos=row-state][data-state]")`));
@@ -931,8 +932,6 @@ await scenario("44 · ⌥⌘V shows the sidebar by epic: each epic with its sess
     await evalIn(t, `${folded}.querySelector("[data-wintos=epic-new-step]").click()`);
     await until("its + still opens the sheet on it", () => evalIn(t, `!!document.querySelector("[data-wintos=new-step] [data-epic='${bare}'][data-on]")`));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
-    await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
-    await until("back by state, where the bands say it", () => evalIn(t, `!document.querySelector("[data-wintos=epic-groups]") && !document.querySelector("[data-wintos=row-state]")`));
 });
 
 await scenario("45 · an epic's page shows its finished sessions and last 8 workdays; the month's hours on the home can be corrected", async () => {
@@ -1099,7 +1098,7 @@ await scenario("49 · the epic agent relays your words to a session: refused unl
     await until("typed in by the session's view and off the queue", async () => !(await st()).relays?.["e2e-relay-wk"], 30000);
 });
 
-await scenario("50 · by epic, the agent is its epic's header: no row of its own, a turning ring while it works", async () => {
+await scenario("50 · the agent is its epic's header: no row of its own, a turning ring while it works", async () => {
     const t = await visible();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -1108,15 +1107,11 @@ await scenario("50 · by epic, the agent is its epic's header: no row of its own
     await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-ring-ag", hook_event_name: "UserPromptSubmit", prompt: "e2e" } });
     await api(`/epics/${id}/agent`, { sessionId: "e2e-ring-ag" });
     await api("/sessions/e2e-ring-ag/epic", { epic: id });
-    await evalIn(t, `localStorage.setItem("wintos:sidebar-by-epic", "0"); window.dispatchEvent(new StorageEvent("storage"))`);
-    await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
     const group = `document.querySelector("[data-epic-group='${id}']")`;
     await until("its heading lit: the agent's pane is where you are", () => evalIn(t, `!!${group}?.querySelector("[data-row='epic:${id}'][data-on]")`));
     await until("its group, the agent in the header, turning", () => evalIn(t, `!!${group}?.querySelector("[data-row='epic:${id}'] [data-agent-running]") && !${group}.querySelector("[data-row='s:e2e-ring-ag']") && !document.querySelector("[data-epic-group=''] [data-row='s:e2e-ring-ag']")`));
     await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-ring-ag", hook_event_name: "Stop" } });
     await until("still once it stops", () => evalIn(t, `!${group}?.querySelector("[data-agent-running]")`));
-    await press(t, "v", { code: "KeyV", mods: ["meta", "alt"] });
-    await until("back by state", () => evalIn(t, `!document.querySelector("[data-wintos=epic-groups]")`));
 });
 
 await scenario("51 · a click on the open pane's chip brings the keys into that pane, from wherever they were", async () => {

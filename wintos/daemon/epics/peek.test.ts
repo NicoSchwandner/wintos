@@ -31,7 +31,7 @@ test("a peek says its state, step, question with options, PRs and last reply", (
     expect(peekText(s, { step: "Cutover", prs: [{ url: "https://github.com/a/b/pull/1", state: "open" }], reply: "Which id?" })).toBe(
         [
             'Drafts mapping: waiting, works the step "Cutover"',
-            "asks you (decide): which id — about the drafts table",
+            "asks the developer (decide): which id — about the drafts table",
             "  option 1: DraftId → one column",
             "  option 2: Both",
             "your suggestion on it: DraftId",

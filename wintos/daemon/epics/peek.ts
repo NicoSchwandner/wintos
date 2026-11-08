@@ -48,7 +48,7 @@ export function peekText(s: Session, more: { step?: string; prs: { url: string; 
         `${s.name?.text ?? s.label ?? s.id}: ${s.state}${s.bgId ? " (in the background)" : ""}${more.step ? `, works the step "${more.step}"` : ""}`,
         freshStatus(s) && `status: ${freshStatus(s)!.text}`,
         s.parkedOn && `paused on: ${s.parkedOn}`,
-        ask && `asks you (${ask.kind}): ${ask.text ?? "see its reply"}${ask.context ? ` — about ${ask.context}` : ""}`,
+        ask && `asks the developer (${ask.kind}): ${ask.text ?? "see its reply"}${ask.context ? ` — about ${ask.context}` : ""}`,
         ...(ask?.options ?? []).map((o, i) => `  option ${i + 1}: ${o.label}${o.then ? ` → ${o.then}` : ""}`),
         ask?.suggestion && `your suggestion on it: ${ask.suggestion}`,
         more.prs.length ? `PRs: ${more.prs.map((p) => `${p.url} (${p.state})`).join(", ")}` : undefined,

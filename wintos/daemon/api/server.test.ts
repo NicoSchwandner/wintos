@@ -113,6 +113,19 @@ describe("wintosd API", () => {
         expect((await post("/epics/nope/title", { title: "x" })).status).toBe(404);
     });
 
+    test("a relay may quote any of your last few prompts to the agent; the agent can't leave its epic by itself", async () => {
+        const id = await (await post("/epics", { title: "Route" })).text();
+        const at = (blockId: string, payload: object) => post("/events", { tabId: "tab-1", blockId, payload });
+        await at("blk-a", { session_id: "ag", hook_event_name: "SessionStart" });
+        await at("blk-w", { session_id: "wk", hook_event_name: "UserPromptSubmit", prompt: "go" });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await post("/sessions/wk/epic", { epic: id });
+        await at("blk-a", { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "Tell it: cut over group A first" });
+        await at("blk-a", { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "and how is the backfill?" });
+        expect((await post("/blocks/blk-a/relay", { to: "wk", text: "cut over group A first" })).status).toBe(200);
+        expect((await post("/blocks/blk-a/epic", { epic: null })).status).toBe(409);
+    });
+
     test("the epic agent passes on only your words, to its own sessions; and suggests on a session's open question", async () => {
         const id = await (await post("/epics", { title: "Route" })).text();
         const at = (blockId: string, payload: object) => post("/events", { tabId: "tab-1", blockId, payload });
@@ -247,7 +260,7 @@ describe("wintosd API", () => {
         expect((await post("/blocks/blk-w/peek", { to: "ag" })).status).toBe(403);
         const text = await (await post("/blocks/blk-a/peek", { to: "Drafts" })).text();
         expect(text).toContain("Drafts mapping: waiting");
-        expect(text).toContain("asks you (decide): which id");
+        expect(text).toContain("asks the developer (decide): which id");
         expect(text).toContain("its last reply:\nPushed it. Which id should the drafts use?");
     });
 

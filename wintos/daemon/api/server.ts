@@ -214,9 +214,12 @@ export async function startServer(opts: { root: string; port: number; host?: str
         writeJsonAtomic(reportsFile, reports);
         logEvent("report", { agent, from: s.id, epic: s.epic, text });
     };
-    // What you told each epic agent last, so a relay passes only your own words (epics/relay.ts);
-    // and the relays waiting to be typed into their sessions.
-    const lastSaid = new Map<string, string>();
+    // What you told each epic agent, so a relay passes only your own words (epics/relay.ts): your
+    // last few prompts to it, kept across restarts. Only the last one, in memory, refused a relay
+    // quoting what you said two prompts back or before a restart.
+    const saidFile = join(opts.root, ".agent-said.json");
+    let saidTo = readJson<Record<string, string[]>>(saidFile, {});
+    const SAID_KEPT = 5;
     // Each session's transcript, from its hook events, for wintos peek's last reply.
     const transcripts = new Map<string, string>();
     const relaysFile = join(opts.root, ".relays.json");
@@ -694,7 +697,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const yours = p.hook_event_name === "UserPromptSubmit" && typeof p.prompt === "string" && !isWintosPrompt(p.prompt);
                 recapper.record(ev.tabId, store.byTab(ev.tabId)?.title ?? "Untitled", p.session_id, typeof tp === "string" ? tp : undefined, yours, Date.now(), yours ? waitedFor(before, Date.now()) : 0);
                 if (yours) markSeen(p.session_id); // you read it to answer it
-                if (yours && epics.list().some((e) => e.agent === p.session_id)) lastSaid.set(p.session_id, p.prompt as string);
+                if (yours && epics.list().some((e) => e.agent === p.session_id)) {
+                    saidTo = { ...saidTo, [p.session_id]: [...(saidTo[p.session_id] ?? []), p.prompt as string].slice(-SAID_KEPT) };
+                    writeJsonAtomic(saidFile, saidTo);
+                }
                 if (yours && p.kind !== "bg") writeWorked(p.session_id);
                 if (p.hook_event_name === "Stop" && p.kind !== "bg") reportUp(p.session_id);
                 if (yours && p.kind !== "bg") setRhythm(prompted(rhythm, Date.now(), (p.prompt as string).length));
@@ -1133,6 +1139,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (b?.epic !== null && (typeof b?.epic !== "string" || !b.epic.trim() || !isSafe(b.epic))) return send(res, 400, "need epic: a name, or null for none");
                 const s = epicOfBlock ? liveIn(sessions, decodeURIComponent(epicOfBlock[1]), sid) : sessions.get(decodeURIComponent(epicOfSession![1]));
                 if (!s) return send(res, 409, "no session in this pane");
+                // An agent leaving its epic by itself would keep the role in name only (⌥⌘E is yours to move it).
+                if (epicOfBlock && epics.list().some((e) => !e.done && e.agent === s.id)) return send(res, 409, "an epic's agent stays in its epic; the developer moves it with ⌥⌘E");
                 const open = epics.list().filter((e) => !e.done);
                 const epic = b.epic === null ? undefined : epicOfBlock ? findEpic(open, b.epic as string) : open.find((e) => e.id === b.epic);
                 if (b.epic !== null && !epic)
@@ -1401,7 +1409,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     broadcast();
                     return send(res, 200, to.name?.text ?? to.label ?? to.id);
                 }
-                if (!youSaid(lastSaid.get(live.id), b.text)) return send(res, 403, "only words the developer said to you go through: quote them from their last prompt; your own words go in --note");
+                if (!(saidTo[live.id] ?? []).some((said) => youSaid(said, b.text as string))) return send(res, 403, "only words the developer said to you go through: quote them from one of their last prompts; your own words go in --note");
                 saveRelays(addRelay(relays, to.id, { text: b.text.trim(), ...(typeof b.note === "string" && b.note.trim() ? { note: b.note.trim() } : {}), from: live.id, at: Date.now() }));
                 logEvent("relay", { agent: live.id, to: to.id, text: b.text.trim(), note: b.note });
                 if (to.bgId) setTimeout(() => void pollBg(), 2_000);

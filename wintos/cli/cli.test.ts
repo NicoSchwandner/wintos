@@ -466,6 +466,14 @@ describe("wintos lane and step", () => {
         await cli(["unit", "remove", "ABC-43"], d.port);
         expect(d.seen.map((x: { body: unknown }) => x.body)).toEqual([{ rename: { from: "ABC-42", to: "ABC-42 phase 2" } }, { move: { name: "ABC-43", by: -1 } }, { remove: "ABC-43" }]);
     });
+    test("a refusal prints the daemon's own reason, not a guess at it", async () => {
+        server = http.createServer((req, res) => req.on("data", () => {}).on("end", () => ((res.statusCode = 400), res.end("need a note up to 160 characters"))));
+        const port = await new Promise<number>((r) => server!.listen(0, "127.0.0.1", () => r((server!.address() as AddressInfo).port)));
+        const r = await new Promise<{ code: number; err: string }>((resolve) =>
+            require("child_process").execFile(CLI, ["step", "Build", "x".repeat(200)], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: "s-1", WAVETERM_BLOCKID: "blk-1", WINTOS_PORT: String(port) } }, (e: { code?: number } | null, _o: string, se: string) => resolve({ code: e?.code ?? 0, err: se }))
+        );
+        expect([r.code, r.err.trim()]).toEqual([1, "wintos: wintosd refused it: need a note up to 160 characters"]);
+    });
     test("a verb with the wrong arguments never falls through to setting the whole list", async () => {
         const d = await fakeDaemon("[ ] x");
         for (const args of [["unit", "remove", "A", "B"], ["unit", "done"], ["unit", "rename", "Old", "step", "New"], ["todo", "done"]]) await cli(args, d.port).catch(() => "");

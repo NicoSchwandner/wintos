@@ -6,7 +6,7 @@ import http from "http";
 import type { AddressInfo } from "net";
 import { basename, dirname, join } from "path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { AGENT_NEWS, epicAgentInjection, epicInjection, injection, promotedNote } from "../inject";
+import { epicAgentInjection, epicInjection, injection, promotedNote, RULES_VERSION } from "../inject";
 import { EpicStore, EPIC_TITLE_MAX, findEpic, SHORT_MAX } from "../epics/epics";
 import { moveEpic } from "../epics/order";
 import { impliedEpic } from "../epics/assign";
@@ -166,24 +166,42 @@ export async function startServer(opts: { root: string; port: number; host?: str
         lastEpicMine.set(key, text);
         return before === undefined || before === text ? { text } : { text, diff: lineDiff(before, text) };
     };
-    const epicText = (sessionId: string) => {
+    const agentEpic = (sessionId: string) => {
+        const e = sessions.get(sessionId)?.epic;
+        const epic = e ? epics.byId(e) : undefined;
+        return epic && epic.agent === sessionId ? epic : undefined;
+    };
+    const epicText = (sessionId: string, full: boolean) => {
         const e = sessions.get(sessionId)?.epic;
         const epic = e ? epics.byId(e) : undefined;
         if (epic && epic.agent === sessionId) {
             const workers = [...sessions.values()]
                 .filter((w) => w.epic === epic.id && w.id !== sessionId && w.state !== "ended")
                 .map((w) => ({ name: w.name?.text ?? w.label ?? "a session", state: w.background ? `${w.state}, in the background` : w.restored ? `${w.state}, not started until the developer opens it` : w.state, step: w.lane?.steps[w.lane.at], status: freshStatus(w)?.text, prs: w.prs ?? [], ask: w.state === "waiting" ? (w.ask?.text ?? w.outcome?.text) : undefined }));
-            // The news once per agent (inject.ts AGENT_NEWS), kept across restarts.
-            const told = agentNews[sessionId] === AGENT_NEWS;
-            if (!told) (agentNews = { ...agentNews, [sessionId]: AGENT_NEWS }), writeJsonAtomic(agentNewsFile, agentNews);
-            return epicAgentInjection({ title: epic.title, dir: epic.dir, steps: serializeUnits(epic.steps) }, workers, told ? undefined : AGENT_NEWS);
+            return epicAgentInjection({ title: epic.title, dir: epic.dir, steps: serializeUnits(epic.steps) }, workers, full, epicMineDiff(epic.id, sessionId));
         }
         // A session already linked to a step is not asked to claim one.
         const claimed = epic && Object.values(epic.links ?? {}).some((ids) => ids.includes(sessionId));
-        return epicInjection(epic && { id: epic.id, title: epic.title, steps: claimed ? [] : epic.steps.filter((u) => u.state !== "done").map((u) => u.name) }, openEpics(), epic && epicMineDiff(epic.id, sessionId));
+        return epicInjection(epic && { id: epic.id, title: epic.title, steps: claimed ? [] : epic.steps.filter((u) => u.state !== "done").map((u) => u.name) }, openEpics(), epic && epicMineDiff(epic.id, sessionId), full);
     };
-    const agentNewsFile = join(opts.root, ".agent-news.json");
-    let agentNews = readJson<Record<string, string>>(agentNewsFile, {});
+    // What a session is told: the rules in full once (its start, a compact, or rules changed since
+    // it was last told), else only what changed. The epic's agent keeps no project file of its
+    // own: its plan is epic.md, so it gets the agent's text alone.
+    const rulesSent = new Map<string, string>();
+    const projectSeen = new Map<string, number>();
+    const contextFor = (sessionId: string, tabId: string, start: boolean) => {
+        const agent = !!agentEpic(sessionId);
+        // Told afresh when the rules change, and when the session's project or epic does: their
+        // text (the project file's path, the epic's notes) is part of the full rules.
+        const version = `${agent ? RULES_VERSION.agent : RULES_VERSION.session}:${store.byTab(tabId)?.dir ?? "-"}:${sessions.get(sessionId)?.epic ?? "-"}`;
+        const full = start || rulesSent.get(sessionId) !== version;
+        rulesSent.set(sessionId, version);
+        if (agent) return epicText(sessionId, full);
+        const project = store.byTab(tabId);
+        const changed = !!project && projectSeen.has(sessionId) && projectSeen.get(sessionId) !== project.mtime;
+        if (project) projectSeen.set(sessionId, project.mtime);
+        return [injection(project, store.mineDiff(tabId, sessionId), full, changed), epicText(sessionId, full)].filter(Boolean).join("\n\n");
+    };
     // What the epics' sessions did, queued for each epic's agent (epics/reports.ts).
     const reportsFile = join(opts.root, ".epic-reports.json");
     let reports = readJson<Reports>(reportsFile, {});
@@ -680,8 +698,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (yours && p.kind !== "bg") writeWorked(p.session_id);
                 if (p.hook_event_name === "Stop" && p.kind !== "bg") reportUp(p.session_id);
                 if (yours && p.kind !== "bg") setRhythm(prompted(rhythm, Date.now(), (p.prompt as string).length));
-                const text =
-                    p.hook_event_name === "UserPromptSubmit" ? [injection(store.byTab(ev.tabId), store.mineDiff(ev.tabId, p.session_id)), epicText(p.session_id)].filter(Boolean).join("\n\n") : "";
+                // SessionStart's text reaches Claude as context too: at a start, a resume, a compact or /clear.
+                const text = p.hook_event_name === "UserPromptSubmit" || p.hook_event_name === "SessionStart" ? contextFor(p.session_id, ev.tabId, p.hook_event_name === "SessionStart") : "";
                 broadcast();
                 return send(res, 200, text);
             }
@@ -1100,9 +1118,6 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (agent) {
                     sessions = setEpic(sessions, agent.id, e.id);
                     saveSessions();
-                    // Its first report says what changed; the generic news for old agents would mislead it.
-                    agentNews = { ...agentNews, [agent.id]: AGENT_NEWS };
-                    writeJsonAtomic(agentNewsFile, agentNews);
                     reports = addReport(reports, agent.id, promotedNote(e.title), Date.now());
                     writeJsonAtomic(reportsFile, reports);
                     logEvent("promote", { agent: agent.id, epic: e.id });

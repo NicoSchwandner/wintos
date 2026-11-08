@@ -75,8 +75,14 @@ if [ "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.tool_name // 
     [ -n "$payload" ] || exit 0
 fi
 
+# What the session is told rides on the answer to these two: given 1 s, as a slow answer past
+# 0.2 s dropped the rules without a trace. Every other event is fire and forget.
+wait=0.2
+case "$(printf '%s' "$payload" | jq -r '.hook_event_name' 2>/dev/null)" in
+UserPromptSubmit | SessionStart) wait=1 ;;
+esac
 # The resume command goes along: it tells the daemon this is the session the pane runs now.
 # The config dir too: its plugin store holds this account's heads-ups.
 printf '%s' "$payload" | jq -c --arg t "$WAVETERM_TABID" --arg b "${WAVETERM_BLOCKID:-}" --arg r "$resume" --arg k "$background" --arg c "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" '{tabId: $t, blockId: $b, payload: (. + (if $r != "" then {resume: $r} else {} end) + (if $k == "bg" then {kind: "bg"} else {} end) + {config_dir: $c})}' 2>/dev/null |
-    curl -sf -m 0.2 -H "Content-Type: application/json" --data-binary @- "http://127.0.0.1:$port/events" 2>/dev/null
+    curl -sf -m "$wait" -H "Content-Type: application/json" --data-binary @- "http://127.0.0.1:$port/events" 2>/dev/null
 exit 0

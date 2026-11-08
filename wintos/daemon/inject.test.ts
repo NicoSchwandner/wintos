@@ -81,11 +81,11 @@ describe("epicAgentInjection", () => {
         expect(t).toContain("wintos start [--cwd <repo>] <step>");
         expect(t).toContain("roadmap edited by the developer");
     });
-    test("news goes first when given; what the agent can do leads the job", () => {
-        const t = epicAgentInjection({ title: "R", dir: "/e", steps: "" }, [], "NEWS");
-        expect(t.startsWith("NEWS\n\n[WintOS epic agent: R]")).toBe(true);
+    test("in full, what the agent can do leads the job; otherwise only the roadmap and the digest", () => {
+        const t = epicAgentInjection({ title: "R", dir: "/e", steps: "" }, []);
         expect(t).toContain("start a session for a roadmap step: `wintos start");
-        expect(epicAgentInjection({ title: "R", dir: "/e", steps: "" }, [])).not.toContain("NEWS");
+        const brief = epicAgentInjection({ title: "R", dir: "/e", steps: "[ ] A" }, [], false);
+        expect(brief).toBe("[WintOS epic agent: R] The roadmap now: [ ] A.\nThe epic's sessions now:\n- none open");
     });
     test("with no sessions open, it says so", () => expect(epicAgentInjection({ title: "R", dir: "/e", steps: "" }, [])).toContain("- none open"));
     test("an empty roadmap is set before anything else; a set one is left to the agent", () => {

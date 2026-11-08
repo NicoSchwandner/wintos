@@ -327,12 +327,12 @@ describe("wintosd API", () => {
         const told = await (await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } })).text();
         expect(told).toContain("[WintOS epic agent: Route documents]");
         expect(told).toContain("- Drafts mapping: working");
-        // What it can do comes first; the news that it can start sessions, once.
-        expect(told).toContain("[WintOS: new since this conversation began]");
-        expect(told.indexOf("You can, yourself")).toBeLessThan(told.indexOf("The details:"));
+        // Its role in full once, what it can do first; then only the roadmap and the digest.
+        expect(told.indexOf("You can, without asking first")).toBeLessThan(told.indexOf("The plan is the body"));
+        expect(told).not.toContain("[WintOS project:");
         const again = await (await post("/events", { tabId: "tab-1", blockId: "blk-1", payload: { ...prompt, session_id: "agent" } })).text();
-        expect(again).not.toContain("[WintOS: new since this conversation began]");
-        expect(again).toContain("Never ask the developer to open a session");
+        expect(again).not.toContain("You can, without asking first");
+        expect(again).toContain("- Drafts mapping: working");
         const worker = await (await post("/events", { tabId: "tab-2", blockId: "blk-2", payload: { ...prompt, session_id: "worker" } })).text();
         expect(worker).not.toContain("[WintOS epic agent:");
         expect((await post(`/epics/${id}/agent`, { sessionId: 3 })).status).toBe(400);
@@ -453,8 +453,11 @@ describe("wintosd API", () => {
         expect(first).toContain("wintos epic <name>");
         await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
         writeFileSync(join(root, ".epics", id, "mine.md"), "cutover per group");
+        // Joining the epic tells it in full once, its notes included; later prompts name the epic.
+        const joined = await (await event(prompt)).text();
+        expect(joined).toContain("[WintOS epic: Route documents]");
+        expect(joined).toContain("cutover per group");
         expect(await (await event(prompt)).text()).toContain("[WintOS epic: Route documents]");
-        expect(await (await event(prompt)).text()).toContain("cutover per group");
     });
 
     test("time counts for the focused session's epic on the idle tick while the Mac is in use", async () => {
@@ -610,7 +613,7 @@ describe("wintosd API", () => {
         // Its agent sees it among its sessions, so a follow-up on its work can go to it.
         const told = await (await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "and the review?" } })).text();
         expect(told).toContain("- Route: Cutover: working, in the background");
-        expect(told).toContain("hand a follow-up to the session that did the work");
+        expect(told).toContain("hand a follow-up on a session's work");
         // The agent tells it something: no pane, so it goes in through the background service once it is free.
         const sent: { id: string; cwd?: string; prompt: string }[] = [];
         srvBgSend.fn = async (id, cwd, prompt) => (sent.push({ id, cwd, prompt }), true);
@@ -719,9 +722,17 @@ describe("wintosd API", () => {
         await event(prompt);
         writeFileSync(join(root, "x", "mine.md"), "ceiling: one vendor\n");
         const text = await (await event(prompt)).text();
-        expect(text.indexOf("mine.md changed since your last prompt")).toBeGreaterThan(-1);
-        expect(text.indexOf("mine.md changed")).toBeLessThan(text.indexOf("project.md"));
+        expect(text).toContain("mine.md changed since your last prompt");
         expect(text).toContain("- ceiling: two vendors\n+ ceiling: one vendor");
+        // The rules came with the first prompt; this one carries only what changed.
+        expect(text).not.toContain("[WintOS project:");
+    });
+
+    test("the rules come in full once: at the session's start, and again only when they change", async () => {
+        const start = await (await event({ ...prompt, hook_event_name: "SessionStart", source: "startup" })).text();
+        expect(start).toContain("wintos done");
+        expect(await (await event(prompt)).text()).not.toContain("wintos done");
+        expect(await (await event({ ...prompt, hook_event_name: "SessionStart", source: "compact" })).text()).toContain("wintos done");
     });
 
     test("non-prompt events answer with an empty body", async () => {

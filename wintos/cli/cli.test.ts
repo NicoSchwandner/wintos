@@ -13,9 +13,15 @@ const tmp = () => mkdtempSync(join(tmpdir(), "wintos-cli-"));
 let server: http.Server | undefined;
 afterEach(() => server?.close());
 
+// Like the real daemon (server.ts), a POST body must be JSON: a fake that took anything let a
+// header-less curl in the CLI ship green.
+const notJson = (req: http.IncomingMessage, res: http.ServerResponse) =>
+    req.method === "POST" && !/^application\/json\b/.test(req.headers["content-type"] ?? "") && ((res.statusCode = 415), res.end("POST bodies must be application/json"), true);
+
 function fakeDaemon(reply: string): Promise<{ port: number; seen: { url: string; body: any }[] }> {
     const seen: { url: string; body: any }[] = [];
     server = http.createServer((req, res) => {
+        if (notJson(req, res)) return;
         let b = "";
         req.on("data", (c) => (b += c));
         req.on("end", () => {
@@ -571,6 +577,7 @@ describe("wintos wake", () => {
     const wake = async (args: string[], status = 200, reply = '{"pr":"https://github.com/o/r/pull/7","until":"released","prompt":"check prod"}') => {
         const seen: { url: string; body: unknown }[] = [];
         server = http.createServer((req, res) => {
+            if (notJson(req, res)) return;
             let b = "";
             req.on("data", (c) => (b += c));
             req.on("end", () => (seen.push({ url: req.url!, body: b && JSON.parse(b) }), (res.statusCode = status), res.end(reply)));

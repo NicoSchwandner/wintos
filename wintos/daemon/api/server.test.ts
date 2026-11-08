@@ -627,6 +627,19 @@ describe("wintosd API", () => {
         expect((await post("/blocks/blk-a/start", { step: "Cutover", check: true })).status).toBe(409);
     }, 30_000);
 
+    test("a turn the model reads as done or paused goes up to the epic's agent too, not only a question", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "echo 'waits: CI on #7'" });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        const id = await (await post("/epics", { title: "Route" })).text();
+        await post("/events", { tabId: "tab-1", blockId: "blk-a", payload: { session_id: "ag", hook_event_name: "UserPromptSubmit", prompt: "go" } });
+        await post(`/epics/${id}/agent`, { sessionId: "ag" });
+        await event(prompt);
+        await post(`/sessions/${prompt.session_id}/epic`, { epic: id });
+        await event({ ...stop, last_assistant_message: "CI runs; I'll be woken when it is done." });
+        await vi.waitFor(async () => expect(((await (await fetch(base + "/state")).json()).epicReports?.ag ?? []).map((r: { text: string }) => r.text).join()).toContain("waits on CI on #7"), { timeout: 5000 });
+    });
+
     test("a turn the model reads as carrying on by itself parks on that, and is not your move", async () => {
         srv.close();
         srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "echo 'waits: the CI retry loop on test'" });
@@ -1718,3 +1731,8 @@ describe("update", () => {
     });
 });
 
+
+test("isDaemonFile: the daemon's own files and folders, at any depth below a dot folder", async () => {
+    const { isDaemonFile } = await import("./server");
+    expect([".sessions.json", ".events/2026-11-08.jsonl", ".fixer/logs/x.log", "route/epic.md", "route/.hidden"].map(isDaemonFile)).toEqual([true, true, true, false, false]);
+});

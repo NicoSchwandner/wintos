@@ -55,3 +55,14 @@ export function mergeBg(sessions: Map<string, Session>, starts: BgStarts, agents
 
 export const liveStarts = (starts: BgStarts, sessions: Map<string, Session>, epic: string) =>
     Object.entries(starts).filter(([short, s]) => s.epic === epic && [...sessions.values()].find((x) => x.bgId === short)?.state !== "ended").length;
+
+// The starts still worth polling for: an ended session is over, and one the listing never showed
+// within a day never ran. Without this the 15 s poll of `claude agents` ran forever.
+export const NEVER_SEEN_MS = 24 * 3_600_000;
+export function pruneStarts(starts: BgStarts, sessions: Map<string, Session>, now: number): BgStarts {
+    const byBg = new Map([...sessions.values()].filter((s) => s.bgId).map((s) => [s.bgId!, s]));
+    return Object.fromEntries(Object.entries(starts).filter(([short, st]) => {
+        const s = byBg.get(short);
+        return s ? s.state !== "ended" : now - st.at < NEVER_SEEN_MS;
+    }));
+}

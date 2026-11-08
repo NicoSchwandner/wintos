@@ -14,7 +14,7 @@ import { workedFocus } from "../epics/worked";
 import { icsToMeetings } from "../../plugins/calendar/parse";
 import { meetingMs } from "../../plugins/calendar/hours";
 import { lastReply as lastReplyIn, peekText, readTail } from "../epics/peek";
-import { BG_ID, BG_MAX, liveStarts, mergeBg, parseAgents, type BgAgent, type BgStarts } from "../epics/bgstart";
+import { BG_ID, BG_MAX, liveStarts, mergeBg, parseAgents, pruneStarts, type BgAgent, type BgStarts } from "../epics/bgstart";
 import { addRelay, relayPrompt, findWorker, relaysDelivered, youSaid, type Relays } from "../epics/relay";
 import { editRoadmap, linkStep, mergedSteps, pruneLinks, type RoadmapOp } from "../epics/roadmap";
 import { addReport, delivered as reportsDelivered, reportLine, worthReporting, type Reports } from "../epics/reports";
@@ -217,6 +217,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
             const listed = parseAgents(out);
             const r = mergeBg(sessions, bgStarts, listed, Date.now());
             sessions = r.sessions;
+            const kept = pruneStarts(bgStarts, sessions, Date.now());
+            if (Object.keys(kept).length !== Object.keys(bgStarts).length) (bgStarts = kept), writeFileSync(bgFile, JSON.stringify(bgStarts));
             await deliverToBackground(listed);
             if (!r.moved.length) return;
             for (const f of r.fresh) {
@@ -232,6 +234,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         }
     };
     const bgTimer = setInterval(() => void pollBg(), 15_000);
+    bgTimer.unref?.();
     // A background session has no pane to type into: what is passed on to it goes in as a prompt
     // through the background service, from the directory it runs in, once it is not at work.
     const bgSend = opts.bgSend ?? ((sessionId: string, cwd: string | undefined, prompt: string) => new Promise<boolean>((resolve) => execFile("/bin/zsh", ["-lc", 'claude --bg --resume "$0" "$1"', sessionId, prompt], { cwd, timeout: 30_000 }, (err) => resolve(!err))));
@@ -310,7 +313,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             if (!title) return;
             saveShelf(withTitle(shelf, item.sessionId, title));
             broadcast();
-        });
+        }).catch((e) => console.error(`[wintosd] titling a shelved session failed: ${e}`));
     };
     // A session nobody named gets one from what it did, after a turn, and again once its PRs or
     // lane changed. One at a time, behind the shelf titles.
@@ -334,7 +337,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             sessions = titleSession(sessions, sessionId, name, Date.now());
             saveSessions("the model named it");
             broadcast();
-        });
+        }).catch((e) => console.error(`[wintosd] naming a session failed: ${e}`));
     };
     // A turn that ended without saying what it expects (no `wintos ask`, wait or done): the model
     // reads its last message, and a guess stands in when it can't. Not behind the titles: it is
@@ -348,15 +351,18 @@ export async function startServer(opts: { root: string; port: number; host?: str
         const cmd = opts.recapCmd;
         reading = reading.then(async () => {
             const out = cmd ? await oneShot(cmd, askPrompt(message)) : undefined;
-            const read = (out && parseAsk(out)) || guessAsk(message);
+            const modelRead = out ? parseAsk(out) : undefined;
+            const read = modelRead || guessAsk(message);
             const next = readTurn(sessions, sessionId, turnAt, read);
             if (next === sessions) return;
             sessions = next;
             saveSessions("the model read the turn");
-            // A question found by reading the turn goes up now; the Stop it came from had none.
-            if (sessions.get(sessionId)?.ask) reportUp(sessionId);
+            // What the read found goes up now; the Stop it came from was still undecided, so nothing
+            // went up then. A question always; done or paused only when the model read it, as the
+            // guess without it takes a status line ("still waiting on CI") for a report.
+            if (modelRead || sessions.get(sessionId)?.ask) reportUp(sessionId);
             broadcast();
-        });
+        }).catch((e) => console.error(`[wintosd] reading a turn failed: ${e}`));
     };
     const applyTouch = (r: { sessions: Map<string, Session>; shelf: Shelf }) => {
         sessions = r.sessions;
@@ -553,9 +559,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         }
     };
     try {
-        // The daemon's own files (.sessions.json, .snoozes.json, .bindings.json) are not notes.
         watcher = watch(opts.root, { recursive: true }, (_e, file) => {
-            if (file && !file.includes("/") && file.startsWith(".")) return;
+            if (file && isDaemonFile(file)) return;
             clearTimeout(pending);
             pending = setTimeout(reload, 100);
         });
@@ -1579,3 +1584,7 @@ function prLink(ref: string): string | undefined {
     const m = url ?? short;
     return m ? `https://github.com/${m[1]}/pull/${m[2]}` : undefined;
 }
+
+// The daemon's own files (.sessions.json, .events/<day>.jsonl, .fixer/logs/…) are not notes: a
+// change to them must not reload every note and broadcast, or each event line would.
+export const isDaemonFile = (file: string) => file.split(/[\\/]/)[0].startsWith(".");

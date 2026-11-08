@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../sessions/reduce";
-import { bgState, liveStarts, mergeBg, parseAgents } from "./bgstart";
+import { bgState, liveStarts, mergeBg, NEVER_SEEN_MS, parseAgents, pruneStarts } from "./bgstart";
 
 const start = { epic: "e", step: "Cutover", name: "Route: Cutover", agent: "ag", tabId: "t1", at: 0 };
 const agent = (state: string, status?: string) => ({ id: "430f7f7e", sessionId: "430f7f7e-9d03", state, status });
@@ -41,4 +41,11 @@ describe("mergeBg", () => {
         expect(liveStarts({ "430f7f7e": start }, s, "other")).toBe(0);
         expect(liveStarts({ "430f7f7e": start }, new Map([["430f7f7e-9d03", { ...s.get("430f7f7e-9d03")!, state: "ended" } as Session]]), "e")).toBe(0);
     });
+});
+
+test("pruneStarts: an ended session and one never listed within a day stop the polling", () => {
+    const sess = (bgId: string, state: Session["state"]) => [bgId, { id: bgId, bgId, state } as Session] as const;
+    const starts = { aaaaaaaa: start, bbbbbbbb: start, cccccccc: { ...start, at: 0 }, dddddddd: { ...start, at: NEVER_SEEN_MS } };
+    const sessions = new Map([sess("aaaaaaaa", "working"), sess("bbbbbbbb", "ended")]);
+    expect(Object.keys(pruneStarts(starts, sessions, NEVER_SEEN_MS + 1))).toEqual(["aaaaaaaa", "dddddddd"]);
 });

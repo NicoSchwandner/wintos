@@ -105,7 +105,7 @@ One wake per PR and event: a session can wait for feedback and the merge at once
 same PR and event again replaces it. A wake expires after 5 working days.'
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID): a wake types into this pane, so run it from the session that should continue"
     if [ "${1:-}" = cancel ]; then
-        curl -sf -m 2 -X POST "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/wake/cancel$SESSION_Q" || die "wintosd not reachable on port $PORT"
+        curl -sf -m 2 -H 'Content-Type: application/json' -d '{}' "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/wake/cancel$SESSION_Q" || die "wintosd not reachable on port $PORT"
         echo
         exit 0
     fi

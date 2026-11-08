@@ -54,7 +54,8 @@ function rowOf(tabId: string, sessions: Session[], touchedAt: number, seen: Reco
     const lastAt = Math.max(touchedAt, ...sessions.map((s) => s.lastAt), 0);
     // A turn that ended while its subagents still run comes back by itself when they report: it
     // is Claude at work, not yet yours to answer or read.
-    const behind = (s: Session) => liveSubagents(s, now) > 0;
+    // Nor is one whose ending the model is still reading: it may be done, paused or a question.
+    const behind = (s: Session) => liveSubagents(s, now) > 0 || !!s.reading;
     const unreadAt = sessions.filter((s) => !behind(s) && isUnread(s, seen)).map((s) => s.turnEndedAt!);
     const waiting = sessions.filter((s) => !behind(s) && s.state === "waiting").map((s) => s.since);
     const unread = unreadAt.length ? { unread: true } : {};

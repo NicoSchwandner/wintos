@@ -53,7 +53,7 @@ export function atWork(sessions: Session[], now: number): { working: number; sub
 // The state a session shows as: one whose turn ended while its subagents still run is at work.
 // A state in the sidebar's words, wherever a state shows: one vocabulary across WintOS.
 export const STATE_WORD = { waiting: "your move", working: "running", parked: "paused", done: "quiet", idle: "quiet", ended: "closed" } as const;
-export const shownState = (s: Session, now: number): Session["state"] => (s.state !== "ended" && liveSubagents(s, now) ? "working" : s.state);
+export const shownState = (s: Session, now: number): Session["state"] => (s.state !== "ended" && (liveSubagents(s, now) || s.reading) ? "working" : s.state);
 
 // The sessions in flight, for the sidebar's meter: those at work and those waiting on
 // you. A parked one waits on a PR or CI, a done or idle one on nothing: neither is in your head.

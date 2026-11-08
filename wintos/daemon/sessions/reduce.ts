@@ -32,6 +32,7 @@ export type Session = {
     ask?: Ask; // what a waiting turn expects of the developer; none yet while it is being read
     askPending?: Ask; // `wintos ask` ran this turn; the turn's Stop asks it
     restored?: boolean; // saved at the last quit, its Claude not started again yet
+    reading?: true; // its turn ended unsaid; the model is reading how (server.ts readEndedTurn): not yet yours
     prs?: string[]; // the PRs it owns: it was the first to touch them (daemon/prs/owners.ts)
     touched?: string[]; // PRs it worked on that another session owns: it is "also in" them
     status?: { text: string; at: number }; // its own line on what it is doing (`wintos status`)

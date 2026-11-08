@@ -656,6 +656,17 @@ describe("wintosd API", () => {
         await vi.waitFor(async () => expect(((await (await fetch(base + "/state")).json()).epicReports?.ag ?? []).map((r: { text: string }) => r.text).join()).toContain("waits on CI on #7"), { timeout: 5000 });
     });
 
+    test("while the model reads how a turn ended it is not your move; then it is what the read says", async () => {
+        srv.close();
+        srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "sleep 0.4; echo 'read: shipped'" });
+        base = `http://127.0.0.1:${(srv.http.address() as { port: number }).port}`;
+        await event(prompt);
+        await event({ ...stop, last_assistant_message: "Shipped the fix." });
+        expect((await (await fetch(base + "/state")).json()).sessions[0].reading).toBe(true);
+        expect(await settled((s) => s.state === "done")).toMatchObject({ state: "done" });
+        expect((await (await fetch(base + "/state")).json()).sessions[0].reading).toBeUndefined();
+    });
+
     test("a turn the model reads as carrying on by itself parks on that, and is not your move", async () => {
         srv.close();
         srv = await startServer({ root, port: 0, token: "t0ken", recapCmd: "echo 'waits: the CI retry loop on test'" });

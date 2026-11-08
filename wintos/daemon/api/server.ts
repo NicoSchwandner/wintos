@@ -388,12 +388,16 @@ export async function startServer(opts: { root: string; port: number; host?: str
         if (!s || s.state !== "waiting" || s.ask || !s.turnEndedAt || liveSubagents(s, Date.now())) return;
         const turnAt = s.turnEndedAt;
         const cmd = opts.recapCmd;
+        // Not your move while it is read: it may turn out done, paused or a question (STATE-11).
+        if (cmd) sessions = new Map(sessions).set(sessionId, { ...s, reading: true });
         reading = reading.then(async () => {
             const out = cmd ? await oneShot(cmd, askPrompt(message)) : undefined;
             const modelRead = out ? parseAsk(out) : undefined;
             const read = modelRead || guessAsk(message);
+            const read0 = sessions.get(sessionId);
+            if (read0?.reading) sessions = new Map(sessions).set(sessionId, { ...read0, reading: undefined });
             const next = readTurn(sessions, sessionId, turnAt, read);
-            if (next === sessions) return;
+            if (next === sessions) return void (saveSessions("the model read the turn"), broadcast());
             sessions = next;
             saveSessions("the model read the turn");
             // What the read found goes up now; the Stop it came from was still undecided, so nothing
@@ -401,8 +405,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
             // guess without it takes a status line ("still waiting on CI") for a report.
             if (modelRead || sessions.get(sessionId)?.ask) reportUp(sessionId);
             broadcast();
-        }).catch((e) => console.error(`[wintosd] reading a turn failed: ${e}`));
+        }).catch((e) => {
+            console.error(`[wintosd] reading a turn failed: ${e}`);
+            const x = sessions.get(sessionId);
+            if (x?.reading) sessions = new Map(sessions).set(sessionId, { ...x, reading: undefined });
+        });
     };
+    // A read cut off by a restart is read again: left as it was, the turn would wait forever.
+    for (const s of [...sessions.values()].filter((x) => x.reading)) {
+        sessions = new Map(sessions).set(s.id, { ...s, reading: undefined });
+        readEndedTurn(s.id, s.outcome?.text ?? "");
+    }
     const applyTouch = (r: { sessions: Map<string, Session>; shelf: Shelf }) => {
         sessions = r.sessions;
         if (r.shelf !== shelf) saveShelf(r.shelf);

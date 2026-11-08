@@ -18,8 +18,10 @@ jobs:
               with:
                   node-version: 22
                   cache: npm
-            # No install scripts: neither the tests nor tsc need Electron's binaries.
+            # No install scripts (they build native modules the tests don't need), but Electron's own
+            # binary: the tests load the electron package, which refuses to load without it.
             - run: npm ci --ignore-scripts
+            - run: node node_modules/electron/install.js
             - run: npx tsc --noEmit
             - run: npx vitest run wintos
             - uses: actions/setup-go@v5

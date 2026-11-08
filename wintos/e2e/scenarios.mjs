@@ -345,11 +345,16 @@ await scenario("12 · ⌘W on a working session warns first, then shelves it int
     await fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-shelf", hook_event_name: "UserPromptSubmit", prompt: "e2e shelf" } }) });
     await sleep(1000);
     const before = panes();
-    await evalIn(t, `document.querySelector('button[data-key="⌘W"]').click()`);
+    // ⌘W into the pane itself: a view of one pane shows no chip to click.
+    const cmdW = async () => {
+        await cdpFocus(t, `[data-blockid="${blockId}"] .xterm-helper-textarea`);
+        for (const type of ["rawKeyDown", "keyUp"]) await cdp(t, "Input.dispatchKeyEvent", { type, key: "w", code: "KeyW", windowsVirtualKeyCode: 87, modifiers: MODS.meta });
+    };
+    await cmdW();
     await until("the warning", () => evalIn(t, `document.body.innerText.includes("to stop the working session")`));
     await sleep(500);
     if (panes() !== before) throw new Error("the first ⌘W closed a working session");
-    await evalIn(t, `document.querySelector('button[data-key="⌘W"]').click()`);
+    await cmdW();
     await until("the session on the shelf", async () => (await shelf()).some((s) => s.sessionId === "e2e-shelf"));
     await until("the pane closed", () => panes() !== before);
     await until("its row in the notes", () => evalIn(t, `document.querySelector("[data-wintos=shelf-dock]")?.innerText.includes("e2e shelf")`));
@@ -579,7 +584,7 @@ await scenario("24 · a session proposes its name, ⌘R renames it for good, and
     const named = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((x) => x.id === "e2e-name")?.name;
     await post("/events", { tabId, blockId, payload: { session_id: "e2e-name", hook_event_name: "UserPromptSubmit", prompt: "e2e name" } });
     await post(`/blocks/${blockId}/name?session=e2e-name`, { text: "Retention backfill review" });
-    await until("the proposed name in its header, with its minute", () => evalIn(t, `[...document.querySelectorAll("[data-wintos=session-header]")].some((h) => h.innerText.includes("Retention backfill review") && h.innerText.includes("change the name"))`));
+    await until("the proposed name in its header, with its minute", () => evalIn(t, `[[...document.querySelectorAll("[data-wintos=session-header], [data-wintos=epic-strip]")].map((h) => h.innerText).join(" ")].some((h) => h.includes("Retention backfill review") && h.includes("change the name"))`));
     await press(t, "r", { code: "KeyR", keyCode: 82, mods: ["meta"] });
     await until("the name field", () => evalIn(t, `!!document.querySelector("[data-wintos=name-session] input")`));
     await cdpFocus(t, "[data-wintos=name-session] input");
@@ -588,7 +593,7 @@ await scenario("24 · a session proposes its name, ⌘R renames it for good, and
     await press(t, "Enter", { keyCode: 13 });
     await until("your name, kept", async () => (await named())?.by === "you" && (await named())?.text === "My name for it");
     await post(`/blocks/${blockId}/name?session=e2e-name`, { text: "Its next name" });
-    await until("its suggestion, beside your name", () => evalIn(t, `[...document.querySelectorAll("[data-wintos=session-header]")].some((h) => h.innerText.includes("My name for it") && h.innerText.includes("Its next name"))`));
+    await until("its suggestion, beside your name", () => evalIn(t, `[[...document.querySelectorAll("[data-wintos=session-header], [data-wintos=epic-strip]")].map((h) => h.innerText).join(" ")].some((h) => h.includes("My name for it") && h.includes("Its next name"))`));
     await post("/events", { tabId, blockId, payload: { session_id: "e2e-name", hook_event_name: "SessionEnd", reason: "prompt_input_exit" } });
 });
 
@@ -848,7 +853,7 @@ await scenario("40 · ⌥⌘T takes a session out into a view of its own: its pa
     await until("its pane gone from here", () => sql(`select count(*) from db_tab t, json_each(t.data->'blockids') j where t.oid='${tabId}' and j.value='${pane}'`) === "0");
 });
 
-await scenario("41 · ⇧⌘Y is the epics home: a card per epic, the one waiting on you first; ⏎ opens its page; the rail shows its mine.md", async () => {
+await scenario("41 · ⇧⌘Y is the epics home: a card per epic; a click opens its page; p pins it first in the sidebar; the rail shows its mine.md", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const pane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
@@ -860,13 +865,16 @@ await scenario("41 · ⇧⌘Y is the epics home: a card per epic, the one waitin
     await api("/sessions/e2e-home/epic", { epic: id });
     await until("the epic's mine.md in the rail", () => evalIn(t, `document.querySelector("[data-wintos=mine-of][data-epic='${id}']")?.closest("[data-wintos=notes-rail]")?.innerText.includes("e2e epic note")`));
     await press(t, "y", { mods: ["meta", "shift"] });
-    await until("its card first", () => evalIn(t, `document.querySelector("[data-wintos=today] [data-epic]")?.dataset.epic === "${id}"`));
-    await press(t, "Enter", { code: "Enter", keyCode: 13 });
+    // Epics hold one order now (pinned, yours, by name): the card is put under the cursor, not found first.
+    await until("its card", () => evalIn(t, `!!document.querySelector("[data-wintos=today] [data-epic='${id}']")`));
+    await evalIn(t, `document.querySelector("[data-wintos=today] [data-epic='${id}'] button[data-act]").click()`);
     await until("its page", () => evalIn(t, `document.querySelector("[data-wintos=epic-page]")?.dataset.epic === "${id}" && document.querySelector("[data-wintos=epic-page] [data-session='e2e-home']") !== null`));
+    const pinned = async () => !!(await (await fetch("http://127.0.0.1:7731/state")).json()).epics.find((e) => e.id === id)?.pinned;
     await press(t, "p", { code: "KeyP" });
-    await until("pinned at the top of the sidebar, saying what waits", () => evalIn(t, `document.querySelector("[data-wintos=pinned-epics] [data-epic='${id}']")?.innerText.includes("your move")`));
+    await until("pinned: the sidebar's first epic", async () => (await pinned()) && (await evalIn(t, `document.querySelector("[data-wintos=epic-groups] [data-epic-group]")?.dataset.epicGroup === "${id}"`)));
+    await until("the page knows it is pinned", () => evalIn(t, `document.querySelector("[data-wintos=epic-page] [data-wintos=epic-pin]")?.innerText.includes("Unpin")`));
     await press(t, "p", { code: "KeyP" });
-    await until("unpinned", () => evalIn(t, `!document.querySelector("[data-wintos=pinned-epics] [data-epic='${id}']")`));
+    await until("unpinned", async () => !(await pinned()));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
 });
 
@@ -1081,21 +1089,29 @@ await scenario("49 · the epic agent relays your words to a session: refused unl
     const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const st = async () => (await fetch("http://127.0.0.1:7731/state")).json();
     const id = await (await api("/epics", { title: "E2E relay" })).text();
-    // A real pane: one that can't take the text keeps it queued.
-    const pane = sql(`select json_extract(data, '$.blockids[0]') from db_tab where oid='${tabId}'`);
-    await api("/events", { tabId: "e2e-elsewhere", blockId: "e2e-relay-ag", payload: { session_id: "e2e-relay-ag", hook_event_name: "SessionStart" } });
-    await api(`/epics/${id}/agent`, { sessionId: "e2e-relay-ag" });
-    await api("/sessions/e2e-relay-ag/epic", { epic: id });
-    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-relay-wk", hook_event_name: "UserPromptSubmit", prompt: "e2e worker" } });
-    await api("/sessions/e2e-relay-wk/epic", { epic: id });
-    await api("/sessions/e2e-relay-wk/name", { text: "E2E cutover check" });
-    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-relay-wk", hook_event_name: "Stop" } });
-    await api("/events", { tabId: "e2e-elsewhere", blockId: "e2e-relay-ag", payload: { session_id: "e2e-relay-ag", hook_event_name: "UserPromptSubmit", prompt: "Tell it: cut over group A first" } });
-    const refused = await api("/blocks/e2e-relay-ag/relay", { to: "E2E cutover", text: "cut over everything" });
+    // Ids of this run's own: an agent belongs to one epic, and an earlier run's epic keeps its agent.
+    const run = Date.now().toString(36), ag = `e2e-relay-ag-${run}`, wk = `e2e-relay-wk-${run}`;
+    // A real pane, not the one you look at: one that can't take the text keeps it queued, and a
+    // relay waits while you are in its pane.
+    const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    await press(t, "d", { mods: ["meta"] });
+    const pane = await until("a second pane", async () => { const x = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return x !== first && x; });
+    await until("its shell ready", () => evalIn(t, `!!document.querySelector("[data-blockid='${pane}'] textarea")`));
+    await evalIn(t, `window.wintosLayout().focusNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(first)}).id)`);
+    await api("/events", { tabId: "e2e-elsewhere", blockId: ag, payload: { session_id: ag, hook_event_name: "SessionStart" } });
+    await api(`/epics/${id}/agent`, { sessionId: ag });
+    await api(`/sessions/${ag}/epic`, { epic: id });
+    await api("/events", { tabId, blockId: pane, payload: { session_id: wk, hook_event_name: "UserPromptSubmit", prompt: "e2e worker" } });
+    await api(`/sessions/${wk}/epic`, { epic: id });
+    await api(`/sessions/${wk}/name`, { text: "E2E cutover check" });
+    await api("/events", { tabId, blockId: pane, payload: { session_id: wk, hook_event_name: "Stop" } });
+    await api("/events", { tabId: "e2e-elsewhere", blockId: ag, payload: { session_id: ag, hook_event_name: "UserPromptSubmit", prompt: "Tell it: cut over group A first" } });
+    const refused = await api(`/blocks/${ag}/relay`, { to: "E2E cutover", text: "cut over everything" });
     if (refused.status !== 403) throw new Error(`words you never said went through: ${refused.status}`);
-    const ok = await api("/blocks/e2e-relay-ag/relay", { to: "E2E cutover", text: "cut over group A first", note: "re its cutover question" });
+    const ok = await api(`/blocks/${ag}/relay`, { to: "E2E cutover", text: "cut over group A first", note: "re its cutover question" });
     if (ok.status !== 200) throw new Error(`relay refused: ${await ok.text()}`);
-    await until("typed in by the session's view and off the queue", async () => !(await st()).relays?.["e2e-relay-wk"], 30000);
+    await until("typed in by the session's view and off the queue", async () => !(await st()).relays?.[wk], 30000);
+    await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(pane)}).id)`);
 });
 
 await scenario("50 · the agent is its epic's header: no row of its own, a turning ring while it works", async () => {
@@ -1224,6 +1240,7 @@ await scenario("55 · r on an epic's page renames it in place: title and short n
     const id = await (await api("/epics", { title: "E2E old name" })).text();
     await evalIn(t, `import("/wintos/ui/menu.ts").then((m) => m.openEpic("${id}"))`);
     await until("its page", () => evalIn(t, `document.querySelector("[data-wintos=epic-page]")?.dataset.epic === "${id}" && !!document.querySelector("[data-wintos=epic-page] [data-wintos=epic-rename]")`));
+    await until("the page focused", () => evalIn(t, `document.activeElement?.matches("[data-wintos=epic-page][data-epic='${id}']")`));
     await press(t, "r");
     await until("the title field", () => evalIn(t, `!!document.querySelector("[data-wintos=epic-retitle] input")`));
     await cdpFocus(t, "[data-wintos=epic-retitle] input");
@@ -1248,6 +1265,7 @@ await scenario("55 · r on an epic's page renames it in place: title and short n
     if (await done()) throw new Error("one x finished the epic");
     await press(t, "x");
     await until("the second x finishes it", done);
+    await until("the page knows it is done", () => evalIn(t, `document.querySelector("[data-wintos=epic-page] [data-wintos=epic-done]")?.innerText.includes("Open again")`));
     await press(t, "x");
     await until("one x opens it again", async () => !(await done()));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });

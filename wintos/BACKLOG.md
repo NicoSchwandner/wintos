@@ -5,6 +5,15 @@ in the commit that finishes it.
 
 ## Next
 
+### The rest of the 7 November audit
+
+The audit (https://claude.ai/artifact/USocwE8oxQLRmDBPdmacNF, "Open only") still lists, largest
+first: one queue for everything typed into sessions (wakes, reports, relays: STATE-2), PR
+ownership on sessions only (STATE-19), one quiet state with a reason (STATE-13), the ~20 state
+files (STATE-20), splitting `daemon/api/server.ts` by domain with a persisted-state helper
+(CODE-5), building before ⌥⌘U stops WintOS (CODE-4), hermetic unit tests and CI (CODE-7, CODE-20),
+and the smaller UI and key items. Retiring "project" is its own item below.
+
 ### "Needs you" reasons that resolve themselves
 
 A session needs you while it has at least one open reason (a question, an approval, a wake). A

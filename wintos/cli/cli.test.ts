@@ -448,9 +448,9 @@ describe("wintos lane and step", () => {
         expect((await cli(["rename", "#14715", "Receipts", "dark", "launch"], d.port)).trim()).toBe("renamed: #14715 todo review");
         expect(d.seen[6]).toEqual({ url: "/blocks/blk-1/rename?session=s-1", body: { to: "#14715", name: "Receipts dark launch" } });
     });
-    test("unit sets the project's units, starts one, ticks one; it prints the list back", async () => {
+    test("unit sets the epic's roadmap, starts one, ticks one; it prints the list back", async () => {
         const d = await fakeDaemon("[>] ABC-42 phase 1 | [ ] ABC-43");
-        expect((await cli(["unit", "ABC-42 phase 1", "ABC-43"], d.port)).trim()).toBe("units: [>] ABC-42 phase 1 | [ ] ABC-43");
+        expect((await cli(["unit", "ABC-42 phase 1", "ABC-43"], d.port)).trim()).toBe("roadmap: [>] ABC-42 phase 1 | [ ] ABC-43");
         await cli(["unit", "start", "ABC-42"], d.port);
         await cli(["unit", "done", "ABC-42", "phase"], d.port);
         expect(d.seen).toEqual([

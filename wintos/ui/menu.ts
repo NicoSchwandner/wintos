@@ -198,6 +198,8 @@ export function runAction(action: string): void {
     // ⌘H / ⌘L: the left and the right area, the same in every tab (the sidebar never takes
     // focus): the Inbox's list and its page, a project's terminals and its notes.
     if (action === "focus-left" || action === "focus-right") return stepSideways(action === "focus-right");
+    // A page in a pane of its own, for scripts and e2e (window.wintosAction("open-url:…")).
+    if (action.startsWith("open-url:")) return void createBlock({ meta: { view: "web", url: action.slice(9) } });
     if (action.startsWith("open-page:")) return openPage(action.slice("open-page:".length));
     // PRs and on call live in the Inbox tab, whichever project you are in.
     if (action === "prs") return toggleInbox("prs");

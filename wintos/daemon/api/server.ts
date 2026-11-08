@@ -1379,7 +1379,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 broadcast();
                 return send(res, 200, link);
             }
-            // `wintos unit`: the project's units of work, by the session in this pane.
+            // `wintos unit`: the epic's roadmap steps, from a session in it (the whole list only from its agent).
             const unit = /^\/blocks\/([^/]+)\/units$/.exec(url.pathname);
             if (req.method === "POST" && unit) {
                 const blockId = decodeURIComponent(unit[1]);
@@ -1423,10 +1423,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     broadcast();
                     return send(res, 200, serializeUnits(next));
                 }
-                const r = store.updateUnits(live.tabId, change);
-                if (typeof r === "string") return send(res, r === "no project" ? 409 : 400, r === "no project" ? "this pane's project has no project.md yet; name it with wintos title first" : "no such unit; wintos unit <unit>… sets the list");
-                broadcast();
-                return send(res, 200, serializeUnits(r));
+                // Steps live on an epic's roadmap only: a view keeps no list of its own (STATE-9).
+                return send(res, 409, "steps live on an epic's roadmap: put this session in an epic first (wintos epic <name>)");
             }
             // The epic agent passes what you told it on to one of its sessions (wintos relay), or puts its
             // recommendation on a session's open question (wintos suggest) instead of asking it again.

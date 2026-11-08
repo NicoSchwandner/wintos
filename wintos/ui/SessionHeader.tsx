@@ -183,7 +183,7 @@ const Dot = ({ c, size = 7 }: { c: { dot: string; ring: string }; size?: number 
 
 // A narrow pane: the lane as one row. No room for every step, so it says how many are done,
 // the one now, and the next that is your call (else simply the next one). The note gives way first.
-// unit: which of the project's units this is (i of n), beside the lane.
+// unit: which of its epic's roadmap steps this is (i of n), beside the lane.
 function StepTrack({ lane, unit }: { lane?: Lane; unit?: { i: number; n: number; name: string } }) {
     const unitChip = unit && <span data-wintos="unit-of" title={unit.name} style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted, flexShrink: 0 }}>step {unit.i}/{unit.n}</span>;
     if (!lane) return <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", fontSize: 11 }}>{unitChip}<span style={{ color: T.secondary, overflow: "hidden", textOverflow: "ellipsis" }}>{unit!.name}</span></div>;
@@ -212,7 +212,7 @@ function StepTrack({ lane, unit }: { lane?: Lane; unit?: { i: number; n: number;
     );
 }
 
-// A wide pane: the roadmap (the epic's, else the project's units of work) and the session's lane, as a column beside the
+// A wide pane: its epic's roadmap and the session's lane, as a column beside the
 // terminal. The unit being worked on holds the lane under it; done ones go quiet, the rest follow.
 export const SessionSteps = memo(({ blockId }: { blockId: string }) => {
     const { state } = useWintos();

@@ -202,11 +202,11 @@ function chipText(pr: PR, group: Group, state: WintosState): string {
 export const urgentPr = (h: SessionHeader | undefined) => h?.prs[0];
 
 // What a live session is called: its name, else its first prompt. The status line is never the name.
-// The roadmap a session works through: its epic's, which all the epic's sessions share, else its
-// project's units.
+// The roadmap a session works through: its epic's, which all the epic's sessions share; none
+// outside an epic.
 export function roadmapOf(state: WintosState, s: Session): { units: Unit[]; epic?: EpicView } {
     const epic = s.epic ? state.epics?.find((e) => e.id === s.epic) : undefined;
-    return epic ? { units: epic.steps, epic } : { units: state.projects.find((p) => p.id === s.tabId)?.units ?? [] };
+    return epic ? { units: epic.steps, epic } : { units: [] };
 }
 
 // The step this session works: the one it is linked to, else, with several under way, the first.

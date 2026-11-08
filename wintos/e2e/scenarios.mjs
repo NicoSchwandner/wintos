@@ -80,6 +80,15 @@ const MODS = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
 // A tab's sidebar rows whose own state mark says <band> (needs, read, running, quiet): the
 // sidebar groups rows by epic, and each row carries its state.
 const rowsIn = (band, tabId) => `[...document.querySelectorAll("[data-wintos=sidebar-list] [data-tabid='${tabId}']")].filter((e) => e.querySelector("[data-wintos=row-state][data-state=${band}]"))`;
+// ⌘D as a hand gives it: into the focused pane's terminal, which is where the split happens.
+// press() moves focus to the page first, and the split then missed now and then.
+async function splitKey(t) {
+    const blockId = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const term = blockId && (await evalIn(t, `!!document.querySelector('[data-blockid="${blockId}"] .xterm-helper-textarea')`));
+    if (!term) return press(t, "d", { mods: ["meta"] });
+    await cdpFocus(t, `[data-blockid="${blockId}"] .xterm-helper-textarea`);
+    for (const type of ["rawKeyDown", "keyUp"]) await cdp(t, "Input.dispatchKeyEvent", { type, key: "d", code: "KeyD", windowsVirtualKeyCode: 68, modifiers: MODS.meta });
+}
 async function press(t, key, { code, keyCode, mods = [] } = {}) {
     const modifiers = mods.reduce((m, k) => m | MODS[k], 0);
     if (modifiers) await focusOut(t);
@@ -366,7 +375,7 @@ await scenario("14 · ⌥⌘P parks the session waiting in a pane just opened", 
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const panes = Number(sql(`select json_array_length(data->'blockids') from db_tab where oid='${tabId}'`));
-    await press(t, "d", { mods: ["meta"] });
+    await splitKey(t);
     await until("a new pane", () => Number(sql(`select json_array_length(data->'blockids') from db_tab where oid='${tabId}'`)) === panes + 1);
     const blockId = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
     const post = (hook_event_name) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-park", hook_event_name, prompt: "e2e park" } }) });
@@ -385,7 +394,7 @@ await scenario("14b · a session that parks itself goes quiet at once, saying wh
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
-    await press(t, "d", { mods: ["meta"] });
+    await splitKey(t);
     const blockId = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
     const focus = (b) => evalIn(t, `window.wintosLayout().focusNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(b)}).id)`);
     await focus(first);
@@ -490,7 +499,7 @@ await scenario("20 · ⌘Z brings back the pane ⌘W closed, and the project ⇧
     const title = (await st()).projects.find((p) => p.id === tabId)?.title;
     const panes = (id) => Number(sql(`select coalesce(json_array_length(data->'blockids'), 0) from db_tab where oid='${id}'`));
     for (let n = panes(tabId); n < 2; n++) {
-        await press(t, "d", { mods: ["meta"] });
+        await splitKey(t);
         await until("a split", () => panes(tabId) === n + 1);
     }
     const before = panes(tabId);
@@ -603,7 +612,7 @@ await scenario("25 · a turn that asks you to decide sits in Your move saying so
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
-    await press(t, "d", { mods: ["meta"] });
+    await splitKey(t);
     const blockId = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
     const post = (hook_event_name, extra = {}) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-ask", hook_event_name, prompt: "e2e ask", ...extra } }) });
     await post("UserPromptSubmit");
@@ -730,7 +739,7 @@ await scenario("32 · a turn that ends with its subagent still running sits in R
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
-    await press(t, "d", { mods: ["meta"] });
+    await splitKey(t);
     const blockId = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
     await evalIn(t, `window.wintosLayout().focusNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(first)}).id)`);
     const post = (hook_event_name, extra = {}) => fetch("http://127.0.0.1:7731/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tabId, blockId, payload: { session_id: "e2e-agent", hook_event_name, prompt: "e2e agent", ...extra } }) });
@@ -761,21 +770,24 @@ await scenario("33 · ⌥⌘B starts a break: the status bar counts it, the side
     await until("the sidebar's meter saying it", () => evalIn(t, `document.querySelector("[data-wintos=rhythm-meter]")?.innerText.includes("on a break")`));
 });
 
-await scenario("37 · wintos unit: the project's steps in the side column, the current one holding the lane; step i/n in the header", async () => {
+await scenario("37 · wintos unit: the epic's roadmap in the side column, the current step holding the lane; step i/n in the header", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const pane = await evalIn(t, `document.querySelector("[data-blockid]")?.dataset.blockid`);
-    await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-units", hook_event_name: "UserPromptSubmit", prompt: "e2e units" } });
-    const q = "?session=e2e-units";
-    await api(`/blocks/${pane}/units${q}`, { items: ["ABC-41 fields check", "ABC-42 phase 1", "ABC-43 match log"] });
+    const pane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
+    const run = Date.now().toString(36), sid = `e2e-units-${run}`, q = `?session=${sid}`;
+    const id = await (await api("/epics", { title: `E2E units ${run}` })).text();
+    for (const add of ["ABC-41 fields check", "ABC-42 phase 1", "ABC-43 match log"]) await api(`/epics/${id}/roadmap`, { add });
+    await api("/events", { tabId, blockId: pane, payload: { session_id: sid, hook_event_name: "UserPromptSubmit", prompt: "e2e units" } });
+    await api(`/sessions/${sid}/epic`, { epic: id });
     await api(`/blocks/${pane}/units${q}`, { done: "ABC-41" });
     await api(`/blocks/${pane}/units${q}`, { start: "ABC-42" });
     await api(`/blocks/${pane}/lane${q}`, { name: "fast", steps: ["Failing test", "Fix"] });
-    await until("the units in the side column", async () => (await evalIn(t, `[...document.querySelectorAll("[data-wintos=project-units] [data-unit]")].map((e) => e.dataset.unit).join(",")`)) === "done,current,todo");
-    if (!(await evalIn(t, `document.querySelector("[data-unit=current]")?.innerText.includes("Failing test")`))) throw new Error("the current unit does not hold the lane");
+    await until("the roadmap in the side column", async () => (await evalIn(t, `[...document.querySelectorAll("[data-wintos=project-units] [data-unit]")].map((e) => e.dataset.unit).join(",")`)) === "done,current,todo");
+    if (!(await evalIn(t, `document.querySelector("[data-unit=current]")?.innerText.includes("Failing test")`))) throw new Error("the current step does not hold the lane");
     if (!(await evalIn(t, `document.querySelector("[data-wintos=unit-of]")?.innerText === "step 2/3"`))) throw new Error("no step 2/3 in the header");
 });
+
 
 await scenario("38 · epics: a session's epic heads its pane and marks its row; ⌥⌘E picks another by its digit", async () => {
     const t = await toProject();
@@ -783,7 +795,7 @@ await scenario("38 · epics: a session's epic heads its pane and marks its row; 
     const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     // A pane of its own: an earlier scenario's session may still sit in the first one.
     const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
-    await press(t, "d", { mods: ["meta"] });
+    await splitKey(t);
     const pane = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
     const a = await (await api("/epics", { title: "E2E archive", short: "Archive" })).text();
     const b = await (await api("/epics", { title: "E2E release" })).text();
@@ -809,7 +821,7 @@ await scenario("39 · each session is a row of its own; two in one view share it
     const tabId = await evalIn(t, "window.wintosTabId()");
     const focused = () => evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
     const first = await focused();
-    await press(t, "d", { mods: ["meta"] });
+    await splitKey(t);
     const second = await until("a new pane focused", async () => { const b = await focused(); return b !== first && b; });
     const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     await api("/events", { tabId, blockId: first, payload: { session_id: "e2e-row-a", hook_event_name: "UserPromptSubmit", prompt: "e2e row a" } });
@@ -826,7 +838,7 @@ await scenario("40 · ⌥⌘T takes a session out into a view of its own: its pa
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
-    await press(t, "d", { mods: ["meta"] });
+    await splitKey(t);
     const pane = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
     const resumable = () => sql(`select count(*) from db_block where data->>'$.meta."cmd:initscript"' like '%e2e-move%'`) === "1";
     await until("a terminal", () => evalIn(t, `!!document.querySelector("[data-blockid='${pane}'] .xterm-helper-textarea")`));
@@ -907,7 +919,7 @@ await scenario("43 · a worker's turn end reaches its epic's agent: typed into t
     await api(`/epics/${id}/agent`, { sessionId: "e2e-ag" });
     // Reports wait while you are in the agent's pane: look at another one. CDP's key-up follows its
     // key-down at once and can land on the old pane's xterm, which takes focus back; a hand is slower.
-    await press(t, "d", { mods: ["meta"] });
+    await splitKey(t);
     const other = await until("a second pane", () => evalIn(t, `[...document.querySelectorAll("[data-blockid]")].map((b) => b.dataset.blockid).find((b) => b !== "${pane}") ?? false`));
     await evalIn(t, `window.wintosLayout().focusNode(window.wintosLayout().getNodeByBlockId("${other}").id)`);
     await until("another pane focused", async () => (await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`)) !== pane);
@@ -1094,7 +1106,7 @@ await scenario("49 · the epic agent relays your words to a session: refused unl
     // A real pane, not the one you look at: one that can't take the text keeps it queued, and a
     // relay waits while you are in its pane.
     const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
-    await press(t, "d", { mods: ["meta"] });
+    await splitKey(t);
     const pane = await until("a second pane", async () => { const x = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return x !== first && x; });
     await until("its shell ready", () => evalIn(t, `!!document.querySelector("[data-blockid='${pane}'] textarea")`));
     await evalIn(t, `window.wintosLayout().focusNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(first)}).id)`);
@@ -1135,7 +1147,7 @@ await scenario("51 · a click on the open pane's chip brings the keys into that 
     // Chips show for a view of two panes or more.
     const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
     if ((await evalIn(t, `document.querySelectorAll("[data-blockid]").length`)) === 1 && (await evalIn(t, `!!document.querySelector("[data-wintos=pane-strip] [data-pane]")`))) throw new Error("a chip for the only pane");
-    await press(t, "d", { mods: ["meta"] });
+    await splitKey(t);
     const pane = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
     await until("its chip, and its terminal ready for the keys", () => evalIn(t, `!!document.querySelector("[data-pane='${pane}']") && !!document.querySelector("[data-blockid='${pane}'] textarea")`));
     await evalIn(t, `(() => { const l = document.querySelector("[data-wintos=sidebar-list]"); l.setAttribute("tabindex", "-1"); l.focus(); })()`);
@@ -1219,7 +1231,7 @@ await scenario("54 · ⌥⌘E, a name and ⌘⏎ promote a session in no epic to
     const tabId = await evalIn(t, "window.wintosTabId()");
     const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const first = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
-    await press(t, "d", { mods: ["meta"] });
+    await splitKey(t);
     const pane = await until("a new pane focused", async () => { const b = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`); return b !== first && b; });
     await api("/events", { tabId, blockId: pane, payload: { session_id: "e2e-promo", hook_event_name: "UserPromptSubmit", prompt: "e2e promo" } });
     await until("its session known", async () => !!(await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((s) => s.id === "e2e-promo"));

@@ -15,7 +15,7 @@
 #   wintos status <line…>              what this session is doing now, shown on its pane (used by Claude)
 #   wintos lane <name> <step…>         the process this session follows; ?step is the developer's call (used by Claude)
 #   wintos step <step> [note…]         where in it the session is now (used by Claude)
-#   wintos unit <unit>…                the project's units of work (tickets, phases), in order (used by Claude)
+#   wintos unit <step>…                epic agent: its epic's roadmap steps, in order
 #   wintos unit start|done <unit>      the one worked on now, or one finished; by its name or its start
 #   wintos unit rename <step> <new name> | move <step> up|down | remove <step>
 #                                      an epic's roadmap edited step by step; a step keeps its sessions
@@ -189,7 +189,7 @@ unit)
         body=$(jq -n '{items: $ARGS.positional}' --args "$@")
     fi
     list=$(printf '%s' "$body" | post "/blocks/$WAVETERM_BLOCKID/units$SESSION_Q") || exit 1
-    echo "units: $list"
+    echo "roadmap: $list"
     ;;
 rename)
     shift

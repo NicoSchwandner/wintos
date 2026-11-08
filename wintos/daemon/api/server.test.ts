@@ -67,20 +67,14 @@ describe("wintosd API", () => {
         expect(state.sessions[0].lane.todos).toEqual([{ text: "Narrow list", done: false }, { text: "Name search", done: true }]);
     });
 
-    test("`wintos unit` sets the project's units, starts one and ticks one; in project.md and /state", async () => {
+    test("`wintos unit` outside an epic is refused: steps live on an epic's roadmap", async () => {
         await event(prompt);
-        expect((await post("/blocks/blk-1/units", { items: ["ABC-41 fields check"] })).status).toBe(409);
         await post("/projects/tab-1/title", { title: "Ledger import", manual: true });
-        expect((await post("/blocks/blk-1/units", { items: ["ABC-41 fields check", "ABC-42 phase 1", "ABC-43 match log"] })).status).toBe(200);
-        expect((await post("/blocks/blk-1/units", { start: "abc-42" })).status).toBe(200);
-        const done = await post("/blocks/blk-1/units", { done: "ABC-41" });
-        expect(await done.text()).toBe("[x] ABC-41 fields check | [>] ABC-42 phase 1 | [ ] ABC-43 match log");
-        expect((await post("/blocks/blk-1/units", { start: "ABC-9" })).status).toBe(400);
+        const r = await post("/blocks/blk-1/units", { items: ["ABC-41 fields check"] });
+        expect([r.status, await r.text()]).toEqual([409, "steps live on an epic's roadmap: put this session in an epic first (wintos epic <name>)"]);
         expect((await post("/blocks/blk-1/units", { items: ["a | b"] })).status).toBe(400);
-        const state = await (await fetch(base + "/state")).json();
-        expect(state.projects[0].units.map((u: { state: string }) => u.state)).toEqual(["done", "current", "todo"]);
-        expect(readFileSync(join(state.projects[0].dir, "project.md"), "utf8")).toContain("units: [x] ABC-41 fields check | [>] ABC-42 phase 1 | [ ] ABC-43 match log");
     });
+
 
     test("epics: one is started, a session joins it by name or by id, and leaves it; /state shows both", async () => {
         await event(prompt);

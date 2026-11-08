@@ -121,8 +121,8 @@ describe("parkSession (`wintos wait`)", () => {
         expect(s.parkedOn).toBeUndefined();
     });
 
-    test("parks the block's live session, and nothing when the block has none", () => {
-        const m = run([ev(start)]);
+    test("parks the block's live session when its turn ends, and nothing when the block has none", () => {
+        const m = run([ev(start), ev(prompt)]);
         expect(only(park(m)).parkPending).toBe(true);
         expect(parkSession(m, "other-block", "x", 5000)).toBe(m);
     });
@@ -461,4 +461,9 @@ test("a status line shows while it is from this turn; one set before your last p
     expect(freshStatus({ status: { text: "walking the test plan", at: 200 }, promptAt: 100 })?.text).toBe("walking the test plan");
     expect(freshStatus({ status: { text: "paused until afternoon", at: 100 }, promptAt: 200 })).toBeUndefined();
     expect(freshStatus({ status: { text: "never prompted here", at: 5 } })?.text).toBe("never prompted here");
+});
+
+test("⌥⌘P on a session whose turn ended quietly pauses it at once, not on a Stop that never comes", () => {
+    const done = new Map([["s", { id: "s", tabId: "t", blockId: "b", state: "done", since: 0, lastAt: 0 } as Session]]);
+    expect(parkSession(done, "b", "parked by you", 5).get("s")).toMatchObject({ state: "parked", parkedOn: "parked by you" });
 });

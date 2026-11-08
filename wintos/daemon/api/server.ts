@@ -95,6 +95,18 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const wakesFile = join(opts.root, ".wakes.json");
     let wakes = rekeyed(readJson<Wakes>(wakesFile, {}));
     const saveWakes = () => writeJsonAtomic(wakesFile, wakes);
+    // A pause a wake made ends with it, cancelled, expired or impossible: the session no longer
+    // waits on that PR, unless another of its wakes still holds it. True when one changed.
+    const endWakePause = (gone: { sessionId: string; pr: string; until: WakeEvent }[]) => {
+        let changed = false;
+        for (const w of gone) {
+            const s = sessions.get(w.sessionId);
+            if (!s || (s.state !== "parked" && !s.parkPending) || s.parkedOn !== waitingOn(w) || Object.values(wakes).some((x) => x.sessionId === s.id)) continue;
+            sessions = unparkSession(sessions, s.id, Date.now());
+            changed = true;
+        }
+        return changed;
+    };
     let checking = false;
     const checkWakes = async () => {
         const waiting = [...new Set(Object.values(wakes).filter((w) => !w.due).map((w) => w.pr))];
@@ -110,6 +122,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             if (JSON.stringify(next.wakes) !== JSON.stringify(wakes)) {
                 wakes = next.wakes;
                 saveWakes();
+                if (endWakePause(next.dropped)) saveSessions("a wake it waited on was dropped");
                 broadcast();
             }
         } finally {
@@ -1208,6 +1221,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
             }
             const unpark = /^\/sessions\/([^/]+)\/unpark$/.exec(url.pathname);
             if (req.method === "POST" && unpark) {
+                // A pause a wake made ends the wake too: the two say the same thing.
+                const s = sessions.get(decodeURIComponent(unpark[1]));
+                const own = Object.entries(wakes).filter(([, w]) => w.sessionId === s?.id && waitingOn(w) === s?.parkedOn);
+                if (own.length) (wakes = Object.fromEntries(Object.entries(wakes).filter(([k]) => !own.some(([o]) => o === k)))), saveWakes();
                 sessions = unparkSession(sessions, decodeURIComponent(unpark[1]), Date.now());
                 saveSessions();
                 broadcast();
@@ -1273,9 +1290,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const live = liveIn(sessions, decodeURIComponent(wake[1]), sid);
                 if (!live) return send(res, 400, "no live Claude session in this pane: run wintos wake from the session that should continue");
                 if (wake[2]) {
-                    const had = Object.values(wakes).some((w) => w.sessionId === live.id);
+                    const gone = Object.values(wakes).filter((w) => w.sessionId === live.id);
+                    const had = gone.length > 0;
                     wakes = Object.fromEntries(Object.entries(wakes).filter(([, w]) => w.sessionId !== live.id));
                     saveWakes();
+                    if (endWakePause(gone)) saveSessions("its wakes were cancelled");
                     broadcast();
                     return send(res, 200, had ? "cancelled" : "no wake was set");
                 }

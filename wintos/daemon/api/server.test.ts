@@ -1616,6 +1616,19 @@ describe("wakes", () => {
         expect((await st()).wakes).toEqual({});
     });
 
+    test("a wake's pause and the wake go together: cancelling one ends the other", async () => {
+        await post("/blocks/blk-1/wake", { until: "green", pr: URL7, prompt: "approve" });
+        await event(stop);
+        expect((await st()).sessions[0].state).toBe("parked");
+        await post("/blocks/blk-1/wake/cancel", {});
+        expect((await st()).sessions[0].state).toBe("waiting");
+        await event(prompt);
+        await post("/blocks/blk-1/wake", { until: "merged", pr: URL7, prompt: "update the docs" });
+        await event(stop);
+        await post(`/sessions/${prompt.session_id}/unpark`, {});
+        expect([(await st()).sessions[0].state, (await st()).wakes]).toEqual(["waiting", {}]);
+    });
+
     test("cancel; and every mistake says how to get it right", async () => {
         await post("/blocks/blk-1/wake", { until: "green", pr: URL7, prompt: "approve" });
         expect(await (await post("/blocks/blk-1/wake/cancel", {})).text()).toBe("cancelled");

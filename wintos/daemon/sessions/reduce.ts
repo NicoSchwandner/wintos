@@ -240,8 +240,8 @@ export function restoreSessions(saved: Session[], now?: number): Map<string, Ses
 export function parkSession(sessions: Map<string, Session>, blockId: string, reason: string, now: number, sessionId?: string): Map<string, Session> {
     const live = liveIn(sessions, blockId, sessionId);
     if (!live) return sessions;
-    // A turn that already ended waiting on the developer parks now: they parked it from WintOS.
-    if (live.state === "waiting") return new Map(sessions).set(live.id, { ...live, state: "parked", since: now, parkedOn: reason, parkPending: undefined, donePending: undefined, ask: undefined, lastAt: now });
+    // A turn that already ended parks now (⌥⌘P from WintOS); one still at work parks when it ends.
+    if (live.state !== "working") return new Map(sessions).set(live.id, { ...live, state: "parked", since: now, parkedOn: reason, parkPending: undefined, donePending: undefined, ask: undefined, lastAt: now });
     return new Map(sessions).set(live.id, { ...live, parkedOn: reason, parkPending: true, donePending: undefined, askPending: undefined, lastAt: now });
 }
 

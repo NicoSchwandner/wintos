@@ -1,3 +1,4 @@
+import { canTypeInto } from "./outbox";
 import { wakeId, wakePrompt, type Wakes } from "../daemon/wakes/wakes";
 import type { Session } from "../daemon/sessions/reduce";
 import type { Shelved } from "../daemon/shelf/shelf";
@@ -11,8 +12,8 @@ export function deliverable(wakes: Wakes, sessions: Session[], shelf: Shelved[],
     return Object.values(wakes).flatMap((w): Delivery[] => {
         if (!w.due) return [];
         const s = sessions.find((x) => x.id === w.sessionId && x.state !== "ended");
-        // A restored session's Claude starts only when its pane is opened: until then nothing can take it.
-        if (s) return s.tabId === tabId && s.blockId && s.state !== "working" && !s.restored ? [{ kind: "type", id: wakeId(w), sessionId: s.id, blockId: s.blockId, text: wakePrompt(w) }] : [];
+        // Typed even while you are in its pane: it is the wake you waited for.
+        if (s) return canTypeInto(s, tabId) ? [{ kind: "type", id: wakeId(w), sessionId: s.id, blockId: s.blockId, text: wakePrompt(w) }] : [];
         const shelved = shelf.find((x) => x.sessionId === w.sessionId);
         return shelved ? [{ kind: "resume", sessionId: w.sessionId, script: shelved.script }] : [];
     });

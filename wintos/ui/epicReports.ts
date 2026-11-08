@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { Reports } from "../daemon/epics/reports";
 import { relayPrompt, type Relays } from "../daemon/epics/relay";
 import type { Session } from "../daemon/sessions/reduce";
+import { canTypeInto } from "./outbox";
 import { typeIntoPane } from "./typeIntoPane";
 import { daemonFetch } from "./useWintos";
 
@@ -13,8 +14,8 @@ export const GATHER_MS = 60_000;
 export type ReportDelivery = { agent: string; blockId: string; text: string; n: number };
 export function reportDeliveries(reports: Reports, sessions: Session[], tabId: string, now: number, lookingAt?: string): ReportDelivery[] {
     return Object.entries(reports).flatMap(([agent, list]) => {
-        const s = sessions.find((x) => x.id === agent && x.state !== "ended");
-        if (!s || s.tabId !== tabId || s.state === "working" || s.restored || s.blockId === lookingAt || !list.length || now - list[0].at < GATHER_MS) return [];
+        const s = sessions.find((x) => x.id === agent);
+        if (!canTypeInto(s, tabId, lookingAt) || !list.length || now - list[0].at < GATHER_MS) return [];
         return [{ agent, blockId: s.blockId, n: list.length, text: `[WintOS report] ${list.map((r) => r.text).join(" · ")}` }];
     });
 }
@@ -23,9 +24,8 @@ export function reportDeliveries(reports: Reports, sessions: Session[], tabId: s
 // it is your answer, and the session may be waiting on it.
 export function relayDeliveries(relays: Relays, sessions: Session[], epics: { id: string; title: string; short?: string }[], tabId: string, lookingAt?: string): ReportDelivery[] {
     return Object.entries(relays).flatMap(([to, list]) => {
-        const s = sessions.find((x) => x.id === to && x.state !== "ended");
-        // A background session (no pane) gets it from the daemon, through the background service.
-        if (!s || s.tabId !== tabId || s.state === "working" || s.restored || s.blockId === lookingAt || !list.length || (s.bgId && !s.attachedTo)) return [];
+        const s = sessions.find((x) => x.id === to);
+        if (!canTypeInto(s, tabId, lookingAt) || !list.length) return [];
         const e = epics.find((x) => x.id === s.epic);
         return [{ agent: to, blockId: s.blockId, n: list.length, text: list.map((r) => relayPrompt(r, e ? (e.short ?? e.title) : "epic")).join("\n") }];
     });

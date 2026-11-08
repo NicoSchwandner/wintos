@@ -19,7 +19,7 @@ import { ACTIVE, T } from "./tokens";
 import { useNow } from "./useNow";
 import { editMine, enterProject, focusArea, focusSession, openBackground, reopenProject, resumePane, setLatestSessions } from "./focus";
 import { getLayoutModelForStaticTab } from "@/layout/index";
-import { setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
+import { cycleOrder, setSwitchOrder, setWakeStops, switchTargetAtom } from "./switcher";
 import { closeProjectTab, openView, registerWintosMenu, runKey, SIDEBAR_BY_EPIC } from "./menu";
 import { isPage, mainViewAtom, newStepEpicAtom, renamingAtom, yourMoveAtom } from "./notes/state";
 import { inFlight, liveSessions } from "./sessions";
@@ -128,9 +128,17 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
 
     // By epic, an agent's row is its epic's header: ⌃⇥ stops there when the agent needs you.
     const asStop = Object.fromEntries(groups.flatMap((g) => (g.agent && g.epic ? [[g.agent.key, `epic:${g.epic.id}`]] : [])));
-    const needKeys = model ? [...bgNeeds.map((s) => `bg:${s.id}`), ...wakeNeeds.map((w) => `wake:${w.projectId}`), ...model.needs.map((r) => asStop[r.key] ?? r.key)] : [];
-    const readKeys = model ? [...wakeNews.map((w) => `wake:${w.projectId}`), ...model.read.map((r) => asStop[r.key] ?? r.key)] : [];
-    useEffect(() => void setSwitchOrder(switchOrder, tabOfRow, needKeys, readKeys), [switchOrder.join(","), needKeys.join(","), readKeys.join(",")]);
+    // ⌃⇥ walks every session: what needs you, oldest first (the bands list the newest first), what
+    // has something to read, then the rest, latest first.
+    const stop = (r: Row) => asStop[r.key] ?? r.key;
+    const cycle = model
+        ? cycleOrder(
+              [...bgNeeds.map((s) => `bg:${s.id}`), ...wakeNeeds.map((w) => `wake:${w.projectId}`), ...[...model.needs].reverse().map(stop)],
+              [...wakeNews.map((w) => `wake:${w.projectId}`), ...[...model.read].reverse().map(stop)],
+              [...model.running, ...model.quiet, ...model.quietMore, ...model.quietStale].map(stop)
+          )
+        : [];
+    useEffect(() => void setSwitchOrder(switchOrder, tabOfRow, cycle, asStop), [switchOrder.join(","), cycle.join(",")]);
     const reopenWoke = (w: ClosedWake) => reopenProject(w.projectId, [resumePane(w.script)]);
     useEffect(() => void setWakeStops(Object.fromEntries([...wokeClosed.map((w) => [`wake:${w.projectId}`, () => reopenWoke(w)] as const), ...bgNeeds.map((s) => [`bg:${s.id}`, () => openBackground(s.bgId!)] as const)])), [wokeClosed.map((w) => w.sessionId).join(","), bgNeeds.map((s) => s.id).join(",")]);
     useEffect(() => void document.querySelector(`[data-wintos=sidebar-list] [data-row="${switchTarget}"]`)?.scrollIntoView({ block: "nearest" }), [switchTarget]);

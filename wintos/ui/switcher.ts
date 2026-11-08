@@ -7,8 +7,9 @@ import { openEpic, openView } from "./menu";
 import type { InboxList } from "./view";
 import { flog } from "./focusLog";
 
-// ⌘J / ⌘K work like ⌘⇥: hold ⌘ and tap to walk the ranked projects in this renderer's
-// sidebar, release ⌘ to switch once. ⌃⇥ walks the projects the same way, always from the top.
+// ⌘J / ⌘K work like ⌘⇥: hold ⌘ and tap to walk the rows of this renderer's sidebar, release ⌘
+// to switch once. ⌃⇥ walks every session by what it asks of you: those that need you first
+// (oldest first), then those with something to read, then the rest (latest first).
 // Walking without switching keeps the cursor in the one renderer that owns it (every Wave tab is
 // its own renderer).
 export const switchTargetAtom = atom(null as string | null);
@@ -16,17 +17,17 @@ export const switchTargetAtom = atom(null as string | null);
 // The sidebar's rows top to bottom: tabs, "s:<session>" rows (tabOf says whose tab), cards.
 let order: string[] = [];
 let tabOf: Record<string, string> = {};
-// The rows that need you (Your move), and those with something to read: ⌃⇥ walks only these.
-let needing: Set<string> = new Set();
-let reading: Set<string> = new Set();
-export const setSwitchOrder = (keys: string[], tabs: Record<string, string> = {}, needs: string[] = [], read: string[] = []) => ((order = keys), (tabOf = tabs), (needing = new Set(needs)), (reading = new Set(read)));
+// ⌃⇥'s order: needs you, to read, the rest; the sidebar ranks them (cycleOrder).
+let cycle: string[] = [];
+// alias: a session's row shown under another key (by epic, the agent's row is its epic's heading).
+let alias: Record<string, string> = {};
+export const setSwitchOrder = (keys: string[], tabs: Record<string, string> = {}, priority: string[] = [], aliases: Record<string, string> = {}) => ((order = keys), (tabOf = tabs), (cycle = priority), (alias = aliases));
 
-// ⌃⇥'s stops: the rows that need you, in the sidebar's order; when none does, those to read.
-// Quiet and running ones are skipped: nothing there waits on you.
-export function waitingStops(order: string[], needs: Set<string>, read: Set<string>): string[] {
-    const mine = order.filter((k) => needs.has(k));
-    return mine.length ? mine : order.filter((k) => read.has(k));
-}
+// The order ⌃⇥ walks, each key once: what needs you (oldest first), what has something to read
+// (oldest first), then the rest as given (latest first).
+export const cycleOrder = (needs: string[], read: string[], rest: string[]) => [...new Set([...needs, ...read, ...rest])];
+// Frozen while ⌃ is held: answering a session mid-walk would otherwise reshuffle the rest.
+let frozen: string[] | null = null;
 // "wake:<project>" stops: a closed project's due wake, which opening reopens on its session.
 // "bg:<session>" stops: a session its epic's agent started in the background, waiting on you.
 let wakeStops: Record<string, () => void> = {};
@@ -68,12 +69,16 @@ let hold: "Meta" | "Control" = "Meta";
 // you, or the last for ⌃⇧⇥, and walks only those (⌃⇥).
 export function switchProject(delta: 1 | -1, held: boolean, from: "here" | "top" = "here"): void {
     if (!walking()) hold = from === "top" ? "Control" : "Meta";
-    // ⌘J/⌘K walks the rows; the cards above them have keys of their own (⇧⌘Y, ⇧⌘G, ⇧⌘O).
-    const stops = from === "top" ? waitingStops(order, needing, reading) : order.filter((k) => !k.startsWith("card:"));
     const at = globalStore.get(switchTargetAtom);
-    let next = stepProject(stops, at ?? (from === "top" ? "" : here()), delta);
-    // Starting from the top in the topmost project already: the first tap is the one after it.
-    if (from === "top" && at == null && next === here() && stops.length > 1) next = stepProject(stops, next, delta);
+    // ⌘J/⌘K walks the rows; the cards above them have keys of their own (⇧⌘Y, ⇧⌘G, ⇧⌘O). ⌃⇥
+    // walks the ranked sessions, the one you are in left out, frozen for the whole walk.
+    if (from === "top" && at == null) {
+        const s = focusedSession();
+        const mine = new Set([here(), ...(s ? [`s:${s.id}`, alias[`s:${s.id}`]] : [])]);
+        frozen = cycle.filter((k) => !mine.has(k));
+    }
+    const stops = from === "top" ? (frozen ?? []) : order.filter((k) => !k.startsWith("card:"));
+    const next = stepProject(stops, at ?? (from === "top" ? "" : here()), delta);
     if (!next) return;
     globalStore.set(switchTargetAtom, next);
     if (!held) return commit("menu");
@@ -121,6 +126,7 @@ export function undoWalkKey(e: { key: string; cmd?: boolean; shift?: boolean; co
 
 function end(why: string): void {
     if (walking()) flog(`walk ended (${why})`);
+    frozen = null;
     globalStore.set(switchTargetAtom, null);
     listen(false);
 }

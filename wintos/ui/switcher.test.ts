@@ -4,7 +4,7 @@ vi.mock("./focusLog", () => ({ flog: vi.fn() }));
 const here = { tab: "a", session: undefined as { id: string; tabId: string } | undefined };
 vi.mock("./focus", () => ({ enterProject: vi.fn(), focusArea: vi.fn(), whereYouAre: () => here.tab, focusedSession: () => here.session }));
 import { enterProject } from "./focus";
-import { setSwitchOrder, setWakeStops, stepProject, switchProject, switchTargetAtom, topProject, toRow, undoWalkKey, walkKey, walking } from "./switcher";
+import { cycleOrder, setSwitchOrder, setWakeStops, stepProject, switchProject, switchTargetAtom, topProject, toRow, undoWalkKey, walkKey, walking } from "./switcher";
 
 describe("stepProject", () => {
     const order = ["a", "b", "c"];
@@ -157,66 +157,57 @@ describe("a walk from a page ends on the main process's word", () => {
     });
 });
 
-describe("⌃⇥: the rows that need you, from the top of the sidebar, switching on release", () => {
+describe("⌃⇥: every session, what needs you first, then what has something to read, then the rest", () => {
     const setup = () => {
         vi.stubGlobal("window", new EventTarget());
         vi.stubGlobal("document", new EventTarget());
         globalStore.set(switchTargetAtom, null);
         vi.mocked(enterProject).mockClear();
-        // q is quiet and r only has something to read: ⌃⇥ skips both while anything needs you.
-        setSwitchOrder(["card:today", "card:prs", "wake:x", "a", "q", "b", "r"], {}, ["wake:x", "a", "b"], ["r"]);
+        // a and b need you, r has something to read, q is quiet; you are in b.
+        setSwitchOrder(["card:today", "wake:x", "a", "q", "b", "r"], {}, cycleOrder(["wake:x", "a", "b"], ["r"], ["q", "a"]));
         here.tab = "b";
+        here.session = undefined;
     };
     const release = (key: string) => window.dispatchEvent(Object.assign(new Event("keyup"), { key }));
 
-    test("the first tap is the topmost project wherever you are, each next one goes down; only ⌃ released switches", () => {
+    test("the first tap is what needs you most; each next one goes on through to read and the rest, never where you are; ⌃ released switches", () => {
         setup();
-        switchProject(1, true, "top");
-        expect(globalStore.get(switchTargetAtom)).toBe("wake:x");
-        switchProject(1, true, "top");
-        expect(globalStore.get(switchTargetAtom)).toBe("a");
+        const taps = [1, 2, 3, 4].map(() => (switchProject(1, true, "top"), globalStore.get(switchTargetAtom)));
+        expect(taps).toEqual(["wake:x", "a", "r", "q"]);
         release("Meta");
         expect(walking()).toBe(true);
         release("Control");
         expect(walking()).toBe(false);
-        expect(enterProject).toHaveBeenCalledExactlyOnceWith("a");
+        expect(enterProject).toHaveBeenCalledExactlyOnceWith("q");
     });
 
-    test("in the topmost project already, the first tap skips it to the second (⌃⇧⇥: the bottom one likewise)", () => {
+    test("the order is frozen while ⌃ is held: a session answered mid-walk doesn't reshuffle it", () => {
         setup();
-        here.tab = "wake:x";
+        switchProject(1, true, "top");
+        setSwitchOrder(["a", "q", "b", "r"], {}, cycleOrder(["b"], ["r"], ["a", "q"]));
         switchProject(1, true, "top");
         expect(globalStore.get(switchTargetAtom)).toBe("a");
-        globalStore.set(switchTargetAtom, null);
-        here.tab = "b";
-        switchProject(-1, true, "top");
-        expect(globalStore.get(switchTargetAtom)).toBe("a");
-    });
-
-    test("quiet and running rows are skipped; with nothing needing you it walks what there is to read, else stays", () => {
-        setup();
-        here.tab = "x";
-        switchProject(1, true, "top");
-        switchProject(1, true, "top");
-        switchProject(1, true, "top");
-        expect(globalStore.get(switchTargetAtom)).toBe("b");
-        globalStore.set(switchTargetAtom, null);
-        setSwitchOrder(["a", "q", "r"], {}, [], ["r"]);
+        release("Control");
         switchProject(1, true, "top");
         expect(globalStore.get(switchTargetAtom)).toBe("r");
+    });
+
+    test("⌃⇧⇥ starts from the end; with no other session it stays", () => {
+        setup();
+        switchProject(-1, true, "top");
+        expect(globalStore.get(switchTargetAtom)).toBe("q");
         globalStore.set(switchTargetAtom, null);
-        setSwitchOrder(["a", "q"], {}, [], []);
+        setSwitchOrder(["b"], {}, ["b"]);
         switchProject(1, true, "top");
         expect(globalStore.get(switchTargetAtom)).toBeNull();
     });
 
-    test("⌃⇧⇥ starts from the bottom, and the cards are no stops", () => {
+    test("by epic, the agent's row is its epic's heading: in the agent's pane that heading is no stop", () => {
         setup();
-        here.tab = "a";
-        switchProject(-1, true, "top");
-        expect(globalStore.get(switchTargetAtom)).toBe("b");
+        setSwitchOrder(["epic:e", "a"], {}, ["epic:e", "a"], { "s:ag": "epic:e" });
+        here.session = { id: "ag", tabId: "t" } as never;
         switchProject(1, true, "top");
-        expect(globalStore.get(switchTargetAtom)).toBe("wake:x");
+        expect(globalStore.get(switchTargetAtom)).toBe("a");
     });
 
     test("walking with ⌃: ⌃⇥ walks on, another ⌃ key is swallowed, a key without ⌃ switches and goes on", () => {
@@ -253,7 +244,7 @@ test("⌃⇥ lands on a background session waiting on you and opens it", () => {
     globalStore.set(switchTargetAtom, null);
     const opened: string[] = [];
     setWakeStops({ "bg:s1": () => opened.push("s1") });
-    setSwitchOrder(["bg:s1", "a", "q"], {}, ["bg:s1", "a"], []);
+    setSwitchOrder(["bg:s1", "a", "q"], {}, ["bg:s1", "a", "q"]);
     here.tab = "a";
     here.session = undefined;
     switchProject(1, false, "top");

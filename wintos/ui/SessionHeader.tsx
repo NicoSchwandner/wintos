@@ -57,7 +57,7 @@ export const SessionHeader = memo(({ blockId }: { blockId: string }) => {
                 ) : (
                     <Key k="⌥⌘E" label="no epic yet" />
                 )}
-                {isAgent && <span style={{ padding: "0 6px", borderRadius: 4, background: look.fg, color: look.bg, fontFamily: T.mono, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.1em" }}>AGENT</span>}
+                {isAgent && <span style={{ padding: "0 6px", borderRadius: 4, background: look.fg, color: look.bg, fontFamily: T.mono, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.1em" }}>EPIC AGENT</span>}
             </button>}
             {h.tone && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: h.tone === "brick" ? T.brick : T.apricot }} />}
             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, whiteSpace: "nowrap" }}>

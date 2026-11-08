@@ -114,12 +114,12 @@ function EmptyProject({ tabId }: { tabId: string }) {
         // ⇧⌘P lists every shelved session to resume; a click resumes the newest straight away.
         ...(shelved ? [["⇧⌘P", shelved > 1 ? `the newest of ${shelved} shelved sessions back` : "the shelved session back", () => toSession(1)] as [string, string, () => void]] : []),
         ["⌘T", "new terminal", () => runKey("terminal")],
-        ["⌘J ⌘K", "another project", () => runKey("switch-next")],
-        ["⇧⌘W", "close this project", () => closeProjectTab(tabId, false)],
+        ["⌘J ⌘K", "another view", () => runKey("switch-next")],
+        ["⇧⌘W", "close this view", () => closeProjectTab(tabId, false)],
     ];
     return (
         <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, fontFamily: T.ui, color: T.muted }}>
-            <span style={{ fontFamily: T.display, fontSize: 24, color: T.secondary }}>Nothing open in this project</span>
+            <span style={{ fontFamily: T.display, fontSize: 24, color: T.secondary }}>Nothing open in this view</span>
             <div style={{ display: "grid", gridTemplateColumns: "auto auto", gap: "10px 28px" }}>
                 {keys.map(([k, label, act]) => (
                     <button key={k} type="button" data-key={k} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={act} style={{ justifySelf: "start", padding: 0, background: "transparent", border: "none", cursor: "pointer" }}>

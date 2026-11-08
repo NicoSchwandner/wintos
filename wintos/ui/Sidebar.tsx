@@ -153,7 +153,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
         e.preventDefault();
         ContextMenuModel.getInstance().showContextMenu(
             [
-                { label: "Open project", click: () => open(tabId) },
+                { label: "Open view", click: () => open(tabId) },
                 { label: "Rename…", click: () => setRenaming(tabId) },
                 {
                     label: "Edit mine.md",
@@ -161,7 +161,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     click: () => editMine(true),
                 },
                 { type: "separator" },
-                { label: "Close tab", click: () => closeProjectTab(tabId, true) },
+                { label: "Close view", click: () => closeProjectTab(tabId, true) },
             ],
             e
         );
@@ -363,10 +363,10 @@ const WalkKeys = () => (
     </span>
 );
 
-// A project's ×, shown on the row pointed at (and the open one); it closes like the menu's Close tab.
+// A view's ×, shown on the row pointed at (and the open one); it closes like the menu's Close view.
 const RowClose = ({ p }: { p: RowProps }) =>
     p.onClose ? (
-        <button type="button" className="w-hover-x" aria-label="Close this project" title={p.active ? "Close this project (⇧⌘W)" : "Close this project"} data-key={p.active ? "⇧⌘W" : ""} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={(e) => (e.stopPropagation(), p.onClose!())} style={{ flexShrink: 0, width: 18, height: 18, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", borderRadius: 5, color: T.muted, cursor: "pointer" }}>
+        <button type="button" className="w-hover-x" aria-label="Close this view" title={p.active ? "Close this view (⇧⌘W)" : "Close this view"} data-key={p.active ? "⇧⌘W" : ""} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={(e) => (e.stopPropagation(), p.onClose!())} style={{ flexShrink: 0, width: 18, height: 18, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", borderRadius: 5, color: T.muted, cursor: "pointer" }}>
             <i className="fa-solid fa-xmark" style={{ fontSize: 10.5 }} />
         </button>
     ) : null;

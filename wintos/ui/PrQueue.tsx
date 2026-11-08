@@ -224,7 +224,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
             <div style={{ flexShrink: 0, minHeight: 30, padding: "4px 26px", boxSizing: "border-box", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 14px", borderTop: `1px solid ${T.hairline}`, background: T.sidebar }}>
                 <Key k="j k" label="row" />
                 <Key k="⏎" label="open" />
-                <Key k="o" label={flat[cursor] && !projectOf.has(flat[cursor].pr.url) ? "open as new project" : "go to project"} off={!flat[cursor]} />
+                <Key k="o" label={flat[cursor] && !projectOf.has(flat[cursor].pr.url) ? "open in a new view" : "go to its view"} off={!flat[cursor]} />
                 <Key k="z" label="snooze" />
                 <Key k="n" label="name its repo" off={!flat[cursor]} />
                 <span data-wintos="pr-next" style={{ display: "contents" }}>
@@ -337,7 +337,7 @@ function PrRow({ r, depth, project, repo, cursor, cols, fix, onOpen }: { r: Queu
                 {fix && <span data-wintos="pr-fix" style={{ fontSize: 11, color: fix.brick ? T.brick : T.apricot }}> · {fix.text}</span>}
             </span>
             <Reviewers r={r} names={cols.names} />
-            <span title={project ? `Project: ${project} (o)` : "No project"} style={{ width: 12, flexShrink: 0, textAlign: "center", fontSize: 11, color: project ? T.moss : "transparent" }}>◆</span>
+            <span title={project ? `View: ${project} (o)` : "No view"} style={{ width: 12, flexShrink: 0, textAlign: "center", fontSize: 11, color: project ? T.moss : "transparent" }}>◆</span>
             {/* The repo gives way; the number never does. */}
             <span style={{ width: compact ? 120 : 150, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: "0.6em", fontFamily: T.mono, fontSize: 11.5, color: T.faint, whiteSpace: "nowrap" }}>
                 <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{repo}</span>

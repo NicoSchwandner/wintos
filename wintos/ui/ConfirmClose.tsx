@@ -12,7 +12,7 @@ import { useFocusOnMount } from "./useFocusOnMount";
 export const ConfirmClose = memo(() => {
     const ref = useFocusOnMount<HTMLDivElement>();
     const tabId = globalStore.get(atoms.staticTabId);
-    const name = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.name ?? "this project";
+    const name = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.name ?? "this view";
     return (
         <div style={{ position: "absolute", inset: 0, zIndex: 100, background: `color-mix(in srgb, ${T.ground} 70%, transparent)`, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={closeOverlay}>
             <div

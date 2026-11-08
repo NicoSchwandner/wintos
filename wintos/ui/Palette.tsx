@@ -2,7 +2,7 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { atoms } from "@/store/global";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { closeOverlay, enterProject, focusSession, reopenProject, resumePane, toggleOverlay } from "./focus";
-import { liveSessions } from "./sessions";
+import { liveSessions, STATE_WORD } from "./sessions";
 import { runAction, runKey } from "./menu";
 import { groupHits, searchPalette, type Field, type Hit, type Kind, type PaletteItem } from "./palette-search";
 import { pluginPanels } from "./panels";
@@ -17,7 +17,7 @@ import { closedWakes } from "./wakes";
 import { shelvedName } from "../daemon/shelf/shelf";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 
-const KIND_LABEL: Record<Kind, string> = { project: "Projects", pr: "PRs", session: "Sessions", action: "Do" };
+const KIND_LABEL: Record<Kind, string> = { project: "Views", pr: "PRs", session: "Sessions", action: "Do" };
 type Texts = Record<string, { body: string; mine: string }>;
 
 // Task ids (DEV-29372) a project names in its title or notes.
@@ -88,7 +88,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                     <input
                         autoFocus
                         value={q}
-                        placeholder="Search projects, notes, PRs, sessions and actions"
+                        placeholder="Search views, notes, PRs, sessions and actions"
                         onChange={(e) => (setQ(e.target.value), setCursor(0), setExpanded(new Set()))}
                         style={{ flexGrow: 1, background: "transparent", border: "none", outline: "none", fontSize: 15, color: T.text, fontFamily: T.ui }}
                     />
@@ -133,7 +133,7 @@ export const Palette = memo(({ names }: { names: Record<string, string | undefin
                 <div style={{ display: "flex", gap: 14, padding: "8px 16px", borderTop: `1px solid ${T.hairline}`, fontSize: 11, color: T.faint }}>
                     <span>⏎ open</span>
                     <span>esc close</span>
-                    <span style={{ marginLeft: "auto" }}>searches titles, PRs, task ids and the notes; closed projects reopen</span>
+                    <span style={{ marginLeft: "auto" }}>searches titles, PRs, task ids and the notes; closed views reopen</span>
                 </div>
             </div>
         </div>
@@ -234,13 +234,13 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
         const tabs = prOf.get(pr.url) ?? [];
         out.push({
             id: `pr:${pr.url}`, kind: "pr", title: `#${pr.number} ${pr.title}`,
-            subtitle: [pr.repo, tabs.length ? tabs.map(title).join(" + ") : "no project", pr.author === gh!.me ? "yours" : pr.assignedMe ? `by ${pr.author}, assigned to you` : `by ${pr.author}`].join(" · "),
+            subtitle: [pr.repo, tabs.length ? tabs.map(title).join(" + ") : "no view", pr.author === gh!.me ? "yours" : pr.assignedMe ? `by ${pr.author}, assigned to you` : `by ${pr.author}`].join(" · "),
             fields: [{ text: `${pr.repo}#${pr.number} ${pr.url} ${taskIds(pr.title, pr.branch)}`, weight: 50, ids: true }, { text: pr.branch, weight: 30, fuzzy: true }],
             run: () => runAction(`open-page:${pr.url}`),
         });
     }
     for (const s of live.filter((s) => s.state !== "ended" && tabIds.includes(s.tabId)))
-        out.push({ id: `s:${s.id}`, kind: "session", title: sessionName(s), subtitle: `${s.state} · ${title(s.tabId)}`, touchedAt: sessionTouched(state, s), run: () => focusSession({ tabId: s.tabId, blockId: s.blockId }) });
+        out.push({ id: `s:${s.id}`, kind: "session", title: sessionName(s), subtitle: `${STATE_WORD[s.state]} · ${title(s.tabId)}`, touchedAt: sessionTouched(state, s), run: () => focusSession({ tabId: s.tabId, blockId: s.blockId }) });
     // A closed project's shelved sessions too: one opens its project again, on that session.
     const closed = new Set(state.projects.filter((p) => p.id && p.title && !p.error && !ids.includes(p.id)).map((p) => p.id!));
     for (const id of [...tabIds, ...closed])
@@ -260,12 +260,12 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     out.push(action("prs", "PRs need attention", "⇧⌘G", "prs"));
     for (const p of pluginPanels(state)) out.push(action(`panel:${p.name}`, p.title, "⇧⌘O", `panel:${p.name}`));
     out.push(action("close", `Close ${here}`, "⇧⌘W", "close-project"));
-    out.push(action("day", "Today: plan the day", "⇧⌘Y", "day"));
+    out.push(action("day", "Epics home: your day, a card per epic, the month by epic", "⇧⌘Y", "day"));
     out.push(action("reflect", "Reflect: this week's reflection and what it looks back on", "⌥⌘Y", "reflect"));
     out.push(action("keyboard", "Keyboard: rank, streak, badges", "⇧⌘I", "keyboard"));
     out.push(action("join", "Join the meeting", "⇧⌘J", "join-meeting"));
     out.push(action("mine", `Edit mine.md of ${here}`, "⌘E", "edit-mine"));
-    out.push(action("park", "Park the waiting session: nothing for you", "⌥⌘P", "park-session"));
+    out.push(action("park", "Pause the waiting session: nothing for you", "⌥⌘P", "park-session"));
     out.push(action("epic", "Put this session in an epic, or start one", "⌥⌘E", "epic"));
     out.push(action("move-session", "Move this session to another view", "⌥⌘M", "move-session"));
     out.push(action("take-out", "Take this session out into a view of its own", "⌥⌘T", "take-out"));

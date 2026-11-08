@@ -226,7 +226,7 @@ export function runAction(action: string): void {
         const focused = focusedSession();
         for (const s of focused?.state === "waiting" ? [focused] : waiting) {
             void parkBlock(s.blockId);
-            rememberUndo({ kind: "park", sessionId: s.id, label: `Parked ${sessionName(s)}` });
+            rememberUndo({ kind: "park", sessionId: s.id, label: `Paused ${sessionName(s)}` });
         }
         return;
     }

@@ -517,7 +517,7 @@ await scenario("21 · ⌘W in a project with no pane left closes the project", a
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     await evalIn(t, `(async () => { const lm = window.wintosLayout(); for (const el of document.querySelectorAll("[data-blockid]")) { const n = lm.getNodeByBlockId(el.dataset.blockid); if (n) await lm.closeNode(n.id); } })()`);
-    await until("the project empty", () => evalIn(t, `document.body.innerText.includes("Nothing open in this project")`));
+    await until("the project empty", () => evalIn(t, `document.body.innerText.includes("Nothing open in this view")`));
     await press(t, "w", { mods: ["meta"] });
     await until("its tab closed", () => sql(`select count(*) from db_tab where oid='${tabId}'`) === "0");
 });
@@ -789,7 +789,7 @@ await scenario("38 · epics: a session's epic heads its pane and marks its row; 
     await until("the epic over the pane, as a session of it", () => evalIn(t, `(() => { const st = document.querySelector("[data-wintos=epic-strip][data-epic='${a}']"); return !!st && st.dataset.role === "session" && st.innerText.toUpperCase().includes("E2E ARCHIVE · SESSION"); })()`));
     const mixed = await evalIn(t, `new Set([...document.querySelectorAll("[data-wintos=session-header]")].map((h) => h.dataset.epic)).size > 1`);
     if (!mixed && (await evalIn(t, `!!document.querySelector("[data-wintos=session-header][data-epic='${a}'] [data-wintos=session-epic]")`))) throw new Error("a second epic header in a view of one epic");
-    await until("the avatar on its row", () => evalIn(t, `!!document.querySelector("[data-tabid='${tabId}'] [data-wintos=epic-avatar]")`));
+    await until("its row under its epic", () => evalIn(t, `!!document.querySelector("[data-epic-group='${a}'] [data-row='s:e2e-epic']")`));
     await press(t, "e", { code: "KeyE", mods: ["meta", "alt"] });
     await until("the epic picker", () => evalIn(t, `!!document.querySelector("[data-wintos=epic-picker]")`));
     const digit = (await evalIn(t, `document.querySelector("[data-wintos=epic-picker] [data-epic='${b}']")?.dataset.key`)).replace("⌘", "");

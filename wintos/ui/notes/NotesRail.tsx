@@ -183,7 +183,7 @@ export function Sessions({ tabId, state, size }: { tabId: string; state?: Wintos
                 <div key={s.id} data-wintos="background-session" title="runs in Claude's background service, not in a pane" style={{ display: "flex", alignItems: "center", gap: 9, paddingLeft: 30, fontSize: size === "rail" ? 12 : 12.5, color: T.quietTitle }}>
                     <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: "50%", background: SESSION_DOT[s.state], opacity: 0.6 }} />
                     <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessionName(s)}</span>
-                    <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: T.faint }}>background · {s.state}</span>
+                    <span style={{ flexShrink: 0, fontFamily: T.mono, fontSize: 11, color: T.faint }}>background · {STATE_WORD[s.state]}</span>
                 </div>
             ))}
             {list.length > 9 && <button type="button" tabIndex={-1} onClick={() => openPalette("shelved")} style={{ alignSelf: "flex-start", padding: 0, background: "transparent", border: "none", cursor: "pointer", fontSize: 12, color: T.faint }}><Key k="⇧⌘P" label={`${list.length - 9} more`} /></button>}

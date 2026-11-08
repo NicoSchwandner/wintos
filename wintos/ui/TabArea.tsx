@@ -25,7 +25,7 @@ import { InboxArea } from "./InboxArea";
 import { inboxKind, isInboxTab } from "./view";
 import { PaneStrip } from "./PaneStrip";
 import { MoveNudge } from "./MoveNudge";
-import { closeProjectTab, runKey } from "./menu";
+import { closeProjectTab, runKey, toSession } from "./menu";
 import { StatusBar } from "./StatusBar";
 import { T } from "./tokens";
 import { ReflectionPage } from "./ReflectionPage";
@@ -111,10 +111,11 @@ function EmptyProject({ tabId }: { tabId: string }) {
     const { state } = useWintos();
     const shelved = state?.shelf?.[tabId]?.length ?? 0;
     const keys: [string, string, () => void][] = [
-        ...(shelved ? [["⌥⌘1", shelved > 1 ? `the newest of ${shelved} shelved sessions back (in the notes)` : "the shelved session back (in the notes)", () => runKey("session-1")] as [string, string, () => void]] : []),
+        // ⇧⌘P lists every shelved session to resume; a click resumes the newest straight away.
+        ...(shelved ? [["⇧⌘P", shelved > 1 ? `the newest of ${shelved} shelved sessions back` : "the shelved session back", () => toSession(1)] as [string, string, () => void]] : []),
         ["⌘T", "new terminal", () => runKey("terminal")],
         ["⌘J ⌘K", "another project", () => runKey("switch-next")],
-        ["⌘W", "close this project", () => closeProjectTab(tabId, false)],
+        ["⇧⌘W", "close this project", () => closeProjectTab(tabId, false)],
     ];
     return (
         <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, fontFamily: T.ui, color: T.muted }}>

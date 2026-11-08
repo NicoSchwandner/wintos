@@ -1221,7 +1221,7 @@ await scenario("54 · ⌥⌘E, a name and ⌘⏎ promote a session in no epic to
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(pane)}).id)`);
 });
 
-await scenario("55 · r on an epic's page renames it in place: title and short name; esc leaves them", async () => {
+await scenario("55 · r on an epic's page renames it in place: title and short name; esc leaves them; x x finishes it", async () => {
     const t = await toProject();
     const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const id = await (await api("/epics", { title: "E2E old name" })).text();
@@ -1244,6 +1244,15 @@ await scenario("55 · r on an epic's page renames it in place: title and short n
     for (const type of ["rawKeyDown", "keyUp"]) await cdp(t, "Input.dispatchKeyEvent", { type, key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
     await until("esc leaves it", () => evalIn(t, `!document.querySelector("[data-wintos=epic-retitle]")`));
     if ((await (await fetch("http://127.0.0.1:7731/state")).json()).epics.find((x) => x.id === id)?.title !== "E2E new name") throw new Error("esc changed the title");
+    // x finishes the epic only on a second press.
+    const done = async () => !!(await (await fetch("http://127.0.0.1:7731/state")).json()).epics.find((x) => x.id === id)?.done;
+    await press(t, "x");
+    await until("x armed, saying so", () => evalIn(t, `document.querySelector("[data-wintos=epic-page] [data-wintos=epic-done]")?.innerText.includes("x again")`));
+    if (await done()) throw new Error("one x finished the epic");
+    await press(t, "x");
+    await until("the second x finishes it", done);
+    await press(t, "x");
+    await until("one x opens it again", async () => !(await done()));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
 });
 

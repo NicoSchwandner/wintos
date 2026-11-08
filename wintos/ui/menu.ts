@@ -299,8 +299,7 @@ export function confirmPaneClose(blockId: string | undefined): boolean {
     return false;
 }
 
-// ⌥⌘1–9: the project's sessions as its notes list them: a live one's pane, a shelved one resumed.
-// The rail's sessions (live, then shelved): back to its pane, or resumed.
+// The rail's sessions (live, then shelved), by number: back to its pane, or resumed.
 export function toSession(n: number): void {
     const tabId = globalStore.get(atoms.staticTabId);
     const state = currentState();

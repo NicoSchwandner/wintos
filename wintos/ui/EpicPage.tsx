@@ -74,6 +74,15 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
         if (ref.current) requestAnimationFrame(() => ref.current && (startCursor(ref.current, (el) => el.dataset.unit === "current") || startCursor(ref.current, (el) => el.dataset.item === "link")));
     }, [id]);
     const toggleDone = () => epic && void daemonFetch(`/epics/${encodeURIComponent(epic.id)}/done`, { method: "POST", body: { done: !epic.done } });
+    // x finishes the epic only on a second press within 3 s, like every other key that ends
+    // something (⌫ ⌫, ⌥⌘R ⌥⌘R); elsewhere x ticks one item. Opening it again needs no second press.
+    const [finishing, setFinishing] = useState(false);
+    useEffect(() => {
+        if (!finishing) return;
+        const t = setTimeout(() => setFinishing(false), 3_000);
+        return () => clearTimeout(t);
+    }, [finishing]);
+    const pressX = () => (epic?.done || finishing ? (setFinishing(false), toggleDone()) : setFinishing(true));
     // a: to the epic agent's pane; resumed from the shelf when its pane was closed; else a new
     // one in a view of its own, which knows from its first prompt that it is the epic's agent.
     // To the newest of these sessions that is still open, else resumed from the shelf; false when none is left.
@@ -137,7 +146,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
     // Enter and ⌫ reach this table from the page's own fields too; there they belong to the field.
     const cursor = cursorKeys(() => ref.current);
     const notInField = (run: KeyTable[string]): KeyTable[string] => (e) => (isTextField(document.activeElement) ? false : run(e));
-    useZoneKeys(ref, { ...cursor, Enter: notInField(cursor.Enter), "Cmd:e": () => editMine(true), x: () => (toggleDone(), true), p: () => (togglePin(), true), r: () => (setRetitling(true), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true),
+    useZoneKeys(ref, { ...cursor, Enter: notInField(cursor.Enter), "Cmd:e": () => editMine(true), x: () => (pressX(), true), p: () => (togglePin(), true), r: () => (setRetitling(true), true), a: () => (toAgent(), true), s: () => (setAdding(true), true), n: () => (newStep(), true),
         d: onStep((name) => edit({ done: name, on: epic?.steps.find((u) => u.name === name)?.state !== "done" })),
         // The cursor goes along with the step it moves.
         "Shift:j": (e) => onStep((name) => (edit({ move: { name, by: 1 } }), cursor.j(e)))(),
@@ -221,7 +230,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                     {!column && <Act wintos="epic-agent" k="a" label={epic.agent ? "Epic agent" : "Start the epic agent"} onClick={toAgent} primary />}
                     <Act wintos="epic-rename" k="r" label="Rename" onClick={() => setRetitling(true)} />
                     <Act wintos="epic-pin" k="p" label={epic.pinned ? "Unpin" : "Pin"} onClick={togglePin} />
-                    <Act wintos="epic-done" k="x" label={epic.done ? "Open again" : "Epic done"} onClick={toggleDone} />
+                    <Act wintos="epic-done" k="x" label={epic.done ? "Open again" : finishing ? "x again: finish the epic" : "Epic done"} onClick={toggleDone} />
                     {!column && <Key k="esc" label="back" />}
                 </span>
             </div>

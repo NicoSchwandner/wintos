@@ -1,4 +1,5 @@
 import type { Row } from "../daemon/ranking/rank";
+import { orderEpics } from "../daemon/epics/order";
 import { EpicAvatar } from "./EpicAvatar";
 import { lookOf, NO_EPIC, shortName } from "./epicLook";
 import { openBackground } from "./focus";
@@ -14,14 +15,15 @@ import type { EpicView } from "./view";
 export type EpicGroup = { epic?: EpicView; rows: Row[]; agent?: Row };
 
 // The sidebar: each open epic with its sessions under it, in an order that holds still: pinned
-// epics first, then by name. What needs you is found by ⌃⇥, not by epics jumping around.
+// epics first, then your own order (the home's ⇧J/⇧K), then by name. What needs you is found by ⌃⇥, not by epics jumping around.
 // Sessions in no epic, and tabs without a session, come last. Rows keep the state list's order.
 export function groupByEpic(rows: Row[], epics: EpicView[]): EpicGroup[] {
     const open = epics.filter((e) => !e.done);
     const of = (r: Row) => (r.key !== r.tabId ? r.sessions[0]?.epic : undefined);
     const isAgent = (r: Row, e: EpicView) => !!e.agent && r.key === `s:${e.agent}`;
     const groups = open.map((epic) => ({ epic, rows: rows.filter((r) => of(r) === epic.id && !isAgent(r, epic)), agent: rows.find((r) => isAgent(r, epic)) }));
-    groups.sort((a, b) => Number(!!b.epic.pinned) - Number(!!a.epic.pinned) || shortName(a.epic).localeCompare(shortName(b.epic), undefined, { sensitivity: "base" }));
+    const place = new Map(orderEpics(open).map((e, i) => [e.id, i]));
+    groups.sort((a, b) => place.get(a.epic.id)! - place.get(b.epic.id)!);
     const known = new Set(open.map((e) => e.id));
     const agents = new Set(groups.flatMap((g) => (g.agent ? [g.agent.key] : [])));
     const loose = rows.filter((r) => (!of(r) || !known.has(of(r)!)) && !agents.has(r.key));

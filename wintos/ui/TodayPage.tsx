@@ -4,6 +4,7 @@ import type { Session } from "../daemon/sessions/reduce";
 import { dayTimeline, DEFAULT_WORKDAY, parseSpan, type Block } from "./dayplan";
 import { EpicAvatar } from "./EpicAvatar";
 import { agentWorking, lookOf, NO_EPIC, shortName } from "./epicLook";
+import { orderEpics } from "../daemon/epics/order";
 import { Key } from "./Key";
 import { meetingsFrom } from "./meetings";
 import { openEpic } from "./menu";
@@ -33,18 +34,22 @@ export const TodayPage = memo(() => {
     const now = useNow(30_000);
     const day = state?.day;
     const live = (state?.sessions ?? []).filter((s) => s.state !== "ended" && !s.background);
-    // What waits on you first, then what is at work, then the rest by how many sessions are open.
-    const weight = (id: string) => {
-        const here = live.filter((s) => s.epic === id);
-        return (here.some((s) => shownState(s, now) === "waiting") ? 1000 : 0) + (here.some((s) => shownState(s, now) === "working") ? 100 : 0) + here.length;
+    // The sidebar's order: pinned, then yours (⇧J/⇧K here), then by name.
+    const epics = orderEpics((state?.epics ?? []).filter((e) => !e.done));
+    const moveCard = (by: 1 | -1) => () => {
+        const id = ref.current?.querySelector<HTMLElement>("[data-cursor][data-epic]")?.dataset.epic;
+        if (!id) return false;
+        void daemonFetch(`/epics/${encodeURIComponent(id)}/move`, { method: "POST", body: { by } });
+        return true;
     };
-    const epics = (state?.epics ?? []).filter((e) => !e.done).sort((a, b) => weight(b.id) - weight(a.id));
     useEffect(() => {
         if (ref.current) requestAnimationFrame(() => ref.current && startCursor(ref.current, (el) => el.dataset.item === "link"));
     }, [epics.length > 0]);
     const [back, setBack] = useState(0);
     useZoneKeys(ref, {
         ...cursorKeys(() => ref.current),
+        "Shift:j": moveCard(1),
+        "Shift:k": moveCard(-1),
         // ← →, not [ ]: brackets need ⌥ on a German or Swedish keyboard.
         ArrowLeft: () => (setBack((b) => b + 1), true),
         ArrowRight: () => (setBack((b) => Math.max(0, b - 1)), true),
@@ -76,7 +81,7 @@ export const TodayPage = memo(() => {
                 <Timeline now={now} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflowY: "auto" }}>
                     {day && <Standup today={today} focus={plan} panel={(p) => <Panel {...p} />} />}
-                    <Panel label="Epics" note={epics.length ? undefined : "none yet: ⌥⌘E in a session starts one"} keys={epics.length > 0 && <Key k="j k · ⏎" label="open the epic" />}>
+                    <Panel label="Epics" note={epics.length ? undefined : "none yet: ⌥⌘E in a session starts one"} keys={epics.length > 0 && <Key k="j k · ⏎ · ⇧J ⇧K" label="open the epic · move it in your order" />}>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 10 }}>
                             {epics.map((e) => <EpicCard key={e.id} epic={e} sessions={live.filter((s) => s.epic === e.id)} now={now} />)}
                         </div>

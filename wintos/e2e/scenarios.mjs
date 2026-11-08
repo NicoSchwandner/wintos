@@ -1253,6 +1253,22 @@ await scenario("55 · r on an epic's page renames it in place: title and short n
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
 });
 
+await scenario("56 · epics hold one order, pinned then yours then by name; ⇧K on the home moves one up, in the sidebar too", async () => {
+    const t = await toProject();
+    const api = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const zz = await (await api("/epics", { title: "E2E order zz" })).text();
+    const aa = await (await api("/epics", { title: "E2E order aa" })).text();
+    const before = (sel, x, y) => evalIn(t, `(() => { const ids = [...document.querySelectorAll("${sel}")].map((e) => e.dataset.epic ?? e.dataset.epicGroup); return ids.indexOf("${x}") >= 0 && ids.indexOf("${x}") < ids.indexOf("${y}"); })()`);
+    await until("by name in the sidebar", () => before("[data-wintos=epic-groups] [data-epic-group]", aa, zz));
+    await press(t, "y", { code: "KeyY", mods: ["meta", "shift"] });
+    await until("by name on the home", () => before("[data-wintos=today] [data-item=link][data-epic]", aa, zz));
+    await evalIn(t, `(() => { for (const e of document.querySelectorAll("[data-wintos=today] [data-cursor]")) e.removeAttribute("data-cursor"); document.querySelector("[data-wintos=today] [data-epic='${zz}']").setAttribute("data-cursor", ""); document.querySelector("[data-wintos=today]").focus(); })()`);
+    await press(t, "K", { code: "KeyK", mods: ["shift"] });
+    await until("⇧K moved it up on the home", () => before("[data-wintos=today] [data-item=link][data-epic]", zz, aa));
+    await until("and in the sidebar", () => before("[data-wintos=epic-groups] [data-epic-group]", zz, aa));
+    await press(t, "Escape", { code: "Escape", keyCode: 27 });
+});
+
 clearInterval(heldTimer);
 for (const r of results) console.log(r.join("  "));
 process.exit(results.some((r) => r[0] === "FAIL") ? 1 : 0);

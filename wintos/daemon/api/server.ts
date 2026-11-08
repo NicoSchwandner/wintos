@@ -8,6 +8,7 @@ import { basename, dirname, join } from "path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { AGENT_NEWS, epicAgentInjection, epicInjection, injection, promotedNote } from "../inject";
 import { EpicStore, EPIC_TITLE_MAX, findEpic, SHORT_MAX } from "../epics/epics";
+import { moveEpic } from "../epics/order";
 import { impliedEpic } from "../epics/assign";
 import { addTime, adjustMonth, epicHistory, lastWorkdays, mergeBackfill, monthByEpic, type TimeLog } from "../epics/time";
 import { lineDiff } from "../projects/diff";
@@ -830,6 +831,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
                     reports = addReport(reports, e.agent, `the developer renamed the epic from "${before.title}" to "${e.title}"`, Date.now());
                     writeJsonAtomic(reportsFile, reports);
                 }
+                broadcast();
+                return send(res, 200, "");
+            }
+            // A place up or down in your order of the epics (the home's ⇧J/⇧K).
+            const epicMove = /^\/epics\/([^/]+)\/move$/.exec(url.pathname);
+            if (req.method === "POST" && epicMove) {
+                const b = (await body(req)) as { by?: unknown };
+                if (b?.by !== 1 && b?.by !== -1) return send(res, 400, "need by: 1 or -1");
+                const ranks = moveEpic(epics.list().filter((e) => !e.done), decodeURIComponent(epicMove[1]), b.by);
+                if (!ranks) return send(res, 409, "it can't go further that way");
+                for (const [id, rank] of ranks) if (epics.byId(id)?.rank !== rank) epics.update(id, (e) => ({ ...e, rank }));
                 broadcast();
                 return send(res, 200, "");
             }

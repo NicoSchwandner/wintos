@@ -12,7 +12,8 @@ import { parseLinks, type Links } from "./roadmap";
 // drive, kept in sight at the top of the sidebar.
 // agent: the session that is the epic agent, which you talk to about the whole epic.
 // links: the sessions that worked each step, by step name (epics/roadmap.ts).
-export type Epic = { id: string; title: string; short?: string; glyph?: string; color?: string; lane?: string; steps: Unit[]; done?: string; pinned?: boolean; agent?: string; links?: Links };
+// rank: its place in your own order of the epics (the home's ⇧J/⇧K); unranked ones follow by name.
+export type Epic = { id: string; title: string; short?: string; glyph?: string; color?: string; lane?: string; steps: Unit[]; done?: string; pinned?: boolean; rank?: number; agent?: string; links?: Links };
 export type EpicFile = Epic & { dir: string; mtime: number; mineMtime: number; body: string };
 
 export const EPIC_TITLE_MAX = 80;
@@ -30,6 +31,7 @@ export function parseEpicMd(raw: string): { epic: Epic; body: string } | undefin
     const epic: Epic = { id: kv.id, title: kv.title, steps: kv.steps ? parseUnits(kv.steps) : [] };
     for (const k of ["short", "glyph", "color", "lane", "done", "agent"] as const) if (kv[k]) epic[k] = kv[k];
     if (kv.pinned === "true") epic.pinned = true;
+    if (/^\d+$/.test(kv.rank ?? "")) epic.rank = Number(kv.rank);
     const links = parseLinks(kv.links);
     if (Object.keys(links).length) epic.links = links;
     return { epic, body: m[2] };
@@ -39,6 +41,7 @@ export function serializeEpicMd(e: Epic, body: string): string {
     const lines = [`id: ${e.id}`, `title: ${e.title}`];
     for (const k of ["short", "glyph", "color", "lane", "done", "agent"] as const) if (e[k]) lines.push(`${k}: ${e[k]}`);
     if (e.pinned) lines.push("pinned: true");
+    if (e.rank !== undefined) lines.push(`rank: ${e.rank}`);
     if (e.steps.length) lines.push(`steps: ${serializeUnits(e.steps)}`);
     if (e.links && Object.keys(e.links).length) lines.push(`links: ${JSON.stringify(e.links)}`);
     return `---\n${lines.join("\n")}\n---\n${body}`;
@@ -123,3 +126,4 @@ export class EpicStore {
         return parsed && { ...parsed.epic, body: parsed.body, dir, mtime: statSync(file).mtimeMs, mineMtime: mtimeOf(join(dir, "mine.md")) };
     }
 }
+

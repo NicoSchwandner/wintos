@@ -3,6 +3,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { describe, expect, test } from "vitest";
 import { EpicStore, findEpic, parseEpicMd, serializeEpicMd, type Epic } from "./epics";
+import { moveEpic, orderEpics } from "./order";
 
 describe("epic.md", () => {
     test("reads the front matter and keeps the body", () => {
@@ -85,4 +86,17 @@ describe("EpicStore", () => {
         expect(s.mine(e.id)!.text).toBe("two");
         expect(s.saveMine("missing", "x")).toBe("no epic");
     });
+});
+
+describe("the order of the epics", () => {
+    const e = (id: string, more: Partial<Epic> = {}) => ({ id, title: id, steps: [], ...more });
+    test("pinned first, then your order, then by name", () =>
+        expect(orderEpics([e("zeta"), e("Alpha"), e("mid", { rank: 1 }), e("top", { rank: 0 }), e("pin", { pinned: true })]).map((x) => x.id)).toEqual(["pin", "top", "mid", "Alpha", "zeta"]));
+    test("a move swaps with the neighbour and ranks them all; never past the pinned ones or the ends", () => {
+        const open = [e("a"), e("b"), e("c"), e("p", { pinned: true })];
+        expect([...moveEpic(open, "c", -1)!]).toEqual([["p", 0], ["a", 1], ["c", 2], ["b", 3]]);
+        expect(moveEpic(open, "a", -1)).toBeUndefined();
+        expect(moveEpic(open, "c", 1)).toBeUndefined();
+    });
+    test("rank survives the front matter", () => expect(parseEpicMd(serializeEpicMd(e("x", { rank: 3 }), ""))?.epic.rank).toBe(3));
 });

@@ -1,3 +1,4 @@
+import { ACTIONS } from "../actions";
 import { globalStore } from "@/app/store/jotaiStore";
 import { atoms } from "@/store/global";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
@@ -254,26 +255,8 @@ function paletteItems(state: WintosState, texts: Texts, names: Record<string, st
     const here = title(activeTab);
     // The key's own path (runKey), so an action does from here exactly what its key does.
     const action = (id: string, t: string, hint: string, a: string): PaletteItem => ({ id: `a:${id}`, kind: "action", title: t, hint, run: () => void runKey(a) });
-    out.push(action("terminal", `New terminal in ${here}`, "⌘T", "terminal"));
-    out.push(action("project", "New session: its epic and what it is for, in a view of its own", "⌘N", "new-step"));
-    out.push(action("rename", `Rename ${here}`, "⌘R", "rename"));
-    out.push(action("prs", "PRs need attention", "⇧⌘G", "prs"));
+    // Every action with a palette line (wintos/actions.ts), and each on-call panel by name.
+    for (const a of ACTIONS) if (a.palette) out.push(action(a.id, a.palette.replace("{here}", here), a.key, a.id));
     for (const p of pluginPanels(state)) out.push(action(`panel:${p.name}`, p.title, "⇧⌘O", `panel:${p.name}`));
-    out.push(action("close", `Close ${here}`, "⇧⌘W", "close-project"));
-    out.push(action("day", "Epics home: your day, a card per epic, the month by epic", "⇧⌘Y", "day"));
-    out.push(action("reflect", "Reflect: this week's reflection and what it looks back on", "⌥⌘Y", "reflect"));
-    out.push(action("keyboard", "Keyboard: rank, streak, badges", "⇧⌘I", "keyboard"));
-    out.push(action("join", "Join the meeting", "⇧⌘J", "join-meeting"));
-    out.push(action("mine", `Edit mine.md of ${here}`, "⌘E", "edit-mine"));
-    out.push(action("park", "Pause the waiting session: nothing for you", "⌥⌘P", "park-session"));
-    out.push(action("epic", "Put this session in an epic, or start one", "⌥⌘E", "epic"));
-    out.push(action("move-session", "Move this session to another view", "⌥⌘M", "move-session"));
-    out.push(action("take-out", "Take this session out into a view of its own", "⌥⌘T", "take-out"));
-    out.push(action("copy-url", "Copy the focused page's url", "⇧⌘C", "copy-url"));
-    out.push(action("restart", "Restart the focused terminal", "⌥⌘R", "restart-terminal"));
-    out.push(action("update", "Update WintOS: rebuild and restart it", "⌥⌘U", "update"));
-    out.push(action("break", "Take a break now", "⌥⌘B", "break"));
-    out.push(action("break-later", "Move nudge: ask again in 10 minutes", "⇧⌥⌘B", "break-later"));
-    out.push(action("keys", "Keyboard shortcuts", "⇧⌘K", "keymap"));
     return out;
 }

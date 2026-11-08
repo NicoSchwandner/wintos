@@ -1,5 +1,5 @@
 import { globalStore } from "@/app/store/jotaiStore";
-import { memo, useState } from "react";
+import { memo, useState, useRef } from "react";
 import { newStepEpicAtom } from "./notes/state";
 import { EpicAvatar } from "./EpicAvatar";
 import { lookOf, NO_EPIC } from "./epicLook";
@@ -9,6 +9,7 @@ import { runAction } from "./menu";
 import { offerStep } from "./newproject";
 import { T } from "./tokens";
 import { useFocusOnMount } from "./useFocusOnMount";
+import { useZoneKeys } from "./zones";
 import { useWintos } from "./useWintos";
 
 // ⌘N: a new session in a view of its own, with the epic it is a step of and what the step is,
@@ -16,6 +17,9 @@ import { useWintos } from "./useWintos";
 // ⌘1-9 pick the epic (the focused session's is marked), ⌘0 none; ↓ takes the epic's next planned step.
 export const NewStep = memo(() => {
     const ref = useFocusOnMount<HTMLInputElement>();
+    // A zone like the palette's: while you type in the sheet, no global key (⌘J, ⌘T, ⌃⇥) acts behind it.
+    const sheetRef = useRef<HTMLDivElement>(null);
+    useZoneKeys(sheetRef, {});
     const { state } = useWintos();
     const open = (state?.epics ?? []).filter((e) => !e.done);
     const [epic, setEpic] = useState<string | undefined>(() => {
@@ -34,7 +38,7 @@ export const NewStep = memo(() => {
     };
     return (
         <div style={{ position: "absolute", inset: 0, zIndex: 100, background: `color-mix(in srgb, ${T.ground} 70%, transparent)`, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "14vh" }} onClick={closeOverlay}>
-            <div data-wintos="new-step" data-zone="overlay" onClick={(e) => e.stopPropagation()} style={{ width: "min(540px, calc(100% - 32px))", padding: "18px 22px", background: T.ground, border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div data-wintos="new-step" ref={sheetRef} data-zone="overlay" onClick={(e) => e.stopPropagation()} style={{ width: "min(540px, calc(100% - 32px))", padding: "18px 22px", background: T.ground, border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, display: "flex", flexDirection: "column", gap: 12 }}>
                 <span style={{ fontFamily: T.display, fontSize: 22, color: T.emphasis }}>New session</span>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     {open.map((e, i) => (

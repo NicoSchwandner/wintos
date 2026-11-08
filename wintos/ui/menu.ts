@@ -1,3 +1,4 @@
+import { KEY_BINDINGS } from "../actions";
 import { globalStore } from "@/app/store/jotaiStore";
 import { atom } from "jotai";
 import { appHandleKeyDown, getDefaultNewBlockDef } from "@/app/store/keymodel";
@@ -42,45 +43,9 @@ export function blockDefFor(action: string, widgets: Record<string, WidgetConfig
     return def ? { def, ephemeral: false } : null;
 }
 
-// Every WintOS key, bound in Wave's global key map so a focused terminal can't swallow it
-// first (Wave's own term handler once ate ⌘K). The menu repeats them for discoverability.
-export const WINTOS_KEYS: [string, string][] = [
-    ["Cmd:j", "switch-next"],
-    ["Cmd:k", "switch-prev"],
-    ["Cmd:n", "new-step"],
-    ["Cmd:r", "rename"],
-    ["Cmd:t", "terminal"],
-    ["Shift:Cmd:w", "close-project"],
-    ["Cmd:e", "edit-mine"],
-    ["Shift:Cmd:p", "palette"],
-    ["Shift:Cmd:k", "keymap"],
-    ["Shift:Cmd:g", "prs"],
-    ["Shift:Cmd:o", "panel"],
-    // ⌥ turns a letter into another character on macOS (⌥J is º, ⌥G is ©), so every ⌥⌘ letter
-    // matches the key's place.
-    ["Shift:Cmd:c", "copy-url"],
-    ["Option:Cmd:c{KeyP}", "park-session"],
-    ["Option:Cmd:c{KeyE}", "epic"],
-    ["Shift:Option:Cmd:c{KeyE}", "epic-page"],
-    ["Option:Cmd:c{KeyM}", "move-session"],
-    ["Option:Cmd:c{KeyT}", "take-out"],
-    ["Option:Cmd:c{KeyG}", "open-pane-pr"],
-    ["Shift:Cmd:j", "join-meeting"],
-    ["Shift:Cmd:y", "day"],
-    ["Option:Cmd:c{KeyY}", "reflect"],
-    // The key marked Y is where Z is on a German (QWERTZ) keyboard: ⌥⌘Y works on either.
-    ["Option:Cmd:c{KeyZ}", "reflect"],
-    ["Shift:Cmd:i", "keyboard"],
-    ["Option:Cmd:c{KeyR}", "restart-terminal"],
-    ["Option:Cmd:c{KeyU}", "update"],
-    ["Option:Cmd:c{KeyB}", "break"],
-    ["Shift:Option:Cmd:c{KeyB}", "break-later"],
-    ["Option:Cmd:c{KeyL}", "rail"],
-    // ⌥ turns a digit into another character too, so these match the key's place.
-    ...Array.from({ length: 9 }, (_, i): [string, string] => [`Option:Cmd:c{Digit${i + 1}}`, `session-${i + 1}`]),
-    ["Cmd:h", "focus-left"],
-    ["Cmd:l", "focus-right"],
-];
+// Every WintOS key (wintos/actions.ts), bound in Wave's global key map so a focused terminal can't
+// swallow it first (Wave's own term handler once ate ⌘K).
+export const WINTOS_KEYS: [string, string][] = KEY_BINDINGS;
 
 function focusedBlockView(): string | undefined {
     const blockId = document.activeElement?.closest<HTMLElement>("[data-blockid]")?.dataset.blockid;

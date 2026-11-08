@@ -1,6 +1,7 @@
 // WintOS: the menu-bar home for what Wave's widget bar did. Each item asks the focused tab's
 // renderer to open the block (wintos/ui/menu.ts).
 import * as electron from "electron";
+import { ACTIONS } from "../wintos/actions";
 
 type Send = (window: electron.BaseWindow | undefined, action: string) => void;
 
@@ -14,43 +15,12 @@ export function makeBlocksMenu(send: Send): Electron.MenuItemConstructorOptions[
         registerAccelerator: false,
         click: (_, window) => send(window, action),
     });
-    // Mirrors WINTOS_KEYS (wintos/ui/menu.ts), which the renderer handles first.
-    return [
-        item("Everything…", "palette", "Shift+Cmd+P"),
-        item("Keyboard Shortcuts", "keymap", "Shift+Cmd+K"),
-        { type: "separator" },
-        item("Next in the Sidebar", "switch-next", "Cmd+J"),
-        item("Previous in the Sidebar", "switch-prev", "Cmd+K"),
-        item("New Session…", "new-step", "Cmd+N"),
-        item("Name This Session", "rename", "Cmd+R"),
-        item("Close View", "close-project", "Shift+Cmd+W"),
-        item("Pause Session (nothing for me)", "park-session", "Alt+Cmd+P"),
-        item("Session's Epic…", "epic", "Alt+Cmd+E"),
-        item("Epic's Page", "epic-page", "Shift+Alt+Cmd+E"),
-        item("Move Session…", "move-session", "Alt+Cmd+M"),
-        item("Take Session Out", "take-out", "Alt+Cmd+T"),
-        item("Join Meeting", "join-meeting", "Shift+Cmd+J"),
-        item("Epics Home", "day", "Shift+Cmd+Y"),
-        item("Reflect", "reflect", "Alt+Cmd+Y"),
-        item("Keyboard Game", "keyboard", "Shift+Cmd+I"),
-        item("Copy Page URL", "copy-url", "Shift+Cmd+C"),
-        item("Restart Terminal", "restart-terminal", "Alt+Cmd+R"),
-        item("Update WintOS", "update", "Alt+Cmd+U"),
-        item("Take a Break", "break", "Alt+Cmd+B"),
-        item("Move Nudge Later", "break-later", "Shift+Alt+Cmd+B"),
-        { type: "separator" },
-        item("Focus Left", "focus-left", "Cmd+H"),
-        item("Focus Right", "focus-right", "Cmd+L"),
-        { type: "separator" },
-        item("New Terminal", "terminal", "Cmd+T"),
-        item("Notes Rail", "rail", "Alt+Cmd+L"),
-        item("Edit mine.md", "edit-mine", "Cmd+E"),
-        item("PRs Need Attention", "prs", "Shift+Cmd+G"),
-        item("On Call", "panel", "Shift+Cmd+O"),
-        { type: "separator" },
-        item("System Info", "sysinfo"),
-        item("Processes", "processes"),
-    ];
+    // The items with a key come from the one list (wintos/actions.ts), a separator between groups.
+    const keyed = ACTIONS.filter((a) => a.menu).flatMap((a, i, all): Electron.MenuItemConstructorOptions[] => [
+        ...(i > 0 && all[i - 1].menu!.group !== a.menu!.group ? [{ type: "separator" as const }] : []),
+        item(a.menu!.label, a.id, a.menu!.accel),
+    ]);
+    return [...keyed, { type: "separator" }, item("System Info", "sysinfo"), item("Processes", "processes")];
 }
 
 export function makeSettingsItem(send: Send): Electron.MenuItemConstructorOptions {

@@ -1,10 +1,11 @@
-import { memo, useState } from "react";
+import { memo, useState, useRef } from "react";
 import { EpicAvatar } from "./EpicAvatar";
 import { lookOf, NO_EPIC } from "./epicLook";
 import { closeOverlay, focusedSession } from "./focus";
 import { Key } from "./Key";
 import { T } from "./tokens";
 import { useFocusOnMount } from "./useFocusOnMount";
+import { useZoneKeys } from "./zones";
 import { daemonFetch, useWintos } from "./useWintos";
 import { sessionName } from "./view";
 
@@ -13,6 +14,9 @@ import { sessionName } from "./view";
 // ⌘⏎ promotes it: a new epic (the typed name, else the session's) with this session as its agent.
 export const EpicPicker = memo(() => {
     const ref = useFocusOnMount<HTMLInputElement>();
+    // A zone like the palette's: while you type in the sheet, no global key (⌘J, ⌘T, ⌃⇥) acts behind it.
+    const sheetRef = useRef<HTMLDivElement>(null);
+    useZoneKeys(sheetRef, {});
     const { state } = useWintos();
     const [session] = useState(focusedSession);
     const [text, setText] = useState("");
@@ -41,7 +45,7 @@ export const EpicPicker = memo(() => {
     const pick = () => (shown[at] ? assign(shown[at].id) : q ? void create(text.trim()) : closeOverlay());
     return (
         <div style={{ position: "absolute", inset: 0, zIndex: 100, background: `color-mix(in srgb, ${T.ground} 70%, transparent)`, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "16vh" }} onClick={closeOverlay}>
-            <div data-wintos="epic-picker" data-zone="overlay" onClick={(e) => e.stopPropagation()} style={{ width: "min(520px, calc(100% - 32px))", padding: "18px 22px", background: T.ground, border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div data-wintos="epic-picker" ref={sheetRef} data-zone="overlay" onClick={(e) => e.stopPropagation()} style={{ width: "min(520px, calc(100% - 32px))", padding: "18px 22px", background: T.ground, border: `1px solid ${T.borderActive}`, borderRadius: 12, fontFamily: T.ui, display: "flex", flexDirection: "column", gap: 12 }}>
                 <span style={{ fontFamily: T.display, fontSize: 22, color: T.emphasis }}>Epic of “{sessionName(session)}”</span>
                 <input
                     ref={ref}

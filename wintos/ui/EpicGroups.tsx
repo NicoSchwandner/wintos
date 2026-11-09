@@ -57,10 +57,12 @@ export function EpicGroups({ groups, renderRow, isHere = () => false, cursor, ne
                     onClick={() => openEpic(g.epic!.id)}
                     style={{ flexGrow: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 9, padding: folded ? "3px 8px" : "5px 8px", borderRadius: 8, background: "transparent", border: `1px solid ${cursor === `epic:${g.epic!.id}` ? T.apricot : "transparent"}`, cursor: "pointer", textAlign: "left", fontFamily: T.ui, ...(here ? { ...ACTIVE, background: look.bg, boxShadow: `inset 3px 0 0 ${look.fg}` } : {}) }}
                 >
-                    <EpicAvatar look={look} size={folded ? 16 : 20} running={g.agent?.sessions[0]?.state === "working"} />
-                    <span style={{ flexGrow: 1, minWidth: 0, fontSize: folded ? 12 : 12.5, fontWeight: folded ? 500 : 700, letterSpacing: "0.02em", color: folded ? T.muted : look.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(g.epic!)}</span>
+                    <span style={{ display: "inline-flex", opacity: g.epic!.done ? 0.45 : 1 }}>
+                        <EpicAvatar look={look} size={folded ? 16 : 20} running={g.agent?.sessions[0]?.state === "working"} />
+                    </span>
+                    <span style={{ flexGrow: 1, minWidth: 0, fontSize: folded ? 12 : 12.5, fontWeight: folded || g.epic!.done ? 500 : 700, letterSpacing: "0.02em", color: folded || g.epic!.done ? T.muted : look.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(g.epic!)}</span>
                     {g.epic!.pinned && <PinMark />}
-                    {g.epic!.done && <span data-wintos="epic-done-mark" title={`finished ${g.epic!.done}; ⌥⌘E moves a session to an open epic`} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, color: T.faint }}>done</span>}
+                    {g.epic!.done && <span data-wintos="epic-done-mark" title={`finished ${g.epic!.done}; ⌥⌘E moves a session to an open epic`} style={{ flexShrink: 0, fontSize: 10.5, color: T.faint }}>done {g.epic!.done.slice(5)}</span>}
                     {g.agent?.band === "needs" && <span data-wintos="epic-agent-state" style={{ fontSize: 10.5, fontWeight: 600, color: T.apricot }}>agent: your move</span>}
                     {!folded && <span style={{ fontFamily: T.mono, fontSize: 11, color: waiting ? T.apricot : T.faint }}>{waiting ? `${waiting} waiting` : g.rows.length}</span>}
                 </button>
@@ -72,12 +74,16 @@ export function EpicGroups({ groups, renderRow, isHere = () => false, cursor, ne
     const folded = groups.filter(empty);
     return (
         <div data-wintos="epic-groups" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {full.map((g) => {
+            {full.map((g, i) => {
                 const look = g.epic ? lookOf(g.epic) : NO_EPIC;
+                // A finished epic is here only for the sessions it still has: set apart under a
+                // label, muted, its rail dashed.
+                const firstDone = !!g.epic?.done && !full[i - 1]?.epic?.done;
                 return (
-                    <div key={g.epic?.id ?? "none"} data-epic-group={g.epic?.id ?? ""} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <div key={g.epic?.id ?? "none"} data-epic-group={g.epic?.id ?? ""} data-done={g.epic?.done ? "" : undefined} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {firstDone && <span data-wintos="finished-epics" style={{ padding: "0 8px 2px", fontSize: 12, fontWeight: 600, color: T.faint }}>Finished, with sessions still open</span>}
                         {g.epic ? header(g, false) : <span style={{ padding: "5px 8px", fontSize: 12, fontWeight: 600, color: T.faint }}>Outside the epics</span>}
-                        <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingLeft: 10, borderLeft: `2px solid ${g.epic ? look.ring : T.border}`, marginLeft: 17 }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingLeft: 10, borderLeft: `2px ${g.epic?.done ? "dashed" : "solid"} ${g.epic && !g.epic.done ? look.ring : T.border}`, marginLeft: 17 }}>
                             {g.rows.map(renderRow)}
                             {bgOf(g).map((s) => (
                                         <button key={s.id} type="button" data-wintos="epic-bg-session" data-session={s.id} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openBackground(s.bgId!)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "3px 8px", background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui, fontSize: 12, color: T.secondary, minWidth: 0 }}>

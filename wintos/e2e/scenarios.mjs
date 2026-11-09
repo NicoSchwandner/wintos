@@ -932,7 +932,7 @@ await scenario("43 · a worker's turn end reaches its epic's agent: typed into t
     await until("typed into the agent and off the queue", async () => !(await st()).epicReports?.["e2e-ag"], 120_000);
 });
 
-await scenario("44 · the sidebar is by epic: each epic with its sessions; + new session opens ⌘N's sheet on that epic; a row drops the epic it sits under; an epic with no session folds to one line with its +", async () => {
+await scenario("44 · the sidebar is by epic: each epic with its sessions; + new session opens ⌘N's sheet on that epic; a row drops the epic it sits under; an epic with no session folds to one line with its +; a finished one with a session is set apart", async () => {
     const t = await toProject();
     const tabId = await evalIn(t, "window.wintosTabId()");
     const pane = await evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`);
@@ -953,6 +953,11 @@ await scenario("44 · the sidebar is by epic: each epic with its sessions; + new
     await evalIn(t, `${folded}.querySelector("[data-wintos=epic-new-step]").click()`);
     await until("its + still opens the sheet on it", () => evalIn(t, `!!document.querySelector("[data-wintos=new-step] [data-epic='${bare}'][data-on]")`));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
+    // Finished while its session runs: under its own heading still, set apart and marked done.
+    await api(`/epics/${id}/done`, { done: true });
+    await until("set apart as finished, its session under it", () => evalIn(t, `(() => { const g = document.querySelector("[data-epic-group='${id}'][data-done]"); return !!g && !!g.querySelector("[data-wintos=finished-epics]") && !!g.querySelector("[data-wintos=epic-done-mark]") && !!g.querySelector("[data-row='s:e2e-grouped']"); })()`));
+    await api(`/epics/${id}/done`, { done: false });
+    await until("open again", () => evalIn(t, `!!document.querySelector("[data-epic-group='${id}']:not([data-done])")`));
 });
 
 await scenario("45 · an epic's page shows its finished sessions and last 8 workdays; the month's hours on the home can be corrected", async () => {

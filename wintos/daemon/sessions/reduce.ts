@@ -231,8 +231,9 @@ export function restoreSessions(saved: Session[], now?: number, alive: Set<strin
         if (s.state === "ended" || (now !== undefined && now - s.lastAt > RESTORE_MAX_AGE_MS)) continue;
         const { subagents: _gone, ...rest } = s;
         const state = s.state === "working" ? "idle" : s.state;
-        // One its epic's agent started runs on in Claude's background service: nothing waits to restart.
-        if (s.bgId) out.set(s.id, rest);
+        // One its epic's agent started runs on in Claude's background service: nothing waits to
+        // restart. A restored mark an older WintOS saved on it goes, or no wake reached it again.
+        if (s.bgId) out.set(s.id, { ...rest, restored: undefined });
         else if (alive.has(s.blockId)) out.set(s.id, { ...rest, state, restored: undefined });
         else out.set(s.id, { ...rest, state, restored: true });
     }

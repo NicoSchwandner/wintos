@@ -47,7 +47,8 @@ export function mergeBg(sessions: Map<string, Session>, starts: BgStarts, agents
         }
         if (known.state === state || known.state === "ended") continue;
         const ask = state === "waiting" ? { ask: { kind: "answer" as const, text: "it waits for your answer", by: "guess" as const } } : { ask: undefined };
-        out.set(known.id, { ...known, state, since: now, lastAt: now, ...ask });
+        // The service lists it, so it runs: no restored mark stays on it.
+        out.set(known.id, { ...known, state, since: now, lastAt: now, ...ask, restored: undefined });
         moved.push(known.id);
     }
     return { sessions: out, fresh, moved };

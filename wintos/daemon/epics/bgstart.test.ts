@@ -35,6 +35,11 @@ describe("mergeBg", () => {
         expect(gone.sessions.get("430f7f7e-9d03")?.state).toBe("ended");
         expect(mergeBg(gone.sessions, { "430f7f7e": start }, [], 20).moved).toEqual([]);
     });
+    test("a session the service lists runs: a not-started mark on it goes with its next move", () => {
+        const one = mergeBg(new Map(), { "430f7f7e": start }, [agent("working", "busy")], 5).sessions;
+        const marked = new Map([["430f7f7e-9d03", { ...one.get("430f7f7e-9d03")!, restored: true }]]);
+        expect(mergeBg(marked, { "430f7f7e": start }, [agent("done", "idle")], 9).sessions.get("430f7f7e-9d03")?.restored).toBeUndefined();
+    });
     test("running starts are counted per epic", () => {
         const s = mergeBg(new Map(), { "430f7f7e": start }, [agent("working", "busy")], 5).sessions;
         expect(liveStarts({ "430f7f7e": start }, s, "e")).toBe(1);

@@ -170,7 +170,10 @@ export function focusedSession(): Session | undefined {
 
 // The focused pane's own session, or none: a key that acts on "this session" (⌘R, ⌥⌘E, ⌥⌘P,
 // ⌥⌘M) must never reach another session in the same view because the focused pane has none.
-export const sessionInPane = (sessions: Session[], blockId: string | undefined) => (blockId ? sessions.find((s) => s.blockId === blockId) : undefined);
+// A pane keeps the sessions it ran before (Claude quit and started again): the one running is
+// it, the newest if several are open, never one that ended.
+export const sessionInPane = (sessions: Session[], blockId: string | undefined) =>
+    blockId ? sessions.filter((s) => s.blockId === blockId && s.state !== "ended").sort((a, b) => b.lastAt - a.lastAt)[0] : undefined;
 
 // ⌘H ⌘L in a project: the focused terminal, the notes rail. The sidebar never takes focus (⌘J/⌘K switch).
 export function focusArea(area: "terminal" | "notes"): void {

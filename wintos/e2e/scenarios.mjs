@@ -590,9 +590,14 @@ await scenario("24 · a session proposes its name, ⌘R renames it for good, and
     const tabId = await evalIn(t, "window.wintosTabId()");
     const blockId = await until("a focused pane", () => evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`));
     const post = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const named = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((x) => x.id === "e2e-name")?.name;
-    await post("/events", { tabId, blockId, payload: { session_id: "e2e-name", hook_event_name: "UserPromptSubmit", prompt: "e2e name" } });
-    await post(`/blocks/${blockId}/name?session=e2e-name`, { text: "Retention backfill review" });
+    const sid = `e2e-name-${Date.now().toString(36)}`;
+    const named = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((x) => x.id === sid)?.name;
+    // ⌘R names the focused pane's session: one an earlier scenario or run left on it goes first.
+    for (const x of (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.filter((x) => x.blockId === blockId && x.state !== "ended"))
+        await post("/events", { tabId, blockId, payload: { session_id: x.id, hook_event_name: "SessionEnd", reason: "prompt_input_exit" } });
+    await until("its pane free", async () => !(await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.some((x) => x.blockId === blockId && x.state !== "ended"));
+    await post("/events", { tabId, blockId, payload: { session_id: sid, hook_event_name: "UserPromptSubmit", prompt: "e2e name" } });
+    await post(`/blocks/${blockId}/name?session=${sid}`, { text: "Retention backfill review" });
     await until("the proposed name in its header, with its minute", () => evalIn(t, `[[...document.querySelectorAll("[data-wintos=session-header], [data-wintos=epic-strip]")].map((h) => h.innerText).join(" ")].some((h) => h.includes("Retention backfill review") && h.includes("change the name"))`));
     await press(t, "r", { code: "KeyR", keyCode: 82, mods: ["meta"] });
     await until("the name field", () => evalIn(t, `!!document.querySelector("[data-wintos=name-session] input")`));
@@ -601,9 +606,9 @@ await scenario("24 · a session proposes its name, ⌘R renames it for good, and
     await cdp(t, "Input.insertText", { text: "My name for it" });
     await press(t, "Enter", { keyCode: 13 });
     await until("your name, kept", async () => (await named())?.by === "you" && (await named())?.text === "My name for it");
-    await post(`/blocks/${blockId}/name?session=e2e-name`, { text: "Its next name" });
+    await post(`/blocks/${blockId}/name?session=${sid}`, { text: "Its next name" });
     await until("its suggestion, beside your name", () => evalIn(t, `[[...document.querySelectorAll("[data-wintos=session-header], [data-wintos=epic-strip]")].map((h) => h.innerText).join(" ")].some((h) => h.includes("My name for it") && h.includes("Its next name"))`));
-    await post("/events", { tabId, blockId, payload: { session_id: "e2e-name", hook_event_name: "SessionEnd", reason: "prompt_input_exit" } });
+    await post("/events", { tabId, blockId, payload: { session_id: sid, hook_event_name: "SessionEnd", reason: "prompt_input_exit" } });
 });
 
 // The run leaves the Inbox as it found it: the pages it opened close again. A failed clean-up
@@ -1312,6 +1317,32 @@ await scenario("56 · epics hold one order, pinned then yours then by name; ⇧K
     await until("the cursor still on the epic it moved", () => evalIn(t, `document.querySelector("[data-wintos=today] [data-cursor][data-epic]")?.dataset.epic === "${zz}"`));
     await until("and in the sidebar", () => before("[data-wintos=epic-groups] [data-epic-group]", zz, aa));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
+});
+
+await scenario("57 · Rename… on a session's row in the sidebar renames the session, and the name is yours", async () => {
+    const t = await toProject();
+    const tabId = await evalIn(t, "window.wintosTabId()");
+    const blockId = await until("a focused pane", () => evalIn(t, `window.wintosLayout().getter(window.wintosLayout().focusedNode)?.data?.blockId`));
+    const post = (path, body) => fetch(`http://127.0.0.1:7731${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const id = `e2e-rowname-${Date.now().toString(36)}`;
+    const named = async () => (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.find((x) => x.id === id)?.name;
+    // An earlier run that failed left its session on this pane: one pane, one session.
+    for (const x of (await (await fetch("http://127.0.0.1:7731/state")).json()).sessions.filter((x) => x.id.startsWith("e2e-rowname-") && x.state !== "ended"))
+        await post("/events", { tabId, blockId, payload: { session_id: x.id, hook_event_name: "SessionEnd", reason: "prompt_input_exit" } });
+    await post("/events", { tabId, blockId, payload: { session_id: id, hook_event_name: "UserPromptSubmit", prompt: "e2e row name" } });
+    await post(`/sessions/${id}/name`, { text: "Before the rename" });
+    await post("/events", { tabId, blockId, payload: { session_id: id, hook_event_name: "Stop" } });
+    const row = `s:${id}`;
+    await until("its row", () => evalIn(t, `document.querySelector('[data-wintos=sidebar-list] [data-row="${row}"]')?.innerText.includes("Before the rename")`));
+    // The row's menu item (a native menu the harness can't click) sets this.
+    await evalIn(t, `window.wintosRename(${JSON.stringify(row)})`);
+    await until("the name field on its row", () => evalIn(t, `!!document.querySelector('[data-row="${row}"] input')`));
+    await cdpFocus(t, `[data-row="${row}"] input`);
+    await evalIn(t, `document.querySelector('[data-row="${row}"] input').select()`);
+    await cdp(t, "Input.insertText", { text: "After the rename" });
+    await press(t, "Enter", { keyCode: 13 });
+    await until("the session renamed, its name yours", async () => (await named())?.text === "After the rename" && (await named())?.by === "you");
+    await post("/events", { tabId, blockId, payload: { session_id: id, hook_event_name: "SessionEnd", reason: "prompt_input_exit" } });
 });
 
 clearInterval(heldTimer);

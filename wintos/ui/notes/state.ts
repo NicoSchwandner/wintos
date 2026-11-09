@@ -13,7 +13,7 @@ export const mainViewAtom = atom<MainView>("terminal");
 export const editingMineAtom = atom(false);
 export type Overlay = "" | "palette" | "keymap" | "confirm-close" | "name-session" | "epic" | "new-step" | "move-session";
 export const overlayAtom = atom<Overlay>("");
-export const renamingAtom = atom(null as string | null); // the tab whose title is being edited
+export const renamingAtom = atom(null as string | null); // the sidebar row being renamed: a view's tab id, or a session's row key
 // ⌥⌘R pressed once: the terminal it would restart, until a second press or 3 s.
 export const restartArmedAtom = atom(null as string | null);
 export const updateArmedAtom = atom(false);

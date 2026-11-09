@@ -489,7 +489,7 @@ export function registerWintosMenu(): void {
     getApi().onWintosOpenPane((url) => runAction(`open-page:${url}`));
     // Dev builds only: lets wintos/e2e drive menu actions that native menus keep out of reach.
     // A dynamic import() from the harness would load second copies of these modules, not the live ones.
-    if (isDev()) Object.assign(window, { wintosAction: runAction, wintosTabId: () => globalStore.get(atoms.staticTabId), wintosKeyDown: appHandleKeyDown, wintosLayout: getLayoutModelForStaticTab, wintosState: currentState, wintosSkipOnboarding: skipOnboarding });
+    if (isDev()) Object.assign(window, { wintosAction: runAction, wintosTabId: () => globalStore.get(atoms.staticTabId), wintosKeyDown: appHandleKeyDown, wintosLayout: getLayoutModelForStaticTab, wintosState: currentState, wintosSkipOnboarding: skipOnboarding, wintosRename: (rowKey: string) => globalStore.set(renamingAtom, rowKey) });
 }
 
 // Dev only (wintos/e2e/seed.mjs): a freshly reset dev instance opens Wave's onboarding, which

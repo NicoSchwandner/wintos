@@ -24,7 +24,7 @@ import { cycleOrder, setSwitchOrder, setWakeStops, switchTargetAtom } from "./sw
 import { closeProjectTab, openView, registerWintosMenu, runKey } from "./menu";
 import { isPage, mainViewAtom, newStepEpicAtom, renamingAtom, yourMoveAtom } from "./notes/state";
 import { inFlight, liveSessions } from "./sessions";
-import { instance, setProjectTitle, useWintos } from "./useWintos";
+import { daemonFetch, instance, setProjectTitle, useWintos } from "./useWintos";
 import { attention, plain } from "./attention";
 import { ghPrs, inboxKind, type InboxList, prRef, projectTabIds, relTime, RowView, sessionName, type WintosState } from "./view";
 import { queueModel } from "./prs";
@@ -152,12 +152,13 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
 
     // The open project with something that needs you lands on its session too; else the terminals.
     const open = (tabId: string) => (tabId !== activeTabId || model?.targets[tabId] ? enterProject(tabId) : focusArea("terminal"));
-    const menu = (e: React.MouseEvent, tabId: string) => {
+    // rowKey: a session's row renames the session, a view's own row the view.
+    const menu = (e: React.MouseEvent, tabId: string, rowKey: string) => {
         e.preventDefault();
         ContextMenuModel.getInstance().showContextMenu(
             [
                 { label: "Open view", click: () => open(tabId) },
-                { label: "Rename…", click: () => setRenaming(tabId) },
+                { label: "Rename…", click: () => setRenaming(rowKey) },
                 {
                     label: "Edit mine.md",
                     enabled: tabId === activeTabId,
@@ -190,14 +191,16 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
             v: epic ? { ...v, title: withoutEpic(v.title, epic) } : v,
             active: here,
             cursor: switchTarget === row.key,
-            renaming: !own && renaming === row.tabId,
+            renaming: renaming === row.key,
             onOpen: () => (own ? focusSession(model!.targets[row.key] ?? { tabId: row.tabId, blockId: own.blockId }) : open(row.tabId)),
-            onMenu: (e: React.MouseEvent) => menu(e, row.tabId),
+            onMenu: (e: React.MouseEvent) => menu(e, row.tabId, row.key),
             onClose: own ? undefined : () => closeProjectTab(row.tabId, true),
             onRename: (title: string | null) => {
                 setRenaming(null);
                 focusArea("terminal");
-                if (title?.trim()) fireAndForget(() => setProjectTitle(row.tabId, title.trim(), true));
+                if (!title?.trim() || title.trim() === props.v.title) return;
+                if (own) void daemonFetch(`/sessions/${encodeURIComponent(own.id)}/name`, { method: "POST", body: { text: title.trim() } }).catch(() => {});
+                else fireAndForget(() => setProjectTitle(row.tabId, title.trim(), true));
             },
         };
         return row.band === "quiet" ? <QuietRow {...props} /> : row.band === "running" ? <QuietRow {...props} v={{ ...props.v, reason: v.next }} dot={T.moss} /> : <CardRow {...props} />;

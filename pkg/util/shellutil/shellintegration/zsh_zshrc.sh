@@ -75,6 +75,26 @@ _waveterm_si_osc7() {
   printf '\033]7;file://localhost%s\007' "$encoded_pwd"  # OSC 7 - current directory
 }
 
+# WintOS runs each pane in a tmux of its own (socket wintos…), mouse off so a shell keeps the
+# terminal's own selection and scrollback. Claude draws full screen and wants the wheel and clicks,
+# which tmux passes on only with mouse on: on while a claude command runs, off at the next prompt.
+typeset -g _WINTOS_MOUSE=0
+_wintos_mouse() {
+  [[ "$TMUX" == */wintos* ]] || return
+  [[ "$1" == on ]] && (( _WINTOS_MOUSE )) && return
+  [[ "$1" == off ]] && (( !_WINTOS_MOUSE )) && return
+  tmux set-option -q mouse "$1" 2>/dev/null && _WINTOS_MOUSE=$([[ "$1" == on ]] && echo 1 || echo 0)
+}
+# Any word of the line, as WintOS's own lines start it after a cd (cd … && claude --resume …).
+# A line that only mentions claude turns it on until its prompt: harmless.
+_wintos_mouse_preexec() {
+  local w
+  for w in ${(z)1}; do
+    [[ "${w:t}" == claude ]] && { _wintos_mouse on; return; }
+  done
+}
+_wintos_mouse_precmd() { _wintos_mouse off; }
+
 _waveterm_si_precmd() {
   local _waveterm_si_status=$?
   _waveterm_si_blocked && return
@@ -139,4 +159,6 @@ fi
 autoload -U add-zsh-hook
 add-zsh-hook precmd  _waveterm_si_precmd
 add-zsh-hook preexec _waveterm_si_preexec
+add-zsh-hook precmd  _wintos_mouse_precmd
+add-zsh-hook preexec _wintos_mouse_preexec
 add-zsh-hook chpwd   _waveterm_si_osc7

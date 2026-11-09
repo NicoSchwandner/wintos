@@ -1,5 +1,5 @@
 import { readJson, writeJsonAtomic } from "../persist";
-import { tmuxPanes } from "../sessions/tmux";
+import { tmuxMouse, tmuxPanes } from "../sessions/tmux";
 import { execFile } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "fs";
 import { AsyncLocalStorage } from "async_hooks";
@@ -76,7 +76,7 @@ const isRoadmapOp = (o: unknown): o is RoadmapOp => {
 };
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined>; bgStop?: (bgId: string) => Promise<boolean>; tmuxPanes?: () => Set<string>; bgEveryMs?: number }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined>; bgStop?: (bgId: string) => Promise<boolean>; tmuxPanes?: () => Set<string>; tmuxMouse?: (blockId: string, on: boolean) => void; bgEveryMs?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // Beside the projects in main.ts; a hidden folder in them by default, which the project store skips.
     const epics = new EpicStore(opts.epicsRoot ?? join(opts.root, ".epics"));
@@ -140,6 +140,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
     // served (cause), or the reading that ran after one.
     let logged = sessions;
     const logEvent = eventLog(join(opts.root, ".events"));
+    // The panes whose tmux has the mouse on for their Claude (sessions/tmux.ts tmuxMouse).
+    const mouseOn = new Set<string>();
     const cause = new AsyncLocalStorage<string>();
     const saveSessions = (why = cause.getStore() ?? "wintosd", always?: string) => {
         for (const line of trail(logged, sessions, why, (t) => store.byTab(t)?.title, always)) console.log(`[wintosd] ${line}`);
@@ -699,6 +701,12 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 // Shelved before the reduce drops them, while their status and PRs are still on hand.
                 for (const l of left) shelveLive(l);
                 sessions = reduceSession(sessions, ev, Date.now());
+                // Its pane's tmux passes the mouse on while it runs; quitting WintOS (reason other)
+                // leaves it running in tmux.
+                if (p.kind !== "bg") {
+                    const quit = p.hook_event_name === "SessionEnd" && p.reason !== "other";
+                    if (quit ? mouseOn.delete(ev.blockId) : !mouseOn.has(ev.blockId) && mouseOn.add(ev.blockId)) (opts.tmuxMouse ?? tmuxMouse)(ev.blockId, !quit);
+                }
                 const typed = typeof p.prompt === "string" ? ` (you sent ${p.prompt.length} characters)` : "";
                 const hook = `hook ${p.hook_event_name}${p.tool_name ? ` ${p.tool_name}` : ""}${p.kind === "bg" ? " from the background service" : ""}${typed}`;
                 // Running again: started or prompted. Closing its pane ends it (SessionEnd) on the way onto the shelf.

@@ -1779,6 +1779,22 @@ describe("done PRs", () => {
     });
 });
 
+describe("tmux mouse", () => {
+    test("a pane's tmux has the mouse on while its Claude runs, once; off when it quits, not when WintOS does", async () => {
+        const mouse = vi.fn();
+        srv.close();
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", tmuxMouse: mouse });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event({ ...prompt, hook_event_name: "SessionStart" });
+        await event(prompt);
+        expect(mouse.mock.calls).toEqual([["blk-1", true]]);
+        await event({ ...prompt, hook_event_name: "SessionEnd", reason: "other" });
+        expect(mouse.mock.calls).toEqual([["blk-1", true]]);
+        await event({ ...prompt, hook_event_name: "SessionEnd", reason: "prompt_input_exit" });
+        expect(mouse.mock.calls).toEqual([["blk-1", true], ["blk-1", false]]);
+    });
+});
+
 describe("update", () => {
     test("the state counts the checkout's new commits and the panes in tmux a restart keeps, and /update restarts from it only then", async () => {
         const repo = mkdtempSync(join(tmpdir(), "wintos-checkout-"));

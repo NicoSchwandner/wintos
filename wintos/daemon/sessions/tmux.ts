@@ -1,4 +1,4 @@
-import { execFileSync } from "child_process";
+import { execFile, execFileSync } from "child_process";
 import { existsSync } from "fs";
 
 // WintOS runs each pane's shell in a tmux session named after the pane (pkg/wintostmux): a pane
@@ -18,4 +18,14 @@ export function tmuxPanes(): Set<string> {
     } catch {
         return new Set();
     }
+}
+
+// Mouse on in a pane's tmux while Claude runs there: it draws full screen and takes the wheel and
+// clicks, which tmux passes on only with mouse on; a shell keeps the terminal's own selection with
+// it off. The shell's own hook sets it before Claude starts (shellintegration/zsh_zshrc.sh); this
+// covers shells that started before that hook existed, and other shells.
+export function tmuxMouse(blockId: string, on: boolean): void {
+    if (process.env.VITEST || !blockId) return;
+    const bin = TMUX.find((p) => existsSync(p)) ?? "tmux";
+    execFile(bin, ["-L", tmuxSocket(), "set-option", "-q", "-t", `w-${blockId}`, "mouse", on ? "on" : "off"], { timeout: 3_000 }, () => {});
 }

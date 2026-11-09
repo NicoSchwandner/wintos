@@ -13,7 +13,7 @@ import type { Group } from "../daemon/prs/group";
 import { runAction } from "./menu";
 import { Key, KeyOr } from "./Key";
 import { fixNote, initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns, type QueueRow, type RowColumns } from "./prs";
-import { typeIntoPane } from "./typeIntoPane";
+import { typeWhenFree } from "./typeIntoPane";
 import type { FixRun } from "../daemon/fixer/runner";
 import { groupOf, lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { nextAction, type NextKind } from "../daemon/fixer/plan";
@@ -249,7 +249,7 @@ async function dispatchNext(url: string): Promise<void> {
     if (!res?.ok) return;
     const r = (await res.json()) as { review?: boolean; blockId?: string; prompt?: string };
     if (r.review) return void (offerPrompt(`\x1b[200~${url} review\x1b[201~\r`), createTab());
-    if (r.blockId && r.prompt) await typeIntoPane(r.blockId, r.prompt);
+    if (r.blockId && r.prompt) await typeWhenFree(r.blockId, r.prompt);
 }
 
 // The same route an automatic run takes: a live owning session gets the prompt typed into its
@@ -258,7 +258,7 @@ async function dispatchCiFix(url: string): Promise<void> {
     const res = await daemonFetch("/fixer/ci", { method: "POST", body: { url } }).catch(() => undefined);
     if (!res?.ok) return;
     const r = (await res.json()) as { run: FixRun; blockId?: string; prompt?: string };
-    if (r.blockId && r.prompt) await typeIntoPane(r.blockId, r.prompt);
+    if (r.blockId && r.prompt) await typeWhenFree(r.blockId, r.prompt);
 }
 
 // Inline in a clipped one-line title: its own line box, or the border is cut off.

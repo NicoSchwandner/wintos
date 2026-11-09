@@ -1,9 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Reports } from "../daemon/epics/reports";
 import { relayPrompt, type Relays } from "../daemon/epics/relay";
 import type { Session } from "../daemon/sessions/reduce";
 import { canTypeInto } from "./outbox";
-import { typeIntoPane } from "./typeIntoPane";
+import { DRAFT_RETRY_MS, DraftInPane, typeIntoPane } from "./typeIntoPane";
 import { daemonFetch } from "./useWintos";
 
 // A report waits this long for others, so a busy minute reaches the agent as one prompt.
@@ -36,6 +36,9 @@ export function useEpicReports(reports: Reports | undefined, sessions: Session[]
     const due = reports && sessions ? reportDeliveries(reports, sessions, tabId, now, lookingAt) : [];
     const relayed = sessions ? relayDeliveries(relays, sessions, epics, tabId, lookingAt) : [];
     const key = [...due, ...relayed].map((d) => `${d.agent}:${d.n}`).join(" ");
+    // A pane with your draft in it waits; this asks again a little later.
+    const [retry, setRetry] = useState(0);
+    const later = (e: unknown) => e instanceof DraftInPane && setTimeout(() => setRetry((n) => n + 1), DRAFT_RETRY_MS);
     useEffect(() => {
         for (const d of due) {
             if (busy.has(d.agent)) continue;
@@ -43,7 +46,7 @@ export function useEpicReports(reports: Reports | undefined, sessions: Session[]
             // Typed first, marked delivered after: a pane that can't take it keeps the queue.
             void typeIntoPane(d.blockId, d.text)
                 .then(() => daemonFetch(`/agents/${encodeURIComponent(d.agent)}/reports/delivered`, { method: "POST", body: { n: d.n } }))
-                .catch(() => {})
+                .catch(later)
                 .finally(() => busy.delete(d.agent));
         }
         for (const d of relayed) {
@@ -51,8 +54,8 @@ export function useEpicReports(reports: Reports | undefined, sessions: Session[]
             busy.add(`relay:${d.agent}`);
             void typeIntoPane(d.blockId, d.text)
                 .then(() => daemonFetch(`/sessions/${encodeURIComponent(d.agent)}/relays/delivered`, { method: "POST", body: { n: d.n } }))
-                .catch(() => {})
+                .catch(later)
                 .finally(() => busy.delete(`relay:${d.agent}`));
         }
-    }, [key]);
+    }, [key, retry]);
 }

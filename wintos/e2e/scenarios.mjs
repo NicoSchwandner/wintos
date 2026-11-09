@@ -1126,9 +1126,17 @@ await scenario("49 · the epic agent relays your words to a session: refused unl
     await api("/events", { tabId: "e2e-elsewhere", blockId: ag, payload: { session_id: ag, hook_event_name: "UserPromptSubmit", prompt: "Tell it: cut over group A first" } });
     const refused = await api(`/blocks/${ag}/relay`, { to: "E2E cutover", text: "cut over everything" });
     if (refused.status !== 403) throw new Error(`words you never said went through: ${refused.status}`);
+    // A half-written prompt in the session's input box: the relay waits rather than send it along.
+    const tmux = (...a) => execFileSync("tmux", ["-L", "wintos-dev", "send-keys", "-t", `w-${pane}`, ...a]);
+    tmux("clear; printf '──────────\\n❯ half written\\n──────────\\n'; sleep 600", "Enter");
+    await sleep(1500);
     const ok = await api(`/blocks/${ag}/relay`, { to: "E2E cutover", text: "cut over group A first", note: "re its cutover question" });
     if (ok.status !== 200) throw new Error(`relay refused: ${await ok.text()}`);
-    await until("typed in by the session's view and off the queue", async () => !(await st()).relays?.[wk], 30000);
+    await sleep(8000);
+    if (!(await st()).relays?.[wk]) throw new Error("typed over the draft in the session's input box");
+    tmux("C-c");
+    tmux("clear", "Enter");
+    await until("typed in by the session's view and off the queue once the box is empty", async () => !(await st()).relays?.[wk], 30000);
     await evalIn(t, `window.wintosLayout().closeNode(window.wintosLayout().getNodeByBlockId(${JSON.stringify(pane)}).id)`);
 });
 

@@ -2,14 +2,14 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { ObjectService } from "@/app/store/services";
 import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
 import { getLayoutModelForStaticTab, LayoutTreeActionType, newLayoutNode, type LayoutTreeInsertNodeAction } from "@/layout/index";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { type Wakes } from "../daemon/wakes/wakes";
 import { deliverable, resumes } from "./wakePlan";
 import type { Session } from "../daemon/sessions/reduce";
 import type { Shelved } from "../daemon/shelf/shelf";
 import { resumePane } from "./focus";
 import { noteResume, resumingNow } from "./resuming";
-import { typeIntoPane } from "./typeIntoPane";
+import { DRAFT_RETRY_MS, DraftInPane, typeIntoPane } from "./typeIntoPane";
 import { daemonFetch } from "./useWintos";
 
 export { closedWakes, deliverable, resumes, WOKE, type ClosedWake, type Delivery } from "./wakePlan";
@@ -32,6 +32,8 @@ const busy = new Set<string>();
 export function useWakeDelivery(wakes: Wakes | undefined, sessions: Session[] | undefined, shelf: Shelved[] | undefined, tabId: string): void {
     const due = wakes && sessions ? deliverable(wakes, sessions, shelf ?? [], tabId) : [];
     const key = due.map((d) => `${d.kind}:${d.sessionId}`).join(" ");
+    // A pane with your draft in it waits; this asks again a little later.
+    const [retry, setRetry] = useState(0);
     useEffect(() => {
         for (const d of due) {
             if (busy.has(d.sessionId)) continue;
@@ -45,8 +47,8 @@ export function useWakeDelivery(wakes: Wakes | undefined, sessions: Session[] | 
             // Typed first, marked delivered after: a pane that can't take it keeps the wake.
             void typeIntoPane(d.blockId, d.text)
                 .then(() => daemonFetch(`/wakes/${encodeURIComponent(d.id)}/delivered`, { method: "POST", body: {} }))
-                .catch(() => {})
+                .catch((e) => e instanceof DraftInPane && setTimeout(() => setRetry((n) => n + 1), DRAFT_RETRY_MS))
                 .finally(() => busy.delete(d.sessionId));
         }
-    }, [key]);
+    }, [key, retry]);
 }

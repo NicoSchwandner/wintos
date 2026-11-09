@@ -14,9 +14,10 @@ test("pinned epics first, then by name whatever waits on you; sessions in no epi
     expect(groups.at(-1)!.rows.map((r) => r.key)).toEqual(["s:d", "t9"]);
 });
 
-test("a done epic has no group; its sessions go outside", () => {
-    const groups = groupByEpic([row("a", "quiet", "old")], [e("old", { done: "2026-11-01" })]);
-    expect(groups.map((g) => g.epic?.id ?? "outside")).toEqual(["outside"]);
+test("a done epic with sessions still running keeps them, after the open epics; one without has no group", () => {
+    const groups = groupByEpic([row("a", "quiet", "old"), row("b", "quiet")], [e("old", { done: "2026-11-01" }), e("gone", { done: "2026-10-01" }), e("open")]);
+    expect(groups.map((g) => g.epic?.id ?? "outside")).toEqual(["open", "old", "outside"]);
+    expect(groups[1].rows.map((r) => r.key)).toEqual(["s:a"]);
 });
 
 test("the epic agent's row is its epic's header, not a row under it nor outside", () => {

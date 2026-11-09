@@ -21,13 +21,17 @@ export function groupByEpic(rows: Row[], epics: EpicView[]): EpicGroup[] {
     const open = epics.filter((e) => !e.done);
     const of = (r: Row) => (r.key !== r.tabId ? r.sessions[0]?.epic : undefined);
     const isAgent = (r: Row, e: EpicView) => !!e.agent && r.key === `s:${e.agent}`;
-    const groups = open.map((epic) => ({ epic, rows: rows.filter((r) => of(r) === epic.id && !isAgent(r, epic)), agent: rows.find((r) => isAgent(r, epic)) }));
+    const groupOf = (epic: EpicView) => ({ epic, rows: rows.filter((r) => of(r) === epic.id && !isAgent(r, epic)), agent: rows.find((r) => isAgent(r, epic)) });
+    const groups = open.map(groupOf);
     const place = new Map(orderEpics(open).map((e, i) => [e.id, i]));
     groups.sort((a, b) => place.get(a.epic.id)! - place.get(b.epic.id)!);
-    const known = new Set(open.map((e) => e.id));
-    const agents = new Set(groups.flatMap((g) => (g.agent ? [g.agent.key] : [])));
+    // A finished epic whose sessions still run keeps them under its name, marked done, after the
+    // open ones: filed "outside the epics" they contradicted the strip over their pane.
+    const finished = epics.filter((e) => e.done).map(groupOf).filter((g) => g.rows.length || g.agent);
+    const known = new Set([...open, ...finished.map((g) => g.epic)].map((e) => e.id));
+    const agents = new Set([...groups, ...finished].flatMap((g) => (g.agent ? [g.agent.key] : [])));
     const loose = rows.filter((r) => (!of(r) || !known.has(of(r)!)) && !agents.has(r.key));
-    return [...groups, ...(loose.length ? [{ rows: loose }] : [])];
+    return [...groups, ...finished, ...(loose.length ? [{ rows: loose }] : [])];
 }
 
 // background: sessions the agents started in the background (no pane, so no row): listed under
@@ -56,6 +60,7 @@ export function EpicGroups({ groups, renderRow, isHere = () => false, cursor, ne
                     <EpicAvatar look={look} size={folded ? 16 : 20} running={g.agent?.sessions[0]?.state === "working"} />
                     <span style={{ flexGrow: 1, minWidth: 0, fontSize: folded ? 12 : 12.5, fontWeight: folded ? 500 : 700, letterSpacing: "0.02em", color: folded ? T.muted : look.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(g.epic!)}</span>
                     {g.epic!.pinned && <PinMark />}
+                    {g.epic!.done && <span data-wintos="epic-done-mark" title={`finished ${g.epic!.done}; ⌥⌘E moves a session to an open epic`} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, color: T.faint }}>done</span>}
                     {g.agent?.band === "needs" && <span data-wintos="epic-agent-state" style={{ fontSize: 10.5, fontWeight: 600, color: T.apricot }}>agent: your move</span>}
                     {!folded && <span style={{ fontFamily: T.mono, fontSize: 11, color: waiting ? T.apricot : T.faint }}>{waiting ? `${waiting} waiting` : g.rows.length}</span>}
                 </button>

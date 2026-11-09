@@ -53,7 +53,9 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
     const { mine, save } = useEpicMine(epic?.id);
     const [month, setMonth] = useState<EpicTime | undefined>();
     // Its sessions, also those its agent started in the background (wintos start), which no pane shows yet.
-    const sessions = (state?.sessions ?? []).filter((s) => s.epic === id && s.state !== "ended" && (!s.background || !!s.bgId));
+    // Those whose Claude doesn't run (restored: it starts when you open its pane) come last.
+    const sessions = (state?.sessions ?? []).filter((s) => s.epic === id && s.state !== "ended" && (!s.background || !!s.bgId)).sort((a, b) => Number(!!a.restored) - Number(!!b.restored));
+    const resting = sessions.filter((s) => s.restored).length;
     const iso = new Date(now).toISOString().slice(0, 7);
     useEffect(() => {
         let live = true;
@@ -183,12 +185,14 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
         <Panel label="Sessions" note={shortName(epic)} keys={sessions.length > 0 && <Key k="j k · ⏎" label="its pane" />}>
             {sessions.map((s) => {
                 const shown = shownState(s, now);
+                const first = s.restored && sessions.findIndex((x) => x.restored) === sessions.indexOf(s);
                 return (
-                    <div key={s.id} data-item="link" data-session={s.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div key={s.id} data-item="link" data-session={s.id} data-resting={s.restored || undefined} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {first && <span data-wintos="resting-label" style={{ fontSize: 11, color: T.faint, marginTop: 6 }}>Not running · ⏎ starts it again</span>}
                         <button type="button" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => (s.bgId && !s.attachedTo ? openBackground(s.bgId) : focusSession({ tabId: s.tabId, blockId: s.blockId }))} style={{ display: "flex", alignItems: "center", gap: 10, flexGrow: 1, minWidth: 0, padding: "4px 6px", margin: "0 -6px", borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui, fontSize: 13.5, color: T.text }}>
-                            <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: SESSION_DOT[shown] }} />
-                            <span style={{ flexGrow: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessionName(s)}</span>
-                            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: shown === "waiting" ? T.apricot : T.muted }}>{s.bgId && !s.attachedTo ? "background · " : ""}{STATE_WORD[shown]} {relTime(now - s.since)}</span>
+                            <span style={{ width: 7, height: 7, boxSizing: "border-box", borderRadius: "50%", flexShrink: 0, ...(s.restored ? { border: `1px solid ${T.faint}` } : { background: SESSION_DOT[shown] }) }} />
+                            <span style={{ flexGrow: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: s.restored ? T.muted : undefined }}>{sessionName(s)}</span>
+                            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: s.restored ? T.faint : shown === "waiting" ? T.apricot : T.muted }}>{s.restored ? `stopped ${relTime(now - s.lastAt)}` : `${s.bgId && !s.attachedTo ? "background · " : ""}${STATE_WORD[shown]} ${relTime(now - s.since)}`}</span>
                         </button>
                     </div>
                 );
@@ -224,7 +228,7 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                         </h1>
                     )}
                     <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>
-                        {[epic.done ? `done ${epic.done}` : `${sessions.length} session${sessions.length === 1 ? "" : "s"} open`, month && month.ms >= 60_000 && `${spent(month.ms)} this month`, epic.lane && `${epic.lane} sessions land here`].filter(Boolean).join(" · ")}
+                        {[epic.done ? `done ${epic.done}` : `${sessions.length - resting} session${sessions.length - resting === 1 ? "" : "s"} open${resting ? `, ${resting} not running` : ""}`, month && month.ms >= 60_000 && `${spent(month.ms)} this month`, epic.lane && `${epic.lane} sessions land here`].filter(Boolean).join(" · ")}
                     </span>
                 </div>
                 <span style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>

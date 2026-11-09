@@ -107,9 +107,10 @@ const localIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 
 function EpicCard({ epic, sessions, now }: { epic: EpicView; sessions: Session[]; now: number }) {
     const look = lookOf(epic);
-    const waiting = sessions.filter((s) => shownState(s, now) === "waiting").length;
-    const working = sessions.filter((s) => shownState(s, now) === "working").length;
-    const state = waiting ? `${waiting} your move` : working ? `${working} running` : sessions.length ? "quiet" : "no session open";
+    const running = sessions.filter((s) => !s.restored);
+    const waiting = running.filter((s) => shownState(s, now) === "waiting").length;
+    const working = running.filter((s) => shownState(s, now) === "working").length;
+    const state = waiting ? `${waiting} your move` : working ? `${working} running` : running.length ? "quiet" : sessions.length ? "not running" : "no session open";
     const planned = epic.steps.filter((x) => x.state !== "done").map((x) => x.name);
     return (
         <div data-item="link" data-epic={epic.id} style={{ display: "flex", flexDirection: "column", gap: 8, padding: "11px 13px", borderRadius: 10, background: T.sidebar, border: `1px solid ${T.border}`, borderTop: `3px solid ${look.fg}` }}>
@@ -122,8 +123,9 @@ function EpicCard({ epic, sessions, now }: { epic: EpicView; sessions: Session[]
                     <span style={{ fontSize: 12, color: waiting ? T.apricot : working ? T.moss : T.muted }}>{state}</span>
                 </span>
             </button>
-            {[...sessions.map((s) => ({ key: s.id, mark: "▸", text: sessionName(s) })), ...planned.map((p) => ({ key: `p:${p}`, mark: "○", text: p }))].slice(0, 4).map((x) => (
-                <span key={x.key} style={{ fontSize: 12.5, color: T.secondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {/* A session whose Claude doesn't run (it starts when its pane opens) comes after the running ones, faint. */}
+            {[...running.map((s) => ({ key: s.id, mark: "▸", text: sessionName(s), faint: false })), ...sessions.filter((s) => s.restored).map((s) => ({ key: s.id, mark: "◦", text: sessionName(s), faint: true })), ...planned.map((p) => ({ key: `p:${p}`, mark: "○", text: p, faint: false }))].slice(0, 4).map((x) => (
+                <span key={x.key} data-resting={x.faint || undefined} style={{ fontSize: 12.5, color: x.faint ? T.faint : T.secondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     <span style={{ fontFamily: T.mono, color: T.faint }}>{x.mark}</span> {x.text}
                 </span>
             ))}

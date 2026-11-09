@@ -112,6 +112,8 @@ export class TermWrap {
     hoveredLinkUri: string | null = null;
     schemeBg: string | null = null;
     schemeAsked: boolean = false;
+    // Mode 2031: the program (tmux, Claude) asked to be told when the appearance flips.
+    schemeMode: boolean = false;
     heldReply: string | null = null;
     onLinkHover?: (uri: string | null, mouseX: number, mouseY: number, showUrl: boolean) => void;
 
@@ -215,6 +217,22 @@ export class TermWrap {
             queueMicrotask(() => this.flushHeldReply(""));
             return true;
         });
+        // Mode 2031 is recorded while the history replays too: tmux reattached after a restart set
+        // it before the pane loaded. Not consumed, so xterm still handles the other modes.
+        const schemeModeSet = (on: boolean) => (params: (number | number[])[]) => {
+            if (params.includes(2031)) this.schemeMode = on;
+            return false;
+        };
+        this.toDispose.push(
+            this.terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, schemeModeSet(true)),
+            this.terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, schemeModeSet(false)),
+            // The appearance asked outright (CSI ? 996 n): tmux asks it when it attaches.
+            this.terminal.parser.registerCsiHandler({ prefix: "?", final: "n" }, (params) => {
+                if (params[0] !== 996 || this.schemeBg == null) return false;
+                if (this.loaded) this.sendDataHandler?.(schemeReport(isDarkBg(this.schemeBg)));
+                return true;
+            })
+        );
         this.terminal.parser.registerOscHandler(16162, (data: string) => {
             try {
                 return handleOsc16162Command(data, this.blockId, this.loaded, this);
@@ -495,6 +513,9 @@ export class TermWrap {
         } finally {
             this.loaded = true;
         }
+        // A program that asked before the pane loaded went unanswered (a reattached tmux, whose
+        // Claude then has no background and takes the dark theme); the report makes it ask again.
+        if (this.schemeMode && this.schemeBg != null) this.sendDataHandler?.(this.schemeNotice(this.schemeBg));
         this.runProcessIdleTimeout();
     }
 
@@ -525,7 +546,14 @@ export class TermWrap {
     setSchemeBg(bg: string | null) {
         const changed = this.schemeBg != null && bg != null && bg !== this.schemeBg;
         this.schemeBg = bg;
-        if (changed && this.schemeAsked) this.sendDataHandler?.(schemeReport(isDarkBg(bg)));
+        if (changed && (this.schemeAsked || this.schemeMode)) this.sendDataHandler?.(this.schemeNotice(bg));
+    }
+
+    // The background first, then the report: tmux passes the report on to its program at once and
+    // asks for the background only after, so a program asking in between got tmux's old colour (or
+    // none) and kept the wrong theme. Programs that ask take an unasked reply as a reply, not input.
+    schemeNotice(bg: string): string {
+        return backgroundReply(bg) + schemeReport(isDarkBg(bg));
     }
 
     handleTermData(data: string) {

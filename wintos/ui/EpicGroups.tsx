@@ -1,6 +1,6 @@
 import type { Row } from "../daemon/ranking/rank";
 import { orderEpics } from "../daemon/epics/order";
-import { EpicAvatar } from "./EpicAvatar";
+import { EpicAvatar, PinMark } from "./EpicAvatar";
 import { lookOf, NO_EPIC, shortName } from "./epicLook";
 import { openBackground } from "./focus";
 import { openEpic } from "./menu";
@@ -55,6 +55,7 @@ export function EpicGroups({ groups, renderRow, isHere = () => false, cursor, ne
                 >
                     <EpicAvatar look={look} size={folded ? 16 : 20} running={g.agent?.sessions[0]?.state === "working"} />
                     <span style={{ flexGrow: 1, minWidth: 0, fontSize: folded ? 12 : 12.5, fontWeight: folded ? 500 : 700, letterSpacing: "0.02em", color: folded ? T.muted : look.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(g.epic!)}</span>
+                    {g.epic!.pinned && <PinMark />}
                     {g.agent?.band === "needs" && <span data-wintos="epic-agent-state" style={{ fontSize: 10.5, fontWeight: 600, color: T.apricot }}>agent: your move</span>}
                     {!folded && <span style={{ fontFamily: T.mono, fontSize: 11, color: waiting ? T.apricot : T.faint }}>{waiting ? `${waiting} waiting` : g.rows.length}</span>}
                 </button>

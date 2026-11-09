@@ -884,9 +884,10 @@ await scenario("41 · ⇧⌘Y is the epics home: a card per epic; a click opens 
     const pinned = async () => !!(await (await fetch("http://127.0.0.1:7731/state")).json()).epics.find((e) => e.id === id)?.pinned;
     await press(t, "p", { code: "KeyP" });
     await until("pinned: the sidebar's first epic", async () => (await pinned()) && (await evalIn(t, `document.querySelector("[data-wintos=epic-groups] [data-epic-group]")?.dataset.epicGroup === "${id}"`)));
+    await until("marked pinned in the sidebar and on its page", () => evalIn(t, `!!document.querySelector("[data-epic-group='${id}'] [data-wintos=epic-pinned]") && !!document.querySelector("[data-wintos=epic-page] h1 [data-wintos=epic-pinned]")`));
     await until("the page knows it is pinned", () => evalIn(t, `document.querySelector("[data-wintos=epic-page] [data-wintos=epic-pin]")?.innerText.includes("Unpin")`));
     await press(t, "p", { code: "KeyP" });
-    await until("unpinned", async () => !(await pinned()));
+    await until("unpinned, its mark gone", async () => !(await pinned()) && (await evalIn(t, `!document.querySelector("[data-epic-group='${id}'] [data-wintos=epic-pinned]")`)));
     await press(t, "Escape", { code: "Escape", keyCode: 27 });
 });
 

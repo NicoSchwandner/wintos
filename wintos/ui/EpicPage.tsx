@@ -1,7 +1,7 @@
 import { useAtomValue } from "jotai";
 import { memo, useEffect, useRef, useState } from "react";
 import type { EpicTime } from "../daemon/epics/time";
-import { EpicAvatar } from "./EpicAvatar";
+import { EpicAvatar, PinMark } from "./EpicAvatar";
 import { agentWorking, lookOf, shortName } from "./epicLook";
 import { globalStore } from "@/app/store/jotaiStore";
 import { focusSession, openBackground } from "./focus";
@@ -219,7 +219,9 @@ export const EpicBody = memo(({ id, column }: { id: string; column?: boolean }) 
                             <input ref={shortRef} aria-label="its short name, for the sidebar" placeholder="short name (optional)" defaultValue={epic.short ?? ""} maxLength={20} style={{ flex: "0 1 150px", minWidth: 0, padding: "2px 8px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 6, outline: "none", color: T.text, fontFamily: T.ui, fontSize: 13 }} />
                         </span>
                     ) : (
-                        <h1 style={{ margin: 0, fontFamily: T.display, fontSize: column ? 18 : 30, fontWeight: 400, lineHeight: 1.1, color: T.emphasis }}>{column ? shortName(epic) : epic.title}</h1>
+                        <h1 style={{ margin: 0, fontFamily: T.display, fontSize: column ? 18 : 30, fontWeight: 400, lineHeight: 1.1, color: T.emphasis }}>
+                            {column ? shortName(epic) : epic.title} {epic.pinned && <PinMark size={column ? 11 : 15} />}
+                        </h1>
                     )}
                     <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.muted }}>
                         {[epic.done ? `done ${epic.done}` : `${sessions.length} session${sessions.length === 1 ? "" : "s"} open`, month && month.ms >= 60_000 && `${spent(month.ms)} this month`, epic.lane && `${epic.lane} sessions land here`].filter(Boolean).join(" · ")}

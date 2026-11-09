@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useState, useRef } from "react";
 import type { EpicTime } from "../daemon/epics/time";
 import type { Session } from "../daemon/sessions/reduce";
 import { dayTimeline, DEFAULT_WORKDAY, parseSpan, type Block } from "./dayplan";
-import { EpicAvatar } from "./EpicAvatar";
+import { EpicAvatar, PinMark } from "./EpicAvatar";
 import { agentWorking, lookOf, NO_EPIC, shortName } from "./epicLook";
 import { orderEpics } from "../daemon/epics/order";
 import { Key } from "./Key";
@@ -116,7 +116,9 @@ function EpicCard({ epic, sessions, now }: { epic: EpicView; sessions: Session[]
             <button type="button" data-act tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => openEpic(epic.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: 0, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: T.ui }}>
                 <EpicAvatar look={look} size={28} running={agentWorking(epic, sessions)} />
                 <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 600, color: T.emphasis, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(epic)}</span>
+                    <span style={{ fontSize: 13.5, fontWeight: 600, color: T.emphasis, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {shortName(epic)} {epic.pinned && <PinMark size={10.5} />}
+                    </span>
                     <span style={{ fontSize: 12, color: waiting ? T.apricot : working ? T.moss : T.muted }}>{state}</span>
                 </span>
             </button>

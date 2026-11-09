@@ -1,3 +1,4 @@
+import { T } from "./tokens";
 import { memo } from "react";
 import type { Look } from "./epicLook";
 import "./epics.css";
@@ -19,3 +20,8 @@ export const EpicAvatar = memo(({ look, size = 22, title, running }: { look: Loo
     </span>
 ));
 EpicAvatar.displayName = "EpicAvatar";
+
+// A pinned epic says so wherever its name shows: the sidebar's heading, the home's card, its page.
+export const PinMark = ({ size = 10 }: { size?: number }) => (
+    <i data-wintos="epic-pinned" className="fa-solid fa-thumbtack" title="pinned: first in the sidebar (p on its page unpins)" aria-label="pinned" style={{ flexShrink: 0, fontSize: size, color: T.faint, transform: "rotate(30deg)" }} />
+);

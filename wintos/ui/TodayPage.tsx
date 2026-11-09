@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState, useRef } from "react";
 import type { EpicTime } from "../daemon/epics/time";
 import type { Session } from "../daemon/sessions/reduce";
 import { dayTimeline, DEFAULT_WORKDAY, parseSpan, type Block } from "./dayplan";
@@ -36,12 +36,21 @@ export const TodayPage = memo(() => {
     const live = (state?.sessions ?? []).filter((s) => s.state !== "ended" && !s.background);
     // The sidebar's order: pinned, then yours (⇧J/⇧K here), then by name.
     const epics = orderEpics((state?.epics ?? []).filter((e) => !e.done));
+    // The cursor stays on the epic you move: it marks a place in the list, so once the new order
+    // arrives it is put back on that epic rather than on the one that took its old place.
+    const moved = useRef<string | undefined>(undefined);
     const moveCard = (by: 1 | -1) => () => {
         const id = ref.current?.querySelector<HTMLElement>("[data-cursor][data-epic]")?.dataset.epic;
         if (!id) return false;
+        moved.current = id;
         void daemonFetch(`/epics/${encodeURIComponent(id)}/move`, { method: "POST", body: { by } });
         return true;
     };
+    const order = epics.map((e) => e.id).join(" ");
+    useEffect(() => {
+        const id = moved.current;
+        if (id && ref.current && startCursor(ref.current, (el) => el.dataset.epic === id)) moved.current = undefined;
+    }, [order]);
     useEffect(() => {
         if (ref.current) requestAnimationFrame(() => ref.current && startCursor(ref.current, (el) => el.dataset.item === "link"));
     }, [epics.length > 0]);

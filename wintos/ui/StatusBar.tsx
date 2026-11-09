@@ -34,7 +34,7 @@ export const StatusBar = memo(({ inbox }: { inbox?: boolean }) => {
     const behind = state?.update?.behind ?? 0;
     const armed = useAtomValue(updateArmedAtom);
     const now = useNow(state?.rhythm?.onBreak ? 1000 : 60_000);
-    const work = atWorkText(atWork(state?.sessions ?? [], now));
+    const work = atWorkText(atWork(state?.sessions ?? [], now, state?.update?.kept));
     const keys = inbox ? [] : KEYS[view];
     const onBreak = state?.rhythm?.onBreak;
     if (inbox && !behind && !onBreak) return null;

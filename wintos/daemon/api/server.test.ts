@@ -1780,7 +1780,7 @@ describe("done PRs", () => {
 });
 
 describe("update", () => {
-    test("the state counts the checkout's new commits, and /update restarts from it only then", async () => {
+    test("the state counts the checkout's new commits and the panes in tmux a restart keeps, and /update restarts from it only then", async () => {
         const repo = mkdtempSync(join(tmpdir(), "wintos-checkout-"));
         const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, encoding: "utf8" });
         git("init", "-q");
@@ -1788,11 +1788,11 @@ describe("update", () => {
         git("commit", "-q", "--allow-empty", "-m", "running");
         const restart = vi.fn();
         srv.close();
-        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", checkout: repo, updateEveryMs: 50, restart });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", checkout: repo, updateEveryMs: 50, restart, tmuxPanes: () => new Set(["in-tmux"]) });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         expect((await post("/update", {})).status).toBe(409);
         git("commit", "-q", "--allow-empty", "-m", "new");
-        await vi.waitFor(async () => expect((await (await fetch(`${base}/state`)).json()).update).toEqual({ behind: 1 }), { timeout: 5_000, interval: 100 });
+        await vi.waitFor(async () => expect((await (await fetch(`${base}/state`)).json()).update).toEqual({ behind: 1, kept: ["in-tmux"] }), { timeout: 5_000, interval: 100 });
         expect((await post("/update", {})).status).toBe(202);
         expect(restart).toHaveBeenCalledWith(execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: repo, encoding: "utf8" }).trim());
     });

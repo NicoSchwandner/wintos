@@ -525,7 +525,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
         snoozes,
         seen,
         fixer: fixer.state(),
-        update: { behind: update?.behind() ?? 0 },
+        update: { behind: update?.behind() ?? 0, ...(update?.behind() ? { kept: [...keptPanes()] } : {}) },
         termCols: opts.termCols ?? 110,
         rhythm: { ...rhythm, everyMs: opts.moveEveryMs ?? 30 * 60_000 },
         ...(opts.journal ? { day: opts.journal.day(new Date()) } : {}),
@@ -540,6 +540,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
         ...(opts.lunch ? { lunch: opts.lunch } : {}),
         ...(opts.workday ? { workday: opts.workday } : {}),
     });
+    // The panes in tmux, whose Claude a restart keeps: asked of tmux at most every 15 s, as the
+    // state is built on every change.
+    let kept = { at: 0, panes: new Set<string>() };
+    const keptPanes = () => (Date.now() - kept.at < 15_000 ? kept.panes : (kept = { at: Date.now(), panes: (opts.tmuxPanes ?? tmuxPanes)() }).panes);
     const broadcast = () => {
         const frame = JSON.stringify(state());
         for (const s of sockets) s.send(frame);

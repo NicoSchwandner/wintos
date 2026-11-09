@@ -406,11 +406,11 @@ export function closeProjectTab(tabId: string, confirm: boolean, land = true): v
 }
 
 // ⌥⌘U: WintOS rebuilt and restarted from its checkout, once that has commits the running one
-// lacks. A restart ends every turn in flight and every subagent still running, so while one is,
-// the first press only asks.
+// lacks. A restart ends the turns and subagents running outside tmux, so while one is, the first
+// press only asks.
 function updateWintos(): void {
     if (!currentState()?.update?.behind) return void flog("update: already up to date");
-    const work = atWork(latestSessions(), Date.now());
+    const work = atWork(latestSessions(), Date.now(), currentState()?.update?.kept);
     if ((work.working || work.subagents) && !globalStore.get(updateArmedAtom)) {
         globalStore.set(updateArmedAtom, true);
         setTimeout(() => globalStore.set(updateArmedAtom, false), 3000);

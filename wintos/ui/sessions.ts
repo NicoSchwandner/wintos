@@ -44,9 +44,10 @@ export function attachments(panes: { blockId: string; script?: string }[], sessi
 }
 
 // What restarting WintOS would stop: turns in flight, and subagents still running, also behind a
-// turn that ended. Claude's background service is not WintOS's to stop.
-export function atWork(sessions: Session[], now: number): { working: number; subagents: number } {
-    const running = sessions.filter((s) => s.state !== "ended" && !s.background);
+// turn that ended. Claude's background service is not WintOS's to stop, and a session in a pane
+// whose shell runs in tmux (kept) runs on through the restart.
+export function atWork(sessions: Session[], now: number, kept: readonly string[] = []): { working: number; subagents: number } {
+    const running = sessions.filter((s) => s.state !== "ended" && !s.background && !kept.includes(s.blockId));
     return { working: running.filter((s) => s.state === "working").length, subagents: running.reduce((n, s) => n + liveSubagents(s, now), 0) };
 }
 

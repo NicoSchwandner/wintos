@@ -68,6 +68,8 @@ describe("atWork: what a restart of WintOS would stop", () => {
                 s("idle", "t", "idle"),
             ], now),
         ).toEqual({ working: 1, subagents: 2 }));
+    test("a session whose pane runs in tmux, subagents and all, goes on through the restart", () =>
+        expect(atWork([s("w", "t", "working"), { ...s("sub", "t", "waiting"), subagents: { a: now - 1000 } }, s("out", "t", "working")], now, ["b-w", "b-sub"])).toEqual({ working: 1, subagents: 0 }));
     test("nothing at work", () => expect(atWork([s("x", "t", "waiting")], now)).toEqual({ working: 0, subagents: 0 }));
 });
 

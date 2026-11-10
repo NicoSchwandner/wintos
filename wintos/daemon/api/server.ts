@@ -41,6 +41,7 @@ import { finishSession, freshStatus, HookEvent, liveSubagents, parkSession, redu
 import { askCard, askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { changes, trail } from "../sessions/trail";
 import { eventLog } from "../events";
+import { sampleMemory } from "../memory/memory";
 import { lastReply, reentry } from "../sessions/reentry";
 import { AWAY_MS, prompted, snooze, startBreak, tick, type Rhythm } from "../rhythm/rhythm";
 import { afterCheck, expiresAt, isWakeEvent, MAX_PROMPT, rekeyed, WAKE_EVENTS, waitingOn, wakeId, wakePrompt, type PrNow, type WakeEvent, type Wakes } from "../wakes/wakes";
@@ -76,7 +77,7 @@ const isRoadmapOp = (o: unknown): o is RoadmapOp => {
 };
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined>; bgStop?: (bgId: string) => Promise<boolean>; tmuxPanes?: () => Set<string>; tmuxMouse?: (blockId: string, on: boolean) => void; bgEveryMs?: number }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined>; bgStop?: (bgId: string) => Promise<boolean>; tmuxPanes?: () => Set<string>; tmuxMouse?: (blockId: string, on: boolean) => void; bgEveryMs?: number; memEveryMs?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // Beside the projects in main.ts; a hidden folder in them by default, which the project store skips.
     const epics = new EpicStore(opts.epicsRoot ?? join(opts.root, ".epics"));
@@ -274,6 +275,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
         }
     };
     const bgTimer = setInterval(() => void pollBg(), opts.bgEveryMs ?? 15_000);
+    // Each WintOS process's memory into the event log (memory/memory.ts), the biggest first.
+    const memTimer = setInterval(() => void sampleMemory(process.ppid).then((procs) => procs.length && logEvent("memory", { totalMb: procs.reduce((n, p) => n + p.mb, 0), top: procs.slice(0, 8).map((p) => `${p.role} ${p.pid} ${p.mb} MB`) })).catch(() => {}), opts.memEveryMs ?? 10 * 60_000);
     bgTimer.unref?.();
     // A background session has no pane to type into: what is passed on to it goes in as a prompt
     // through the background service, from the directory it runs in, once it is not at work.
@@ -1636,6 +1639,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             clearInterval(warmRecap);
             clearInterval(wakeTimer);
             clearInterval(bgTimer);
+            clearInterval(memTimer);
             update?.stop();
             runner.stop();
             clearTimeout(pending);

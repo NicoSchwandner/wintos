@@ -17,7 +17,7 @@ describe("normalize", () => {
         expect(normalize(node(), "me", { requestedMe: true, requestedTeam: false })).toEqual({
             repo: "o/r", number: 7, url: "https://github.com/o/r/pull/7", title: "Add flag", author: "ana",
             isDraft: false, createdAt: "2026-09-25T09:00:00Z", reviewDecision: "REVIEW_REQUIRED", checks: "SUCCESS", head: "abc123",
-            conflict: false, requestedMe: true, requestedTeam: false, reviewedByMe: false, reviewers: ["me"],
+            conflict: false, requestedMe: true, requestedTeam: false, reviewedByMe: false, reviewers: ["me"], people: ["me"],
             additions: 10, deletions: 2, branch: "DEV-1-flag", movedAt: "2026-09-25T09:00:00Z",
         }));
 

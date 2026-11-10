@@ -31,6 +31,15 @@ describe("queueModel", () => {
         expect([d.groups, d.team]).toEqual([[], 0]);
     });
 
+    test("a team PR a person other than you is asked to review is theirs, not the team's; with only teams asked it stays", () => {
+        const handed = queueModel([pr({ number: 8, author: "bo.k", requestedTeam: true, reviewers: ["core-reviewers", "tobias"], people: ["tobias"] })], "me", MON);
+        expect([handed.groups, handed.team]).toEqual([[], 0]);
+        const open = queueModel([pr({ number: 8, author: "bo.k", requestedTeam: true, reviewers: ["core-reviewers"], people: [] })], "me", MON);
+        expect(open.team).toBe(1);
+        const mineToo = queueModel([pr({ number: 8, author: "bo.k", requestedTeam: true, reviewers: ["core-reviewers", "me"], people: ["me", "bo.k"] })], "me", MON);
+        expect(mineToo.team).toBe(1);
+    });
+
     test("your PRs waiting on others count as waiting, not yours", () => {
         const w = queueModel([pr({ number: 6, reviewers: ["ana"] })], "me", MON);
         expect([w.groups.map((g) => g.group), w.yours, w.waiting]).toEqual([["waiting"], 0, 1]);

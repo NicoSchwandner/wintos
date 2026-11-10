@@ -21,8 +21,10 @@ export function queueModel(prs: PR[], me: string, now: number, snoozes: Snoozes 
         return { pr, group, mine: isMine(pr, me), age: ageLabel(pr, now), qualifier: qualifier(pr, group, { reviewers: false }), total: pr.additions + pr.deletions, children: [] };
     };
     const snoozed = prs.filter((p) => isSnoozed(p, snoozes, now)).map(toRow);
-    // Someone else's draft asks nothing of your team yet, whoever is requested on it.
-    const all = prs.filter((p) => !isSnoozed(p, snoozes, now)).map(toRow).filter((r) => !(r.group === "team" && (r.pr.isDraft || (ownTeam && !r.pr.reviewers.some((x) => ownTeam.includes(x))))));
+    // Someone else's draft asks nothing of your team yet, whoever is requested on it. Nor does one
+    // a person other than you is asked to review: the team's request went to them.
+    const handed = (pr: PR) => (pr.people ?? []).some((x) => x !== me && x !== pr.author);
+    const all = prs.filter((p) => !isSnoozed(p, snoozes, now)).map(toRow).filter((r) => !(r.group === "team" && (r.pr.isDraft || handed(r.pr) || (ownTeam && !r.pr.reviewers.some((x) => ownTeam.includes(x))))));
     const byUrl = new Map(all.map((r) => [r.pr.url, r]));
     const numbers = new Map(prs.map((p) => [p.url, p.number])); // snoozed bases too
     // A stacked PR that asks nothing of you waits under its base; one that does keeps its own

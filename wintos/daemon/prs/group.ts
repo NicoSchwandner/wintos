@@ -20,6 +20,7 @@ export type PR = {
     reviewedByMe: boolean;
     assignedMe?: boolean; // someone else's PR handed to you to drive
     reviewers: string[]; // people and teams still asked, bots excluded
+    people?: string[]; // of those, the people (not teams)
     changesRequestedBy?: string;
     changesRerequested?: boolean; // everyone who asked for changes has been asked to review again
     approvedBy?: string[]; // people whose latest review approves

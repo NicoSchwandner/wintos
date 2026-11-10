@@ -35,6 +35,7 @@ export function normalize(n: Node, me: string, asked: { requestedMe: boolean; re
         .filter((r): r is Reviewer => !!r && r.__typename !== "Bot")
         .map((r) => r.login ?? r.name ?? "")
         .filter((l) => l && !isBot(l));
+    const people = n.reviewRequests.nodes.flatMap((r) => (r.requestedReviewer?.__typename === "User" && r.requestedReviewer.login && !isBot(r.requestedReviewer.login) ? [r.requestedReviewer.login] : []));
     const latest = reviews.map((r) => r.submittedAt).sort().pop();
     const checks = n.commits.nodes[0]?.commit.statusCheckRollup?.state;
     const pr: PR = {
@@ -50,6 +51,7 @@ export function normalize(n: Node, me: string, asked: { requestedMe: boolean; re
         requestedTeam: asked.requestedTeam,
         reviewedByMe: reviews.some((r) => r.author!.login === me),
         reviewers,
+        people,
         additions: n.additions,
         deletions: n.deletions,
         branch: n.headRefName,

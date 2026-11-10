@@ -60,14 +60,16 @@ export const MeetingCard = memo(({ meetings }: { meetings: Meeting[] }) => {
 MeetingCard.displayName = "MeetingCard";
 
 // The window's top edge (design D): in the last two minutes an apricot line fills from left to
-// right and is full when the meeting starts. Never takes a click.
+// right and is full when the meeting starts. Never takes a click. It lies over the epic strip's
+// top border, which can be orange itself: on the window's ground, with a gap of ground below it,
+// it covers that border instead of running into it.
 export const MeetingEdge = memo(({ meetings }: { meetings: Meeting[] }) => {
     const now = useNow(1000);
     const n = nextMeetings(meetings, now);
     if (!n.soon) return null;
     const done = 1 - n.msLeft! / WARN_MS;
     return (
-        <div aria-hidden style={{ position: "fixed", top: 0, left: 0, right: 0, height: 3, zIndex: 1000, pointerEvents: "none", background: `color-mix(in srgb, ${T.apricot} 20%, transparent)` }}>
+        <div aria-hidden data-wintos="meeting-edge" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 4, zIndex: 1000, pointerEvents: "none", background: `color-mix(in srgb, ${T.apricot} 22%, ${T.ground})`, borderBottom: `3px solid ${T.ground}` }}>
             <div style={{ height: "100%", width: `${Math.round(done * 1000) / 10}%`, background: T.apricot, transition: "width 1s linear" }} />
         </div>
     );

@@ -36,3 +36,10 @@ test("a pane that already resumes the session counts, so it isn't resumed twice"
     expect(resumes([undefined, "cd '/w' && claude --resume 's'"], "s")).toBe(true);
     expect(resumes(["cd '/w' && claude --resume 'other'"], "s")).toBe(false);
 });
+
+test("a due wake for a paused session starts it again in its own pane first; once it runs, the wake is typed", () => {
+    const paused = session({ paused: 3, restored: true, cwd: "/w" });
+    expect(deliverable({ s: wake }, [paused], [], "t")).toEqual([{ kind: "wake-resume", sessionId: "s", blockId: "b", script: "cd '/w' && claude --resume 's'" }]);
+    expect(deliverable({ s: wake }, [paused], [], "other")).toEqual([]);
+    expect(deliverable({ s: wake }, [session({ state: "idle" })], [], "t")[0]).toMatchObject({ kind: "type" });
+});

@@ -1,5 +1,6 @@
 import { readJson, writeJsonAtomic } from "../persist";
 import { tmuxMouse, tmuxPanes } from "../sessions/tmux";
+import { IDLE_PAUSE_MS, pausable, readPaneClaudes } from "../sessions/pause";
 import { execFile } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "fs";
 import { AsyncLocalStorage } from "async_hooks";
@@ -77,7 +78,7 @@ const isRoadmapOp = (o: unknown): o is RoadmapOp => {
 };
 // journal: a daily journal for the Today page; lunch: "HH:MM-HH:MM", never counted as free time.
 
-export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined>; bgStop?: (bgId: string) => Promise<boolean>; tmuxPanes?: () => Set<string>; tmuxMouse?: (blockId: string, on: boolean) => void; bgEveryMs?: number; memEveryMs?: number }): Promise<WintosServer> {
+export async function startServer(opts: { root: string; port: number; host?: string; uiOrigins?: string[]; plugins?: Plugin[]; token?: string; journal?: Journal; onJournalChange?: () => void; lunch?: string; workday?: string; recapCmd?: string; recapExtra?: string; fixCmd?: string; fixCwd?: string; repoNamesFile?: string; claudeDirs?: string[]; prNow?: (url: string, who: Who, events: WakeEvent[]) => Promise<PrNow | undefined>; wakeEveryMs?: number; fetchDone?: (urls: string[]) => Promise<DonePr[]>; checkout?: string; updateEveryMs?: number; restart?: (repo: string) => void; moveEveryMs?: number; termCols?: number; epicsRoot?: string; calendarIcs?: string; listAgents?: () => Promise<string | undefined>; bgSend?: (sessionId: string, cwd: string | undefined, prompt: string) => Promise<boolean>; bgLogs?: (bgId: string) => Promise<string | undefined>; bgStop?: (bgId: string) => Promise<boolean>; tmuxPanes?: () => Set<string>; tmuxMouse?: (blockId: string, on: boolean) => void; bgEveryMs?: number; memEveryMs?: number; paneClaudes?: () => Promise<Map<string, { pid: number; busy: boolean }>>; stopClaude?: (pid: number) => void; pauseEveryMs?: number; idlePauseMs?: number }): Promise<WintosServer> {
     const store = new ProjectStore(opts.root);
     // Beside the projects in main.ts; a hidden folder in them by default, which the project store skips.
     const epics = new EpicStore(opts.epicsRoot ?? join(opts.root, ".epics"));
@@ -277,6 +278,27 @@ export async function startServer(opts: { root: string; port: number; host?: str
     const bgTimer = setInterval(() => void pollBg(), opts.bgEveryMs ?? 15_000);
     // Each WintOS process's memory into the event log (memory/memory.ts), the biggest first.
     const memTimer = setInterval(() => void sampleMemory(process.ppid).then((procs) => procs.length && logEvent("memory", { totalMb: procs.reduce((n, p) => n + p.mb, 0), top: procs.slice(0, 8).map((p) => `${p.role} ${p.pid} ${p.mb} MB`) })).catch(() => {}), opts.memEveryMs ?? 10 * 60_000);
+    // Idle sessions paused (sessions/pause.ts): their Claude stopped, row and pane kept, resumed on
+    // opening or by a wake. seenAt: when you were last at each (POST /focus).
+    const seenAt = new Map<string, number>();
+    const pauseIdle = async (why: string, idleMs?: number) => {
+        const now = Date.now();
+        const candidates = pausable(sessions.values(), now, seenAt, focused?.sessionId, idleMs);
+        if (!candidates.length) return 0;
+        const claudes = await (opts.paneClaudes ?? readPaneClaudes)();
+        let n = 0;
+        for (const c of candidates) {
+            const p = claudes.get(c.blockId);
+            const s = sessions.get(c.id);
+            if (!p || p.busy || !s || s.state === "working" || s.restored) continue;
+            sessions = new Map(sessions).set(s.id, { ...s, restored: true, paused: now });
+            (opts.stopClaude ?? ((pid) => { try { process.kill(pid, "SIGTERM"); } catch { /* gone already */ } }))(p.pid);
+            n++;
+        }
+        if (n) saveSessions(why), broadcast();
+        return n;
+    };
+    const pauseTimer = setInterval(() => void pauseIdle("idle and unseen for 8 hours", opts.idlePauseMs ?? IDLE_PAUSE_MS).catch(() => {}), opts.pauseEveryMs ?? Math.min(10 * 60_000, opts.idlePauseMs ?? IDLE_PAUSE_MS));
     bgTimer.unref?.();
     // A background session has no pane to type into: what is passed on to it goes in as a prompt
     // through the background service, from the directory it runs in, once it is not at work.
@@ -700,6 +722,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (![ev?.tabId, ev?.blockId, p?.session_id, p?.hook_event_name].every(isSafe))
                     return send(res, 400, "need string tabId, blockId, payload.session_id, payload.hook_event_name");
                 const before = sessions.get(p.session_id);
+                // A paused session's Claude ending is the pause itself: the session stays as it is.
+                if (before?.paused && p.hook_event_name === "SessionEnd") return send(res, 200, "");
                 const left = leavingFor(sessions, ev);
                 // Shelved before the reduce drops them, while their status and PRs are still on hand.
                 for (const l of left) shelveLive(l);
@@ -1094,6 +1118,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (focused?.sessionId === b.sessionId || (!focused && b.sessionId === null)) return send(res, 200, "");
                 logEvent("focus", { id: b.sessionId });
                 const now = Date.now();
+                if (focused) seenAt.set(focused.sessionId, now);
+                if (typeof b.sessionId === "string") seenAt.set(b.sessionId, now);
                 if (focused) countTime(now, lastIdleMs);
                 focused = typeof b.sessionId === "string" ? { sessionId: b.sessionId, since: now } : undefined;
                 return send(res, 200, "");
@@ -1219,6 +1245,8 @@ export async function startServer(opts: { root: string; port: number; host?: str
             }
             if (req.method === "POST" && url.pathname === "/update") {
                 if (!update?.repo || !update.behind()) return send(res, 409, "nothing to update: the checkout has no commits the running WintOS lacks");
+                // The idle ones pause; those at work run on in tmux through the restart.
+                await pauseIdle("WintOS updating").catch(() => 0);
                 (opts.restart ?? ((repo) => restartWintos(repo, port !== DEFAULT_PORT)))(update.repo);
                 return send(res, 202, "");
             }
@@ -1640,6 +1668,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
             clearInterval(wakeTimer);
             clearInterval(bgTimer);
             clearInterval(memTimer);
+            clearInterval(pauseTimer);
             update?.stop();
             runner.stop();
             clearTimeout(pending);

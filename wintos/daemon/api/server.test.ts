@@ -1779,6 +1779,31 @@ describe("done PRs", () => {
     });
 });
 
+describe("pause", () => {
+    test("an idle session is paused: its Claude stopped, its row kept; its Claude ending changes nothing; it runs again on resume", async () => {
+        const stop = vi.fn();
+        let busy = true;
+        srv.close();
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", paneClaudes: async () => new Map([["blk-1", { pid: 4242, busy }]]), stopClaude: stop, pauseEveryMs: 50, idlePauseMs: 0 });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        const me = async () => (await (await fetch(base + "/state")).json()).sessions.find((x: { id: string }) => x.id === prompt.session_id);
+        await event(prompt);
+        await event({ ...prompt, hook_event_name: "Stop" });
+        await new Promise((r) => setTimeout(r, 200));
+        expect(stop).not.toHaveBeenCalled(); // it runs a command: at work
+        busy = false;
+        await vi.waitFor(() => expect(stop).toHaveBeenCalledWith(4242), { timeout: 2_000, interval: 50 });
+        expect(await me()).toMatchObject({ restored: true, paused: expect.any(Number) });
+        expect(stop).toHaveBeenCalledTimes(1);
+        await event({ ...prompt, hook_event_name: "SessionEnd", reason: "other" });
+        expect(await me()).toMatchObject({ restored: true, state: "waiting" });
+        await event({ ...prompt, hook_event_name: "SessionStart" });
+        const back = await me();
+        expect(back.restored).toBeUndefined();
+        expect(back.paused).toBeUndefined();
+    });
+});
+
 describe("tmux mouse", () => {
     test("a pane's tmux has the mouse on while its Claude runs, once; off when it quits, not when WintOS does", async () => {
         const mouse = vi.fn();
@@ -1796,7 +1821,7 @@ describe("tmux mouse", () => {
 });
 
 describe("update", () => {
-    test("the state counts the checkout's new commits and the panes in tmux a restart keeps, and /update restarts from it only then", async () => {
+    test("the state counts the checkout's new commits and the panes in tmux a restart keeps; /update pauses the idle sessions and restarts from it only then", async () => {
         const repo = mkdtempSync(join(tmpdir(), "wintos-checkout-"));
         const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, encoding: "utf8" });
         git("init", "-q");
@@ -1804,12 +1829,16 @@ describe("update", () => {
         git("commit", "-q", "--allow-empty", "-m", "running");
         const restart = vi.fn();
         srv.close();
-        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", checkout: repo, updateEveryMs: 50, restart, tmuxPanes: () => new Set(["in-tmux"]) });
+        const stop = vi.fn();
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", checkout: repo, updateEveryMs: 50, restart, tmuxPanes: () => new Set(["in-tmux"]), paneClaudes: async () => new Map([["blk-1", { pid: 77, busy: false }]]), stopClaude: stop });
         base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
         expect((await post("/update", {})).status).toBe(409);
         git("commit", "-q", "--allow-empty", "-m", "new");
         await vi.waitFor(async () => expect((await (await fetch(`${base}/state`)).json()).update).toEqual({ behind: 1, kept: ["in-tmux"] }), { timeout: 5_000, interval: 100 });
+        await event(prompt);
+        await event({ ...prompt, hook_event_name: "Stop" });
         expect((await post("/update", {})).status).toBe(202);
+        expect(stop).toHaveBeenCalledWith(77); // the idle session paused before the restart
         expect(restart).toHaveBeenCalledWith(execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: repo, encoding: "utf8" }).trim());
     });
 });

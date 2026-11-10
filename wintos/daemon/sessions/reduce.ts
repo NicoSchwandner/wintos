@@ -32,6 +32,7 @@ export type Session = {
     ask?: Ask; // what a waiting turn expects of the developer; none yet while it is being read
     askPending?: Ask; // `wintos ask` ran this turn; the turn's Stop asks it
     restored?: boolean; // saved at the last quit, its Claude not started again yet
+    paused?: number; // when WintOS stopped its idle Claude (sessions/pause.ts); restored too, until it runs again
     reading?: true; // its turn ended unsaid; the model is reading how (server.ts readEndedTurn): not yet yours
     prs?: string[]; // the PRs it owns: it was the first to touch them (daemon/prs/owners.ts)
     touched?: string[]; // PRs it worked on that another session owns: it is "also in" them
@@ -234,6 +235,8 @@ export function restoreSessions(saved: Session[], now?: number, alive: Set<strin
         // One its epic's agent started runs on in Claude's background service: nothing waits to
         // restart. A restored mark an older WintOS saved on it goes, or no wake reached it again.
         if (s.bgId) out.set(s.id, { ...rest, restored: undefined });
+        // Paused: its pane's shell lives on in tmux, its Claude does not.
+        else if (s.paused) out.set(s.id, { ...rest, state, restored: true });
         else if (alive.has(s.blockId)) out.set(s.id, { ...rest, state, restored: undefined });
         else out.set(s.id, { ...rest, state, restored: true });
     }
@@ -383,3 +386,7 @@ export const liveIn = (sessions: Map<string, Session>, blockId: string, sessionI
     const named = sessionId ? sessions.get(sessionId) : undefined;
     return named && named.state !== "ended" ? named : liveSessionIn(sessions.values(), blockId);
 };
+
+// The line that starts a session again in its pane: the one it reported, else from its folder.
+export const resumeScriptOf = (s: Pick<Session, "id" | "cwd" | "resume">): string | undefined =>
+    s.resume ?? (s.cwd ? `cd '${s.cwd.replace(/'/g, "'\\''")}' && claude --resume '${s.id}'` : undefined);

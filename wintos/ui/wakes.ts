@@ -37,6 +37,12 @@ export function useWakeDelivery(wakes: Wakes | undefined, sessions: Session[] | 
     useEffect(() => {
         for (const d of due) {
             if (busy.has(d.sessionId)) continue;
+            if (d.kind === "wake-resume") {
+                if (resumingNow(d.sessionId)) continue;
+                noteResume(d.script);
+                void typeIntoPane(d.blockId, d.script).catch(() => {});
+                continue;
+            }
             if (d.kind === "resume") {
                 if (resumingNow(d.sessionId) || resumes(tabScripts(tabId), d.sessionId)) continue;
                 noteResume(d.script);

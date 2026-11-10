@@ -13,6 +13,7 @@ import { Key } from "./Key";
 import { setLatestStreak } from "./keyGame";
 import { Rich } from "./notes/ProjectNotes";
 import { MeetingCard, MeetingEdge } from "./MeetingCard";
+import { usePausedResume } from "./pausedResume";
 import { closedWakes, useWakeDelivery, type ClosedWake } from "./wakes";
 import { useSchemeNotices } from "./schemeNotices";
 import { meetingsFrom } from "./meetings";
@@ -92,6 +93,7 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
     const now = useNow();
     const fullScreen = useAtomValue(atoms.isFullScreen);
     const mainView = useAtomValue(mainViewAtom);
+    usePausedResume(raw?.sessions, activeTabId, lookingAt, typeof document !== "undefined" && document.hasFocus() && !isPage(mainView));
     const switchTarget = useAtomValue(switchTargetAtom);
     const [renaming, setRenaming] = useAtom(renamingAtom);
 

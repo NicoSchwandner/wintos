@@ -3,7 +3,7 @@ import { useFocusOnMount } from "./useFocusOnMount";
 import { useZoneKeys } from "./zones";
 import { wantPane } from "./focusOwner";
 import { motionKeys } from "./listMotion";
-import { enterProject, focusSession, reopenProject, resumePane } from "./focus";
+import { enterProject, focusSession, latestSessions, reopenProject, resumePane } from "./focus";
 import { atoms, createTab } from "@/store/global";
 import { offerPrompt, prLinkPaste } from "./newproject";
 import { useAtomValue } from "jotai";
@@ -13,7 +13,8 @@ import type { Group } from "../daemon/prs/group";
 import { runAction } from "./menu";
 import { Key, KeyOr } from "./Key";
 import { fixNote, initials, keepSelection, matchesPr, queueModel, reviewerChips, rowColumns, type QueueRow, type RowColumns } from "./prs";
-import { typeWhenFree } from "./typeIntoPane";
+import { typeIntoPane, typeWhenFree } from "./typeIntoPane";
+import { noteResume } from "./resuming";
 import type { FixRun } from "../daemon/fixer/runner";
 import { groupOf, lastMovement, nextWorkingDayStart } from "../daemon/prs/group";
 import { nextAction, type NextKind } from "../daemon/fixer/plan";
@@ -242,14 +243,30 @@ PrQueue.displayName = "PrQueue";
 
 const NEXT_LABEL: Record<NextKind, string> = { conflict: "fix the conflict", ci: "fix red CI", comments: "work the review comments", rereview: "re-review", review: "review", merge: "merge" };
 
-// A review needs you in it: a new project whose Claude starts on the link. The rest goes the
-// fixer's way, typed into the owning session's pane when it is live.
+type Into = { blockId?: string; tabId?: string; prompt?: string; resume?: string };
+
+// Into the session that holds the PR, in its pane: a paused one is resumed there first, and the
+// prompt goes in once it runs (up to 90 s).
+async function intoSession(r: Into): Promise<void> {
+    if (!r.blockId || !r.prompt) return;
+    if (r.resume) {
+        noteResume(r.resume);
+        await typeIntoPane(r.blockId, r.resume);
+        const up = () => latestSessions().some((s) => s.blockId === r.blockId && !s.restored && s.state !== "ended" && s.state !== "working");
+        for (let i = 0; i < 90 && !up(); i++) await new Promise((done) => setTimeout(done, 1000));
+    }
+    await typeWhenFree(r.blockId, r.prompt);
+}
+
+// f: the row's next step, in the session that holds the PR when one does; a review you go to
+// with it. A review no session holds needs you in it: a new project whose Claude starts on the link.
 async function dispatchNext(url: string): Promise<void> {
     const res = await daemonFetch("/fixer/next", { method: "POST", body: { url } }).catch(() => undefined);
     if (!res?.ok) return;
-    const r = (await res.json()) as { review?: boolean; blockId?: string; prompt?: string };
+    const r = (await res.json()) as Into & { review?: boolean };
     if (r.review) return void (offerPrompt(`\x1b[200~${url} review\x1b[201~\r`), createTab());
-    if (r.blockId && r.prompt) await typeWhenFree(r.blockId, r.prompt);
+    if (r.blockId && r.tabId && r.prompt?.endsWith(" review")) focusSession({ tabId: r.tabId, blockId: r.blockId });
+    await intoSession(r);
 }
 
 // The same route an automatic run takes: a live owning session gets the prompt typed into its
@@ -257,8 +274,7 @@ async function dispatchNext(url: string): Promise<void> {
 async function dispatchCiFix(url: string): Promise<void> {
     const res = await daemonFetch("/fixer/ci", { method: "POST", body: { url } }).catch(() => undefined);
     if (!res?.ok) return;
-    const r = (await res.json()) as { run: FixRun; blockId?: string; prompt?: string };
-    if (r.blockId && r.prompt) await typeWhenFree(r.blockId, r.prompt);
+    await intoSession((await res.json()) as Into & { run: FixRun });
 }
 
 // Inline in a clipped one-line title: its own line box, or the border is cut off.

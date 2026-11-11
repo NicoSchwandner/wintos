@@ -1133,7 +1133,7 @@ describe("the PR fixer", () => {
         await until(async () => (await fixerOf()).runs.length === 2);
     });
 
-    test("f: each row's next step, a review opened by the window, nothing for a merged PR", async () => {
+    test("f: each row's next step, a review opened by the window unless a session holds it, nothing for a merged PR", async () => {
         const dir = await start(true);
         await until(async () => (await (await fetch(base + "/state")).json()).plugins["gh-prs"]);
         const next = (n: number) => post("/fixer/next", { url: `${RED.slice(0, -1)}${n}` });
@@ -1145,6 +1145,9 @@ describe("the PR fixer", () => {
         await event(prompt);
         await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [`${RED.slice(0, -1)}2`] });
         expect(await (await next(2)).json()).toMatchObject({ blockId: "blk-1", run: { kind: "rereview", route: "pane" } });
+        // A first review a session already holds goes to it, not to a new view.
+        await event({ hook_event_name: "PostToolUse", session_id: prompt.session_id, prs: [`${RED.slice(0, -1)}3`] });
+        expect(await (await next(3)).json()).toEqual({ blockId: "blk-1", tabId: "tab-1", prompt: `${RED.slice(0, -1)}3 review` });
         expect((await next(1)).status).toBe(409);
         expect((await post("/fixer/next", { url: "https://github.com/o/r/pull/77" })).status).toBe(404);
     });

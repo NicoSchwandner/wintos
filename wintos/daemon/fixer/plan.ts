@@ -33,9 +33,15 @@ export function nextAction(pr: PR, me: string, group: Group): NextKind | undefin
 
 // Everything but a conflict goes back to the session that knows the code: for a re-review, the
 // one that reviewed it, which holds the PR as its own or as "also in".
+// The session in a pane that holds the PR: owns it, or (touched) worked on it. Its owner first.
+export function holderOf(pr: PR, sessions: Session[], touched: boolean): Session | undefined {
+    const live = sessions.filter((s) => s.state !== "ended" && !!s.blockId && !(s.bgId && !s.attachedTo));
+    return live.find((s) => s.prs?.includes(pr.url)) ?? (touched ? live.find((s) => s.touched?.includes(pr.url)) : undefined);
+}
+
 export function fixJob(pr: PR, sessions: Session[], shelf: Shelf, kind: FixKind = "ci"): FixJob {
     const holds = (x: { prs?: string[]; touched?: string[] }) => !!x.prs?.includes(pr.url) || (kind === "rereview" && !!x.touched?.includes(pr.url));
-    const live = sessions.find((s) => s.state !== "ended" && holds(s));
+    const live = holderOf(pr, sessions, kind === "rereview");
     if (live) return { kind, pr, route: { kind: "pane", tabId: live.tabId, blockId: live.blockId, sessionId: live.id } };
     const shelved = Object.values(shelf).flat().find(holds);
     if (shelved) return { kind, pr, route: { kind: "resume", sessionId: shelved.sessionId, script: shelved.script } };

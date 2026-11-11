@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { PR } from "../prs/group";
 import type { Session } from "../sessions/reduce";
 import type { Shelf } from "../shelf/shelf";
-import { fixJob, conflictJobs, fixKey, nextAction } from "./plan";
+import { fixJob, conflictJobs, fixKey, holderOf, nextAction } from "./plan";
 
 const pr = (n: number, o: Partial<PR> = {}): PR =>
     ({ repo: "o/r", number: n, url: `https://github.com/o/r/pull/${n}`, title: `PR ${n}`, author: "me", isDraft: false, createdAt: "", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: `b${n}`, head: `sha${n}`, ...o }) as PR;
@@ -72,4 +72,15 @@ describe("fixJob for a re-review", () => {
         const shelf: Shelf = { proj: [{ sessionId: "s", script: RESUME("s"), label: "x", touched: [p.url], at: 1 }] };
         expect(fixJob(p, [], shelf, "rereview")).toMatchObject({ kind: "rereview", route: { kind: "resume", sessionId: "s" } });
     });
+});
+
+test("holderOf: the session in a pane that owns the PR, else (for a review) one that worked on it; never one ended or without a pane", () => {
+    const pr = { url: "https://github.com/o/r/pull/9" } as Parameters<typeof holderOf>[0];
+    const touched = { ...session("t", "idle", []), touched: [pr.url] };
+    const owner = session("o", "waiting", [pr.url]);
+    expect(holderOf(pr, [touched, owner], true)?.id).toBe("o");
+    expect(holderOf(pr, [touched], true)?.id).toBe("t");
+    expect(holderOf(pr, [touched], false)).toBeUndefined();
+    expect(holderOf(pr, [session("e", "ended", [pr.url]), { ...session("bg", "idle", [pr.url]), bgId: "x" }], true)).toBeUndefined();
+    expect(holderOf(pr, [{ ...session("p", "idle", [pr.url]), restored: true }], false)?.id).toBe("p"); // paused: resumed in its pane
 });

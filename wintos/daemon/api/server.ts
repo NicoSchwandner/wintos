@@ -33,12 +33,12 @@ import { emptyStats, recordClick, recordDayDone, recordKey, type KeyStats } from
 import { resumedSession, shelve, unshelve, withTitle, type Shelf, type Shelved } from "../shelf/shelf";
 import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
 import { doneUnit, serializeUnits, setUnits, startUnit, unitIndex, UNIT_MAX, UNITS_MAX, type Unit } from "../projects/units";
-import { fixJob, fixPrompt, nextAction, type FixJob } from "../fixer/plan";
+import { fixJob, fixPrompt, holderOf, nextAction, type FixJob } from "../fixer/plan";
 import { reassignPrs, touchPrs } from "../prs/owners";
 import { groupOf, type DonePr, type PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { isWintosPrompt, namePrompt, nameKey, userPrompts } from "../sessions/naming";
-import { finishSession, freshStatus, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setEpic, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession } from "../sessions/reduce";
+import { finishSession, freshStatus, HookEvent, liveSubagents, parkSession, reduceSession, restoreSessions, Session, setEpic, setLane, setStatus, setStep, setTodo, tickTodo, endSessions, leavingFor, unparkSession, nameSession, renameSession, acceptSuggestedName, titleSession, liveIn, prLinks, askSession, readTurn, attachSession, resumeScriptOf } from "../sessions/reduce";
 import { askCard, askPrompt, guessAsk, isAskKind, parseAsk } from "../sessions/asks";
 import { changes, trail } from "../sessions/trail";
 import { eventLog } from "../events";
@@ -1264,10 +1264,11 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (pr.checks !== "FAILURE" && pr.checks !== "ERROR") return send(res, 409, "its CI is not red");
                 const job = fixJob(pr, [...sessions.values()], shelf);
                 const run = fixer.start(job);
-                return json(res, { run, ...(job.route.kind === "pane" ? { blockId: job.route.blockId, tabId: job.route.tabId, prompt: fixPrompt(job) } : {}) });
+                const held = job.route.kind === "pane" ? sessions.get(job.route.sessionId) : undefined;
+                return json(res, { run, ...(job.route.kind === "pane" ? { blockId: job.route.blockId, tabId: job.route.tabId, prompt: fixPrompt(job), resume: held?.restored ? resumeScriptOf(held) : undefined } : {}) });
             }
-            // f in the PRs tab: the row's next step. A first review needs you in it, so the window opens
-            // it as a session of its own; so does a re-review no session holds.
+            // f in the PRs tab: the row's next step, in the session that holds the PR when one does. A
+            // review no session holds needs you in it, so the window opens it as a session of its own.
             if (req.method === "POST" && url.pathname === "/fixer/next") {
                 const b = (await body(req)) as { url?: unknown };
                 const gh = ghData();
@@ -1275,11 +1276,20 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (!gh || !pr) return send(res, 404, "no such PR in the PR list");
                 const kind = nextAction(pr, gh.me, groupOf(pr, gh.me, Date.now()));
                 if (!kind) return send(res, 409, "nothing to do for it but wait");
-                if (kind === "review") return json(res, { review: true });
-                const job: FixJob = kind === "conflict" ? { kind, pr, route: { kind: "fresh" } } : fixJob(pr, [...sessions.values()], shelf, kind);
+                // A session that already holds the PR gets it in its pane (a paused one is resumed
+                // there first); only without one does a review open a new view.
+                const resumeOf = (id: string) => {
+                    const s = sessions.get(id);
+                    return s?.restored ? resumeScriptOf(s) : undefined;
+                };
+                if (kind === "review") {
+                    const at = holderOf(pr, [...sessions.values()], true);
+                    return json(res, at ? { blockId: at.blockId, tabId: at.tabId, prompt: `${pr.url} review`, resume: resumeOf(at.id) } : { review: true });
+                }
+                const job: FixJob = fixJob(pr, [...sessions.values()], shelf, kind);
                 if (kind === "rereview" && job.route.kind === "fresh") return json(res, { review: true });
                 const run = fixer.start(job);
-                return json(res, { run, ...(job.route.kind === "pane" ? { blockId: job.route.blockId, tabId: job.route.tabId, prompt: fixPrompt(job) } : {}) });
+                return json(res, { run, ...(job.route.kind === "pane" ? { blockId: job.route.blockId, tabId: job.route.tabId, prompt: fixPrompt(job), resume: resumeOf(job.route.sessionId) } : {}) });
             }
             // Coming back to a session after a while: what you asked, what it did, what it needs.
             const back = /^\/sessions\/([^/]+)\/reentry$/.exec(url.pathname);

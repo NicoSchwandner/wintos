@@ -405,6 +405,10 @@ async function appMain() {
     const ready = await getWaveSrvReady();
     console.log("wavesrv ready signal received", ready, Date.now() - startTs, "ms");
     await electronApp.whenReady();
+    // WintOS loads its UI from Vite, which marks its pre-bundled libraries cacheable forever under a
+    // stamp that can outlive them: a restart after the cache was rebuilt asked for a chunk that no
+    // longer existed and the window stayed blank. Everything here comes from the local server.
+    if (isDev) await electron.session.defaultSession.clearCache();
     configureAuthKeyRequestInjection(electron.session.defaultSession);
     initIpcHandlers();
 

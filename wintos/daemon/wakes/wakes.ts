@@ -27,8 +27,6 @@ export type PrNow = { state: "OPEN" | "MERGED" | "CLOSED"; checks: "green" | "re
 
 const WORKING_DAYS_KEPT = 5;
 export const MAX_PROMPT = 1000;
-// More changed than this since your review, and the re-review is yours to look at, not the session's.
-export const REREVIEW_MAX_LINES = 50;
 
 // Changes that are no business logic: tests, generated code, lock files and dependency
 // manifests, project files, docs, and the tooling in a repo's root dot-folders (.github, .claude).
@@ -95,16 +93,13 @@ const WHEN: Record<WakeEvent, string> = { green: "goes green", merged: "is merge
 export const waitingOn = (w: Pick<Wake, "pr" | "until">) => `${refOf(w.pr)} ${WAITING[w.until]}`;
 // ref: how the window names the PR (its repo's short name), else owner/repo#n.
 export const wakesWhen = (w: Pick<Wake, "pr" | "until">, ref = refOf(w.pr)) => `wakes when ${ref} ${WHEN[w.until]}`;
-// A re-review past the line limit is the developer's: the session asks instead. Feedback is
-// triaged: small fixes it makes, a comment on the approach goes to the developer.
+// Feedback is triaged: small fixes the session makes, a comment on the approach goes to the developer.
 export function wakePrompt(w: Wake): string {
     const ref = refOf(w.pr);
-    // Not knowing how much changed counts as too much.
-    if (w.until === "rereview" && (w.lines === undefined || w.lines > REREVIEW_MAX_LINES)) {
+    if (w.until === "rereview") {
         const how = w.lines === undefined ? "an unknown amount of logic" : `${w.lines} lines of logic`;
-        return `[WintOS wake: ${ref} asks for your review again, and ${how} changed since your review, more than the ${REREVIEW_MAX_LINES} lines you may re-review on your own] Don't re-review it. Run \`wintos ask approve "re-review ${ref}: ${how} changed"\` and stop.`;
+        return `[WintOS wake: ${ref} asks for your review again; ${how} changed since your review] ${w.prompt}`;
     }
-    if (w.until === "rereview") return `[WintOS wake: ${ref} asks for your review again; ${w.lines} lines of logic changed since your review] ${w.prompt}`;
     if (w.until === "comments")
         return `[WintOS wake: ${ref} has new review feedback] ${w.prompt} Triage each comment first: fix the small ones; when one questions the approach or asks for a bigger change, don't change course on your own: run \`wintos ask decide "<the comment, a few words>"\` and stop.`;
     return `[WintOS wake: ${ref} is ${w.until === "green" ? "green" : w.until}] ${w.prompt}`;

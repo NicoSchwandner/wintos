@@ -20,14 +20,12 @@ describe("review events", () => {
     });
     test("a merged PR wants no more review: the wake is dropped", () =>
         expect(afterCheck({ a: wake({ until: "rereview" }) }, 50, { [URL]: pr({ state: "MERGED", requestedAgain: true }) }).dropped).toHaveLength(1));
-    test("a due re-review carries how much logic changed; past the limit the session asks instead", () => {
+    test("a due re-review carries how much logic changed, however much that is", () => {
         const small = afterCheck({ a: wake({ until: "rereview", prompt: "re-review the fixes" }) }, 50, { [URL]: pr({ requestedAgain: true, logicLines: 12 }) }).wakes.a;
         expect([small.lines, wakePrompt(small)]).toEqual([12, "[WintOS wake: o/r#7 asks for your review again; 12 lines of logic changed since your review] re-review the fixes"]);
-        const big = wakePrompt({ ...small, lines: 240 });
-        expect(big).toContain("Don't re-review it.");
-        expect(big).toContain('wintos ask approve "re-review o/r#7: 240 lines of logic changed"');
-        const unknown = afterCheck({ a: wake({ until: "rereview" }) }, 50, { [URL]: pr({ requestedAgain: true }) }).wakes.a;
-        expect(wakePrompt(unknown)).toContain("an unknown amount of logic changed");
+        expect(wakePrompt({ ...small, lines: 240 })).toBe("[WintOS wake: o/r#7 asks for your review again; 240 lines of logic changed since your review] re-review the fixes");
+        const unknown = afterCheck({ a: wake({ until: "rereview", prompt: "re-review the fixes" }) }, 50, { [URL]: pr({ requestedAgain: true }) }).wakes.a;
+        expect(wakePrompt(unknown)).toBe("[WintOS wake: o/r#7 asks for your review again; an unknown amount of logic changed since your review] re-review the fixes");
     });
     test("feedback comes with the triage: small fixes yes, a different approach is the developer's", () =>
         expect(wakePrompt(wake({ until: "comments", prompt: "work the comments." }))).toMatch(/^\[WintOS wake: o\/r#7 has new review feedback\] work the comments\. Triage each comment first: .*wintos ask decide/));

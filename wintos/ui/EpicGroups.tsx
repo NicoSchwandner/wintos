@@ -36,6 +36,10 @@ export function groupByEpic(rows: Row[], epics: EpicView[]): EpicGroup[] {
 
 // background: sessions the agents started in the background (no pane, so no row): listed under
 // their epic, a click opens one in a pane.
+// The background sessions no group lists (no epic, or one without a group here): those alone need
+// a place of their own above the epics.
+export const bgOutside = (background: Session[], groups: EpicGroup[]) => background.filter((s) => !groups.some((g) => g.epic && g.epic.id === s.epic));
+
 export function EpicGroups({ groups, renderRow, isHere = () => false, cursor, newStep, background = [] }: { groups: EpicGroup[]; renderRow: (r: Row) => React.ReactNode; isHere?: (r: Row) => boolean; cursor: string | null; newStep: (epic: string) => void; background?: Session[] }) {
     // An epic with nothing under it (Reviews, Elmah between errands) folds to one line, kept apart
     // at the bottom.

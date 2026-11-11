@@ -33,7 +33,7 @@ import { goToInbox } from "./inbox";
 import { useZoneKeys } from "./zones";
 import { cardValue, loadingPanels, pluginPanels } from "./panels";
 import { EpicAvatar } from "./EpicAvatar";
-import { EpicGroups, groupByEpic } from "./EpicGroups";
+import { bgOutside, EpicGroups, groupByEpic } from "./EpicGroups";
 import { useEpicReports } from "./epicReports";
 import { withoutEpic, type Look } from "./epicLook";
 
@@ -256,9 +256,9 @@ export const WintOSSidebar = memo(({ workspace }: { workspace: Workspace }) => {
                     </div>
                 ) : (
                     <>
-                        {/* Above the epics: what has no row in them, a closed view's wake and a background session. */}
-                        <Band kind="needs" count={wakeNeeds.length + bgNeeds.length}>
-                            {bgNeeds.map(bgCard)}
+                        {/* Above the epics: what has no row in them, a closed view's wake and a background session in no epic group (one in a group is listed there). */}
+                        <Band kind="needs" count={wakeNeeds.length + bgOutside(bgNeeds, groups).length}>
+                            {bgOutside(bgNeeds, groups).map(bgCard)}
                             {wakeNeeds.map(wakeCard)}
                         </Band>
                         <Band kind="read" count={wakeNews.length}>{wakeNews.map(wakeCard)}</Band>

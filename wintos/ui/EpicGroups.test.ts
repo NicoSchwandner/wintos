@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { Row } from "../daemon/ranking/rank";
 import type { Session } from "../daemon/sessions/reduce";
-import { groupByEpic } from "./EpicGroups";
+import { bgOutside, groupByEpic } from "./EpicGroups";
 import type { EpicView } from "./view";
 
 const row = (id: string, band: Row["band"], epic?: string): Row => ({ key: `s:${id}`, tabId: "t", band, lastAt: 0, sessions: [{ id, epic } as Session] });
@@ -26,4 +26,10 @@ test("the epic agent's row is its epic's header, not a row under it nor outside"
     expect(groups[0].rows.map((r) => r.key)).toEqual(["s:w"]);
     expect(groups[0].agent?.key).toBe("s:ag");
     expect(groups.some((g) => !g.epic)).toBe(false);
+});
+
+test("a background session waiting on you is listed in its epic's group, so above the epics only one no group lists shows", () => {
+    const groups = groupByEpic([row("a", "quiet", "route")], [e("route"), e("other")]);
+    const bg = (id: string, epic?: string) => ({ id, tabId: "t", blockId: "", state: "waiting", since: 0, lastAt: 0, bgId: id, ...(epic ? { epic } : {}) }) as Session;
+    expect(bgOutside([bg("in", "route"), bg("none"), bg("gone", "deleted-epic")], groups).map((s) => s.id)).toEqual(["none", "gone"]);
 });

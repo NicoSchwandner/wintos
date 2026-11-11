@@ -241,6 +241,11 @@ describe("wintos-hook.sh on PostToolUse", () => {
         await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr view 56 -R acme/proposals", ""));
         expect(d.seen[0].body.payload).toMatchObject({ pr_verb: "view", prs: ["https://github.com/acme/proposals/pull/56"] });
     });
+    test("a PR a lander script opened (its \"PR: <link>\" line) counts as created by the session", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("bash ../Wint.AI.Workspaces/scripts/ws-pr.sh -m 'Record x'", "Pushed branch\nPR: https://github.com/o/ws/pull/3662\nauto-merge on\n"));
+        expect(d.seen[0].body.payload).toMatchObject({ prs: ["https://github.com/o/ws/pull/3662"], pr_verb: "create" });
+    });
     test("a command that is no gh pr command sends nothing", async () => {
         const d = await fakeDaemon("");
         await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("ls", "https://github.com/o/r/pull/12"));

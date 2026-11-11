@@ -54,3 +54,12 @@ test("pruneStarts: an ended session and one never listed within a day stop the p
     const sessions = new Map([sess("aaaaaaaa", "working"), sess("bbbbbbbb", "ended")]);
     expect(Object.keys(pruneStarts(starts, sessions, NEVER_SEEN_MS + 1))).toEqual(["aaaaaaaa", "dddddddd"]);
 });
+
+test("mergeBg: a session its hooks already reported, by its id, is the same session: kept with its pane, given its short id", () => {
+    const start = { epic: "e", step: "s", name: "Route: Cutover", agent: "ag", tabId: "t1", at: 0 };
+    const listed = parseAgents(JSON.stringify([{ id: "430f7f7e", sessionId: "430f7f7e-9d03", state: "working", status: "busy" }]));
+    const had = new Map([["430f7f7e-9d03", { id: "430f7f7e-9d03", tabId: "t4", blockId: "pane4", attachedTo: "pane4", state: "working", since: 1, lastAt: 1, epic: "e" } as Session]]);
+    const r = mergeBg(had, { "430f7f7e": start }, listed, 5);
+    expect(r.sessions.get("430f7f7e-9d03")).toMatchObject({ blockId: "pane4", attachedTo: "pane4", bgId: "430f7f7e" });
+    expect(r.fresh).toEqual([]);
+});

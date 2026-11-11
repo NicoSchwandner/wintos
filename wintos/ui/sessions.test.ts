@@ -88,3 +88,11 @@ test("a pane running claude attach <short id> shows the session its epic's agent
     expect(attachments([{ blockId: "v1", script: "claude attach 430f7f7e" }], [s("430f7f7e-9d03", { bgId: "430f7f7e", background: true })], "t", new Set())).toEqual([{ sessionId: "430f7f7e-9d03", blockId: "v1" }]);
     expect(attachments([{ blockId: "v1", script: "claude attach 430f7f7e" }], [s("other", { bgId: "11111111" })], "t", new Set())).toEqual([]);
 });
+
+test("a pane that attached once attaches again when the daemon holds its session in no pane any more", () => {
+    const panes = [{ blockId: "v1", script: "claude attach 13289177" }];
+    const bg = (o = {}) => ({ id: "s1", bgId: "13289177", tabId: "t0", blockId: "", state: "working", since: 0, lastAt: 0, ...o }) as never;
+    expect(attachments(panes, [bg()], "t", new Set(["s1@v1"]))).toEqual([{ sessionId: "s1", blockId: "v1" }]);
+    // held by the other pane: left alone
+    expect(attachments(panes, [bg({ blockId: "w2", tabId: "t2", attachedTo: "w2" })], "t", new Set(["s1@v1"]))).toEqual([]);
+});

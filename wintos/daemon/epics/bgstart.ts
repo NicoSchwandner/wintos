@@ -36,7 +36,8 @@ export function mergeBg(sessions: Map<string, Session>, starts: BgStarts, agents
     const moved: string[] = [];
     for (const [short, start] of Object.entries(starts)) {
         const a = agents.find((x) => x.id === short);
-        const known = [...out.values()].find((s) => s.bgId === short);
+        // By its short id, or by its session id: one its hooks already reported is the same session.
+        const known = [...out.values()].find((s) => s.bgId === short) ?? (a && out.get(a.sessionId));
         const state = bgState(a);
         if (!known) {
             if (!a) continue; // not listed yet: it is still starting
@@ -45,10 +46,11 @@ export function mergeBg(sessions: Map<string, Session>, starts: BgStarts, agents
             moved.push(a.sessionId);
             continue;
         }
+        if (!known.bgId) out.set(known.id, { ...known, bgId: short });
         if (known.state === state || known.state === "ended") continue;
         const ask = state === "waiting" ? { ask: { kind: "answer" as const, text: "it waits for your answer", by: "guess" as const } } : { ask: undefined };
         // The service lists it, so it runs: no restored mark stays on it.
-        out.set(known.id, { ...known, state, since: now, lastAt: now, ...ask, restored: undefined });
+        out.set(known.id, { ...out.get(known.id)!, state, since: now, lastAt: now, ...ask, restored: undefined });
         moved.push(known.id);
     }
     return { sessions: out, fresh, moved };

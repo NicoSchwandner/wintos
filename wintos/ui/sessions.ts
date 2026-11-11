@@ -31,15 +31,17 @@ export function unreadSessions(sessions: Session[], tabId: string, seen: Record<
 
 // Panes of this tab that resume a session WintOS places elsewhere: a `claude attach` shows it,
 // while its events come from the background service with an old pane's id.
-// sent: the panes this window already attached. Each attaches once: two panes resuming one session
-// (the same project open twice) would otherwise take it back from each other on every state.
+// sent: the panes this window already attached. Each attaches once while the session shows in a
+// pane: two panes resuming one session (the same project open twice) would otherwise take it back
+// from each other on every state. One the daemon holds in no pane any more is attached again.
 export function attachments(panes: { blockId: string; script?: string }[], sessions: Session[], tabId: string, sent: ReadonlySet<string>): { sessionId: string; blockId: string }[] {
     return panes.flatMap(({ blockId, script }) => {
         // `claude attach <short id>` shows a session its epic's agent started in the background.
         const id = script && /--resume '([\w-]+)'/.exec(script)?.[1];
         const bg = script && /claude attach ([0-9a-f]{8})\b/.exec(script)?.[1];
         const s = id ? sessions.find((x) => x.id === id && x.state !== "ended") : bg ? sessions.find((x) => x.bgId === bg && x.state !== "ended") : undefined;
-        return s && (s.blockId !== blockId || s.tabId !== tabId) && !sent.has(`${s.id}@${blockId}`) ? [{ sessionId: s.id, blockId }] : [];
+        const lost = !!s && (!s.blockId || (!!s.bgId && !s.attachedTo));
+        return s && (s.blockId !== blockId || s.tabId !== tabId) && (lost || !sent.has(`${s.id}@${blockId}`)) ? [{ sessionId: s.id, blockId }] : [];
     });
 }
 

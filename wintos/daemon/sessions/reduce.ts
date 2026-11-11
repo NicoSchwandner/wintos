@@ -169,6 +169,9 @@ export function reduceSession(sessions: Map<string, Session>, ev: HookEvent, now
     if (prev?.status) session.status = prev.status;
     if (prev?.name) session.name = prev.name;
     if (prev?.epic) session.epic = prev.epic;
+    // Its background-service id stays: without it the service's listing took it for a new session
+    // and replaced it, pane and all, every few seconds.
+    if (prev?.bgId) session.bgId = prev.bgId;
     const said = name === "Stop" ? outcomeOf(ev.payload.last_assistant_message) : undefined;
     const outcome = said ? { text: said, at: now } : prev?.outcome;
     if (outcome) session.outcome = outcome;

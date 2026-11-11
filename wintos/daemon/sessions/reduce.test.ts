@@ -476,3 +476,9 @@ test("restored at a restart: a session whose pane's tmux session still runs neve
     const m = restoreSessions(saved, undefined, new Set(["b1"]));
     expect([m.get("a")?.restored, m.get("a")?.state, m.get("b")?.restored, m.get("b")?.state]).toEqual([undefined, "waiting", true, "idle"]);
 });
+
+test("a hook event from the background service keeps the session's short id and the pane showing it", () => {
+    const had = new Map([["s1", { id: "s1", tabId: "t4", blockId: "pane4", attachedTo: "pane4", bgId: "13289177", state: "waiting", since: 1, lastAt: 1 } as Session]]);
+    const next = reduceSession(had, { tabId: "t0", blockId: "origin", payload: { session_id: "s1", hook_event_name: "PostToolUse", kind: "bg" } }, 5).get("s1");
+    expect(next).toMatchObject({ bgId: "13289177", blockId: "pane4", attachedTo: "pane4" });
+});

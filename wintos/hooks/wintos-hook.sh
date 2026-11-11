@@ -23,6 +23,23 @@ payload="$(cat)"
 # background session has a transcript, it is one of them, and stays unreported. A fork resumed
 # in a pane runs in the pane's own Claude, without the variable, and owns the pane like any session.
 background="${CLAUDE_CODE_SESSION_KIND:-}"
+# Not every Claude that has the pane's id runs in the pane. Claude's background service keeps the
+# id of the pane it was first started from, and so does everything it runs, its own hooks for a
+# background session included, some without the variable above. A Claude in the pane is on the
+# pane's terminal; any other one is in the background, wherever its id says it is.
+if [ -n "$WAVETERM_BLOCKID" ] && [ -n "${TMUX:-}" ] && [ "$background" != "bg" ]; then
+    pane_tty="$(tmux display -p -t "w-$WAVETERM_BLOCKID" '#{pane_tty}' 2>/dev/null)"
+    if [ -n "$pane_tty" ]; then
+        # The hook itself has no terminal: the nearest ancestor that has one is its Claude.
+        p=$PPID own=""
+        while [ -n "$p" ] && [ "$p" -gt 1 ]; do
+            t="$(ps -o tty= -p "$p" 2>/dev/null | tr -d ' ')"
+            case "$t" in "" | "??" | "?") ;; *) own="/dev/$t"; break ;; esac
+            p="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"
+        done
+        [ "$own" = "$pane_tty" ] || background="bg"
+    fi
+fi
 if [ "$background" = "bg" ]; then
     transcript="$(printf '%s' "$payload" | jq -r '.transcript_path // empty' 2>/dev/null)"
     [ -n "$transcript" ] && [ -s "$transcript" ] || exit 0

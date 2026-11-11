@@ -185,6 +185,15 @@ describe("wintos-hook.sh keeps the block's resume command", () => {
         expect(w.calls()).toBe("");
     });
 
+    test("a Claude off the pane's terminal is in the background, whatever pane id it inherited", () => {
+        const w = fakeWsh();
+        writeFileSync(join(w.dir, "tmux"), `#!/bin/sh\necho /dev/ttys999\n`, { mode: 0o755 });
+        const t = join(tmp(), "bg.jsonl");
+        writeFileSync(t, JSON.stringify({ type: "user" }));
+        runHook(env(w.dir, { TMUX: "/tmp/tmux-1/wintos,1,0", PATH: `${w.dir}:${process.env.PATH}` }), JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "bg", cwd: "/x", transcript_path: t }));
+        expect(w.calls()).toBe("");
+    });
+
     test("a fork resumed in a pane runs in the pane's own Claude: it takes the pane, whatever its transcript says", () => {
         const w = fakeWsh();
         const t = join(tmp(), "fork.jsonl");

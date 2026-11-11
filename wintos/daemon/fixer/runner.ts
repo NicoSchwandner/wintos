@@ -37,8 +37,22 @@ export class Fixer {
                 last.set(r.id, { ...last.get(r.id), ...r });
             } catch {}
         }
-        // A run cut off by a restart never ended: it says so rather than looking forever busy.
-        this.runs = [...last.values()].map((r) => (r.endedAt || r.route === "pane" ? r : { ...r, endedAt: r.at, exit: null, result: "cut off by a WintOS restart" })).sort((a, b) => b.at - a.at).slice(0, SHOWN_RUNS);
+        this.runs = [...last.values()].sort((a, b) => b.at - a.at).slice(0, SHOWN_RUNS);
+        this.endCutOffRuns();
+    }
+
+    // A restart kills a run mid-way, often with a merge left uncommitted in the PR's worktree.
+    // It says so rather than looking forever busy, and its job counts as untried again, so the
+    // next PR refresh starts it over instead of leaving the PR half fixed.
+    private endCutOffRuns(): void {
+        const cut = this.runs.filter((r) => !r.endedAt && r.route !== "pane");
+        if (!cut.length) return;
+        for (const r of cut) {
+            this.record({ ...r, endedAt: Date.now(), exit: null, result: "cut off by a WintOS restart; tried again" });
+            this.tried.delete(fixKey(r.kind, r));
+        }
+        this.runs.sort((a, b) => b.at - a.at);
+        writeFileSync(join(this.dir, "tried.json"), JSON.stringify([...this.tried]));
     }
 
     state(): FixerState {

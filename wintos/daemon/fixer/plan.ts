@@ -11,7 +11,7 @@ export type Route = { kind: "pane"; tabId: string; blockId: string; sessionId: s
 export type FixJob = { kind: FixKind; pr: PR; route: Route };
 
 // One attempt per PR, kind and head commit: a fix that fails stays the developer's until the PR moves.
-export const fixKey = (kind: FixKind, pr: PR) => `${kind}:${pr.url}@${pr.head}`;
+export const fixKey = (kind: FixKind, pr: Pick<PR, "url" | "head">) => `${kind}:${pr.url}@${pr.head}`;
 
 const mineOpen = (pr: PR, me: string) => pr.author === me && !pr.mergedAt && !!pr.head;
 
@@ -51,7 +51,7 @@ export function fixJob(pr: PR, sessions: Session[], shelf: Shelf, kind: FixKind 
 export function fixPrompt(job: FixJob): string {
     const { pr } = job;
     if (job.kind === "conflict")
-        return `${pr.url} has merge conflicts with its base (${pr.base ?? "its base branch"}). Resolve them with the resolving-merge-conflicts skill, given this PR link: it merges the base in, resolves each hunk from the intent of both sides, runs the repo's checks, commits and pushes to ${pr.branch}. Never force-push, and never rewrite a branch already merged into test. If a hunk can't be resolved with confidence, leave the PR as it is and end with one line saying which file and why.`;
+        return `${pr.url} has merge conflicts with its base (${pr.base ?? "its base branch"}). Resolve them with the resolving-merge-conflicts skill, given this PR link: it merges the base in, resolves each hunk from the intent of both sides, runs the repo's checks, commits and pushes to ${pr.branch}. If an earlier attempt left a merge of the base uncommitted in the PR's worktree, finish that merge rather than starting another. Never force-push, and never rewrite a branch already merged into test. If a hunk can't be resolved with confidence, leave the PR as it is and end with one line saying which file and why.`;
     if (job.kind === "comments")
         return `${pr.url} has review feedback waiting. Work it with the receiving-code-review skill: verify each comment against the code, fix what holds and answer what doesn't, run the tests, push to ${pr.branch}, then ask everyone who requested changes to review again.`;
     if (job.kind === "rereview") return `${pr.url} asks for your review again. Re-review what changed since your last review, as the review lane says for a re-review.`;

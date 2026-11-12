@@ -30,11 +30,18 @@ background="${CLAUDE_CODE_SESSION_KIND:-}"
 if [ -n "$WAVETERM_BLOCKID" ] && [ -n "${TMUX:-}" ] && [ "$background" != "bg" ]; then
     pane_tty="$(tmux display -p -t "w-$WAVETERM_BLOCKID" '#{pane_tty}' 2>/dev/null)"
     if [ -n "$pane_tty" ]; then
-        # The hook itself has no terminal: the nearest ancestor that has one is its Claude.
+        # The Claude running this hook is the nearest claude process above it; its terminal decides.
+        # Not the nearest terminal: the background service has none, and its parent may be a
+        # `claude attach` in this very pane.
         p=$PPID own=""
         while [ -n "$p" ] && [ "$p" -gt 1 ]; do
-            t="$(ps -o tty= -p "$p" 2>/dev/null | tr -d ' ')"
-            case "$t" in "" | "??" | "?") ;; *) own="/dev/$t"; break ;; esac
+            case "$(ps -o command= -p "$p" 2>/dev/null | awk '{print $1}')" in
+            claude | */claude | */claude/versions/*)
+                t="$(ps -o tty= -p "$p" 2>/dev/null | tr -d ' ')"
+                case "$t" in "" | "??" | "?") ;; *) own="/dev/$t" ;; esac
+                break
+                ;;
+            esac
             p="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"
         done
         [ "$own" = "$pane_tty" ] || background="bg"

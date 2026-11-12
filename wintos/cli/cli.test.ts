@@ -255,6 +255,17 @@ describe("wintos-hook.sh on PostToolUse", () => {
         await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("bash ../Wint.AI.Workspaces/scripts/ws-pr.sh -m 'Record x'", "Pushed branch\nPR: https://github.com/o/ws/pull/3662\nauto-merge on\n"));
         expect(d.seen[0].body.payload).toMatchObject({ prs: ["https://github.com/o/ws/pull/3662"], pr_verb: "create" });
     });
+    test("reading PRs claims none of them, nor the links their output prints", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr checks 7 -R o/r; gh pr view 8 -R o/r --json body", "Depends on https://github.com/o/r/pull/9\n"));
+        expect(d.seen[0].body.payload).toMatchObject({ pr_verb: "view" });
+        expect(d.seen[0].body.payload.prs).not.toContain("https://github.com/o/r/pull/9");
+    });
+    test("in a compound command only the PR acted on counts, its number paired with its own repo", async () => {
+        const d = await fakeDaemon("");
+        await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("gh pr view 15037 -R o/core && gh pr comment 720 -R o/mcp --body x", "https://github.com/o/r/pull/9\n"));
+        expect(d.seen[0].body.payload).toMatchObject({ pr_verb: "comment", prs: ["https://github.com/o/mcp/pull/720"] });
+    });
     test("a command that is no gh pr command sends nothing", async () => {
         const d = await fakeDaemon("");
         await runHookAsync({ WAVETERM_TABID: "t", WAVETERM_BLOCKID: "b", WINTOS_PORT: String(d.port) }, post("ls", "https://github.com/o/r/pull/12"));

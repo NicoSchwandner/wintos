@@ -81,14 +81,20 @@ esac
 if [ "$(printf '%s' "$payload" | jq -r '.hook_event_name + ":" + (.tool_name // "")' 2>/dev/null)" = "PostToolUse:Bash" ]; then
     payload="$(printf '%s' "$payload" | jq -c '
         (.tool_input.command // "") as $c
-        | ($c | test("(^|[;&|(\\s])gh pr (create|edit|ready|merge|comment|view|checks|review|close|reopen)\\b")) as $ghPr
+        | "https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+" as $url
+        # Each gh pr command of a compound one by itself, so a number and a repo pair only within one.
+        | [$c | splits("[;&|\n]+") | capture("(^|[\\s(])gh pr (?<v>create|edit|ready|merge|comment|review|close|reopen|view|checks)\\b(?<rest>.*)")
+            | .rest as $r | {v, named: ([$r | scan($url)] + ([($r | capture("^\\s+(?<n>[0-9]+)\\b")), ($r | capture("(-R|--repo)[ =](?<r>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"))] | if length == 2 then ["https://github.com/\(.[1].r)/pull/\(.[0].n)"] else [] end))}] as $gh
+        # Acting on a PR claims it; reading one (view, checks) never does, nor does a link in the output,
+        # but for the one gh pr create prints.
+        | [$gh[] | select(.v != "view" and .v != "checks")] as $acts
         | [$c | scan("gh api [^;&|]*") | select(test("\\s(-[fF]|--field|--raw-field|--input|(-X|--method)[ =]?(POST|PATCH|PUT))(\\s|=|$)")) | capture("repos/(?<r>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pulls/(?<n>[0-9]+)") | "https://github.com/\(.r)/pull/\(.n)"] as $written
         | [(.tool_response.stdout? // "") | strings | split("\n")[] | capture("^\\s*PR: (?<u>https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+)\\s*$") | .u] as $landed
-        | select($ghPr or ($written | length > 0) or ($landed | length > 0))
-        | (if $ghPr then ([$c, (.tool_response | tostring)] | join(" ") | [scan("https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+")])
-          + ([($c | capture("gh pr [a-z]+ (?<n>[0-9]+)\\b")), ($c | capture("(-R|--repo)[ =](?<r>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"))] | if length == 2 then ["https://github.com/\(.[1].r)/pull/\(.[0].n)"] else [] end) else [] end)
-          + $written + $landed
-        | unique as $prs | ($c | capture("gh pr (?<v>create|edit|ready|merge|comment|view|checks|review|close|reopen)\\b").v // (if ($landed | length > 0) then "create" else null end)) as $verb
+        | (if any($acts[]; .v == "create") then [(.tool_response.stdout? // "") | strings | scan($url)] else [] end) as $created
+        | select(($gh | length > 0) or ($written | length > 0) or ($landed | length > 0))
+        | (if ($acts | length > 0) then [$acts[].named[]] else [$gh[].named[]] end) + $created + $written + $landed
+        | unique as $prs
+        | ((if any($acts[]; .v == "create") or ($landed | length > 0) then "create" else ($acts[0].v // null) end) // (if ($gh | length > 0) then "view" else null end)) as $verb
         | select(($prs | length > 0) or $verb)
         | {hook_event_name: "PostToolUse", session_id: $ARGS.named.p.session_id, cwd: $ARGS.named.p.cwd, prs: $prs}
           + if $verb then {pr_verb: $verb} else {} end' --argjson p "$payload" 2>/dev/null)"

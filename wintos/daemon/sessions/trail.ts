@@ -2,7 +2,7 @@ import type { Session } from "./reduce";
 
 // One line per session a change moved, for reading back later what happened to it and who did
 // it: its state, what it asks, its park, a pending done/ask/wait, its status, name, step,
-// subagents and pane. Never what the developer typed: a prompt is only its length, in cause.
+// subagents, pane and the PRs it owns. Never what the developer typed: a prompt is only its length, in cause.
 // always: a session that gets a line even when nothing moved (a prompt sent to a running turn).
 export function trail(before: Map<string, Session>, after: Map<string, Session>, cause: string, title: (tabId: string) => string | undefined, always?: string): string[] {
     const lines: string[] = [];
@@ -35,5 +35,10 @@ export function changes(was: Session | undefined, s: Session): string[] {
     const subs = (x: Session) => String(Object.keys(x.subagents ?? {}).length);
     diff("subagents", subs(was), subs(s));
     if (was.blockId !== s.blockId) out.push(`moved to pane ${s.blockId.slice(0, 6)}`);
+    const short = (u: string) => u.replace(/^https:\/\/github\.com\/[^/]+\//, "").replace("/pull/", "#");
+    const gained = (s.prs ?? []).filter((u) => !(was.prs ?? []).includes(u));
+    const lost = (was.prs ?? []).filter((u) => !(s.prs ?? []).includes(u));
+    if (gained.length) out.push(`owns ${gained.map(short).join(", ")}`);
+    if (lost.length) out.push(`no longer owns ${lost.map(short).join(", ")}`);
     return out;
 }

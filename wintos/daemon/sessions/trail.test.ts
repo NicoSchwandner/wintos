@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Session } from "./reduce";
-import { trail } from "./trail";
+import { changes, trail } from "./trail";
 
 const s = (o: Partial<Session> = {}): Session => ({ id: "abcdef123456", tabId: "tab-1", blockId: "blk-1", state: "working", since: 0, lastAt: 0, ...o });
 const m = (...list: Session[]) => new Map(list.map((x) => [x.id, x]));
@@ -23,3 +23,8 @@ test("asks, a pending done and a name", () =>
 
 test("a prompt to a turn already running still leaves a line", () =>
     expect(trail(m(s()), m(s({ lastAt: 5 })), "hook UserPromptSubmit (you sent 12 characters)", title, "abcdef123456")).toEqual(["session abcdef12 (Intake) ← hook UserPromptSubmit (you sent 12 characters): unchanged, working"]));
+
+test("a PR it comes to own or loses is on its line, so a move can be traced", () => {
+    const base = { id: "s1", tabId: "t", blockId: "b", state: "idle", since: 1, lastAt: 1 } as const;
+    expect(changes({ ...base, prs: ["https://github.com/o/r/pull/1"] }, { ...base, prs: ["https://github.com/o/r/pull/2"] })).toEqual(["owns r#2", "no longer owns r#1"]);
+});

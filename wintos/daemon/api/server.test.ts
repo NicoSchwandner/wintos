@@ -1851,3 +1851,61 @@ test("isDaemonFile: the daemon's own files and folders, at any depth below a dot
     const { isDaemonFile } = await import("./server");
     expect([".sessions.json", ".events/2026-11-08.jsonl", ".fixer/logs/x.log", "route/epic.md", "route/.hidden"].map(isDaemonFile)).toEqual([true, true, true, false, false]);
 });
+
+describe("PR hand-off: wintos owner, tell --pr, pr --took-over", () => {
+    const PR = "https://github.com/o/r/pull/7";
+    const owns = async () => {
+        await event(prompt);
+        await post("/blocks/blk-1/pr", { ref: PR });
+    };
+    const caller = () => post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { ...prompt, session_id: "caller" } });
+    const gaps = () => readFileSync(join(root, ".ownership", "gaps.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+
+    test("the owner in a pane is named, and feedback waits for it as a relay about the PR, marked as from the session", async () => {
+        await owns();
+        await caller();
+        const o = await (await fetch(`${base}/prs/owner?ref=o/r%237&session=caller`)).json();
+        expect(o).toMatchObject({ pr: PR, route: "pane", sessionId: prompt.session_id, mine: false });
+        const r = await post("/prs/tell?session=caller", { ref: PR, text: "the null check is missing" });
+        expect(r.status).toBe(200);
+        const relays = (await (await fetch(base + "/state")).json()).relays;
+        expect(relays[prompt.session_id]).toEqual([expect.objectContaining({ text: "the null check is missing", about: PR, from: "caller" })]);
+    });
+
+    test("telling your own PR is refused", async () => {
+        await owns();
+        expect((await post(`/prs/tell?session=${prompt.session_id}`, { ref: PR, text: "x" })).status).toBe(409);
+    });
+
+    test("no owner: 404 saying how to take it over, and the gap is logged with what was searched", async () => {
+        await caller();
+        const r = await post("/prs/tell?session=caller", { ref: PR, text: "x" });
+        expect([r.status, await r.text()]).toEqual([404, expect.stringContaining("--took-over")]);
+        expect(gaps()).toEqual([expect.objectContaining({ pr: PR, kind: "no-owner", by: "caller", checked: ["live sessions", "ended sessions", "shelf"] })]);
+    });
+
+    test("--took-over makes the caller the owner, keeps the old one as also-in, and logs why", async () => {
+        await owns();
+        await caller();
+        expect((await post("/prs/took-over?session=caller", { ref: PR, reason: "owner never answered" })).status).toBe(200);
+        expect((await (await fetch(`${base}/prs/owner?ref=${encodeURIComponent(PR)}`)).json()).sessionId).toBe("caller");
+        expect(gaps()).toEqual([expect.objectContaining({ kind: "took-over", by: "caller", reason: "owner never answered" })]);
+        expect((await post("/prs/took-over?session=caller", { ref: PR })).status).toBe(400);
+    });
+
+    test("an owner that ended is resumed headless with the feedback, however long ago", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-told-"));
+        writeFileSync(join(dir, "claude"), `#!/bin/sh\nprintf '%s\\n' "$@" >> "${dir}/args"\necho '{"type":"result","result":"Fixed."}'\n`, { mode: 0o755 });
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", fixCmd: join(dir, "claude"), fixCwd: dir });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await owns();
+        await event({ hook_event_name: "SessionEnd", session_id: prompt.session_id, reason: "prompt_input_exit" });
+        expect((await (await fetch(`${base}/prs/owner?ref=${encodeURIComponent(PR)}`)).json()).route).toBe("shelved");
+        expect((await post("/prs/tell", { ref: PR, text: "rename it" })).status).toBe(200);
+        for (let i = 0; i < 100 && !require("fs").existsSync(join(dir, "args")); i++) await new Promise((r) => setTimeout(r, 50));
+        const args = readFileSync(join(dir, "args"), "utf8");
+        expect(args).toContain("--resume");
+        expect(args).toContain(`[Session "outside WintOS", not the developer, about your PR ${PR}] rename it`);
+    });
+});

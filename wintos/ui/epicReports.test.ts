@@ -34,3 +34,16 @@ describe("relayDeliveries", () => {
         expect(relayDeliveries(relays, [worker()], [], "t1", "b-wk")).toEqual([]);
     });
 });
+
+describe("relayResumes", () => {
+    const base = { tabId: "t", blockId: "b", state: "idle", since: 1, lastAt: 1, cwd: "/w" } as const;
+    test("feedback on a PR for a paused owner in this tab resumes it in its pane; an epic agent's relay does not", async () => {
+        const { relayResumes } = await import("./epicReports");
+        const paused: Session = { id: "s1", ...base, restored: true, paused: 1 };
+        const pr = { text: "x", from: "c", at: 1, about: "https://github.com/o/r/pull/1" };
+        expect(relayResumes({ s1: [pr] }, [paused], "t")).toEqual([{ sessionId: "s1", blockId: "b", script: "cd '/w' && claude --resume 's1'" }]);
+        expect(relayResumes({ s1: [{ text: "x", from: "agent", at: 1 }] }, [paused], "t")).toEqual([]);
+        expect(relayResumes({ s1: [pr] }, [paused], "other-tab")).toEqual([]);
+        expect(relayResumes({ s1: [pr] }, [{ ...paused, restored: undefined, paused: undefined }], "t")).toEqual([]);
+    });
+});

@@ -241,7 +241,7 @@ export const PrQueue = memo(({ pageOpen }: { pageOpen: boolean }) => {
 });
 PrQueue.displayName = "PrQueue";
 
-const NEXT_LABEL: Record<NextKind, string> = { conflict: "fix the conflict", ci: "fix red CI", comments: "work the review comments", rereview: "re-review", review: "review", merge: "merge" };
+const NEXT_LABEL: Record<NextKind, string> = { conflict: "fix the conflict", ci: "fix red CI", comments: "work the review comments", rereview: "re-review", review: "review", merge: "merge", told: "pass on feedback" };
 
 type Into = { blockId?: string; tabId?: string; prompt?: string; resume?: string };
 

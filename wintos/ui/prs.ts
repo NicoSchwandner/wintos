@@ -110,6 +110,7 @@ const RUN_WORDS: Record<FixRun["kind"], { what: string; doing: string; tried: st
     comments: { what: "the review comments", doing: "working the review comments", tried: "worked the review comments" },
     rereview: { what: "the re-review", doing: "re-reviewing", tried: "re-reviewed" },
     merge: { what: "the merge", doing: "merging", tried: "tried to merge" },
+    told: { what: "feedback from another session", doing: "working feedback from another session", tried: "worked feedback from another session" },
 };
 
 export function fixNote(run: FixRun | undefined, pr: PR, queued: string[]): { text: string; brick?: boolean } | undefined {

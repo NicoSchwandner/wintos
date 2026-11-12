@@ -72,8 +72,10 @@ export class Fixer {
 
     // A job's run, recorded before anything happens. A pane run is the caller's to type.
     start(job: FixJob): FixRun {
-        this.tried.add(fixKey(job.kind, job.pr));
-        writeFileSync(join(this.dir, "tried.json"), JSON.stringify([...this.tried]));
+        if (job.kind !== "told") {
+            this.tried.add(fixKey(job.kind, job.pr));
+            writeFileSync(join(this.dir, "tried.json"), JSON.stringify([...this.tried]));
+        }
         const at = Date.now();
         const id = `${new Date(at).toISOString().replace(/[:.]/g, "-")}-${job.kind}-${job.pr.repo.split("/")[1]}-${job.pr.number}`;
         const sessionId = job.route.kind === "fresh" ? undefined : job.route.sessionId;

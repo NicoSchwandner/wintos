@@ -5,7 +5,8 @@ import type { Links } from "./roadmap";
 // session's pane as a prompt, so it arrives as yours; and only words you did say to the agent go
 // through, so the agent cannot speak for you. Its own note may come along, marked as its own.
 // own: the agent's own words (wintos tell), marked as its, never as yours.
-export type Relay = { text: string; note?: string; from: string; at: number; own?: true };
+// about: a PR the receiver owns, told by another session (wintos tell --pr); fromName names it.
+export type Relay = { text: string; note?: string; from: string; at: number; own?: true; about?: string; fromName?: string };
 export type Relays = Record<string, Relay[]>;
 
 // The session meant: by its name, its id's start, or a roadmap step it is linked to; exact first,
@@ -27,6 +28,7 @@ const plain = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
 export const youSaid = (prompt: string | undefined, words: string) => !!prompt && !!plain(words) && plain(prompt).includes(plain(words));
 
 export function relayPrompt(r: Relay, epic: string): string {
+    if (r.about) return `[Session "${r.fromName ?? r.from}", not the developer, about your PR ${r.about}] ${r.text}`;
     if (r.own) return `[The ${epic} agent, not the developer] ${r.text}`;
     return `[You, via the ${epic} agent] ${r.text}${r.note ? `\n[The ${epic} agent's note, not the developer's: ${r.note}]` : ""}`;
 }

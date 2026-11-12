@@ -607,3 +607,43 @@ describe("wintos wake", () => {
         expect([r.seen[0].url, r.out.trim()]).toEqual(["/blocks/blk-1/wake/cancel?session=s-1", "cancelled"]);
     });
 });
+
+describe("wintos tell --pr and wintos owner, from any session", () => {
+    const daemon = (status: number, reply: string): Promise<{ port: number; seen: { url: string; body: any }[] }> => {
+        const seen: { url: string; body: any }[] = [];
+        server = http.createServer((req, res) => {
+            let b = "";
+            req.on("data", (c) => (b += c));
+            req.on("end", () => {
+                seen.push({ url: req.url!, body: b ? JSON.parse(b) : undefined });
+                res.statusCode = status;
+                res.end(reply);
+            });
+        });
+        return new Promise((r) => server!.listen(0, "127.0.0.1", () => r({ port: (server!.address() as AddressInfo).port, seen })));
+    };
+    const run = (args: string[], env: Record<string, string>) =>
+        new Promise<{ code: number; out: string; err: string }>((resolve) => {
+            require("child_process").execFile(CLI, args, { env: { PATH: process.env.PATH!, ...env } }, (e: { code?: number } | null, out: string, err: string) => resolve({ code: e?.code ?? 0, out, err }));
+        });
+
+    test("outside a WintOS pane it still hands feedback over, as this session", async () => {
+        const d = await daemon(200, JSON.stringify({ pr: "https://github.com/o/r/pull/7", route: "pane", name: "Fix it" }));
+        const r = await run(["tell", "--pr", "o/r#7", "the", "null", "check"], { WINTOS_PORT: String(d.port), CLAUDE_CODE_SESSION_ID: "me" });
+        expect([r.code, r.out.trim()]).toEqual([0, 'told "Fix it", who owns https://github.com/o/r/pull/7: typed in once it is free']);
+        expect(d.seen[0]).toEqual({ url: "/prs/tell?session=me", body: { ref: "o/r#7", text: "the null check" } });
+    });
+
+    test("no owner: exit 3 with the daemon's way out", async () => {
+        const d = await daemon(404, "no session owns it: fix it yourself, then run wintos pr … --took-over");
+        const r = await run(["tell", "--pr", "o/r#7", "x"], { WINTOS_PORT: String(d.port) });
+        expect([r.code, r.err]).toEqual([3, expect.stringContaining("--took-over")]);
+    });
+
+    test("owner names who and how", async () => {
+        const d = await daemon(200, JSON.stringify({ pr: "https://github.com/o/r/pull/7", route: "paused", name: "Fix it", epic: "route-do", mine: false }));
+        const r = await run(["owner", "o/r#7"], { WINTOS_PORT: String(d.port), CLAUDE_CODE_SESSION_ID: "me" });
+        expect(r.out.trim()).toBe('https://github.com/o/r/pull/7 is owned by "Fix it" (epic route-do): paused; wintos tell --pr resumes it in its pane first');
+        expect(d.seen[0].url).toBe("/prs/owner?ref=o%2Fr%237&session=me");
+    });
+});

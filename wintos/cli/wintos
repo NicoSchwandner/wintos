@@ -25,6 +25,10 @@
 #                                      in their words; WintOS types it into that session's pane as theirs
 #   wintos suggest <session> <text…>   epic agent: your recommendation on a session's open question, shown with it
 #   wintos tell <session> <text…>      epic agent: your own words to one of the epic's sessions, typed in marked as yours
+#   wintos owner <PR>                  the session that owns a PR, and how something said to it reaches it
+#   wintos tell --pr <PR> <text…>      hand feedback on a PR to the session that owns it (any session,
+#                                      also outside WintOS); exit 3: no owner, fix it yourself
+#   wintos pr <PR> --took-over "<why>" this session takes a PR over that no one (reachable) owned; logged
 #   wintos peek <session>              epic agent: a session's state, step, open question, PRs and last reply
 #   wintos adopt <session>             epic agent: a session in no epic joins yours
 #   wintos stop <session>              epic agent: stop a session you started in the background
@@ -163,6 +167,12 @@ pr)
     # --own: this session takes the PR over; without it, the first session to touch a PR owns it.
     own=false
     [ "${1:-}" = --own ] && own=true && shift
+    if [ "${2:-}" = --took-over ]; then
+        [ $# -eq 3 ] && [ -n "$3" ] || die "usage: wintos pr <PR> --took-over \"<why>\""
+        jq -n --arg r "$1" --arg w "$3" '{ref: $r, reason: $w}' | post "/prs/took-over$SESSION_Q"
+        echo
+        exit 0
+    fi
     [ $# -eq 1 ] || die "usage: wintos pr [--own] <PR link | owner/repo#number>"
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     link=$(jq -n --arg r "$1" --argjson own "$own" '{ref: $r, own: $own}' | post "/blocks/$WAVETERM_BLOCKID/pr$SESSION_Q") || exit 1
@@ -241,7 +251,30 @@ start)
     ask "$(jq -n --arg s "$step" --arg i "$id" '{step: $s, bgId: $i}')"
     echo "started \"$name\" in the background ($id); it shows in the epic, and claude attach $id opens it"
     ;;
+owner)
+    shift
+    [ $# -eq 1 ] || die "usage: wintos owner <PR link | owner/repo#number>"
+    ref=$(jq -rn --arg r "$1" '$r | @uri')
+    out=$(curl -s -m 2 "http://127.0.0.1:$PORT/prs/owner?ref=$ref${CLAUDE_CODE_SESSION_ID:+&session=$CLAUDE_CODE_SESSION_ID}") || die "wintosd not reachable on port $PORT"
+    printf '%s' "$out" | jq -r '
+        if .route == null then "wintos: " + . | halt_error(1)
+        elif .mine then "you own \(.pr)"
+        elif .route == "none" then "no session owns \(.pr): fix it yourself, then wintos pr \(.pr) --took-over \"<why>\""
+        else "\(.pr) is owned by \"\(.name)\"\(if .epic then " (epic \(.epic))" else "" end): " + {pane: "running in a pane; wintos tell --pr types it in once it is free", background: "running in the background; wintos tell --pr sends it there", paused: "paused; wintos tell --pr resumes it in its pane first", shelved: "ended; wintos tell --pr resumes it headless"}[.route] end' 2>/dev/null || die "unexpected answer: $out"
+    ;;
 relay | suggest | tell)
+    if [ "$1" = tell ] && [ "${2:-}" = --pr ]; then
+        [ $# -ge 4 ] || die "usage: wintos tell --pr <PR> <text…>"
+        ref="$3"
+        shift 3
+        out=$(jq -n --arg r "$ref" --arg t "$*" '{ref: $r, text: $t}' | curl -s -m 5 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/prs/tell$SESSION_Q") || die "wintosd not reachable on port $PORT"
+        code=$(printf '%s' "$out" | tail -n 1)
+        reply=$(printf '%s' "$out" | sed '$d')
+        [ "$code" = 404 ] && { echo "wintos: $reply" >&2; exit 3; }
+        [ "$code" = 200 ] || die "$reply"
+        printf '%s' "$reply" | jq -r '"told \"\(.name)\", who owns \(.pr): " + {pane: "typed in once it is free", background: "sent to it in the background", paused: "it is resumed in its pane first", shelved: "it is resumed headless to work on it"}[.route]'
+        exit 0
+    fi
     verb="$1"
     shift
     [ $# -ge 2 ] || die "usage: wintos relay <session> <words…> [--note \"<your own context>\"] | wintos suggest|tell <session> <text…>"

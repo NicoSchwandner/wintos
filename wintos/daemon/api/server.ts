@@ -2,7 +2,7 @@ import { readJson, writeJsonAtomic } from "../persist";
 import { tmuxMouse, tmuxPanes } from "../sessions/tmux";
 import { IDLE_PAUSE_MS, pausable, readPaneClaudes } from "../sessions/pause";
 import { execFile } from "child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "fs";
 import { AsyncLocalStorage } from "async_hooks";
 import http from "http";
 import type { AddressInfo } from "net";
@@ -19,7 +19,7 @@ import { icsToMeetings } from "../../plugins/calendar/parse";
 import { meetingMs } from "../../plugins/calendar/hours";
 import { lastReply as lastReplyIn, peekText, readTail } from "../epics/peek";
 import { BG_ID, BG_MAX, liveStarts, mergeBg, parseAgents, pruneStarts, type BgAgent, type BgStarts } from "../epics/bgstart";
-import { addRelay, relayPrompt, findWorker, relaysDelivered, youSaid, type Relays } from "../epics/relay";
+import { addRelay, relayPrompt, findWorker, relaysDelivered, youSaid, type Relay, type Relays } from "../epics/relay";
 import { editRoadmap, linkStep, mergedSteps, pruneLinks, type RoadmapOp } from "../epics/roadmap";
 import { addReport, delivered as reportsDelivered, reportLine, worthReporting, type Reports } from "../epics/reports";
 import { Plugin, PluginRunner } from "../plugins/runner";
@@ -35,6 +35,7 @@ import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
 import { doneUnit, serializeUnits, setUnits, startUnit, unitIndex, UNIT_MAX, UNITS_MAX, type Unit } from "../projects/units";
 import { fixJob, fixPrompt, holderOf, nextAction, type FixJob } from "../fixer/plan";
 import { reassignPrs, touchPrs } from "../prs/owners";
+import { GAP_SOURCES, ownerOf, type Gap } from "../prs/handoff";
 import { groupOf, type DonePr, type PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { isWintosPrompt, namePrompt, nameKey, userPrompts } from "../sessions/naming";
@@ -445,6 +446,20 @@ export async function startServer(opts: { root: string; port: number; host?: str
         sessions = new Map(sessions).set(s.id, { ...s, reading: undefined });
         readEndedTurn(s.id, s.outcome?.text ?? "");
     }
+    // A PR registration missed: on record for whoever fixes registration, and a heads-up in the
+    // tab of the session that hit it.
+    const gapsFile = join(opts.root, ".ownership", "gaps.jsonl");
+    const noteGap = (g: Pick<Gap, "pr" | "kind" | "reason">, caller: Session | undefined, sid: string | undefined) => {
+        const gap: Gap = { at: Date.now(), ...g, ...(sid ? { by: sid } : {}), ...(caller ? { byName: caller.name?.text ?? caller.label } : {}), checked: GAP_SOURCES };
+        mkdirSync(dirname(gapsFile), { recursive: true });
+        appendFileSync(gapsFile, JSON.stringify(gap) + "\n");
+        logEvent("ownership-gap", gap);
+        const project = caller && projectOf(caller.id);
+        if (!caller || !project) return;
+        const text = g.kind === "no-owner" ? `No session owned ${g.pr}` : `Taken over: ${g.pr}`;
+        headsUps = [...headsUps, { id: `gap:${gap.at}`, sessionId: caller.id, project, text, explanation: `WintOS had no owner registered for this PR${g.reason ? ` (${g.reason})` : ""}. Each case is in .ownership/gaps.jsonl, to fix PR registration from.`, at: gap.at }];
+        writeJsonAtomic(headsFile, headsUps);
+    };
     const applyTouch = (r: { sessions: Map<string, Session>; shelf: Shelf }) => {
         sessions = r.sessions;
         if (r.shelf !== shelf) saveShelf(r.shelf);
@@ -1085,6 +1100,43 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 return send(res, 200, "");
             }
             // A one-off rebuild of PR ownership (from the sessions' transcripts): url → session id, or null.
+            // `wintos owner <pr>`, `wintos tell --pr`, `wintos pr --took-over`: any session, also one
+            // outside WintOS, finds who owns a PR and hands what it has to say to them.
+            if (url.pathname === "/prs/owner" || url.pathname === "/prs/tell" || url.pathname === "/prs/took-over") {
+                const b = req.method === "POST" ? ((await body(req)) as { ref?: unknown; text?: unknown; reason?: unknown }) : { ref: url.searchParams.get("ref") };
+                const link = typeof b?.ref === "string" ? prLink(b.ref) : undefined;
+                if (!link) return send(res, 400, "need a PR link or owner/repo#number");
+                const caller = sid ? sessions.get(sid) : undefined;
+                const owner = ownerOf(link, [...sessions.values()], shelf);
+                const mine = !!sid && owner.sessionId === sid;
+                if (req.method === "GET" && url.pathname === "/prs/owner") return json(res, { pr: link, ...owner, mine });
+                if (req.method !== "POST") return send(res, 405, "");
+                if (url.pathname === "/prs/took-over") {
+                    if (typeof b.reason !== "string" || !b.reason.trim() || b.reason.length > 500) return send(res, 400, "need --took-over \"<why>\", up to 500 characters");
+                    if (caller && caller.state !== "ended") applyTouch(touchPrs(sessions, shelf, caller.id, [link], true));
+                    noteGap({ pr: link, kind: "took-over", reason: b.reason.trim() }, caller, sid);
+                    saveSessions();
+                    broadcast();
+                    return send(res, 200, caller ? "now yours; the gap is logged" : "logged (a session outside WintOS owns nothing in WintOS)");
+                }
+                if (typeof b.text !== "string" || !b.text.trim() || b.text.length > 2000) return send(res, 400, "need the text, up to 2000 characters");
+                if (mine) return send(res, 409, "you own this PR yourself");
+                if (owner.route === "none" || !owner.sessionId) {
+                    noteGap({ pr: link, kind: "no-owner" }, caller, sid);
+                    return send(res, 404, `no session owns ${link}: fix it yourself, then run wintos pr ${link} --took-over "<why>". The gap is logged.`);
+                }
+                const relay: Relay = { text: b.text.trim(), from: sid ?? "outside", fromName: caller ? (caller.name?.text ?? caller.label ?? caller.id.slice(0, 8)) : "outside WintOS", at: Date.now(), about: link };
+                if (owner.route === "shelved") {
+                    const pr = ghData()?.prs.find((p) => p.url === link) ?? prOfLink(link);
+                    fixer.start({ kind: "told", pr, route: { kind: "resume", sessionId: owner.sessionId, script: owner.script! }, text: relayPrompt(relay, "") });
+                } else {
+                    saveRelays(addRelay(relays, owner.sessionId, relay));
+                    if (owner.route === "background") setTimeout(() => void pollBg(), 2_000);
+                }
+                logEvent("tell-pr", { from: sid, to: owner.sessionId, pr: link, route: owner.route });
+                broadcast();
+                return json(res, { pr: link, ...owner });
+            }
             if (req.method === "POST" && url.pathname === "/prs/owners") {
                 const b = (await body(req)) as { owners?: unknown; touched?: unknown };
                 const owners = b?.owners;
@@ -1717,6 +1769,12 @@ const PR_URL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/;
 
 
 // A PR as the session names it: its link, or owner/repo#number.
+// A PR not in the PR list (not yours, or not fetched yet): enough of one to run a job on it.
+function prOfLink(link: string): PR {
+    const [, repo, n] = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(link)!;
+    return { repo, number: Number(n), url: link } as PR;
+}
+
 function prLink(ref: string): string | undefined {
     const url = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/.exec(ref.trim());
     const short = /^([\w.-]+\/[\w.-]+)#(\d+)$/.exec(ref.trim());

@@ -4,11 +4,12 @@ import type { Shelf } from "../shelf/shelf";
 
 // Where a fix runs. pane: typed into the live session that owns the PR; resume: that shelved
 // session continued headless under its own id; fresh: a new headless run.
-export type FixKind = "conflict" | "ci" | "comments" | "rereview" | "merge";
+export type FixKind = "conflict" | "ci" | "comments" | "rereview" | "merge" | "told";
 // review: a first look, which needs you in it, so it opens a session of its own instead of a run.
 export type NextKind = FixKind | "review";
 export type Route = { kind: "pane"; tabId: string; blockId: string; sessionId: string } | { kind: "resume"; sessionId: string; script: string } | { kind: "fresh" };
-export type FixJob = { kind: FixKind; pr: PR; route: Route };
+// text: for "told", what another session said about the PR, as the owner gets it.
+export type FixJob = { kind: FixKind; pr: PR; route: Route; text?: string };
 
 // One attempt per PR, kind and head commit: a fix that fails stays the developer's until the PR moves.
 export const fixKey = (kind: FixKind, pr: Pick<PR, "url" | "head">) => `${kind}:${pr.url}@${pr.head}`;
@@ -50,6 +51,7 @@ export function fixJob(pr: PR, sessions: Session[], shelf: Shelf, kind: FixKind 
 
 export function fixPrompt(job: FixJob): string {
     const { pr } = job;
+    if (job.kind === "told") return job.text ?? "";
     if (job.kind === "conflict")
         return `${pr.url} has merge conflicts with its base (${pr.base ?? "its base branch"}). Resolve them with the resolving-merge-conflicts skill, given this PR link: it merges the base in, resolves each hunk from the intent of both sides, runs the repo's checks, commits and pushes to ${pr.branch}. If an earlier attempt left a merge of the base uncommitted in the PR's worktree, finish that merge rather than starting another. Never force-push, and never rewrite a branch already merged into test. If a hunk can't be resolved with confidence, leave the PR as it is and end with one line saying which file and why.`;
     if (job.kind === "comments")

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Reports } from "../daemon/epics/reports";
 import { relayPrompt, type Relays } from "../daemon/epics/relay";
-import type { Session } from "../daemon/sessions/reduce";
+import { resumeScriptOf, type Session } from "../daemon/sessions/reduce";
 import { canTypeInto } from "./outbox";
+import { noteResume, resumingNow } from "./resuming";
 import { DRAFT_RETRY_MS, DraftInPane, typeIntoPane } from "./typeIntoPane";
 import { daemonFetch } from "./useWintos";
 
@@ -31,11 +32,23 @@ export function relayDeliveries(relays: Relays, sessions: Session[], epics: { id
     });
 }
 
+// Feedback on a PR for an owner that is paused, or not started since a restart: it is started
+// again in its own pane, and the feedback is typed in once it runs. Only a PR hand-off does this;
+// what an epic agent passes on waits until you open the session.
+export function relayResumes(relays: Relays, sessions: Session[], tabId: string): { sessionId: string; blockId: string; script: string }[] {
+    return Object.entries(relays).flatMap(([to, list]) => {
+        const s = sessions.find((x) => x.id === to);
+        const script = s && list.some((r) => r.about) && s.restored && s.state !== "ended" && s.tabId === tabId && s.blockId ? resumeScriptOf(s) : undefined;
+        return s && script ? [{ sessionId: s.id, blockId: s.blockId, script }] : [];
+    });
+}
+
 const busy = new Set<string>();
 export function useEpicReports(reports: Reports | undefined, sessions: Session[] | undefined, tabId: string, now: number, lookingAt: string | undefined, relays: Relays = {}, epics: { id: string; title: string; short?: string }[] = []): void {
     const due = reports && sessions ? reportDeliveries(reports, sessions, tabId, now, lookingAt) : [];
     const relayed = sessions ? relayDeliveries(relays, sessions, epics, tabId, lookingAt) : [];
-    const key = [...due, ...relayed].map((d) => `${d.agent}:${d.n}`).join(" ");
+    const resumes = sessions ? relayResumes(relays, sessions, tabId) : [];
+    const key = [...due, ...relayed].map((d) => `${d.agent}:${d.n}`).join(" ") + resumes.map((r) => ` resume:${r.sessionId}`).join("");
     // A pane with your draft in it waits; this asks again a little later.
     const [retry, setRetry] = useState(0);
     const later = (e: unknown) => e instanceof DraftInPane && setTimeout(() => setRetry((n) => n + 1), DRAFT_RETRY_MS);
@@ -48,6 +61,11 @@ export function useEpicReports(reports: Reports | undefined, sessions: Session[]
                 .then(() => daemonFetch(`/agents/${encodeURIComponent(d.agent)}/reports/delivered`, { method: "POST", body: { n: d.n } }))
                 .catch(later)
                 .finally(() => busy.delete(d.agent));
+        }
+        for (const r of resumes) {
+            if (resumingNow(r.sessionId)) continue;
+            noteResume(r.script);
+            void typeIntoPane(r.blockId, r.script).catch(() => {});
         }
         for (const d of relayed) {
             if (busy.has(`relay:${d.agent}`)) continue;

@@ -50,6 +50,7 @@ fi
 SESSION_Q="${CLAUDE_CODE_SESSION_ID:+?session=$CLAUDE_CODE_SESSION_ID}"
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 HOOK="$HERE/../hooks/wintos-hook.sh"
+GUARD="$HERE/../hooks/pr-guard.sh"
 SETTINGS="${WINTOS_CLAUDE_SETTINGS:-${HOME:-~}/.claude/settings.json}"
 EVENTS="SessionStart UserPromptSubmit Stop SubagentStart SubagentStop Notification SessionEnd"
 
@@ -369,15 +370,15 @@ hooks)
     [ -f "$SETTINGS.wintos-bak" ] || cp "$SETTINGS" "$SETTINGS.wintos-bak"
     # Ours are recognised by the hook path, so the user's own hooks are never touched.
     # Prompt and agent hooks have no .command, hence the default.
-    strip='.hooks //= {} | .hooks |= with_entries(.value |= map(select(any(.hooks[]?; (.command // "") | contains("wintos-hook.sh")) | not)))'
+    strip='.hooks //= {} | .hooks |= with_entries(.value |= map(select(any(.hooks[]?; (.command // "") | (contains("wintos-hook.sh") or contains("pr-guard.sh"))) | not)))'
     case "${2:-}" in
     install)
         # shellcheck disable=SC2016
-        rewrite_settings --arg hook "$HOOK" --arg events "$EVENTS" "$strip"' | reduce ($events | split(" "))[] as $e (.;
+        rewrite_settings --arg hook "$HOOK" --arg guard "$GUARD" --arg events "$EVENTS" "$strip"' | reduce ($events | split(" "))[] as $e (.;
             .hooks[$e] = ((.hooks[$e] // []) + [{hooks: [{type: "command", command: $hook}]}]))
-            | .hooks.PreToolUse = ((.hooks.PreToolUse // []) + [{matcher: "AskUserQuestion|ExitPlanMode", hooks: [{type: "command", command: $hook}]}])
+            | .hooks.PreToolUse = ((.hooks.PreToolUse // []) + [{matcher: "AskUserQuestion|ExitPlanMode", hooks: [{type: "command", command: $hook}]}, {matcher: "Bash", hooks: [{type: "command", command: $guard}]}])
             | .hooks.PostToolUse = ((.hooks.PostToolUse // []) + [{matcher: "Bash|AskUserQuestion|ExitPlanMode", hooks: [{type: "command", command: $hook}]}])'
-        echo "wintos: hooks installed in $SETTINGS ($EVENTS PreToolUse:AskUserQuestion|ExitPlanMode PostToolUse:Bash|AskUserQuestion|ExitPlanMode)"
+        echo "wintos: hooks installed in $SETTINGS ($EVENTS PreToolUse:AskUserQuestion|ExitPlanMode PreToolUse:Bash (PR guard) PostToolUse:Bash|AskUserQuestion|ExitPlanMode)"
         ;;
     uninstall)
         rewrite_settings "$strip"' | .hooks |= with_entries(select(.value | length > 0)) | if .hooks == {} then del(.hooks) else . end'

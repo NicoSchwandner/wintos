@@ -7,7 +7,7 @@ import { AsyncLocalStorage } from "async_hooks";
 import http from "http";
 import type { AddressInfo } from "net";
 import { homedir } from "os";
-import { basename, dirname, join } from "path";
+import { basename, dirname, join, resolve as resolvePath } from "path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { epicAgentInjection, epicInjection, injection, promotedNote, RULES_VERSION } from "../inject";
 import { EpicStore, EPIC_TITLE_MAX, findEpic, SHORT_MAX } from "../epics/epics";
@@ -36,6 +36,7 @@ import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
 import { doneUnit, serializeUnits, setUnits, startUnit, unitIndex, UNIT_MAX, UNITS_MAX, type Unit } from "../projects/units";
 import { fixJob, fixPrompt, holderOf, nextAction, type FixJob } from "../fixer/plan";
 import { reassignPrs, touchPrs } from "../prs/owners";
+import { guardTarget, repoOfRemote, type GuardTarget } from "../prs/guard";
 import { GAP_SOURCES, ownerOf, resumeOfFound, searchTranscripts, type Found, type Gap, type Owner } from "../prs/handoff";
 import { groupOf, type DonePr, type PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
@@ -449,6 +450,17 @@ export async function startServer(opts: { root: string; port: number; host?: str
     }
     // A PR registration missed: on record for whoever fixes registration, and a heads-up in the
     // tab of the session that hit it.
+    // The PR a guarded command acts on: named in it, or for a push the open PR of the branch it pushes.
+    const guardedPr = async (t: GuardTarget, cwd: string): Promise<string | undefined> => {
+        if (t.url) return t.url;
+        const dir = t.dir ? resolvePath(cwd, t.dir) : cwd;
+        const git = (...args: string[]) => new Promise<string>((done) => execFile("git", ["-C", dir, ...args], { timeout: 5_000 }, (_e, out) => done(String(out ?? "").trim())));
+        const repo = t.repo ?? repoOfRemote(await git("remote", "get-url", "origin"));
+        if (!repo) return undefined;
+        if (t.number) return `https://github.com/${repo}/pull/${t.number}`;
+        const branch = t.branch ?? (await git("symbolic-ref", "--short", "HEAD"));
+        return ghData()?.prs.find((p) => p.repo.toLowerCase() === repo.toLowerCase() && p.branch === branch && !p.mergedAt)?.url;
+    };
     // The Claude config dirs whose transcripts a PR's owner is searched in when none is registered.
     const configDirs = new Set(opts.claudeDirs ?? []);
     // Owners found in a transcript that run outside WintOS right now: searched once, not each time.
@@ -1124,6 +1136,20 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 return send(res, 200, "");
             }
             // A one-off rebuild of PR ownership (from the sessions' transcripts): url → session id, or null.
+            // The guard hook, before a push, comment or review: refused when the PR is another live
+            // session's, saying whose and the ways out. Anything it can't place goes through.
+            if (req.method === "POST" && url.pathname === "/prs/guard") {
+                const b = (await body(req)) as { command?: unknown; cwd?: unknown; session_id?: unknown };
+                if (typeof b?.command !== "string" || typeof b.cwd !== "string" || !b.cwd.startsWith("/")) return send(res, 400, "need command and cwd");
+                const t = guardTarget(b.command);
+                const link = t && (await guardedPr(t, b.cwd));
+                const owner = link ? ownerOf(link, [...sessions.values()], shelf) : undefined;
+                const live = owner?.sessionId && owner.sessionId !== b.session_id && (owner.route === "pane" || owner.route === "background" || owner.route === "paused");
+                if (!link || !owner || !live) return send(res, 200, "");
+                const where = { pane: "running in a pane", background: "running in the background", paused: "paused" }[owner.route as "pane" | "background" | "paused"];
+                logEvent("pr-guard", { session: b.session_id, owner: owner.sessionId, pr: link, kind: t!.kind });
+                return send(res, 409, `${link} belongs to the session "${owner.name}" (${where}), not to you. Hand it what you found: wintos tell --pr ${link} "<what to change>". If you have to do it yourself: wintos pr ${link} --took-over "<why>", then run this again; or, for this one command only, put WINTOS_NOT_MINE=1 in front of it.`);
+            }
             // `wintos owner <pr>`, `wintos tell --pr`, `wintos pr --took-over`: any session, also one
             // outside WintOS, finds who owns a PR and hands what it has to say to them.
             if (url.pathname === "/prs/owner" || url.pathname === "/prs/tell" || url.pathname === "/prs/took-over") {

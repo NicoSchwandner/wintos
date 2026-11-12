@@ -1927,3 +1927,46 @@ describe("PR hand-off: an owner registration missed", () => {
         expect(gaps).toEqual([expect.objectContaining({ pr: PR, kind: "found-in-transcript", found: prompt.session_id })]);
     });
 });
+
+describe("the PR guard", () => {
+    const PR = "https://github.com/o/r/pull/7";
+    const guard = (command: string, session_id: string) => post("/prs/guard", { command, cwd: "/tmp", session_id });
+
+    test("a comment on another live session's PR is refused, naming it and the ways out; its owner and unowned PRs go through", async () => {
+        await event(prompt);
+        await post("/blocks/blk-1/pr", { ref: PR });
+        const r = await guard(`gh pr comment ${PR} --body x`, "other");
+        const why = await r.text();
+        expect(r.status).toBe(409);
+        for (const way of [`wintos tell --pr ${PR}`, `wintos pr ${PR} --took-over`, "WINTOS_NOT_MINE=1"]) expect(why).toContain(way);
+        expect((await guard(`gh pr comment ${PR} --body x`, prompt.session_id)).status).toBe(200);
+        expect((await guard("gh pr comment https://github.com/o/r/pull/8 --body x", "other")).status).toBe(200);
+        expect((await guard(`WINTOS_NOT_MINE=1 gh pr comment ${PR} --body x`, "other")).status).toBe(200);
+    });
+
+    test("after --took-over the command goes through", async () => {
+        await event(prompt);
+        await post("/blocks/blk-1/pr", { ref: PR });
+        await post("/events", { tabId: "tab-1", blockId: "blk-2", payload: { ...prompt, session_id: "other" } });
+        await post("/prs/took-over?session=other", { ref: PR, reason: "owner stuck" });
+        expect((await guard(`gh pr comment ${PR} --body x`, "other")).status).toBe(200);
+    });
+
+    test("a push is placed by its branch's open PR", async () => {
+        srv.close();
+        const dir = mkdtempSync(join(tmpdir(), "wintos-guard-"));
+        execFileSync("git", ["init", "-q", "-b", "feat", dir]);
+        execFileSync("git", ["-C", dir, "remote", "add", "origin", "https://github.com/o/r.git"]);
+        const pr = { repo: "o/r", number: 7, url: PR, title: "t", author: "me", isDraft: false, createdAt: "", conflict: false, requestedMe: false, requestedTeam: false, reviewedByMe: false, reviewers: [], additions: 1, deletions: 1, branch: "feat", head: "h" };
+        writeFileSync(join(dir, "gh"), `#!/bin/sh\necho '${JSON.stringify({ me: "me", prs: [pr] })}'\n`, { mode: 0o755 });
+        mkdirSync(join(root, ".fixer"), { recursive: true });
+        writeFileSync(join(root, ".fixer", "settings.json"), JSON.stringify({ conflicts: false }));
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", plugins: [{ name: "gh-prs", cmd: [join(dir, "gh")], everyMs: 0 }] });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event(prompt);
+        await post("/blocks/blk-1/pr", { ref: PR });
+        for (let i = 0; i < 100 && !(await (await fetch(base + "/state")).json()).plugins?.["gh-prs"]?.data; i++) await new Promise((r) => setTimeout(r, 50));
+        expect((await post("/prs/guard", { command: `cd ${dir} && git push`, cwd: "/tmp", session_id: "other" })).status).toBe(409);
+        expect((await post("/prs/guard", { command: `cd ${dir} && git push origin elsewhere`, cwd: "/tmp", session_id: "other" })).status).toBe(200);
+    });
+});

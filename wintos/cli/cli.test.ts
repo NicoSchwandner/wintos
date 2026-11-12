@@ -283,6 +283,8 @@ describe("wintos hooks", () => {
             expect(s.hooks[e].filter((h: any) => h.hooks[0].command.endsWith("wintos-hook.sh"))).toHaveLength(1);
         // A question to the developer mid-turn: before it, the turn waits on them; after it, it runs on.
         expect([s.hooks.PreToolUse[0].matcher, s.hooks.PostToolUse[0].matcher]).toEqual(["AskUserQuestion|ExitPlanMode", "Bash|AskUserQuestion|ExitPlanMode"]);
+        // The PR guard, once however often it is installed.
+        expect(s.hooks.PreToolUse.filter((h: any) => h.hooks[0].command.endsWith("pr-guard.sh")).map((h: any) => h.matcher)).toEqual(["Bash"]);
     });
 
     test("a Claude config dir given names where they go; another account's settings stay as they were", () => {
@@ -645,5 +647,38 @@ describe("wintos tell --pr and wintos owner, from any session", () => {
         const r = await run(["owner", "o/r#7"], { WINTOS_PORT: String(d.port), CLAUDE_CODE_SESSION_ID: "me" });
         expect(r.out.trim()).toBe('https://github.com/o/r/pull/7 is owned by "Fix it" (epic route-do): paused; wintos tell --pr resumes it in its pane first');
         expect(d.seen[0].url).toBe("/prs/owner?ref=o%2Fr%237&session=me");
+    });
+});
+
+describe("pr-guard.sh", () => {
+    const GUARD = join(__dirname, "../hooks/pr-guard.sh");
+    const daemon = (status: number, reply: string): Promise<{ port: number; seen: any[] }> => {
+        const seen: any[] = [];
+        server = http.createServer((req, res) => {
+            let b = "";
+            req.on("data", (c) => (b += c));
+            req.on("end", () => (seen.push(JSON.parse(b)), (res.statusCode = status), res.end(reply)));
+        });
+        return new Promise((r) => server!.listen(0, "127.0.0.1", () => r({ port: (server!.address() as AddressInfo).port, seen })));
+    };
+    const guard = (port: number, command: string) =>
+        new Promise<string>((resolve) => {
+            const c = require("child_process").execFile(GUARD, { env: { PATH: process.env.PATH!, WINTOS_PORT: String(port) } }, (_e: unknown, out: string) => resolve(out));
+            c.stdin.end(JSON.stringify({ hook_event_name: "PreToolUse", session_id: "me", cwd: "/w", tool_name: "Bash", tool_input: { command } }));
+        });
+
+    test("a refusal from the daemon denies the command with its reason", async () => {
+        const d = await daemon(409, "belongs to the session X");
+        const out = JSON.parse(await guard(d.port, "git push"));
+        expect(out.hookSpecificOutput).toEqual({ hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "belongs to the session X" });
+        expect(d.seen[0]).toEqual({ command: "git push", cwd: "/w", session_id: "me" });
+    });
+
+    test("anything else goes through, and commands it guards nothing about are not even asked about", async () => {
+        const d = await daemon(200, "");
+        expect(await guard(d.port, "git push")).toBe("");
+        expect(await guard(d.port, "ls -la")).toBe("");
+        expect(d.seen).toHaveLength(1);
+        expect(await guard(1, "git push")).toBe("");
     });
 });

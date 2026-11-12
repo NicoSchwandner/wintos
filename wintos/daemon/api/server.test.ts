@@ -1881,7 +1881,7 @@ describe("PR hand-off: wintos owner, tell --pr, pr --took-over", () => {
         await caller();
         const r = await post("/prs/tell?session=caller", { ref: PR, text: "x" });
         expect([r.status, await r.text()]).toEqual([404, expect.stringContaining("--took-over")]);
-        expect(gaps()).toEqual([expect.objectContaining({ pr: PR, kind: "no-owner", by: "caller", checked: ["live sessions", "ended sessions", "shelf"] })]);
+        expect(gaps()).toEqual([expect.objectContaining({ pr: PR, kind: "no-owner", by: "caller", checked: ["live sessions", "ended sessions", "shelf", "transcripts (30 days)"] })]);
     });
 
     test("--took-over makes the caller the owner, keeps the old one as also-in, and logs why", async () => {
@@ -1907,5 +1907,23 @@ describe("PR hand-off: wintos owner, tell --pr, pr --took-over", () => {
         const args = readFileSync(join(dir, "args"), "utf8");
         expect(args).toContain("--resume");
         expect(args).toContain(`[Session "outside WintOS", not the developer, about your PR ${PR}] rename it`);
+    });
+});
+
+describe("PR hand-off: an owner registration missed", () => {
+    test("is found in its transcript, registered, and logged", async () => {
+        srv.close();
+        const cfg = mkdtempSync(join(tmpdir(), "claude-cfg-"));
+        mkdirSync(join(cfg, "projects", "-w"), { recursive: true });
+        const PR = "https://github.com/o/r/pull/8";
+        const f = join(cfg, "projects", "-w", `${prompt.session_id}.jsonl`);
+        writeFileSync(f, JSON.stringify({ timestamp: "2026-11-09T09:00:00Z", cwd: "/w", toolUseResult: { stdout: `PR: ${PR}` } }) + "\n");
+        srv = await startServer({ ...INERT, root, port: 0, token: "t0ken", claudeDirs: [cfg] });
+        base = `http://127.0.0.1:${(srv.http.address() as AddressInfo).port}`;
+        await event(prompt);
+        const o = await (await fetch(`${base}/prs/owner?ref=${encodeURIComponent(PR)}`)).json();
+        expect(o).toMatchObject({ route: "pane", sessionId: prompt.session_id });
+        const gaps = readFileSync(join(root, ".ownership", "gaps.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+        expect(gaps).toEqual([expect.objectContaining({ pr: PR, kind: "found-in-transcript", found: prompt.session_id })]);
     });
 });

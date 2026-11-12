@@ -6,6 +6,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statS
 import { AsyncLocalStorage } from "async_hooks";
 import http from "http";
 import type { AddressInfo } from "net";
+import { homedir } from "os";
 import { basename, dirname, join } from "path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { epicAgentInjection, epicInjection, injection, promotedNote, RULES_VERSION } from "../inject";
@@ -35,7 +36,7 @@ import { oneShot, titlePrompt, writeTitle } from "../shelf/title";
 import { doneUnit, serializeUnits, setUnits, startUnit, unitIndex, UNIT_MAX, UNITS_MAX, type Unit } from "../projects/units";
 import { fixJob, fixPrompt, holderOf, nextAction, type FixJob } from "../fixer/plan";
 import { reassignPrs, touchPrs } from "../prs/owners";
-import { GAP_SOURCES, ownerOf, type Gap } from "../prs/handoff";
+import { GAP_SOURCES, ownerOf, resumeOfFound, searchTranscripts, type Found, type Gap, type Owner } from "../prs/handoff";
 import { groupOf, type DonePr, type PR } from "../prs/group";
 import { Fixer } from "../fixer/runner";
 import { isWintosPrompt, namePrompt, nameKey, userPrompts } from "../sessions/naming";
@@ -448,15 +449,37 @@ export async function startServer(opts: { root: string; port: number; host?: str
     }
     // A PR registration missed: on record for whoever fixes registration, and a heads-up in the
     // tab of the session that hit it.
+    // The Claude config dirs whose transcripts a PR's owner is searched in when none is registered.
+    const configDirs = new Set(opts.claudeDirs ?? []);
+    // Owners found in a transcript that run outside WintOS right now: searched once, not each time.
+    const foundOutside = new Map<string, Found>();
+    // The registered owner, else the session whose transcript first names the PR: one WintOS
+    // knows gets the PR registered; one outside WintOS is resumed headless unless it is at work.
+    const ownerOrFound = async (link: string, caller: Session | undefined, sid: string | undefined): Promise<Owner> => {
+        const owner = ownerOf(link, [...sessions.values()], shelf);
+        if (owner.route !== "none" || foundOutside.has(link)) return owner;
+        const found = await searchTranscripts(link, [...configDirs]);
+        if (!found || found.sessionId === sid) return owner;
+        noteGap({ pr: link, kind: "found-in-transcript", found: found.sessionId }, caller, sid);
+        const known = sessions.has(found.sessionId) || Object.values(shelf).flat().some((i) => i.sessionId === found.sessionId);
+        if (known) {
+            applyTouch(reassignPrs(sessions, shelf, { [link]: found.sessionId }));
+            saveSessions();
+            return ownerOf(link, [...sessions.values()], shelf);
+        }
+        const script = resumeOfFound(found, homedir());
+        if (found.running || !script) return foundOutside.set(link, found), owner;
+        return { route: "shelved", sessionId: found.sessionId, name: `outside WintOS${found.cwd ? ` (${basename(found.cwd)})` : ""}`, script };
+    };
     const gapsFile = join(opts.root, ".ownership", "gaps.jsonl");
-    const noteGap = (g: Pick<Gap, "pr" | "kind" | "reason">, caller: Session | undefined, sid: string | undefined) => {
+    const noteGap = (g: Pick<Gap, "pr" | "kind" | "reason" | "found">, caller: Session | undefined, sid: string | undefined) => {
         const gap: Gap = { at: Date.now(), ...g, ...(sid ? { by: sid } : {}), ...(caller ? { byName: caller.name?.text ?? caller.label } : {}), checked: GAP_SOURCES };
         mkdirSync(dirname(gapsFile), { recursive: true });
         appendFileSync(gapsFile, JSON.stringify(gap) + "\n");
         logEvent("ownership-gap", gap);
         const project = caller && projectOf(caller.id);
         if (!caller || !project) return;
-        const text = g.kind === "no-owner" ? `No session owned ${g.pr}` : `Taken over: ${g.pr}`;
+        const text = { "no-owner": `No session owned ${g.pr}`, "took-over": `Taken over: ${g.pr}`, "found-in-transcript": `Owner of ${g.pr} found only in its transcript` }[g.kind];
         headsUps = [...headsUps, { id: `gap:${gap.at}`, sessionId: caller.id, project, text, explanation: `WintOS had no owner registered for this PR${g.reason ? ` (${g.reason})` : ""}. Each case is in .ownership/gaps.jsonl, to fix PR registration from.`, at: gap.at }];
         writeJsonAtomic(headsFile, headsUps);
     };
@@ -780,6 +803,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (p.hook_event_name === "PostToolUse" && p.pr_verb !== "view") applyTouch(touchPrs(sessions, shelf, p.session_id, prLinks(p.prs)));
                 saveSessions(hook, p.hook_event_name === "UserPromptSubmit" ? p.session_id : undefined);
                 const configDir = (p as { config_dir?: unknown }).config_dir;
+                if (typeof configDir === "string" && configDir.startsWith("/")) configDirs.add(configDir);
                 if (opts.claudeDirs && typeof configDir === "string" && configDir.startsWith("/")) watchStore(configDir);
                 const tp = (p as { transcript_path?: unknown }).transcript_path;
                 if (p.hook_event_name === "Stop" && typeof tp === "string") nameByModel(p.session_id, tp, store.byTab(ev.tabId)?.title);
@@ -1107,7 +1131,7 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 const link = typeof b?.ref === "string" ? prLink(b.ref) : undefined;
                 if (!link) return send(res, 400, "need a PR link or owner/repo#number");
                 const caller = sid ? sessions.get(sid) : undefined;
-                const owner = ownerOf(link, [...sessions.values()], shelf);
+                const owner = url.pathname === "/prs/took-over" ? ownerOf(link, [...sessions.values()], shelf) : await ownerOrFound(link, caller, sid);
                 const mine = !!sid && owner.sessionId === sid;
                 if (req.method === "GET" && url.pathname === "/prs/owner") return json(res, { pr: link, ...owner, mine });
                 if (req.method !== "POST") return send(res, 405, "");
@@ -1122,8 +1146,10 @@ export async function startServer(opts: { root: string; port: number; host?: str
                 if (typeof b.text !== "string" || !b.text.trim() || b.text.length > 2000) return send(res, 400, "need the text, up to 2000 characters");
                 if (mine) return send(res, 409, "you own this PR yourself");
                 if (owner.route === "none" || !owner.sessionId) {
-                    noteGap({ pr: link, kind: "no-owner" }, caller, sid);
-                    return send(res, 404, `no session owns ${link}: fix it yourself, then run wintos pr ${link} --took-over "<why>". The gap is logged.`);
+                    const busy = foundOutside.get(link);
+                    noteGap({ pr: link, kind: "no-owner", ...(busy ? { reason: `opened by ${busy.sessionId}, running outside WintOS` } : {}) }, caller, sid);
+                    const who = busy ? `${link} was opened by session ${busy.sessionId}${busy.cwd ? ` (in ${busy.cwd})` : ""}, which runs outside WintOS right now: tell it there, or` : `no session owns ${link}:`;
+                    return send(res, 404, `${who} fix it yourself, then run wintos pr ${link} --took-over "<why>". The gap is logged.`);
                 }
                 const relay: Relay = { text: b.text.trim(), from: sid ?? "outside", fromName: caller ? (caller.name?.text ?? caller.label ?? caller.id.slice(0, 8)) : "outside WintOS", at: Date.now(), about: link };
                 if (owner.route === "shelved") {

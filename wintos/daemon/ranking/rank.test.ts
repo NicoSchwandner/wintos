@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Session } from "../sessions/reduce";
-import { QUIET_CAP, rank, STALE_MS } from "./rank";
+import { QUIET_CAP, rank, rankSessions, STALE_MS } from "./rank";
 
 const DAY = 86_400_000;
 const NOW = 100 * DAY;
@@ -9,6 +9,17 @@ const s = (tabId: string, state: Session["state"], at: number, id = `${tabId}-${
 });
 
 describe("rank", () => {
+    test("a turn that ended while its subagents still run comes back by itself: running, not your move or to read", () => {
+        const behind = { ...s("t", "waiting", NOW - 60_000), turnEndedAt: NOW - 60_000, subagents: { a: NOW - 120_000 } };
+        const r = rank(["t"], [behind], NOW);
+        expect([r.needs, r.read, r.running.map((x) => x.tabId)]).toEqual([[], [], ["t"]]);
+    });
+
+    test("a subagent whose stop never came stops counting after a while, and the turn is yours again", () => {
+        const stale = { ...s("t", "waiting", NOW - 60_000), subagents: { a: NOW - 4 * 3_600_000 } };
+        expect(rank(["t"], [stale], NOW).needs.map((x) => x.tabId)).toEqual(["t"]);
+    });
+
     test("a session that said it is done is quiet, not needs-you", () => {
         const r = rank(["t"], [s("t", "done", NOW - 5)], NOW);
         expect([r.needs, r.running, r.quiet.map((x) => x.tabId)]).toEqual([[], [], ["t"]]);
@@ -20,10 +31,10 @@ describe("rank", () => {
         expect(r.running).toEqual([]);
     });
 
-    test("needs you sorts the longest wait first", () => {
-        const r = rank(["new", "old"], [s("new", "waiting", NOW - 10), s("old", "waiting", NOW - 1000)], NOW);
-        expect(r.needs.map((x) => x.tabId)).toEqual(["old", "new"]);
-        expect(r.needs[0].waitingSince).toBe(NOW - 1000);
+    test("needs you sorts the newest wait first", () => {
+        const r = rank(["old", "new"], [s("new", "waiting", NOW - 10), s("old", "waiting", NOW - 1000)], NOW);
+        expect(r.needs.map((x) => x.tabId)).toEqual(["new", "old"]);
+        expect(r.needs[1].waitingSince).toBe(NOW - 1000);
     });
 
     test("running and quiet sort by latest activity", () => {
@@ -52,7 +63,7 @@ describe("rank", () => {
 
     test("a tab nothing is known about is quiet and visible, never stale", () => {
         const r = rank(["fresh"], [], NOW);
-        expect(r.quiet).toEqual([{ tabId: "fresh", band: "quiet", lastAt: 0, sessions: [] }]);
+        expect(r.quiet).toEqual([{ key: "fresh", tabId: "fresh", band: "quiet", lastAt: 0, sessions: [] }]);
         expect(r.quietStale).toEqual([]);
     });
 
@@ -61,15 +72,6 @@ describe("rank", () => {
         expect(r.quiet[0].lastAt).toBe(NOW - DAY);
     });
 
-    test("a PR that needs you lifts a quiet project into needs you", () => {
-        const r = rank(["t"], [s("t", "idle", NOW - 5)], NOW, {}, { t: NOW - 3 * DAY });
-        expect(r.needs.map((x) => [x.tabId, x.waitingSince])).toEqual([["t", NOW - 3 * DAY]]);
-    });
-
-    test("the older of a waiting session and a rotting PR sets the wait", () => {
-        const r = rank(["t"], [s("t", "waiting", NOW - 10)], NOW, {}, { t: NOW - DAY });
-        expect(r.needs[0].waitingSince).toBe(NOW - DAY);
-    });
 
     test("sessions of tabs outside the workspace are ignored", () => {
         const r = rank(["t"], [s("gone", "waiting", NOW)], NOW);
@@ -78,28 +80,64 @@ describe("rank", () => {
 });
 
 describe("parked sessions", () => {
-    test("a session parked on CI runs; it is not waiting on you", () => {
+    test("a parked session is quiet: nothing for you, and Claude isn't working", () => {
         const r = rank(["t1"], [s("t1", "parked", NOW - 1000)], NOW);
+        expect([r.quiet.map((x) => x.tabId), r.running, r.needs]).toEqual([["t1"], [], []]);
+    });
+
+    test("another session there still working keeps the project running", () => {
+        const r = rank(["t1"], [s("t1", "parked", NOW - 1000), { ...s("t1", "working", NOW - 500), id: "w", blockId: "b2" }], NOW);
         expect(r.running.map((x) => x.tabId)).toEqual(["t1"]);
-        expect(r.needs).toEqual([]);
     });
 });
 
 describe("unread", () => {
     const ended = (tabId: string, state: Session["state"], turnEndedAt: number): Session => ({ ...s(tabId, state, turnEndedAt), turnEndedAt });
 
-    test("a reply you haven't seen keeps the project in Needs you, whatever the session's state", () => {
-        const r = rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, {}, { t: NOW - 100 });
-        expect(r.needs).toEqual([expect.objectContaining({ tabId: "t", unread: true, waitingSince: NOW - 50 })]);
+    test("a reply you haven't seen puts the project in To read until you have, a done one included", () => {
+        const r = rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, { t: NOW - 100 });
+        expect([r.needs, r.read]).toEqual([[], [expect.objectContaining({ tabId: "t", unread: true, waitingSince: NOW - 50 })]]);
     });
 
-    test("once seen, it falls to where it belongs: done is quiet, parked is running", () => {
-        expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW, {}, {}, { t: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
-        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, {}, { t: NOW - 10 }).running.map((x) => x.tabId)).toEqual(["t"]);
+    test("a turn waiting on you is your move, read or not, and outranks a reply to read there", () => {
+        const both = [{ ...s("t", "waiting", NOW - 30), turnEndedAt: NOW - 30 }, { ...ended("t", "done", NOW - 50), id: "s2", blockId: "b2" }];
+        expect(rank(["t"], both, NOW, {}, { t: NOW }).needs.map((x) => x.tabId)).toEqual(["t"]);
+        expect(rank(["t"], both, NOW, {}, {}).read).toEqual([]);
+    });
+
+    test("once seen, it falls to where it belongs: done and parked are quiet", () => {
+        const done = ended("t", "done", NOW - 50);
+        expect(rank(["t"], [done], NOW, {}, { [done.id]: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
+        expect(rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, {}).quiet.map((x) => x.tabId)).toEqual(["t"]);
+    });
+
+    test("a parked turn is quiet unseen too: it carries on by itself, nothing to read yet", () => {
+        const r = rank(["t"], [ended("t", "parked", NOW - 50)], NOW, {}, { t: NOW - 100 });
+        expect([r.read, r.quiet.map((x) => x.tabId)]).toEqual([[], ["t"]]);
+    });
+
+    test("seen is per session: reading one pane leaves the other's reply unread", () => {
+        const two = [ended("t", "done", NOW - 50), { ...ended("t", "done", NOW - 40), id: "s2", blockId: "b2" }];
+        expect(rank(["t"], two, NOW, {}, { [two[0].id]: NOW - 10 }).read[0]?.unread).toBe(true);
+        expect(rank(["t"], two, NOW, {}, { [two[0].id]: NOW - 10, s2: NOW - 10 }).quiet.map((x) => x.tabId)).toEqual(["t"]);
     });
 
     test("never seen at all counts as unread; an ended session's last reply does not", () => {
-        expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW).needs[0]?.unread).toBe(true);
-        expect(rank(["t"], [ended("t", "ended", NOW - 50)], NOW).needs).toEqual([]);
+        expect(rank(["t"], [ended("t", "done", NOW - 50)], NOW).read[0]?.unread).toBe(true);
+        expect(rank(["t"], [ended("t", "ended", NOW - 50)], NOW).read).toEqual([]);
+    });
+});
+
+describe("rankSessions", () => {
+    const s = (id: string, tabId: string, state: Session["state"], more: Partial<Session> = {}): Session => ({ id, tabId, blockId: `b-${id}`, state, since: NOW - 1000, lastAt: NOW - 1000, ...more }) as Session;
+    test("each session is a row of its own, in the band its state puts it, keyed by the session", () => {
+        const r = rankSessions(["t1"], [s("a", "t1", "waiting"), s("b", "t1", "working"), s("c", "t1", "idle")], NOW);
+        expect(r.needs.map((x) => x.key)).toEqual(["s:a"]);
+        expect(r.running.map((x) => x.key)).toEqual(["s:b"]);
+        expect(r.quiet.map((x) => [x.key, x.tabId])).toEqual([["s:c", "t1"]]);
+    });
+    test("a tab with no session keeps a row of its own; an ended session has none", () => {
+        const r = rankSessions(["t1", "t2"], [s("a", "t1", "ended")], NOW);
+        expect(r.quiet.map((x) => x.key).sort()).toEqual(["t1", "t2"]);
     });
 });

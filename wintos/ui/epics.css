@@ -1,0 +1,103 @@
+/* Each epic's face (EpicAvatar, epicLook.ts): a colour that never means a state, so it says
+   where you are and nothing else. fg on bg stays above 4.5:1 in both themes. */
+:root:root {
+    --w-epic-rose: #d79bc0;
+    --w-epic-rose-bg: #33222c;
+    --w-epic-rose-ring: #5c3a4f;
+    --w-epic-teal: #7fb8c9;
+    --w-epic-teal-bg: #1f3138;
+    --w-epic-teal-ring: #3f6b78;
+    --w-epic-amber: #e3b65a;
+    --w-epic-amber-bg: #352c1b;
+    --w-epic-amber-ring: #6a5530;
+    --w-epic-coral: #e88a78;
+    --w-epic-coral-bg: #3a231f;
+    --w-epic-coral-ring: #6b3c33;
+    --w-epic-violet: #aaa6e6;
+    --w-epic-violet-bg: #262540;
+    --w-epic-violet-ring: #47457a;
+    --w-epic-green: #9cc48a;
+    --w-epic-green-bg: #22301e;
+    --w-epic-green-ring: #42603a;
+    --w-epic-blue: #8eb4e8;
+    --w-epic-blue-bg: #1f2a3d;
+    --w-epic-blue-ring: #3d5578;
+    --w-epic-stone: #b8ad9c;
+    --w-epic-stone-bg: #2a2723;
+    --w-epic-stone-ring: #4a443c;
+}
+@media (prefers-color-scheme: light) {
+    :root:root {
+        --w-epic-rose: #9a3a6e;
+        --w-epic-rose-bg: #f6e4ee;
+        --w-epic-rose-ring: #e2b8cf;
+        --w-epic-teal: #1f6577;
+        --w-epic-teal-bg: #ddeef2;
+        --w-epic-teal-ring: #a9cdd7;
+        --w-epic-amber: #8a5a00;
+        --w-epic-amber-bg: #f6ebd2;
+        --w-epic-amber-ring: #e0c98f;
+        --w-epic-coral: #a8381f;
+        --w-epic-coral-bg: #f8e2dc;
+        --w-epic-coral-ring: #e6b3a6;
+        --w-epic-violet: #4b45a8;
+        --w-epic-violet-bg: #e7e6f8;
+        --w-epic-violet-ring: #bdbaea;
+        --w-epic-green: #3b6b22;
+        --w-epic-green-bg: #e3efda;
+        --w-epic-green-ring: #b5d3a3;
+        --w-epic-blue: #2a5a9a;
+        --w-epic-blue-bg: #e0e9f6;
+        --w-epic-blue-ring: #adc3e3;
+        --w-epic-stone: #5c5448;
+        --w-epic-stone-bg: #ece8df;
+        --w-epic-stone-ring: #cfc8bb;
+    }
+}
+
+/* A pane holding a session of an epic wears the epic's colour on its frame: the ring at rest;
+   focused, the focus ring (focusRing.ts) draws in the colour itself. */
+.block:has([data-wintos="session-header"][data-epic-color="rose"]) .block-mask { border-color: var(--w-epic-rose-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="rose"]) { --w-pane-accent: var(--w-epic-rose); }
+.block:has([data-wintos="session-header"][data-epic-color="teal"]) .block-mask { border-color: var(--w-epic-teal-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="teal"]) { --w-pane-accent: var(--w-epic-teal); }
+.block:has([data-wintos="session-header"][data-epic-color="amber"]) .block-mask { border-color: var(--w-epic-amber-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="amber"]) { --w-pane-accent: var(--w-epic-amber); }
+.block:has([data-wintos="session-header"][data-epic-color="coral"]) .block-mask { border-color: var(--w-epic-coral-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="coral"]) { --w-pane-accent: var(--w-epic-coral); }
+.block:has([data-wintos="session-header"][data-epic-color="violet"]) .block-mask { border-color: var(--w-epic-violet-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="violet"]) { --w-pane-accent: var(--w-epic-violet); }
+.block:has([data-wintos="session-header"][data-epic-color="green"]) .block-mask { border-color: var(--w-epic-green-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="green"]) { --w-pane-accent: var(--w-epic-green); }
+.block:has([data-wintos="session-header"][data-epic-color="blue"]) .block-mask { border-color: var(--w-epic-blue-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="blue"]) { --w-pane-accent: var(--w-epic-blue); }
+.block:has([data-wintos="session-header"][data-epic-color="stone"]) .block-mask { border-color: var(--w-epic-stone-ring) !important; }
+.block:has([data-wintos="session-header"][data-epic-color="stone"]) { --w-pane-accent: var(--w-epic-stone); }
+
+/* An epic whose agent is at work: a short arc turning around its face. Without motion, a still ring. */
+.w-agent-run {
+    position: relative;
+}
+.w-agent-run::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    border-top-color: var(--w-run);
+    border-right-color: var(--w-run);
+    animation: w-agent-orbit 1.4s linear infinite;
+    pointer-events: none;
+}
+@keyframes w-agent-orbit {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .w-agent-run::after {
+        animation: none;
+        border-color: var(--w-run);
+        opacity: 0.6;
+    }
+}

@@ -30,10 +30,21 @@ if type _init_completion &>/dev/null; then
   source <(wsh completion bash)
 fi
 
+# WintOS runs each pane's shell in a tmux of its own (socket wintos…), which drops these sequences;
+# there they go through as tmux passthrough (allow-passthrough on in its config).
+_waveterm_si_out() {
+  if [[ "$TMUX" == */wintos* ]]; then
+    local e=$'\033'
+    printf '\033Ptmux;%s\033\\' "${1//$e/$e$e}"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 # extdebug breaks bash-preexec semantics; bail out cleanly
 if shopt -q extdebug; then
   # printf 'wave si: disabled (bash extdebug enabled)\n' >&2
-  printf '\033]16162;M;{"integration":false}\007'
+  _waveterm_si_out "$(printf '\033]16162;M;{"integration":false}\007')"
   return 0
 fi
 
@@ -49,7 +60,7 @@ fi
 # Check if bash-preexec was successfully imported
 if [ -z "${bash_preexec_imported:-}" ]; then
     # bash-preexec failed to import, disable shell integration
-    printf '\033]16162;M;{"integration":false}\007'
+    _waveterm_si_out "$(printf '\033]16162;M;{"integration":false}\007')"
     return 0
 fi
 
@@ -57,6 +68,7 @@ _WAVETERM_SI_FIRSTPROMPT=1
 
 # Wave Terminal Shell Integration
 _waveterm_si_blocked() {
+    [[ "$TMUX" == */wintos* ]] && return 1
     [[ -n "$TMUX" || -n "$STY" || "$TERM" == tmux* || "$TERM" == screen* ]]
 }
 
@@ -75,7 +87,7 @@ _waveterm_si_urlencode() {
 _waveterm_si_osc7() {
     _waveterm_si_blocked && return
     local encoded_pwd=$(_waveterm_si_urlencode "$PWD")
-    printf '\033]7;file://localhost%s\007' "$encoded_pwd"
+    _waveterm_si_out "$(printf '\033]7;file://localhost%s\007' "$encoded_pwd")"
 }
 
 _waveterm_si_precmd() {
@@ -85,13 +97,13 @@ _waveterm_si_precmd() {
     if [ "$_WAVETERM_SI_FIRSTPROMPT" -eq 1 ]; then
         local uname_info
         uname_info=$(uname -smr 2>/dev/null)
-        printf '\033]16162;M;{"shell":"bash","shellversion":"%s","uname":"%s","integration":true}\007' "$BASH_VERSION" "$uname_info"
+        _waveterm_si_out "$(printf '\033]16162;M;{"shell":"bash","shellversion":"%s","uname":"%s","integration":true}\007' "$BASH_VERSION" "$uname_info")"
     else
-        printf '\033]16162;D;{"exitcode":%d}\007' "$_waveterm_si_status"
+        _waveterm_si_out "$(printf '\033]16162;D;{"exitcode":%d}\007' "$_waveterm_si_status")"
     fi
     # OSC 7 sent on every prompt - bash has no chpwd hook for directory changes
     _waveterm_si_osc7
-    printf '\033]16162;A\007'
+    _waveterm_si_out "$(printf '\033]16162;A\007')"
     _WAVETERM_SI_FIRSTPROMPT=0
 }
 
@@ -106,9 +118,9 @@ _waveterm_si_preexec() {
     local cmd64
     cmd64=$(printf '%s' "$cmd" | base64 2>/dev/null | tr -d '\n\r')
     if [ -n "$cmd64" ]; then
-        printf '\033]16162;C;{"cmd64":"%s"}\007' "$cmd64"
+        _waveterm_si_out "$(printf '\033]16162;C;{"cmd64":"%s"}\007' "$cmd64")"
     else
-        printf '\033]16162;C\007'
+        _waveterm_si_out "$(printf '\033]16162;C\007')"
     fi
 }
 

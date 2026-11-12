@@ -63,8 +63,11 @@ export class PluginRunner {
                 (err, stdout, stderr) => {
                     const last = this.results[name]?.data;
                     let result: PluginResult;
-                    if (err) result = { ok: false, at: Date.now(), data: last, error: (stderr || err.message).trim().slice(0, 500) };
-                    else {
+                    if (err) {
+                        const why = (stderr || err.message).trim();
+                        console.error(`[wintosd] plugin ${name} failed: ${why}`);
+                        result = { ok: false, at: Date.now(), data: last, error: failureLine(stderr, err, p.timeoutMs ?? DEFAULT_TIMEOUT_MS) };
+                    } else {
                         try {
                             result = { ok: true, at: Date.now(), data: JSON.parse(stdout) };
                         } catch {
@@ -104,4 +107,16 @@ function pluginEnv(overrides: Plugin["env"] = {}): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = { ...process.env };
     for (const [k, v] of Object.entries(overrides)) v === null ? delete env[k] : (env[k] = v);
     return env;
+}
+
+// The panel's one line for a failed run. gh's own line (gh: HTTP 504) wherever it sits in the
+// output (a crash prints it inside a dumped error object, under an HTML error page); a run cut
+// off by its time limit says so instead of execFile's "Command failed: <the command>".
+export function failureLine(stderr: string, err: { killed?: boolean; signal?: string | null; message: string }, timeoutMs: number): string {
+    const gh = /gh: [^\n'\\]+/.exec(stderr)?.[0].trim();
+    const http = gh && /HTTP (5\d\d)/.exec(gh)?.[1];
+    if (http) return `GitHub is having trouble (HTTP ${http}); it tries again by itself`;
+    if (gh) return gh.slice(0, 200);
+    if (err.killed || err.signal) return `no answer within ${Math.round(timeoutMs / 1000)} s; it tries again by itself`;
+    return (stderr.trim() || err.message).split("\n")[0].slice(0, 200);
 }

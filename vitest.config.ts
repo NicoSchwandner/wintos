@@ -17,6 +17,9 @@ export default mergeConfig(
             typecheck: {
                 tsconfig: "tsconfig.json",
             },
+            // WintOS: the git repos tests make never run the developer's global hooks (a secret
+            // scan on every commit made the journal tests slow and flaky).
+            env: { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.hooksPath", GIT_CONFIG_VALUE_0: "/dev/null" },
         },
     })
 );

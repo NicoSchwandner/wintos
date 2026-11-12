@@ -1,0 +1,31 @@
+# WintOS: its unit tests, the type check and the tmux package's tests on every push, so a commit
+# that breaks them is seen before ⌥⌘U puts it on the everyday instance. macOS, as WintOS runs
+# there and its scripts use BSD tools.
+name: WintOS
+
+on:
+    push:
+        branches: [key-router, stable]
+    pull_request:
+
+jobs:
+    test:
+        runs-on: macos-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+            # No install scripts (they build native modules the tests don't need), but Electron's own
+            # binary: the tests load the electron package, which refuses to load without it.
+            - run: npm ci --ignore-scripts
+            - run: node node_modules/electron/install.js
+            - run: npx tsc --noEmit
+            - run: npx vitest run wintos
+            - uses: actions/setup-go@v5
+              with:
+                  go-version-file: go.mod
+            - run: brew install tmux
+            - run: go test ./pkg/wintostmux/

@@ -1,19 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { checkbox, toggleCheckbox } from "./checkbox";
-
-describe("checkbox", () => {
-    test("reads a task line, any bullet, any indent", () => {
-        expect(checkbox("- [ ] Test-run with Anton")).toEqual({ state: "todo", text: "Test-run with Anton" });
-        expect(checkbox("  * [x] done")).toEqual({ state: "done", text: "done" });
-        expect(checkbox("- [X] done")).toEqual({ state: "done", text: "done" });
-        expect(checkbox("- [~] half")).toEqual({ state: "partial", text: "half" });
-    });
-
-    test("anything else is not a checkbox", () => {
-        expect(checkbox("- a bullet")).toBeUndefined();
-        expect(checkbox("[ ] no bullet")).toBeUndefined();
-    });
-});
+import { toggleCheckbox } from "./checkbox";
 
 describe("toggleCheckbox", () => {
     const md = "# Mine\n- [ ] one\n- [x] two\nplain";

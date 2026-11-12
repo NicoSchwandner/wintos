@@ -309,6 +309,7 @@ export function handleOsc16162Command(data: string, blockId: string, loaded: boo
             rtInfo["shell:state"] = "ready";
             globalStore.set(termWrap.shellIntegrationStatusAtom, "ready");
             globalStore.set(termWrap.claudeCodeActiveAtom, false);
+            termWrap.schemeAsked = false;
             const marker = terminal.registerMarker(0);
             if (marker) {
                 termWrap.promptMarkers.push(marker);

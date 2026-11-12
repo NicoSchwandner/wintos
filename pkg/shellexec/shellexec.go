@@ -28,6 +28,7 @@ import (
 	"github.com/wavetermdev/waveterm/pkg/util/shellutil"
 	"github.com/wavetermdev/waveterm/pkg/wavebase"
 	"github.com/wavetermdev/waveterm/pkg/waveobj"
+	"github.com/wavetermdev/waveterm/pkg/wintostmux"
 	"github.com/wavetermdev/waveterm/pkg/wshrpc"
 	"github.com/wavetermdev/waveterm/pkg/wshrpc/wshclient"
 	"github.com/wavetermdev/waveterm/pkg/wshutil"
@@ -684,6 +685,10 @@ func StartLocalShellProc(logCtx context.Context, termSize waveobj.TermSize, cmdS
 		return nil, fmt.Errorf("invalid term size: %v", termSize)
 	}
 	shellutil.AddTokenSwapEntry(cmdOpts.SwapToken)
+	// WintOS: the shell runs in a tmux session that outlives WintOS (wintostmux.go).
+	if isShell {
+		ecmd = wintostmux.Wrap(ecmd, cmdOpts.SwapToken.Env["WAVETERM_BLOCKID"], termSize.Rows, termSize.Cols)
+	}
 	cmdPty, err := pty.StartWithSize(ecmd, &pty.Winsize{Rows: uint16(termSize.Rows), Cols: uint16(termSize.Cols)})
 	if err != nil {
 		return nil, err

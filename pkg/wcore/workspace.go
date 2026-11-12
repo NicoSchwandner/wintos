@@ -225,6 +225,18 @@ func getNextTabName(tabNames []string) string {
 
 // returns tabid
 func CreateTab(ctx context.Context, workspaceId string, tabName string, activateTab bool, isInitialLaunch bool) (string, error) {
+	return createTabWith(ctx, workspaceId, tabName, activateTab, isInitialLaunch, GetNewTabLayout())
+}
+
+// WintOS: a tab for reopening a project on a session it already had, its first pane given
+// (the session's resume). A Claude in a starter terminal would be one session too many, and a
+// starter swapped for the pane afterwards races the layout's orphan cleanup, which deletes the
+// new pane before it is laid out.
+func CreatePlainTab(ctx context.Context, workspaceId string, activateTab bool, first waveobj.MetaMapType) (string, error) {
+	return createTabWith(ctx, workspaceId, "", activateTab, false, GetPlainTabLayout(first))
+}
+
+func createTabWith(ctx context.Context, workspaceId string, tabName string, activateTab bool, isInitialLaunch bool, layout PortableLayout) (string, error) {
 	if tabName == "" {
 		ws, err := GetWorkspace(ctx, workspaceId)
 		if err != nil {
@@ -254,7 +266,7 @@ func CreateTab(ctx context.Context, workspaceId string, tabName string, activate
 
 	// No need to apply an initial layout for the initial launch, since the starter layout will get applied after onboarding modal dismissal
 	if !isInitialLaunch {
-		err = ApplyPortableLayout(ctx, tab.OID, GetNewTabLayout(), true)
+		err = ApplyPortableLayout(ctx, tab.OID, layout, true)
 		if err != nil {
 			return tab.OID, fmt.Errorf("error applying new tab layout: %w", err)
 		}

@@ -359,11 +359,19 @@ function getApi(): ElectronApi {
     return (window as any).api;
 }
 
+// WintOS: the Inbox holds pages only; a terminal or anything else there would belong to no
+// project. Every way of adding a pane (keys, menus, splits, a replace) ends in one of these.
+function refusedInInbox(blockDef: BlockDef): boolean {
+    const tab = globalStore.get(WOS.getWaveObjectAtom<Tab>(WOS.makeORef("tab", globalStore.get(atoms.staticTabId))));
+    return !!tab?.meta?.["wintos:inbox"] && blockDef?.meta?.view !== "web";
+}
+
 async function createBlockSplitHorizontally(
     blockDef: BlockDef,
     targetBlockId: string,
     position: "before" | "after"
 ): Promise<string> {
+    if (refusedInInbox(blockDef)) return "";
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
     const newBlockId = await ObjectService.CreateBlock(blockDef, rtOpts);
@@ -387,6 +395,7 @@ async function createBlockSplitVertically(
     targetBlockId: string,
     position: "before" | "after"
 ): Promise<string> {
+    if (refusedInInbox(blockDef)) return "";
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
     const newBlockId = await ObjectService.CreateBlock(blockDef, rtOpts);
@@ -406,6 +415,7 @@ async function createBlockSplitVertically(
 }
 
 async function createBlock(blockDef: BlockDef, magnified = false, ephemeral = false): Promise<string> {
+    if (refusedInInbox(blockDef)) return "";
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
     const blockId = await ObjectService.CreateBlock(blockDef, rtOpts);
@@ -424,6 +434,7 @@ async function createBlock(blockDef: BlockDef, magnified = false, ephemeral = fa
 }
 
 async function replaceBlock(blockId: string, blockDef: BlockDef, focus: boolean): Promise<string> {
+    if (refusedInInbox(blockDef)) return "";
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
     const newBlockId = await ObjectService.CreateBlock(blockDef, rtOpts);
@@ -534,6 +545,10 @@ function getLocalHostDisplayNameAtom(): Atom<string> {
  * @param forceOpenInternally Force the link to open in a new web widget.
  */
 async function openLink(uri: string, forceOpenInternally = false) {
+    // WintOS: a web link opens as a WintOS page (reused if already open, in front in an Inbox
+    // tab); "Open URL in External Browser" still goes out, and so does anything not http(s).
+    const wintosOpenPage = (window as { wintosOpenPage?: (url: string) => void }).wintosOpenPage;
+    if (wintosOpenPage && /^https?:\/\//i.test(uri)) return wintosOpenPage(uri);
     if (forceOpenInternally || globalStore.get(atoms.settingsAtom)?.["web:openlinksinternally"]) {
         const blockDef: BlockDef = {
             meta: {

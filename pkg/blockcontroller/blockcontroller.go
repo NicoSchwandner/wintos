@@ -23,6 +23,7 @@ import (
 	"github.com/wavetermdev/waveterm/pkg/util/shellutil"
 	"github.com/wavetermdev/waveterm/pkg/wavebase"
 	"github.com/wavetermdev/waveterm/pkg/waveobj"
+	"github.com/wavetermdev/waveterm/pkg/wintostmux"
 	"github.com/wavetermdev/waveterm/pkg/wps"
 	"github.com/wavetermdev/waveterm/pkg/wshrpc/wshclient"
 	"github.com/wavetermdev/waveterm/pkg/wslconn"
@@ -221,6 +222,8 @@ func ResyncController(ctx context.Context, tabId string, blockId string, rtOpts 
 
 	// Force restart if requested
 	if force && existing != nil {
+		// WintOS: a restarted terminal starts a fresh shell, not the tmux session it ran.
+		wintostmux.Kill(blockId)
 		DestroyBlockController(blockId)
 		time.Sleep(100 * time.Millisecond)
 		existing = nil

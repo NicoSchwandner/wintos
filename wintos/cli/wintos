@@ -1,15 +1,58 @@
-#!/bin/sh
+#!/bin/bash
 # wintos: small CLI around wintosd.
 #   wintos title <words…>              name this tab's project (used by Claude)
 #   wintos wait <what…>                end this turn parked on something outside (used by Claude)
+#   wintos wake <event> <pr> <prompt…> park until a PR is green, merged, released, re-requested or commented on, then get the prompt (used by Claude)
+#   wintos wake cancel                 drop this session's wakes
+#   wintos ask <kind> [<what…>]       end this turn waiting on the developer: answer, decide, approve or unblock;
+#                                     --context "<what this is about>", --option "<label>: <what it leads to>" (2-4)
 #   wintos done                        end this turn done: nothing waits on the developer (used by Claude)
-#   wintos hooks install|uninstall     wire the hook into Claude Code settings
+#   wintos name <words…>               name this session, as shown in the sidebar (⌘R changes it)
+#   wintos todo <to-do>… | todo done <to-do>
+#                                      the things to do within the current lane step, and one ticked
+#   wintos pr <link|owner/repo#n> [--own]
+#                                      a PR this session works on without gh pr (browser, gh api)
+#   wintos status <line…>              what this session is doing now, shown on its pane (used by Claude)
+#   wintos lane <name> <step…>         the process this session follows; ?step is the developer's call (used by Claude)
+#   wintos step <step> [note…]         where in it the session is now (used by Claude)
+#   wintos unit <step>…                epic agent: its epic's roadmap steps, in order
+#   wintos unit start|done <unit>      the one worked on now, or one finished; by its name or its start
+#   wintos unit rename <step> <new name> | move <step> up|down | remove <step>
+#                                      an epic's roadmap edited step by step; a step keeps its sessions
+#   wintos epic <name> | none          the epic this session is a step of, by its id, title or their start (used by Claude)
+#   wintos relay <session> <words…> [--note "<your own context>"]
+#                                      epic agent: pass on to one of the epic's sessions what the developer told you,
+#                                      in their words; WintOS types it into that session's pane as theirs
+#   wintos suggest <session> <text…>   epic agent: your recommendation on a session's open question, shown with it
+#   wintos tell <session> <text…>      epic agent: your own words to one of the epic's sessions, typed in marked as yours
+#   wintos owner <PR>                  the session that owns a PR, and how something said to it reaches it
+#   wintos tell --pr <PR> <text…>      hand feedback on a PR to the session that owns it (any session,
+#                                      also outside WintOS); exit 3: no owner, fix it yourself
+#   wintos pr <PR> --took-over "<why>" this session takes a PR over that no one (reachable) owned; logged
+#   wintos peek <session>              epic agent: a session's state, step, open question, PRs and last reply
+#   wintos adopt <session>             epic agent: a session in no epic joins yours
+#   wintos stop <session>              epic agent: stop a session you started in the background
+#   wintos rename <session> <name…>    epic agent: rename one of its sessions (one you named keeps yours)
+#   wintos start [--cwd <dir>] <step> <prompt…>
+#                                      epic agent: start a session for a roadmap step, in Claude's background service;
+#                                      it shows in the epic, linked to the step, and reports to you like the others
+#   wintos hooks install|uninstall [<claude config dir>]
+#                                      wire the hook into that Claude Code config (default ~/.claude);
+#                                      one account each, named explicitly
 set -eu
 PORT="${WINTOS_PORT:-7730}"
+# In Claude's background service there is no pane: a session its epic's agent started is found
+# by its own id instead, so its wintos commands (status, wake, ask…) work there too.
+if [ -z "${WAVETERM_BLOCKID:-}" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && [ "${CLAUDE_CODE_SESSION_KIND:-}" = bg ]; then
+    WAVETERM_BLOCKID="-"
+fi
+# The session this runs in, so a pane running two (a fork in the background) never mixes them up.
+SESSION_Q="${CLAUDE_CODE_SESSION_ID:+?session=$CLAUDE_CODE_SESSION_ID}"
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 HOOK="$HERE/../hooks/wintos-hook.sh"
+GUARD="$HERE/../hooks/pr-guard.sh"
 SETTINGS="${WINTOS_CLAUDE_SETTINGS:-${HOME:-~}/.claude/settings.json}"
-EVENTS="SessionStart UserPromptSubmit Stop SubagentStop Notification SessionEnd"
+EVENTS="SessionStart UserPromptSubmit Stop SubagentStart SubagentStop Notification SessionEnd"
 
 die() { echo "wintos: $*" >&2; exit 1; }
 
@@ -25,6 +68,16 @@ rewrite_settings() {
         die "could not update $SETTINGS; left unchanged"
     fi
 }
+# A POST of the JSON on stdin; prints the answer. A refusal prints the daemon's own reason (a
+# line too long, no such step…), not a guess at it.
+post() {
+    local out code
+    out=$(curl -s -m 2 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT$1") || die "wintosd not reachable on port $PORT"
+    code=${out##*$'\n'}
+    out=${out%$'\n'*}
+    [ "${code#2}" != "$code" ] || die "wintosd refused it: ${out:-HTTP $code}"
+    printf '%s' "$out"
+}
 
 case "${1:-}" in
 title)
@@ -32,8 +85,7 @@ title)
     [ $# -gt 0 ] || die "usage: wintos title <words>"
     [ -n "${WAVETERM_TABID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_TABID)"
     out="$(jq -n --arg t "$*" '{title: $t, manual: false}' |
-        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/projects/$WAVETERM_TABID/title")" ||
-        die "wintosd not reachable on port $PORT, or it refused the title"
+        post "/projects/$WAVETERM_TABID/title")" || exit 1
     printf '%s' "$out" | jq -r '"titled: \(.title)" + (if .titleLocked then " (locked: the developer named it)" else "" end)'
     ;;
 wait)
@@ -41,35 +93,303 @@ wait)
     [ $# -gt 0 ] || die "usage: wintos wait <what you are waiting on>"
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
     jq -n --arg r "$*" '{reason: $r}' |
-        curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/wait" >/dev/null ||
-        die "wintosd not reachable on port $PORT, or it refused the reason"
+        post "/blocks/$WAVETERM_BLOCKID/wait$SESSION_Q" >/dev/null || exit 1
     echo "waiting on: $*"
+    ;;
+wake)
+    shift
+    WAKE_USAGE='usage: wintos wake <event> <pr> <prompt>   (then end your turn)
+  event   green     its CI passed on the latest commit
+          merged    merged into its base branch
+          released  its merge commit is on main
+          rereview  you (or your team) are asked to review it again, after your review
+          comments  someone reviewed or commented on it, after the wake was set
+  pr      a link (https://github.com/owner/repo/pull/123) or owner/repo#123
+  prompt  what you will do then, as an instruction to yourself
+e.g.  wintos wake green acme/api#123 "CI is green: submit the approval on #123"
+      wintos wake released https://github.com/o/r/pull/285 "check the re-embed progress in prod and report"
+      wintos wake rereview o/r#90 "re-review the fixes against your earlier comments"
+      wintos wake cancel     (drops them all)
+One wake per PR and event: a session can wait for feedback and the merge at once; setting the
+same PR and event again replaces it. A wake expires after 5 working days.'
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID): a wake types into this pane, so run it from the session that should continue"
+    if [ "${1:-}" = cancel ]; then
+        echo '{}' | post "/blocks/$WAVETERM_BLOCKID/wake/cancel$SESSION_Q" || exit 1
+        echo
+        exit 0
+    fi
+    [ $# -ge 3 ] || die "$(printf 'need an event, a PR and a prompt (got %s argument(s))\n%s' "$#" "$WAKE_USAGE")"
+    event="$1"; ref="$2"; shift 2
+    body="$(jq -n --arg u "$event" --arg p "$ref" --arg t "$*" '{until: $u, pr: $p, prompt: $t}')"
+    out="$(printf '%s' "$body" | curl -s -m 5 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/wake$SESSION_Q")" || die "wintosd not reachable on port $PORT"
+    code="$(printf '%s' "$out" | tail -n1)"
+    text="$(printf '%s' "$out" | sed '$d')"
+    [ "$code" = 200 ] || die "$(printf '%s\n%s' "$text" "$WAKE_USAGE")"
+    printf '%s' "$text" | jq -r '"wakes when \(.pr) is \(.until): \(.prompt)\nNow end your turn; the prompt is typed into this pane when it happens."'
+    ;;
+status)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos status <what this session is doing>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    jq -n --arg t "$*" '{text: $t}' |
+        post "/blocks/$WAVETERM_BLOCKID/status$SESSION_Q" >/dev/null || exit 1
+    echo "status: $*"
+    ;;
+name)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos name <3 to 6 words: what this session works on>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    jq -n --arg t "$*" '{text: $t}' |
+        post "/blocks/$WAVETERM_BLOCKID/name$SESSION_Q" >/dev/null || exit 1
+    echo "name: $* (the developer can change it with ⌘R for a minute; carry on)"
+    ;;
+lane)
+    shift
+    [ $# -gt 1 ] || die "usage: wintos lane <name> <step…>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    name="$1"
+    shift
+    jq -n --arg n "$name" '{name: $n, steps: $ARGS.positional}' --args "$@" |
+        post "/blocks/$WAVETERM_BLOCKID/lane$SESSION_Q" >/dev/null || exit 1
+    echo "lane: $name ($(printf '%s\n' "$@" | paste -sd'|' - | sed 's/|/ · /g'))"
+    ;;
+step)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos step <step> [note…]"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    step="$1"
+    shift
+    jq -n --arg s "$step" --arg n "$*" '{step: $s} + (if $n != "" then {note: $n} else {} end)' |
+        post "/blocks/$WAVETERM_BLOCKID/step$SESSION_Q" >/dev/null || exit 1
+    echo "step: $step${*:+ ($*)}"
+    ;;
+pr)
+    shift
+    # --own: this session takes the PR over; without it, the first session to touch a PR owns it.
+    own=false
+    [ "${1:-}" = --own ] && own=true && shift
+    if [ "${2:-}" = --took-over ]; then
+        [ $# -eq 3 ] && [ -n "$3" ] || die "usage: wintos pr <PR> --took-over \"<why>\""
+        jq -n --arg r "$1" --arg w "$3" '{ref: $r, reason: $w}' | post "/prs/took-over$SESSION_Q"
+        echo
+        exit 0
+    fi
+    [ $# -eq 1 ] || die "usage: wintos pr [--own] <PR link | owner/repo#number>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    link=$(jq -n --arg r "$1" --argjson own "$own" '{ref: $r, own: $own}' | post "/blocks/$WAVETERM_BLOCKID/pr$SESSION_Q") || exit 1
+    echo "pr: $link"
+    ;;
+unit)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos unit <unit>… | wintos unit start <unit> | wintos unit done <unit>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    if [ "$1" = rename ] && [ $# -eq 3 ]; then
+        body=$(jq -n --arg f "$2" --arg t "$3" '{rename: {from: $f, to: $t}}')
+    elif [ "$1" = move ] && [ $# -eq 3 ] && { [ "$3" = up ] || [ "$3" = down ]; }; then
+        body=$(jq -n --arg n "$2" --argjson b "$([ "$3" = up ] && echo -1 || echo 1)" '{move: {name: $n, by: $b}}')
+    elif [ "$1" = remove ] && [ $# -eq 2 ]; then
+        body=$(jq -n --arg n "$2" '{remove: $n}')
+    elif { [ "$1" = start ] || [ "$1" = done ]; } && [ $# -gt 1 ]; then
+        verb="$1"
+        shift
+        body=$(jq -n --arg v "$verb" --arg u "$*" '{($v): $u}')
+    elif [ "$1" = rename ] || [ "$1" = move ] || [ "$1" = remove ] || [ "$1" = start ] || [ "$1" = done ]; then
+        # A verb with the wrong arguments must never fall through to setting the whole list.
+        die "usage: wintos unit rename \"<step>\" \"<new name>\" | move \"<step>\" up|down | remove \"<step>\" | start <step> | done <step> (quote names with spaces)"
+    else
+        body=$(jq -n '{items: $ARGS.positional}' --args "$@")
+    fi
+    list=$(printf '%s' "$body" | post "/blocks/$WAVETERM_BLOCKID/units$SESSION_Q") || exit 1
+    echo "roadmap: $list"
+    ;;
+rename)
+    shift
+    [ $# -ge 2 ] || die "usage: wintos rename <session> <name…>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    to="$1"
+    shift
+    out=$(jq -n --arg t "$to" --arg n "$*" '{to: $t, name: $n}' | curl -s -m 5 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/rename$SESSION_Q") || die "wintosd not reachable on port $PORT"
+    code=$(printf '%s' "$out" | tail -n 1)
+    reply=$(printf '%s' "$out" | sed '$d')
+    [ "$code" = 200 ] || die "$reply"
+    echo "renamed: $reply"
+    ;;
+adopt | stop)
+    verb="$1"
+    shift
+    [ $# -ge 1 ] || die "usage: wintos $verb <session>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    out=$(jq -n --arg t "$*" '{to: $t}' | curl -s -m 40 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/$verb$SESSION_Q") || die "wintosd not reachable on port $PORT"
+    code=$(printf '%s' "$out" | tail -n 1)
+    reply=$(printf '%s' "$out" | sed '$d')
+    [ "$code" = 200 ] || die "$reply"
+    if [ "$verb" = adopt ]; then echo "$reply is in your epic now"; else echo "stopped $reply"; fi
+    ;;
+peek)
+    shift
+    [ $# -ge 1 ] || die "usage: wintos peek <session>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    out=$(jq -n --arg t "$*" '{to: $t}' | curl -s -m 40 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/peek$SESSION_Q") || die "wintosd not reachable on port $PORT"
+    code=$(printf '%s' "$out" | tail -n 1)
+    reply=$(printf '%s' "$out" | sed '$d')
+    [ "$code" = 200 ] || die "$reply"
+    printf '%s\n' "$reply"
+    ;;
+start)
+    shift
+    cwd=""
+    [ "${1:-}" = --cwd ] && { [ $# -ge 2 ] || die "--cwd needs a directory"; cwd="$2"; shift 2; }
+    [ $# -ge 2 ] || die "usage: wintos start [--cwd <dir>] <step> <prompt…>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    step="$1"
+    shift
+    ask() { out=$(printf '%s' "$1" | curl -s -m 5 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/start$SESSION_Q") || die "wintosd not reachable on port $PORT"; code=$(printf '%s' "$out" | tail -n 1); reply=$(printf '%s' "$out" | sed '$d'); [ "$code" = 200 ] || die "$reply"; }
+    ask "$(jq -n --arg s "$step" '{step: $s, check: true}')"
+    name="$reply"
+    started=$(cd "${cwd:-.}" && claude --bg -n "$name" "$*" 2>&1) || die "claude --bg failed: $started"
+    id=$(printf '%s' "$started" | sed -n 's/.*claude attach \([0-9a-f]\{8\}\).*/\1/p' | head -n 1)
+    [ -n "$id" ] || die "claude --bg printed no session id: $started"
+    ask "$(jq -n --arg s "$step" --arg i "$id" '{step: $s, bgId: $i}')"
+    echo "started \"$name\" in the background ($id); it shows in the epic, and claude attach $id opens it"
+    ;;
+owner)
+    shift
+    [ $# -eq 1 ] || die "usage: wintos owner <PR link | owner/repo#number>"
+    ref=$(jq -rn --arg r "$1" '$r | @uri')
+    out=$(curl -s -m 2 "http://127.0.0.1:$PORT/prs/owner?ref=$ref${CLAUDE_CODE_SESSION_ID:+&session=$CLAUDE_CODE_SESSION_ID}") || die "wintosd not reachable on port $PORT"
+    printf '%s' "$out" | jq -r '
+        if .route == null then "wintos: " + . | halt_error(1)
+        elif .mine then "you own \(.pr)"
+        elif .route == "none" then "no session owns \(.pr): fix it yourself, then wintos pr \(.pr) --took-over \"<why>\""
+        else "\(.pr) is owned by \"\(.name)\"\(if .epic then " (epic \(.epic))" else "" end): " + {pane: "running in a pane; wintos tell --pr types it in once it is free", background: "running in the background; wintos tell --pr sends it there", paused: "paused; wintos tell --pr resumes it in its pane first", shelved: "ended; wintos tell --pr resumes it headless"}[.route] end' 2>/dev/null || die "unexpected answer: $out"
+    ;;
+relay | suggest | tell)
+    if [ "$1" = tell ] && [ "${2:-}" = --pr ]; then
+        [ $# -ge 4 ] || die "usage: wintos tell --pr <PR> <text…>"
+        ref="$3"
+        shift 3
+        out=$(jq -n --arg r "$ref" --arg t "$*" '{ref: $r, text: $t}' | curl -s -m 5 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/prs/tell$SESSION_Q") || die "wintosd not reachable on port $PORT"
+        code=$(printf '%s' "$out" | tail -n 1)
+        reply=$(printf '%s' "$out" | sed '$d')
+        [ "$code" = 404 ] && { echo "wintos: $reply" >&2; exit 3; }
+        [ "$code" = 200 ] || die "$reply"
+        printf '%s' "$reply" | jq -r '"told \"\(.name)\", who owns \(.pr): " + {pane: "typed in once it is free", background: "sent to it in the background", paused: "it is resumed in its pane first", shelved: "it is resumed headless to work on it"}[.route]'
+        exit 0
+    fi
+    verb="$1"
+    shift
+    [ $# -ge 2 ] || die "usage: wintos relay <session> <words…> [--note \"<your own context>\"] | wintos suggest|tell <session> <text…>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    to="$1"
+    shift
+    note=""
+    text=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --note) [ $# -ge 2 ] || die "--note needs its text"; note="$2"; shift 2 ;;
+        *) text="${text:+$text }$1"; shift ;;
+        esac
+    done
+    body=$(jq -n --arg to "$to" --arg t "$text" --arg n "$note" '{to: $to, text: $t} + (if $n == "" then {} else {note: $n} end)')
+    out=$(printf '%s' "$body" | curl -s -m 2 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/$verb$SESSION_Q") ||
+        die "wintosd not reachable on port $PORT"
+    code=$(printf '%s' "$out" | tail -n 1)
+    reply=$(printf '%s' "$out" | sed '$d')
+    [ "$code" = 200 ] || die "$reply"
+    case "$verb" in
+    relay) echo "relayed to $reply; WintOS types it in once it is free" ;;
+    tell) echo "told $reply, marked as yours (not the developer's); WintOS types it in once it is free" ;;
+    *) echo "suggested on $reply's question" ;;
+    esac
+    ;;
+epic)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos epic <name> | wintos epic none"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    if [ "$*" = none ]; then body='{"epic":null}'; else body=$(jq -n --arg e "$*" '{epic: $e}'); fi
+    out=$(printf '%s' "$body" | curl -s -m 2 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/epic$SESSION_Q") ||
+        die "wintosd not reachable on port $PORT"
+    code=$(printf '%s' "$out" | tail -n 1)
+    text=$(printf '%s' "$out" | sed '$d')
+    [ "$code" = 200 ] || die "$text"
+    echo "epic: $text"
+    ;;
+todo)
+    shift
+    [ $# -gt 0 ] || die "usage: wintos todo <to-do>… | wintos todo done <to-do>"
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    [ "$1" = done ] && [ $# -eq 1 ] && die "usage: wintos todo done <to-do>"
+    if [ "$1" = done ] && [ $# -gt 1 ]; then
+        shift
+        jq -n --arg d "$*" '{done: $d}' | post "/blocks/$WAVETERM_BLOCKID/todo$SESSION_Q" >/dev/null || exit 1
+        echo "todo done: $*"
+    else
+        jq -n '{items: $ARGS.positional}' --args "$@" | post "/blocks/$WAVETERM_BLOCKID/todo$SESSION_Q" >/dev/null || exit 1
+        echo "todo: $(printf '%s\n' "$@" | paste -sd'|' - | sed 's/|/ · /g')"
+    fi
+    ;;
+ask)
+    shift
+    case "${1:-}" in answer | decide | approve | unblock) ;; *) die "usage: wintos ask answer|decide|approve|unblock [<what you need from them>] [--context <line>] [[--question <which>] --option \"<label>: <then>\"...]..." ;; esac
+    [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
+    kind="$1"
+    shift
+    # What the question is about (--context) and its choices (--option "label: what it leads to",
+    # 2-4; --question <which> before the options of each when it asks several). --why, --recommend,
+    # --final and --pick are taken and dropped: older instructions still send them, and the card
+    # that showed them is gone.
+    words=() context="" options='[]' question=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --context) context="${2:-}"; shift 2 ;;
+        --why | --recommend | --pick | --pick-on) shift 2 ;;
+        --final) shift ;;
+        --question) question="${2:-}"; shift 2 ;;
+        --option) options="$(jq -c --arg o "${2:-}" --arg q "$question" '. + [($o | capture("^(?<label>.*?)(: (?<then>.*))?$") | with_entries(select(.value != null))) + (if $q != "" then {q: $q} else {} end)]' <<<"$options")"; shift 2 ;;
+        *) words+=("$1"); shift ;;
+        esac
+    done
+    text="${words[*]:-}"
+    reply="$(jq -n --arg k "$kind" --arg t "$text" --arg c "$context" --argjson o "$options" \
+        '{kind: $k, text: $t} + (if $c != "" then {context: $c} else {} end) + (if ($o | length) > 0 then {options: $o} else {} end)' |
+        curl -s -m 2 -w '\n%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/ask$SESSION_Q")" || die "wintosd not reachable on port $PORT"
+    [ "${reply##*$'\n'}" = 200 ] || die "wintosd refused the ask: ${reply%$'\n'*}"
+    echo "asks the developer to $kind${text:+: $text}"
     ;;
 done)
     [ -n "${WAVETERM_BLOCKID:-}" ] || die "not inside a WintOS terminal (no WAVETERM_BLOCKID)"
-    echo '{}' | curl -sf -m 2 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$PORT/blocks/$WAVETERM_BLOCKID/done" >/dev/null ||
-        die "wintosd not reachable on port $PORT"
+    echo '{}' | post "/blocks/$WAVETERM_BLOCKID/done$SESSION_Q" >/dev/null || exit 1
     echo "done: nothing waits on the developer"
     ;;
 hooks)
+    if [ -n "${3:-}" ]; then
+        [ -d "$3" ] || die "no such Claude config dir: $3"
+        SETTINGS="$3/settings.json"
+    fi
     [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
     [ -f "$SETTINGS.wintos-bak" ] || cp "$SETTINGS" "$SETTINGS.wintos-bak"
     # Ours are recognised by the hook path, so the user's own hooks are never touched.
     # Prompt and agent hooks have no .command, hence the default.
-    strip='.hooks //= {} | .hooks |= with_entries(.value |= map(select(any(.hooks[]?; (.command // "") | contains("wintos-hook.sh")) | not)))'
+    strip='.hooks //= {} | .hooks |= with_entries(.value |= map(select(any(.hooks[]?; (.command // "") | (contains("wintos-hook.sh") or contains("pr-guard.sh"))) | not)))'
     case "${2:-}" in
     install)
         # shellcheck disable=SC2016
-        rewrite_settings --arg hook "$HOOK" --arg events "$EVENTS" "$strip"' | reduce ($events | split(" "))[] as $e (.;
-            .hooks[$e] = ((.hooks[$e] // []) + [{hooks: [{type: "command", command: $hook}]}]))'
-        echo "wintos: hooks installed in $SETTINGS ($EVENTS)"
+        rewrite_settings --arg hook "$HOOK" --arg guard "$GUARD" --arg events "$EVENTS" "$strip"' | reduce ($events | split(" "))[] as $e (.;
+            .hooks[$e] = ((.hooks[$e] // []) + [{hooks: [{type: "command", command: $hook}]}]))
+            | .hooks.PreToolUse = ((.hooks.PreToolUse // []) + [{matcher: "AskUserQuestion|ExitPlanMode", hooks: [{type: "command", command: $hook}]}, {matcher: "Bash", hooks: [{type: "command", command: $guard}]}])
+            | .hooks.PostToolUse = ((.hooks.PostToolUse // []) + [{matcher: "Bash|AskUserQuestion|ExitPlanMode", hooks: [{type: "command", command: $hook}]}])'
+        echo "wintos: hooks installed in $SETTINGS ($EVENTS PreToolUse:AskUserQuestion|ExitPlanMode PreToolUse:Bash (PR guard) PostToolUse:Bash|AskUserQuestion|ExitPlanMode)"
         ;;
     uninstall)
-        rewrite_settings "$strip"' | .hooks |= with_entries(select(.value | length > 0))'
+        rewrite_settings "$strip"' | .hooks |= with_entries(select(.value | length > 0)) | if .hooks == {} then del(.hooks) else . end'
         echo "wintos: hooks removed from $SETTINGS"
         ;;
-    *) die "usage: wintos hooks install|uninstall" ;;
+    *) die "usage: wintos hooks install|uninstall [<claude config dir>]" ;;
     esac
     ;;
-*) die "usage: wintos title <words> | wintos wait <what> | wintos done | wintos hooks install|uninstall" ;;
+*)
+    # The usage is the header above, so the two can't drift apart.
+    sed -n '3,/^set -eu/p' "$0" | sed '$d; s/^# \{0,1\}//' >&2
+    exit 1
+    ;;
 esac

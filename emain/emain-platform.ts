@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { fireAndForget } from "@/util/util";
-import { app, dialog, ipcMain, shell } from "electron";
+import { app, BaseWindow, dialog, ipcMain, shell } from "electron";
 import envPaths from "env-paths";
 import { existsSync, mkdirSync } from "fs";
 import os from "os";
@@ -18,6 +18,13 @@ app.setName("waveterm/electron");
 // WintOS: a second instance (WINTOS_INSTANCE=dev) needs its own Electron data folder, or the
 // single-instance lock, which Electron keys on it, quits it at once.
 if (process.env.WINTOS_INSTANCE) app.setPath("userData", path.join(app.getPath("appData"), `waveterm-${process.env.WINTOS_INSTANCE}`, "electron"));
+// WintOS: the dev instance restarts while you work in the everyday one; its windows show without
+// taking focus, so a restart never pulls you to its Space.
+if (process.env.WINTOS_INSTANCE === "dev") {
+    BaseWindow.prototype.show = function (this: BaseWindow) {
+        this.showInactive();
+    };
+}
 
 const isDev = !app.isPackaged;
 const isDevVite = isDev && process.env.ELECTRON_RENDERER_URL;

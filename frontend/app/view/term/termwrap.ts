@@ -14,11 +14,14 @@ import {
     globalStore,
     isDev,
     openLink,
+    createBlock,
     WOS,
 } from "@/store/global";
 import * as services from "@/store/services";
 import { PLATFORM, PlatformMacOS } from "@/util/platformutil";
 import { base64ToArray, fireAndForget } from "@/util/util";
+import { formatRemoteUri } from "@/util/waveutil";
+import { backgroundReply, isDarkBg, schemeReport } from "@/wintos/ui/termScheme";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -36,7 +39,9 @@ import {
     isClaudeCodeCommand,
     type ShellIntegrationStatus,
 } from "./osc-handlers";
-import { makeTermLinkHandlers } from "./term-links";
+import { findPathLinks, makeTermLinkHandlers, paneCwd, resolvePathLink } from "./term-links";
+import { findRefLinks, resolveRef } from "@/wintos/ui/refLinks";
+import { currentState } from "@/wintos/ui/useWintos";
 import {
     bufferLinesToText,
     createTempFileFromBlob,
@@ -105,6 +110,11 @@ export class TermWrap {
     claudeCodeActiveAtom: jotai.PrimitiveAtom<boolean>;
     nodeModel: BlockNodeModel; // this can be null
     hoveredLinkUri: string | null = null;
+    schemeBg: string | null = null;
+    schemeAsked: boolean = false;
+    // Mode 2031: the program (tmux, Claude) asked to be told when the appearance flips.
+    schemeMode: boolean = false;
+    heldReply: string | null = null;
     onLinkHover?: (uri: string | null, mouseX: number, mouseY: number, showUrl: boolean) => void;
 
     // Paste deduplication
@@ -146,10 +156,15 @@ export class TermWrap {
         this.webglEnabledAtom = jotai.atom(false) as jotai.PrimitiveAtom<boolean>;
         const linkHandlers = makeTermLinkHandlers(
             PLATFORM === PlatformMacOS,
-            (uri) => fireAndForget(() => openLink(uri)),
+            (uri, external) => (external ? getApi().openExternal(uri) : fireAndForget(() => openLink(uri))),
             (uri, x, y, showUrl) => {
                 this.hoveredLinkUri = uri;
                 this.onLinkHover?.(uri, x, y, showUrl);
+            },
+            (path, external) => {
+                const connection = this.blockMeta().connection;
+                if (external) return getApi().openNativePath(path);
+                fireAndForget(() => createBlock({ meta: { view: "preview", file: path, ...(connection && { connection }) } }));
             }
         );
         this.terminal = new Terminal({
@@ -169,6 +184,10 @@ export class TermWrap {
         this.terminal.loadAddon(
             new WebLinksAddon(linkHandlers.activate, { hover: linkHandlers.hover, leave: linkHandlers.leave })
         );
+        this.terminal.registerLinkProvider({
+            provideLinks: (y, callback) =>
+                fireAndForget(async () => callback(await this.pathLinks(y, linkHandlers))),
+        });
         this.setTermRenderer(WebGLSupported && waveOptions.useWebGl ? "webgl" : "dom");
         // Register OSC handlers
         this.terminal.parser.registerOscHandler(7, (data: string) => {
@@ -187,6 +206,33 @@ export class TermWrap {
                 return false;
             }
         });
+        this.terminal.parser.registerOscHandler(11, (data: string) => {
+            if (data !== "?" || this.schemeBg == null) return false;
+            if (!this.loaded) return true;
+            this.schemeAsked = true;
+            // Programs follow the query with a DA1 (ESC[c) and take an answer to that first as
+            // "no reply"; xterm answers DA1 from the same chunk, and the backend takes each input
+            // in its own goroutine, so both leave in one send.
+            this.heldReply = backgroundReply(this.schemeBg);
+            queueMicrotask(() => this.flushHeldReply(""));
+            return true;
+        });
+        // Mode 2031 is recorded while the history replays too: tmux reattached after a restart set
+        // it before the pane loaded. Not consumed, so xterm still handles the other modes.
+        const schemeModeSet = (on: boolean) => (params: (number | number[])[]) => {
+            if (params.includes(2031)) this.schemeMode = on;
+            return false;
+        };
+        this.toDispose.push(
+            this.terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, schemeModeSet(true)),
+            this.terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, schemeModeSet(false)),
+            // The appearance asked outright (CSI ? 996 n): tmux asks it when it attaches.
+            this.terminal.parser.registerCsiHandler({ prefix: "?", final: "n" }, (params) => {
+                if (params[0] !== 996 || this.schemeBg == null) return false;
+                if (this.loaded) this.sendDataHandler?.(schemeReport(isDarkBg(this.schemeBg)));
+                return true;
+            })
+        );
         this.terminal.parser.registerOscHandler(16162, (data: string) => {
             try {
                 return handleOsc16162Command(data, this.blockId, this.loaded, this);
@@ -326,6 +372,45 @@ export class TermWrap {
         this.terminal.options.cursorBlink = cursorBlink ?? false;
     }
 
+    blockMeta(): MetaType {
+        return globalStore.get(WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", this.blockId)))?.meta ?? {};
+    }
+
+    // Only files that exist become links, so a word that merely looks like a path stays plain text.
+    async pathLinks(
+        y: number,
+        handlers: ReturnType<typeof makeTermLinkHandlers>
+    ): Promise<TermTypes.ILink[] | undefined> {
+        const line = this.terminal.buffer.active.getLine(y - 1)?.translateToString(true) ?? "";
+        const meta = this.blockMeta();
+        const cwd = paneCwd(meta);
+        const links = await Promise.all(
+            findPathLinks(line).map(async ({ text, start, end }) => {
+                const path = resolvePathLink(text, cwd);
+                if (!path) return null;
+                const info = await RpcApi.FileInfoCommand(TabRpcClient, {
+                    info: { path: formatRemoteUri(path, meta.connection) },
+                }).catch((): null => null);
+                if (!info || info.notfound || info.isdir) return null;
+                return {
+                    range: { start: { x: start + 1, y }, end: { x: end, y } },
+                    text: path,
+                    activate: handlers.activatePath,
+                    hover: handlers.osc8Hover,
+                    leave: handlers.leave,
+                };
+            })
+        );
+        // WintOS: a PR Claude names (#352, Core#14129) links to it when it is clear which one.
+        const state = currentState();
+        const refs = !state ? [] : findRefLinks(line).flatMap(({ start, end, ...ref }) => {
+            const url = resolveRef(ref, state, this.blockId);
+            return url ? [{ range: { start: { x: start + 1, y }, end: { x: end, y } }, text: url, activate: handlers.activate, hover: handlers.osc8Hover, leave: handlers.leave }] : [];
+        });
+        const found = [...links.filter((l) => l != null), ...refs];
+        return found.length ? found : undefined;
+    }
+
     setTermRenderer(renderer: "webgl" | "dom") {
         if (renderer === "webgl") {
             if (this.webglAddon != null) {
@@ -428,6 +513,9 @@ export class TermWrap {
         } finally {
             this.loaded = true;
         }
+        // A program that asked before the pane loaded went unanswered (a reattached tmux, whose
+        // Claude then has no background and takes the dark theme); the report makes it ask again.
+        if (this.schemeMode && this.schemeBg != null) this.sendDataHandler?.(this.schemeNotice(this.schemeBg));
         this.runProcessIdleTimeout();
     }
 
@@ -453,13 +541,34 @@ export class TermWrap {
         this.mainFileSubject.release();
     }
 
+    // Only a program that asked for the background during this command hears of a change; at a
+    // shell prompt the report would arrive as typed junk.
+    setSchemeBg(bg: string | null) {
+        const changed = this.schemeBg != null && bg != null && bg !== this.schemeBg;
+        this.schemeBg = bg;
+        if (changed && (this.schemeAsked || this.schemeMode)) this.sendDataHandler?.(this.schemeNotice(bg));
+    }
+
+    // The background first, then the report: tmux passes the report on to its program at once and
+    // asks for the background only after, so a program asking in between got tmux's old colour (or
+    // none) and kept the wrong theme. Programs that ask take an unasked reply as a reply, not input.
+    schemeNotice(bg: string): string {
+        return backgroundReply(bg) + schemeReport(isDarkBg(bg));
+    }
+
     handleTermData(data: string) {
         if (!this.loaded) {
             return;
         }
 
-        this.sendDataHandler?.(data);
+        this.flushHeldReply(data);
         this.multiInputCallback?.(data);
+    }
+
+    flushHeldReply(data: string) {
+        const out = (this.heldReply ?? "") + data;
+        this.heldReply = null;
+        if (out) this.sendDataHandler?.(out);
     }
 
     addFocusListener(focusFn: () => void) {

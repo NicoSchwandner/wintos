@@ -36,6 +36,9 @@ describe("parseProjectMd", () => {
         expect(parseProjectMd("---\ntitle: x\n---\n")).toEqual({ error: "front matter has no id" });
     });
 
+    test("a kind line from an older WintOS is ignored", () =>
+        expect(parseProjectMd("---\nid: t\nkind: support\n---\n")).toEqual({ meta: { id: "t", titleLocked: false, pr: [] }, body: "" }));
+
     test("optional keys default", () => {
         const r = parseProjectMd("---\nid: t\n---\n");
         expect(r).toEqual({ meta: { id: "t", titleLocked: false, pr: [] }, body: "" });
@@ -45,6 +48,16 @@ describe("parseProjectMd", () => {
         const r = parseProjectMd(doc);
         if ("error" in r) throw new Error(r.error);
         expect(parseProjectMd(serializeProjectMd(r.meta, r.body))).toEqual(r);
+    });
+});
+
+describe("units in the front matter", () => {
+    test("read from and written back to one line, beside the other keys", () => {
+        const raw = "---\nid: tab-1\ntitle: Ledger import\nunits: [x] ABC-41 fields check | [>] ABC-42 phase 1\n---\nbody\n";
+        const r = parseProjectMd(raw);
+        if ("error" in r) throw new Error(r.error);
+        expect(r.meta.units).toEqual([{ name: "ABC-41 fields check", state: "done" }, { name: "ABC-42 phase 1", state: "current" }]);
+        expect(serializeProjectMd(r.meta, r.body)).toBe(raw);
     });
 });
 

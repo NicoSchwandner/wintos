@@ -26,7 +26,19 @@ fi
 typeset -g _WAVETERM_SI_FIRSTPRECMD=1
 
 # shell integration
+# WintOS runs each pane's shell in a tmux of its own (socket wintos…), which drops these sequences;
+# there they go through as tmux passthrough (allow-passthrough on in its config).
+_waveterm_si_out() {
+  if [[ "$TMUX" == */wintos* ]]; then
+    local e=$'\033'
+    printf '\033Ptmux;%s\033\\' "${1//$e/$e$e}"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 _waveterm_si_blocked() {
+  [[ "$TMUX" == */wintos* ]] && return 1
   [[ -n "$TMUX" || -n "$STY" || "$TERM" == tmux* || "$TERM" == screen* ]]
 }
 
@@ -72,25 +84,45 @@ _waveterm_si_compmode() {
 _waveterm_si_osc7() {
   _waveterm_si_blocked && return
   local encoded_pwd=$(_waveterm_si_urlencode "$PWD")
-  printf '\033]7;file://localhost%s\007' "$encoded_pwd"  # OSC 7 - current directory
+  _waveterm_si_out "$(printf '\033]7;file://localhost%s\007' "$encoded_pwd")"  # OSC 7 - current directory
 }
+
+# WintOS runs each pane in a tmux of its own (socket wintos…), mouse off so a shell keeps the
+# terminal's own selection and scrollback. Claude draws full screen and wants the wheel and clicks,
+# which tmux passes on only with mouse on: on while a claude command runs, off at the next prompt.
+typeset -g _WINTOS_MOUSE=0
+_wintos_mouse() {
+  [[ "$TMUX" == */wintos* ]] || return
+  [[ "$1" == on ]] && (( _WINTOS_MOUSE )) && return
+  [[ "$1" == off ]] && (( !_WINTOS_MOUSE )) && return
+  tmux set-option -q mouse "$1" 2>/dev/null && _WINTOS_MOUSE=$([[ "$1" == on ]] && echo 1 || echo 0)
+}
+# Any word of the line, as WintOS's own lines start it after a cd (cd … && claude --resume …).
+# A line that only mentions claude turns it on until its prompt: harmless.
+_wintos_mouse_preexec() {
+  local w
+  for w in ${(z)1}; do
+    [[ "${w:t}" == claude ]] && { _wintos_mouse on; return; }
+  done
+}
+_wintos_mouse_precmd() { _wintos_mouse off; }
 
 _waveterm_si_precmd() {
   local _waveterm_si_status=$?
   _waveterm_si_blocked && return
   # D;status for previous command (skip before first prompt)
   if (( !_WAVETERM_SI_FIRSTPRECMD )); then
-    printf '\033]16162;D;{"exitcode":%d}\007' "$_waveterm_si_status"
+    _waveterm_si_out "$(printf '\033]16162;D;{"exitcode":%d}\007' "$_waveterm_si_status")"
   else
     local uname_info=$(uname -smr 2>/dev/null)
     local omz=false
     local comp=$(_waveterm_si_compmode)
     [[ -n "$ZSH" && -r "$ZSH/oh-my-zsh.sh" ]] && omz=true
-    printf '\033]16162;M;{"shell":"zsh","shellversion":"%s","uname":"%s","integration":true,"omz":%s,"comp":"%s"}\007' "$ZSH_VERSION" "$uname_info" "$omz" "$comp"
+    _waveterm_si_out "$(printf '\033]16162;M;{"shell":"zsh","shellversion":"%s","uname":"%s","integration":true,"omz":%s,"comp":"%s"}\007' "$ZSH_VERSION" "$uname_info" "$omz" "$comp")"
     # OSC 7 only sent on first prompt - chpwd hook handles directory changes
     _waveterm_si_osc7
   fi
-  printf '\033]16162;A\007'
+  _waveterm_si_out "$(printf '\033]16162;A\007')"
   _WAVETERM_SI_FIRSTPRECMD=0
 }
 
@@ -104,9 +136,9 @@ _waveterm_si_preexec() {
   local cmd64
   cmd64=$(printf '%s' "$cmd" | base64 2>/dev/null | tr -d '\n\r')
   if [ -n "$cmd64" ]; then
-    printf '\033]16162;C;{"cmd64":"%s"}\007' "$cmd64"
+    _waveterm_si_out "$(printf '\033]16162;C;{"cmd64":"%s"}\007' "$cmd64")"
   else
-    printf '\033]16162;C\007'
+    _waveterm_si_out "$(printf '\033]16162;C\007')"
   fi
 }
 
@@ -123,9 +155,9 @@ _waveterm_si_inputempty() {
   if (( current_empty != WAVETERM_SI_INPUTEMPTY )); then
     WAVETERM_SI_INPUTEMPTY=$current_empty
     if (( current_empty )); then
-      printf '\033]16162;I;{"inputempty":true}\007'
+      _waveterm_si_out "$(printf '\033]16162;I;{"inputempty":true}\007')"
     else
-      printf '\033]16162;I;{"inputempty":false}\007'
+      _waveterm_si_out "$(printf '\033]16162;I;{"inputempty":false}\007')"
     fi
   fi
 }
@@ -139,4 +171,6 @@ fi
 autoload -U add-zsh-hook
 add-zsh-hook precmd  _waveterm_si_precmd
 add-zsh-hook preexec _waveterm_si_preexec
+add-zsh-hook precmd  _wintos_mouse_precmd
+add-zsh-hook preexec _wintos_mouse_preexec
 add-zsh-hook chpwd   _waveterm_si_osc7

@@ -81,6 +81,21 @@ func GetNewTabLayout() PortableLayout {
 	}
 }
 
+// first: the first pane's own meta (a resume of the session the project reopens on), on top of
+// a plain shell.
+func GetPlainTabLayout(first waveobj.MetaMapType) PortableLayout {
+	meta := waveobj.MetaMapType{
+		waveobj.MetaKey_View:       "term",
+		waveobj.MetaKey_Controller: "shell",
+	}
+	for k, v := range first {
+		meta[k] = v
+	}
+	return PortableLayout{
+		{IndexArr: []int{0}, BlockDef: &waveobj.BlockDef{Meta: meta}, Focused: true},
+	}
+}
+
 func GetLayoutIdForTab(ctx context.Context, tabId string) (string, error) {
 	tabObj, err := wstore.DBGet[*waveobj.Tab](ctx, tabId)
 	if err != nil {

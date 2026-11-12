@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { basename, join } from "path";
 import { lineDiff } from "./diff";
 import { parseProjectMd, ProjectMeta, serializeProjectMd } from "./parse";
+import type { Unit } from "./units";
 import { slugify } from "./slug";
 
 export type Project = Partial<ProjectMeta> & { dir: string; mtime: number; mineMtime?: number; error?: string; body?: string };
@@ -37,7 +38,7 @@ export class ProjectStore {
 
     reload(): void {
         this.projects = readdirSync(this.root, { withFileTypes: true })
-            .filter((d) => d.isDirectory())
+            .filter((d) => d.isDirectory() && !d.name.startsWith(".")) // a hidden folder is the daemon's own, never a project
             .map((d) => this.read(join(this.root, d.name)));
     }
 
@@ -63,10 +64,30 @@ export class ProjectStore {
             pr: existing?.pr ?? [],
             title,
             ...(existing?.next ? { next: existing.next } : {}),
+            ...(existing?.units ? { units: existing.units } : {}),
         };
         writeFileSync(join(dir, "project.md"), serializeProjectMd(meta, existing?.body ?? ""));
         this.reload();
         return this.byTab(tabId)!;
+    }
+
+    // `wintos unit`: change returns the new list, or undefined when it names no unit.
+    updateUnits(tabId: string, change: (units: Unit[]) => Unit[] | undefined): Unit[] | "no project" | "no such unit" {
+        const p = this.byTab(tabId);
+        if (!p?.id || p.error) return "no project";
+        const units = change(p.units ?? []);
+        if (!units) return "no such unit";
+        this.updateMeta(tabId, () => ({ units }));
+        return units;
+    }
+
+    // Rewrites the front matter with some keys changed, the body and every other key as they are.
+    private updateMeta(tabId: string, keys: () => Partial<ProjectMeta>): void {
+        const p = this.byTab(tabId);
+        if (!p?.id || p.error) return;
+        const { dir, mtime: _m, mineMtime: _mm, error: _e, body, ...meta } = p;
+        writeFileSync(join(dir, "project.md"), serializeProjectMd({ ...(meta as ProjectMeta), ...keys() }, body ?? ""));
+        this.reload();
     }
 
     mineDiff(tabId: string, sessionId: string): { text: string; diff?: string } {
@@ -85,6 +106,28 @@ export class ProjectStore {
         if (!p) return undefined;
         const mineFile = join(p.dir, "mine.md");
         return { dir: p.dir, projectMd: p.error ? null : (p.body ?? ""), mine: existsSync(mineFile) ? readFileSync(mineFile, "utf8") : "", mineMtime: mtimeOf(mineFile) };
+    }
+
+    // Every project's notes for the palette's search, closed projects included.
+    texts(): Record<string, { body: string; mine: string }> {
+        const out: Record<string, { body: string; mine: string }> = {};
+        for (const p of this.projects) {
+            if (!p.id) continue;
+            const mineFile = join(p.dir, "mine.md");
+            out[p.id] = { body: p.body ?? "", mine: existsSync(mineFile) ? readFileSync(mineFile, "utf8") : "" };
+        }
+        return out;
+    }
+
+    // A closed project's folder taken up by a new tab: the binding moves, and read() rewrites the
+    // file's id to match.
+    reopen(fromId: string, tabId: string): "ok" | "no project" | "taken" {
+        const p = this.byTab(fromId);
+        if (!p) return "no project";
+        if (this.byTab(tabId)) return "taken";
+        this.bind(p.dir, tabId);
+        this.reload();
+        return "ok";
     }
 
     // The only file WintOS writes on the developer's behalf; always inside the project folder.

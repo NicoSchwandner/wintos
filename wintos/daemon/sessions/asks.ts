@@ -1,0 +1,98 @@
+import { ASK_KINDS, type Ask, type AskCard, type AskKind, type AskOption, type TurnRead } from "./reduce";
+
+const MESSAGE_TAIL = 3000;
+const ASK_TEXT_MAX = 90;
+// A question this close to the end of a reply is what the reply leaves the developer with.
+const QUESTION_TAIL = 600;
+
+// For a turn that ended without saying what it expects (no `wintos ask`, wait or done).
+export function askPrompt(message: string): string {
+    return [
+        "A coding agent ended its turn with the message below. Say what it now expects of the developer, as one line",
+        "`<kind>: <what, in at most 10 words>`, where kind is one of:",
+        "- answer: it asked them a question",
+        "- decide: it laid out options and they pick one",
+        "- approve: it explicitly asks for their go before it goes on (a plan of what it will do by itself is not this)",
+        "- unblock: it needs them to do something it can't (a login, an unlock, a manual step); never when it says nothing is needed",
+        "- read: it only reports (done, a status, an analysis, a PR to look at); nothing waits on them",
+        "- waits: it carries on by itself: something it started runs (CI, a loop, a deploy, its subagents or teammates) and it will be woken or come back. A progress update while that work still runs (\"nothing needs you yet; a summary follows\") is waits, not read",
+        'E.g. "decide: two bands or one marked band", "read: momentum fix is live", "waits: the CI retry loop on test".',
+        "Unless it is read or waits, add a line `context: <what this is about, at most 12 words>`, and when the message offers",
+        "choices, one line each (2 to 4) `option: <the choice, a few words> — <what it leads to, a few words>`.",
+        "When it asks more than one thing, put `question: <which, a few words>` before the options of each, up to 8 options in all.",
+        "Reply with these lines only.",
+        "",
+        "Message:",
+        message.slice(-MESSAGE_TAIL),
+    ].join("\n");
+}
+
+const clip = (t: string) => (t.length > ASK_TEXT_MAX ? `${t.slice(0, ASK_TEXT_MAX - 1).trimEnd()}…` : t);
+
+export function parseAsk(out: string): TurnRead | undefined {
+    const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
+    const m = /^\W*(answer|decide|approve|unblock|read|waits)\b\W*(.*)$/i.exec(lines[0] ?? "");
+    if (!m) return undefined;
+    const kind = m[1].toLowerCase();
+    if (kind === "read") return "done";
+    const text = m[2].replace(/^["'“`]+|["'”.`]+$/g, "").trim();
+    if (kind === "waits") return { waits: clip(text || "something it started") };
+    // "unblock: none needed": the model named a kind, then said nothing is asked.
+    if (/^(none|nothing|no action|not needed|n\/a)\b/i.test(text)) return "done";
+    const context = lines.map((l) => /^context:\s*(.+)$/i.exec(l)?.[1]).find(Boolean);
+    let q: string | undefined;
+    const read = lines.flatMap((l): AskOption[] => {
+        const h = /^question:\s*(.+)$/i.exec(l);
+        if (h) return void (q = h[1].slice(0, 80)), [];
+        const o = /^option:\s*(.+?)(?:\s+[—–-]\s+(.+))?$/i.exec(l);
+        return o ? [{ label: o[1].slice(0, 80), ...(o[2] ? { then: o[2].slice(0, 160) } : {}), ...(q ? { q } : {}) }] : [];
+    });
+    const several = optionGroups(read).length > 1;
+    const options = several ? read.slice(0, GROUPED_MAX) : read.slice(0, OPTION_MAX).map(({ q: _, ...o }) => o);
+    return { kind: kind as AskKind, ...(text ? { text: clip(text) } : {}), by: "model", ...(context ? { context: context.slice(0, 240) } : {}), ...(options.length >= 2 ? { options } : {}) };
+}
+
+// When the model can't be asked: a question near the end asks, anything else only reports.
+export function guessAsk(message: string): Ask | "done" {
+    const tail = message.replace(/[*_`]+/g, "").slice(-QUESTION_TAIL);
+    const question = tail.match(/[^.!?\n]*\?/g)?.pop()?.replace(/^[\s>*+-]+/, "").trim();
+    return question ? { kind: "answer", text: clip(question), by: "guess" } : "done";
+}
+
+export const isAskKind = (k: unknown): k is AskKind => (ASK_KINDS as readonly unknown[]).includes(k);
+
+const LINE_MAX = 240;
+const OPTION_MAX = 4;
+const GROUPED_MAX = 8;
+
+// A card's questions: runs of options that answer the same one, as 1-based ranges. A card without
+// questions is one group.
+export function optionGroups(options: AskOption[]): { q?: string; from: number; to: number }[] {
+    const out: { q?: string; from: number; to: number }[] = [];
+    options.forEach((o, i) => {
+        const last = out[out.length - 1];
+        if (last && last.q === o.q) last.to = i + 1;
+        else out.push({ ...(o.q ? { q: o.q } : {}), from: i + 1, to: i + 1 });
+    });
+    return out;
+}
+const oneLine = (v: unknown, max: number) => typeof v === "string" && v.trim() !== "" && !/[\n\r]/.test(v) && v.trim().length <= max;
+
+// What a `wintos ask` question is about and its choices, or why it is refused. Anything else
+// (why, recommend, final, picks: the card that showed them is gone) is dropped.
+export function askCard(b: { context?: unknown; options?: unknown }): AskCard | string {
+    const card: AskCard = {};
+    if (b.context !== undefined) {
+        if (!oneLine(b.context, LINE_MAX)) return `context: one line, up to ${LINE_MAX} characters`;
+        card.context = (b.context as string).trim();
+    }
+    if (b.options !== undefined) {
+        const options = Array.isArray(b.options) ? b.options : [];
+        const fields = options.every((o) => o && oneLine(o.label, 80) && (o.then === undefined || oneLine(o.then, 160)) && (o.q === undefined || oneLine(o.q, 80)));
+        const groups = fields ? optionGroups(options) : [];
+        const ok = fields && options.length <= (groups.length > 1 ? GROUPED_MAX : OPTION_MAX) && groups.every((g) => g.to - g.from >= 1 && g.to - g.from < OPTION_MAX);
+        if (!ok) return `options: 2 to ${OPTION_MAX} per question (q), up to ${GROUPED_MAX} in all, each a label up to 80 characters and an optional "then" up to 160`;
+        card.options = options.map((o) => ({ label: o.label.trim(), ...(o.then ? { then: o.then.trim() } : {}), ...(groups.length > 1 && o.q ? { q: o.q.trim() } : {}) }));
+    }
+    return card;
+}

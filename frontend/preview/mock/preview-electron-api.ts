@@ -1,7 +1,8 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-const previewElectronApi: ElectronApi = {
+// WintOS: its own api methods (custom.d.ts) have no preview mock; the cast keeps tsc clean.
+const previewElectronApi = {
     getAuthKey: () => "",
     getIsDev: () => false,
     getCursorPoint: () => ({ x: 0, y: 0 }) as Electron.Point,
@@ -59,7 +60,7 @@ const previewElectronApi: ElectronApi = {
     doRefresh: () => {},
     saveTextFile: (_fileName: string, _content: string) => Promise.resolve(false),
     setIsActive: async () => {},
-};
+} as unknown as ElectronApi;
 
 function installPreviewElectronApi() {
     (window as any).api = previewElectronApi;

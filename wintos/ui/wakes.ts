@@ -1,0 +1,60 @@
+import { globalStore } from "@/app/store/jotaiStore";
+import { ObjectService } from "@/app/store/services";
+import { getWaveObjectAtom, makeORef } from "@/app/store/wos";
+import { getLayoutModelForStaticTab, LayoutTreeActionType, newLayoutNode, type LayoutTreeInsertNodeAction } from "@/layout/index";
+import { useEffect, useState } from "react";
+import { type Wakes } from "../daemon/wakes/wakes";
+import { deliverable, resumes } from "./wakePlan";
+import type { Session } from "../daemon/sessions/reduce";
+import type { Shelved } from "../daemon/shelf/shelf";
+import { resumePane } from "./focus";
+import { noteResume, resumingNow } from "./resuming";
+import { DRAFT_RETRY_MS, DraftInPane, typeIntoPane } from "./typeIntoPane";
+import { daemonFetch } from "./useWintos";
+
+export { closedWakes, deliverable, resumes, WOKE, type ClosedWake, type Delivery } from "./wakePlan";
+
+// A pane beside the others that leaves your focus where it is.
+async function addPaneQuietly(meta: MetaType): Promise<void> {
+    const blockId = await ObjectService.CreateBlock({ meta }, { termsize: { rows: 25, cols: 80 } });
+    const insert: LayoutTreeInsertNodeAction = { type: LayoutTreeActionType.InsertNode, node: newLayoutNode(undefined, undefined, undefined, { blockId }), magnified: false, focused: false };
+    getLayoutModelForStaticTab().treeReducer(insert);
+}
+
+function tabScripts(tabId: string): (string | undefined)[] {
+    const ids = globalStore.get(getWaveObjectAtom<Tab>(makeORef("tab", tabId)))?.blockids ?? [];
+    return ids.map((id) => globalStore.get(getWaveObjectAtom<Block>(makeORef("block", id)))?.meta?.["cmd:initscript"] as string | undefined);
+}
+
+// Whichever window claims a wake first types it; the daemon says yes to one only. A resume is
+// started once, then waits for the session to come up.
+const busy = new Set<string>();
+export function useWakeDelivery(wakes: Wakes | undefined, sessions: Session[] | undefined, shelf: Shelved[] | undefined, tabId: string): void {
+    const due = wakes && sessions ? deliverable(wakes, sessions, shelf ?? [], tabId) : [];
+    const key = due.map((d) => `${d.kind}:${d.sessionId}`).join(" ");
+    // A pane with your draft in it waits; this asks again a little later.
+    const [retry, setRetry] = useState(0);
+    useEffect(() => {
+        for (const d of due) {
+            if (busy.has(d.sessionId)) continue;
+            if (d.kind === "wake-resume") {
+                if (resumingNow(d.sessionId)) continue;
+                noteResume(d.script);
+                void typeIntoPane(d.blockId, d.script).catch(() => {});
+                continue;
+            }
+            if (d.kind === "resume") {
+                if (resumingNow(d.sessionId) || resumes(tabScripts(tabId), d.sessionId)) continue;
+                noteResume(d.script);
+                void addPaneQuietly(resumePane(d.script)).catch(() => {});
+                continue;
+            }
+            busy.add(d.sessionId);
+            // Typed first, marked delivered after: a pane that can't take it keeps the wake.
+            void typeIntoPane(d.blockId, d.text)
+                .then(() => daemonFetch(`/wakes/${encodeURIComponent(d.id)}/delivered`, { method: "POST", body: {} }))
+                .catch((e) => e instanceof DraftInPane && setTimeout(() => setRetry((n) => n + 1), DRAFT_RETRY_MS))
+                .finally(() => busy.delete(d.sessionId));
+        }
+    }, [key, retry]);
+}

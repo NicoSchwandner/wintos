@@ -6,3 +6,4 @@ const common = { bundle: true, platform: "node", target: "node20", format: "cjs"
 await build({ ...common, entryPoints: ["wintos/daemon/main.ts"], outfile: "dist/wintos/wintosd.cjs" });
 // Core plugins run the same way: one self-contained file each.
 await build({ ...common, entryPoints: ["wintos/plugins/gh-prs/main.ts"], outfile: "dist/wintos/plugins/gh-prs.cjs" });
+await build({ ...common, entryPoints: ["wintos/plugins/calendar/main.ts"], outfile: "dist/wintos/plugins/calendar.cjs" });

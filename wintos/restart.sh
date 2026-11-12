@@ -19,6 +19,11 @@ running() { pgrep -f "remoteDebuggingPort $DEBUG_PORT|remote-debugging-port=$DEB
 
 # Built before anything stops: a checkout that doesn't build leaves the running WintOS alone,
 # instead of leaving nothing running (⌥⌘U on a broken commit did). Sessions run on in tmux.
+# A cleaned cache can take node_modules with it: put it back rather than fail to build.
+if [ ! -x node_modules/.bin/electron-vite ]; then
+    npm ci --no-audit --no-fund >/dev/null || fail "npm ci failed; WintOS keeps running as it was"
+    ok "dependencies reinstalled"
+fi
 task build:server:quickdev >/dev/null || fail "the server doesn't build; WintOS keeps running as it was"
 ok "server built"
 node wintos/build.mjs >/dev/null || fail "the daemon or CLI doesn't build; WintOS keeps running as it was"

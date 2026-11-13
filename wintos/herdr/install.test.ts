@@ -1,3 +1,4 @@
+import { transformSync } from "esbuild";
 import {
     chmodSync,
     copyFileSync,
@@ -14,12 +15,13 @@ import {
     writeFileSync,
 } from "fs";
 import { execFileSync } from "node:child_process";
+import { runInNewContext } from "node:vm";
 import { tmpdir } from "os";
 import { join } from "path";
 import { expect, test } from "vitest";
 import { installFiles } from "./install.mjs";
 
-function runMainInstaller(temp: string, env: Record<string, string> = {}, state?: object) {
+function runMainInstaller(temp: string, env: Record<string, string> = {}, state?: object, failedCheck?: string) {
     const appHome = join(temp, ".config/herdr-app");
     mkdirSync(join(appHome, "layouts"), { recursive: true });
     writeFileSync(join(appHome, "layouts/main.json"), JSON.stringify({ type: "row", children: [] }));
@@ -28,7 +30,9 @@ function runMainInstaller(temp: string, env: Record<string, string> = {}, state?
         stub,
         `
 const cp = require('node:child_process');
-cp.execFileSync = (command) => {
+cp.execFileSync = (command, args) => {
+    require('node:fs').appendFileSync(${JSON.stringify(join(temp, "commands.jsonl"))}, JSON.stringify({ command, args }) + '\\n');
+    if (command === 'herdr-app' && args[0] === 'check' && args[1].endsWith('/' + ${JSON.stringify(failedCheck ?? "not-a-mod")})) throw new Error('Synthetic native check failed');
     if (command === '/usr/bin/which') return '/bin/echo\\n';
     if (command === 'launchctl' || command === 'herdr-app') return '';
     throw new Error('Unexpected external command: ' + command);
@@ -240,10 +244,11 @@ test("installs bracket-free shortcuts without changing the shipped layout, exist
     chmodSync(join(temp, "shared-claude.json"), 0o600);
     symlinkSync("shared-claude.json", claudeSettings);
     const sourceRoot = join(temp, "source");
-    mkdirSync(join(sourceRoot, "mods/wintos-nav"), { recursive: true });
-    mkdirSync(join(sourceRoot, "mods/wintos-search"), { recursive: true });
-    for (const name of ["wintos-nav", "wintos-search"])
+    for (const name of ["wintos-nav", "wintos-search", "wintos-meetings", "wintos-system"]) {
+        mkdirSync(join(sourceRoot, "mods", name), { recursive: true });
         writeFileSync(join(sourceRoot, "mods", name, "main.js"), "test mod");
+    }
+    writeFileSync(join(sourceRoot, "meetings.ts"), "export const meetingRows = () => [];");
     writeFileSync(join(sourceRoot, "hook.sh"), "test hook");
     writeFileSync(join(sourceRoot, "main.ts"), 'console.log(process.argv.slice(2).join("|"))');
     await installFiles({ appHome, installRoot, claudeSettings, sourceRoot, codexExecutable: "/bin/echo" });
@@ -308,10 +313,11 @@ test("installed CLI routes only Herdr wakes and leaves Wave commands with the or
     mkdirSync(join(appHome, "layouts"), { recursive: true });
     mkdirSync(binDir);
     writeFileSync(join(appHome, "layouts/main.json"), JSON.stringify({ type: "row", children: [] }));
-    for (const name of ["wintos-nav", "wintos-search"]) {
+    for (const name of ["wintos-nav", "wintos-search", "wintos-meetings", "wintos-system"]) {
         mkdirSync(join(sourceRoot, "mods", name), { recursive: true });
         writeFileSync(join(sourceRoot, "mods", name, "main.js"), "fixture");
     }
+    writeFileSync(join(sourceRoot, "meetings.ts"), "export const meetingRows = () => [];");
     writeFileSync(join(sourceRoot, "hook.sh"), "fixture");
     writeFileSync(join(sourceRoot, "main.ts"), 'console.log(process.argv.slice(2).join("|"))');
     mkdirSync(join(temp, "hooks"));
@@ -400,4 +406,230 @@ test("persistent launchd errors stop after bounded retries", async () => {
             throw Object.assign(Error("Still unavailable"), { status: 5 });
         }) as any)
     ).rejects.toThrow("Still unavailable");
+});
+
+function layoutNodes(node: any): any[] {
+    return [node, ...(node.children ?? []).flatMap(layoutNodes)];
+}
+
+function glancesFixture(clock = true) {
+    const temp = mkdtempSync(join(tmpdir(), "herdr-glances-install-"));
+    const appHome = join(temp, "app");
+    const options = { appHome, installRoot: join(temp, "install"), claudeSettings: join(temp, "claude.json") };
+    const clockNode = {
+        id: "personal-clock",
+        type: "block",
+        size: { px: 36 },
+        content: { mod: "local-clock", props: { format: "24h" } },
+    };
+    const layout = {
+        id: "root",
+        type: "row",
+        titlebar: "none",
+        children: [
+            {
+                id: "sidebar",
+                type: "column",
+                size: { px: 268 },
+                background: "chrome",
+                children: [
+                    { id: "brand", type: "block", window_drag: true, content: { mod: "workspace-chrome" } },
+                    ...(clock ? [{ id: "clock-wrapper", type: "column", children: [clockNode] }] : []),
+                    {
+                        id: "sidebar-lists",
+                        type: "column",
+                        children: [
+                            { id: "spaces", type: "block", content: { mod: "spaces" } },
+                            { id: "agents", type: "block", content: { mod: "agents" } },
+                        ],
+                    },
+                    {
+                        id: "sidebar-footer",
+                        type: "block",
+                        size: { px: 69 },
+                        content: { mod: "workspace-chrome", props: { footer: true } },
+                    },
+                ],
+            },
+            { id: "work", type: "block", content: { tab: "active" } },
+        ],
+    };
+    mkdirSync(join(appHome, "layouts"), { recursive: true });
+    mkdirSync(join(appHome, "mods/local-clock"), { recursive: true });
+    writeFileSync(join(appHome, "mods/local-clock/main.js"), "personal clock stays untouched");
+    writeFileSync(join(appHome, "layouts/personal.json"), JSON.stringify(layout));
+    writeFileSync(join(appHome, "shared.json"), JSON.stringify({ layout: "personal", keep: true }));
+    const cloneFile = join(appHome, "layouts/wintos-companion.json");
+    return { ...options, layout, cloneFile, readClone: () => JSON.parse(readFileSync(cloneFile, "utf8")) };
+}
+
+test.each([true, false])(
+    "actual installer places both glances while preserving the native sidebar and reinstalling idempotently (clock=%s)",
+    async (clock) => {
+        const f = glancesFixture(clock);
+        const sourceText = readFileSync(join(f.appHome, "layouts/personal.json"), "utf8");
+        await installFiles(f);
+        const installed = f.readClone();
+        const nodes = layoutNodes(installed);
+        const parent = nodes.find((node) => node.children?.some((child: any) => child.id === "wintos-meetings"));
+        expect(parent).toBeDefined();
+        const anchor = parent.children.findIndex((node: any) =>
+            clock ? node.content?.mod === "local-clock" : node.id === "brand"
+        );
+        expect(parent.children[anchor + 1]).toMatchObject({
+            id: "wintos-meetings",
+            type: "block",
+            content: { mod: "wintos-meetings" },
+        });
+        const sidebar = nodes.find((node) => node.id === "sidebar");
+        const footerIndex = sidebar.children.findIndex((node: any) => node.id === "sidebar-footer");
+        expect(sidebar.children[footerIndex - 1]).toMatchObject({
+            id: "wintos-system",
+            type: "block",
+            content: { mod: "wintos-system" },
+        });
+        const withoutManaged = (node: any): any => ({
+            ...node,
+            ...(node.children
+                ? {
+                      children: node.children
+                          .filter(
+                              (child: any) =>
+                                  !["wintos-meetings", "wintos-system", "wintos-companion-commands"].includes(child.id)
+                          )
+                          .map(withoutManaged),
+                  }
+                : {}),
+        });
+        expect(withoutManaged(installed)).toEqual(f.layout);
+        expect(readFileSync(join(f.appHome, "layouts/personal.json"), "utf8")).toBe(sourceText);
+        expect(readFileSync(join(f.appHome, "mods/local-clock/main.js"), "utf8")).toBe(
+            "personal clock stays untouched"
+        );
+        await installFiles(f);
+        expect(f.readClone()).toEqual(installed);
+        expect(JSON.parse(readFileSync(join(f.appHome, "shared.json"), "utf8"))).toEqual({
+            layout: "wintos-companion",
+            keep: true,
+        });
+    }
+);
+
+test("an inactive stale companion clone cannot replace the newly selected source, while active clone edits survive", async () => {
+    const f = glancesFixture();
+    writeFileSync(f.cloneFile, JSON.stringify({ id: "stale", type: "row", children: [] }));
+    await installFiles(f);
+    expect(f.readClone().id).toBe("root");
+    const edited = f.readClone();
+    edited.background = "personal-look";
+    writeFileSync(f.cloneFile, JSON.stringify(edited));
+    await installFiles(f);
+    expect(f.readClone()).toEqual(edited);
+});
+
+test("main checks every installed native mod including both glances before restarting its synthetic service", () => {
+    const temp = mkdtempSync(join(tmpdir(), "herdr-glances-check-"));
+    runMainInstaller(temp, { WINTOS_ROOT: join(temp, "history") });
+    const commands = readFileSync(join(temp, "commands.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+    const checks = commands.filter((call) => call.command === "herdr-app" && call.args[0] === "check");
+    expect(checks.map((call) => call.args)).toEqual(
+        ["wintos-nav", "wintos-search", "wintos-meetings", "wintos-system"].map((name) => [
+            "check",
+            join(temp, ".config/herdr-app/mods", name),
+        ])
+    );
+    const restartIndex = commands.findIndex((call) => call.command === "launchctl");
+    expect(
+        commands.findIndex((call) => call.command === "herdr-app" && call.args[1]?.endsWith("wintos-system"))
+    ).toBeLessThan(restartIndex);
+});
+
+test("actual installer copies both glance mods and emits an independently executable meeting model", async () => {
+    const f = glancesFixture();
+    await installFiles(f);
+    for (const name of ["wintos-meetings", "wintos-system"]) {
+        for (const file of ["main.js", "mod.json"])
+            expect(readFileSync(join(f.appHome, "mods", name, file), "utf8")).toBe(
+                readFileSync(join(__dirname, "mods", name, file), "utf8")
+            );
+    }
+    const module = { exports: {} as any };
+    runInNewContext(
+        transformSync(readFileSync(join(f.appHome, "mods/wintos-meetings/model.js"), "utf8"), { format: "cjs" }).code,
+        { module, exports: module.exports }
+    );
+    const now = new Date(2026, 10, 13, 10).getTime();
+    expect(
+        module.exports.meetingRows(
+            {
+                meetings: [
+                    {
+                        title: "Synthetic planning",
+                        start: new Date(2026, 10, 13, 11).toISOString(),
+                        end: new Date(2026, 10, 13, 12).toISOString(),
+                        room: "Room North",
+                    },
+                ],
+            },
+            now
+        )
+    ).toEqual([{ title: "Synthetic planning", time: "11:00 – 12:00", room: "Room North" }]);
+});
+
+test("reinstallation moves only the managed meeting slot beneath a clock added later", async () => {
+    const f = glancesFixture(false);
+    await installFiles(f);
+    const layout = f.readClone();
+    const sidebar = layoutNodes(layout).find((node) => node.id === "sidebar");
+    const existing = sidebar.children.find((node: any) => node.id === "wintos-meetings");
+    existing.size = { px: 100 };
+    const wrapper = {
+        id: "later-clock",
+        type: "column",
+        children: [{ id: "clock", type: "block", content: { mod: "local-clock" } }],
+    };
+    sidebar.children.splice(2, 0, wrapper);
+    writeFileSync(f.cloneFile, JSON.stringify(layout));
+    await installFiles(f);
+    const updated = f.readClone();
+    const nested = layoutNodes(updated).find((node) => node.id === "later-clock");
+    expect(nested.children[1]).toEqual(existing);
+    expect(layoutNodes(updated).filter((node) => node.id === "wintos-meetings")).toHaveLength(1);
+    expect(
+        layoutNodes(updated)
+            .find((node) => node.id === "sidebar")
+            .children.some((node: any) => node.id === "wintos-meetings")
+    ).toBe(false);
+    await installFiles(f);
+    expect(f.readClone()).toEqual(updated);
+});
+
+test.each(["wintos-meetings", "wintos-system"])(
+    "a failed native check for %s prevents service restart",
+    (failedCheck) => {
+        const temp = mkdtempSync(join(tmpdir(), "herdr-glances-refusal-"));
+        expect(() => runMainInstaller(temp, { WINTOS_ROOT: join(temp, "history") }, undefined, failedCheck)).toThrow(
+            "Synthetic native check failed"
+        );
+        const commands = readFileSync(join(temp, "commands.jsonl"), "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line));
+        expect(commands.some((call) => call.command === "launchctl")).toBe(false);
+    }
+);
+
+test("a sidebar without clock, brand or footer anchors keeps its existing native content", async () => {
+    const f = glancesFixture(false);
+    const sidebar = f.layout.children[0] as any;
+    sidebar.children = sidebar.children.filter((node: any) => !["brand", "sidebar-footer"].includes(node.id));
+    writeFileSync(join(f.appHome, "layouts/personal.json"), JSON.stringify(f.layout));
+    await installFiles(f);
+    expect(layoutNodes(f.readClone()).find((node) => node.id === "sidebar")).toEqual(sidebar);
+    expect(layoutNodes(f.readClone()).some((node) => ["wintos-meetings", "wintos-system"].includes(node.id))).toBe(
+        false
+    );
 });

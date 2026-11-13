@@ -41,7 +41,7 @@ export function icsToMeetings(text: string, from: number, to: number, opts: { ke
     }
 }
 
-function meetingsOf(cal: ICAL.Component, from: number, to: number, opts: { keepAllDay?: boolean; rooms?: string[] }): IcsMeeting[] {
+export function meetingsOf(cal: ICAL.Component, from: number, to: number, opts: { keepAllDay?: boolean; rooms?: string[] }): IcsMeeting[] {
     const rooms = new Map(
         (opts.rooms ?? []).map((r) => {
             const [address, name] = r.split("=").map((x) => x.trim());

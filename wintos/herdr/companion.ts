@@ -112,7 +112,7 @@ export async function createCompanion(options: CompanionOptions = {}) {
         if (result.code) throw new Error(`hc get: ${result.stderr}`);
         return JSON.parse(result.stdout);
     };
-    const sameAgent = (s: SessionHit, t: Terminal | undefined) => {
+    const sameAgent = (s: Pick<SessionHit, "id" | "provider" | "terminalPid">, t: Terminal | undefined) => {
         if (t?.state !== "live") return false;
         const pidMatches =
             Number.isSafeInteger(s.terminalPid) && s.terminalPid! > 0 && t.foreground?.pid === s.terminalPid;
@@ -155,9 +155,15 @@ export async function createCompanion(options: CompanionOptions = {}) {
     async function refreshCodex(query = "", withHistory = true) {
         if (!codexRoot && withHistory) return;
         if (codexRoot && withHistory && now() - (codexCache.get(query) ?? -Infinity) >= 60_000) {
-            for (const hit of await codexHistory(codexRoot, query)) {
+            for (const { indexedTitle, ...hit } of await codexHistory(codexRoot, query)) {
                 const old = state.sessions[hit.id];
-                state.sessions[hit.id] = { ...hit, ...old, prs: [...new Set([...hit.prs, ...(old?.prs ?? [])])] };
+                const knownName = old?.name && old.name !== hit.id ? old.name : undefined;
+                state.sessions[hit.id] = {
+                    ...hit,
+                    ...old,
+                    name: indexedTitle ?? knownName ?? hit.name,
+                    prs: [...new Set([...hit.prs, ...(old?.prs ?? [])])],
+                };
             }
             codexCache.set(query, now());
         }
@@ -271,13 +277,15 @@ export async function createCompanion(options: CompanionOptions = {}) {
         return { id: p.session_id };
     }
 
-    async function open(id: string) {
+    async function open(id: string, stillCurrent = () => true) {
         if (state.sessions[id]?.provider === "codex") await refreshCodex("", false);
+        if (!stillCurrent()) return { id, skipped: true };
         const hit = index().find((s) => s.id === id);
         if (!hit) failure(404, "Session not found");
         if (hit.source === "wintos" && hit.live) failure(409, "Session is live in WintOS; focus it in Wave");
         if (current(hit)) {
             const t = await terminal(hit.terminal!);
+            if (!stillCurrent()) return { id, skipped: true };
             if (current(hit) && sameAgent(hit, t)) {
                 await checked("herdr-app", ["do", "agent.focus", "--terminal", hit.terminal!]);
                 return { id, focused: true };
@@ -289,6 +297,11 @@ export async function createCompanion(options: CompanionOptions = {}) {
                 409,
                 `Unbound live Codex terminal(s): ${unboundCodex.map((t) => t.terminal).join(", ")}. Register the active thread with wintos wake in that terminal, or close it before resuming history.`
             );
+        return resumeInNewTab(hit, stillCurrent);
+    }
+
+    async function resumeInNewTab(hit: SessionHit, stillCurrent: () => boolean) {
+        const id = hit.id;
         if (state.opening[id] != null && now() - state.opening[id] < 60_000) return { id, opening: true };
         const parts = resumeParts(hit.resume, hit.id);
         if (hit.resume && !parts) failure(409, "Unrecognized resume script; refusing to execute it");
@@ -301,8 +314,10 @@ export async function createCompanion(options: CompanionOptions = {}) {
                 ? undefined
                 : hit.configDir;
         if (!cwd) failure(409, "Session has no known working directory");
-        state.opening[id] = now();
+        const openingAt = now();
+        state.opening[id] = openingAt;
         save();
+        let opened = false;
         try {
             if (hit.source === "transcript") {
                 const modified = hit.transcriptPath ? (await stat(hit.transcriptPath)).mtimeMs : hit.lastAt;
@@ -310,6 +325,7 @@ export async function createCompanion(options: CompanionOptions = {}) {
                     failure(409, "Transcript is recent; cannot confirm the session is closed");
             }
             const processes = await checked("ps", ["-axo", "args="]);
+            if (!stillCurrent()) return { id, skipped: true };
             if (processes.split("\n").some((line) => /\b(claude|codex)\b/.test(line) && line.includes(id)))
                 failure(409, "Claude process for this session may still be running");
             const argv =
@@ -324,11 +340,13 @@ export async function createCompanion(options: CompanionOptions = {}) {
                           id,
                       ];
             await checked("herdr-app", ["do", "tab.new", JSON.stringify({ name: hit.name, folder: cwd, argv })]);
+            opened = true;
             return { id, opening: true };
-        } catch (e) {
-            delete state.opening[id];
-            save();
-            throw e;
+        } finally {
+            if (!opened && state.opening[id] === openingAt) {
+                delete state.opening[id];
+                save();
+            }
         }
     }
 
@@ -388,6 +406,19 @@ export async function createCompanion(options: CompanionOptions = {}) {
         return false;
     }
 
+    async function codexWakeBinding(body: Record<string, any>) {
+        const wire = await terminal(body.terminal);
+        if (wire?.state !== "live" || wire.status?.app !== "codex") return;
+        const resumed = resumedCodex(wire);
+        if (resumed && resumed !== body.codexId) failure(409, "Codex thread does not match the terminal");
+        if (!resumed && !(await foregroundCodexCaller(body.callerPid, wire.foreground?.pid)))
+            failure(
+                409,
+                "Fresh Codex thread ownership could not be verified. Exit and resume this conversation in the same Herdr terminal, then retry."
+            );
+        return { id: body.codexId, provider: "codex" as const, terminalPid: wire.foreground?.pid, cwd: wire.cwd };
+    }
+
     async function nativeWake(body: Record<string, any>) {
         if (!text(body.terminal) && text(body.codexId)) {
             await refreshCodex("", false);
@@ -400,28 +431,30 @@ export async function createCompanion(options: CompanionOptions = {}) {
                 );
             body.terminal = session.terminal;
         }
-        if (text(body.codexId) && text(body.terminal)) {
+        const previousId = state.terminals[body.terminal];
+        const binding = text(body.codexId) && text(body.terminal) ? await codexWakeBinding(body) : undefined;
+        if (text(body.terminal)) {
             const wire = await terminal(body.terminal);
-            if (wire?.state === "live" && wire.status?.app === "codex") {
-                const resumed = resumedCodex(wire);
-                if (resumed && resumed !== body.codexId) failure(409, "Codex thread does not match the terminal");
-                if (!resumed && !(await foregroundCodexCaller(body.callerPid, wire.foreground?.pid)))
-                    failure(
-                        409,
-                        "Fresh Codex thread ownership could not be verified. Exit and resume this conversation in the same Herdr terminal, then retry."
-                    );
+            if (state.terminals[body.terminal] !== previousId)
+                failure(409, "No matching latest session for terminal; its foreground changed");
+            if (binding) {
+                if (!sameAgent(binding, wire)) failure(409, "Codex thread does not match the terminal");
                 register({
                     terminal: body.terminal,
-                    terminalPid: wire.foreground?.pid,
+                    terminalPid: binding.terminalPid,
                     provider: "codex",
                     configDir: body.codexHome ?? codexRoot ?? join(homedir(), ".codex"),
                     payload: {
                         session_id: body.codexId,
                         hook_event_name: "UserPromptSubmit",
-                        cwd: wire.cwd ?? process.cwd(),
+                        cwd: binding.cwd ?? process.cwd(),
                     },
                 });
                 body.sessionId = body.codexId;
+            } else {
+                const session = state.sessions[previousId];
+                if (!session || !current(session) || !sameAgent(session, wire))
+                    failure(409, "No matching latest session for terminal; its foreground changed");
             }
         }
         return registerWake(body);
@@ -478,16 +511,21 @@ export async function createCompanion(options: CompanionOptions = {}) {
         else if (unreachable(wake.event, pr)) wake.status = "cancelled";
     }
 
+    const currentWake = (wake: Wake) => state.wakes[wake.id] === wake && wake.status === "pending";
+
     async function deliver(wake: Wake) {
+        if (!currentWake(wake)) return;
         const session = state.sessions[wake.sessionId];
+        const stillCurrent = () => currentWake(wake) && state.sessions[wake.sessionId] === session;
         if (!session || !current(session)) {
-            await open(wake.sessionId);
+            await open(wake.sessionId, stillCurrent);
             return;
         }
         const address = session.terminal!;
         let t = await terminal(address);
+        if (!currentWake(wake)) return;
         if (!t || t.state === "finished") {
-            await open(wake.sessionId);
+            await open(wake.sessionId, stillCurrent);
             return;
         }
         if (!sameAgent(session, t) || !["idle", "done"].includes(t.status?.state ?? "")) return;
@@ -497,7 +535,7 @@ export async function createCompanion(options: CompanionOptions = {}) {
             !current(session) ||
             state.sessions[wake.sessionId] !== session ||
             !sameAgent(session, t) ||
-            wake.status !== "pending"
+            !currentWake(wake)
         )
             return;
         if (wasDone && !["idle", "done"].includes(t!.status!.state ?? "")) return;
@@ -514,13 +552,13 @@ export async function createCompanion(options: CompanionOptions = {}) {
 
     async function pollWakes() {
         for (const wake of Object.values(state.wakes)) {
-            if (closed || wake.status !== "pending") continue;
+            if (closed || !currentWake(wake)) continue;
             try {
                 delete wake.error;
                 if (state.sessions[wake.sessionId]?.provider === "codex") await refreshCodex("", false);
                 await checkWake(wake);
                 save();
-                if (wake.status === "pending" && wake.due != null) await deliver(wake);
+                if (currentWake(wake) && wake.due != null) await deliver(wake);
             } catch (e) {
                 wake.error = messageOf(e);
             }

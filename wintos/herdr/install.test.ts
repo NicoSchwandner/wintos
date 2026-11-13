@@ -286,6 +286,16 @@ test("installs bracket-free shortcuts without changing the shipped layout, exist
         execFileSync(launch, ["resume", "thread"], { env: { HC_TERMINAL_ID: "t42" }, encoding: "utf8" }).trim()
     ).toBe('-c shell_environment_policy.set.HC_TERMINAL_ID="t42" resume thread');
     expect(JSON.parse(readFileSync(join(installRoot, "backup/keys.json"), "utf8")).global["ctrl-tab"]).toBe("tab.next");
+    const changed = {
+        type: "column",
+        children: [{ id: "different-clock", type: "block", content: { mod: "local-clock" } }],
+    };
+    writeFileSync(join(appHome, "layouts/changed.json"), JSON.stringify(changed));
+    writeFileSync(join(appHome, "shared.json"), JSON.stringify({ layout: "changed", unrelated: true }));
+    await installFiles({ appHome, installRoot, claudeSettings, sourceRoot, codexExecutable: "/bin/echo" });
+    expect(JSON.parse(readFileSync(join(appHome, "layouts/wintos-companion.json"), "utf8")).children[0]).toEqual(
+        changed.children[0]
+    );
 });
 
 test("installed CLI routes only Herdr wakes and leaves Wave commands with the original CLI", async () => {

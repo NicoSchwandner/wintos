@@ -63,6 +63,6 @@ Files: `wintos/herdr/backend/system.ts`, `wintos/herdr/system.test.ts`, `wintos/
 - [x] Test actual mod fetch/render wiring with mocked host/network; add installation tests for its bottom-left slot. Run scoped/full tests, typecheck and populated native-render checks with the meeting card.
 
 ## Verification state
-All 1,530 tests and full typecheck pass after merging the parent fixes. All four installed native mods and populated meeting/resource render fixtures pass native checks. Live endpoints return calendar rooms and whole-machine usage. Native screenshot capture returned an old frame and computer use found no accessible window, so pixel inspection remains unverified; actual-mod geometry tests and recursive layout checks cover placement.
+All 1,534 tests and full typecheck pass after merging the parent fixes. All four installed native mods and populated meeting/resource render fixtures pass native checks. Live endpoints return calendar rooms and whole-machine usage. Native screenshot capture returned an old frame and computer use found no accessible window, so pixel inspection remains unverified; actual-mod geometry tests and recursive layout checks cover placement.
 
 - [ ] Inspect pixels in a live accessible Herdr window; screenshot capture is currently stale and computer use reports no accessible window.

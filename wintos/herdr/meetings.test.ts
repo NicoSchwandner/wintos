@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { meetingRows } from "./meetings";
+import { createCalendarFeed } from "./backend/calendar";
 
 const now = new Date(2026, 10, 13, 10, 0).getTime();
 const iso = (hour: number, minute = 0, day = 13) => new Date(2026, 10, day, hour, minute).toISOString();
@@ -340,6 +341,51 @@ function frozenClock() {
 }
 
 describe("native meetings mod", () => {
+    test("the actual minute timer refreshes the backend after a 20ms fetch instead of waiting two minutes", async () => {
+        frozenClock();
+        let requests = 0;
+        const calendarFetch = vi.fn<typeof globalThis.fetch>(() => new Promise<Response>((resolve) => {
+            const poll = ++requests;
+            setTimeout(() => resolve(new Response(`BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:synthetic-cadence
+SUMMARY:Poll ${poll}
+DTSTART:20261113T130000
+DTEND:20261113T140000
+LOCATION:Room North
+END:VEVENT
+END:VCALENDAR`)), 20);
+        }));
+        const feed = createCalendarFeed({
+            loadSettings: () => ({ url: "https://calendar.example.test/synthetic.ics" }),
+            fetch: calendarFetch,
+            now: () => Date.now(),
+        });
+        const companionFetch = vi.fn(async (url: string) => {
+            expect(url).toBe("http://127.0.0.1:7732/meetings");
+            return ok(await feed.read());
+        });
+        const h = host(companionFetch);
+        expect(h.timers.map((timer) => timer.ms)).toEqual([60_000]);
+        const timer = setInterval(() => h.timers[0].callback(h.cx), h.timers[0].ms);
+        try {
+            await vi.advanceTimersByTimeAsync(20);
+            await h.settle();
+            expect(text(h.mod.render())).toContain("Poll 1");
+            expect(h.mod.cache.updatedAt).toBe(now + 20);
+            await vi.advanceTimersByTimeAsync(59_980);
+            expect(Date.now()).toBe(now + 60_000);
+            expect(calendarFetch).toHaveBeenCalledTimes(2);
+            await vi.advanceTimersByTimeAsync(20);
+            await h.settle();
+            expect(text(h.mod.render())).toContain("Poll 2");
+            expect(h.mod.cache.updatedAt).toBe(now + 60_020);
+            expect(companionFetch).toHaveBeenCalledTimes(2);
+        } finally {
+            clearInterval(timer);
+        }
+    });
     test("fetches on init and every minute, renders separate nonshrinking room lines and resizes only its own slot", async () => {
         frozenClock();
         const fetch = vi.fn(async () => ok(pair));

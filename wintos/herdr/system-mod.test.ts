@@ -2,15 +2,25 @@ import { transformSync } from "esbuild";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { expect, test, vi } from "vitest";
+import { createSystemSampler } from "./backend/system";
 
 function element() {
     const node: any = { children: [], attrs: {} };
-    const builder: any = new Proxy(node, { get(target, key: string) {
-        if (key in target) return target[key];
-        if (["on_click", "on_key_down", "cursor_pointer"].includes(key)) throw Error("Status must have no actions");
-        if (key === "child") return (child: any) => { target.children.push(child); return builder; };
-        return (value: any) => { target.attrs[key] = value; return builder; };
-    } });
+    const builder: any = new Proxy(node, {
+        get(target, key: string) {
+            if (key in target) return target[key];
+            if (["on_click", "on_key_down", "cursor_pointer"].includes(key)) throw Error("Status must have no actions");
+            if (key === "child")
+                return (child: any) => {
+                    target.children.push(child);
+                    return builder;
+                };
+            return (value: any) => {
+                target.attrs[key] = value;
+                return builder;
+            };
+        },
+    });
     return builder;
 }
 const ok = (data: any) => ({ ok: true, json: async () => data });
@@ -18,24 +28,32 @@ function host(fetchReply: (...args: any[]) => Promise<any>) {
     const theme = { chrome: "chrome-token", muted: "muted-token", foreground: "foreground-token" };
     const module = { exports: {} as any };
     const fetch = vi.fn(fetchReply);
-    runInNewContext(transformSync(readFileSync(`${__dirname}/mods/wintos-system/main.js`, "utf8"), { format: "cjs" }).code, {
-        module, exports: module.exports, fetch,
-        require: (name: string) => {
-            if (name === "gpui-kit") return { View: class {}, div: element };
-            if (name === "gpui-base") return { h_flex: element };
-            if (name === "herdr") return { theme: () => theme };
-            throw Error("Unexpected host API");
-        },
-    });
+    runInNewContext(
+        transformSync(readFileSync(`${__dirname}/mods/wintos-system/main.js`, "utf8"), { format: "cjs" }).code,
+        {
+            module,
+            exports: module.exports,
+            fetch,
+            require: (name: string) => {
+                if (name === "gpui-kit") return { View: class {}, div: element };
+                if (name === "gpui-base") return { h_flex: element };
+                if (name === "herdr") return { theme: () => theme };
+                throw Error("Unexpected host API");
+            },
+        }
+    );
     const mod = new module.exports.default();
     const tasks: Promise<any>[] = [];
     const timers: { ms: number; callback: (cx: any) => void }[] = [];
-    const cx = { notify: vi.fn(), spawn: (fn: any) => tasks.push(fn(cx)),
-        timer: { every: (ms: number, callback: any) => timers.push({ ms, callback }) } };
+    const cx = {
+        notify: vi.fn(),
+        spawn: (fn: any) => tasks.push(fn(cx)),
+        timer: { every: (ms: number, callback: any) => timers.push({ ms, callback }) },
+    };
     mod.init({}, cx);
     const rendered = () => {
         const root = mod.render();
-        const text = (node: any): string => typeof node === "string" ? node : node.children.map(text).join("");
+        const text = (node: any): string => (typeof node === "string" ? node : node.children.map(text).join(""));
         return { root, text: text(root) };
     };
     return { mod, cx, fetch, timers, tasks, rendered, flush: () => Promise.all(tasks) };
@@ -53,7 +71,7 @@ test("renders unknowns immediately, then themed native CPU/RAM text from the pro
 
 test("refreshes every five seconds with only one request in flight", async () => {
     let finish!: (value: any) => void;
-    const h = host(() => new Promise((resolve) => finish = resolve));
+    const h = host(() => new Promise((resolve) => (finish = resolve)));
     expect(h.timers.map((timer) => timer.ms)).toEqual([5000]);
     h.timers[0].callback(h.cx);
     expect(h.fetch).toHaveBeenCalledTimes(1);
@@ -67,11 +85,59 @@ test("refreshes every five seconds with only one request in flight", async () =>
     expect(h.rendered().text).toBe("CPU 100% · RAM —");
 });
 
+test("the actual widget's five-second polls receive fresh samples despite collection latency", async () => {
+    let clock = 0,
+        samples = 0;
+    const sampler = createSystemSampler({
+        now: () => clock,
+        cpus: () => {
+            const sample = samples++;
+            return [
+                {
+                    model: "Synthetic CPU",
+                    speed: 1000,
+                    times: {
+                        user: sample * 25,
+                        idle: sample * 75,
+                        nice: 0,
+                        sys: 0,
+                        irq: 0,
+                    },
+                },
+            ];
+        },
+        totalmem: () => 8 * 1024 ** 3,
+        vmStat: async () => {
+            clock += 20;
+            return "Mach Virtual Memory Statistics: (page size of 4096 bytes)\nAnonymous pages: 100.\nPages purgeable: 10.\nPages wired down: 20.\nPages occupied by compressor: 5.\n";
+        },
+    });
+    const h = host(async () => ok(await sampler.read()));
+    await h.flush();
+    expect(h.rendered().text).toBe("CPU — · RAM 0.0/8 GiB");
+    for (const pollAt of [5000, 10000]) {
+        clock = pollAt;
+        h.timers[0].callback(h.cx);
+        await h.flush();
+        expect(h.rendered().text).toBe("CPU 25% · RAM 0.0/8 GiB");
+        expect(samples).toBe(pollAt / 5000 + 1);
+    }
+});
+
 test.each([
-    { cpu: null, memory: null }, {}, { cpu: -1 }, { cpu: 101 }, { cpu: "42" }, { cpu: NaN },
-    { cpu: Infinity }, { memory: { used: -1, total: 16 } }, { memory: { used: 17, total: 16 } },
-    { memory: { used: 0, total: 0 } }, { memory: { used: 1, total: Infinity } },
-    { memory: { used: "1", total: 16 } }, null,
+    { cpu: null, memory: null },
+    {},
+    { cpu: -1 },
+    { cpu: 101 },
+    { cpu: "42" },
+    { cpu: NaN },
+    { cpu: Infinity },
+    { memory: { used: -1, total: 16 } },
+    { memory: { used: 17, total: 16 } },
+    { memory: { used: 0, total: 0 } },
+    { memory: { used: 1, total: Infinity } },
+    { memory: { used: "1", total: 16 } },
+    null,
 ])("invalid or absent metrics render as unknown (%#)", async (data) => {
     const h = host(async () => ok(data));
     await h.flush();
@@ -79,9 +145,16 @@ test.each([
 });
 
 test.each([
-    async () => { throw Error("sensitive network payload"); },
+    async () => {
+        throw Error("sensitive network payload");
+    },
     async () => ({ ok: false, json: async () => ({ error: "sensitive response" }) }),
-    async () => ({ ok: true, json: async () => { throw Error("sensitive JSON payload"); } }),
+    async () => ({
+        ok: true,
+        json: async () => {
+            throw Error("sensitive JSON payload");
+        },
+    }),
 ])("failed refresh clears stale numbers and the next timer recovers (%#)", async (failure) => {
     const h = host(async () => ok({ cpu: 42 }));
     await h.flush();

@@ -151,16 +151,38 @@ describe("createCalendarFeed", () => {
         expect(fetch).toHaveBeenCalledTimes(1);
     });
 
-    test("timestamps and caches from completion rather than a slow request's start", async () => {
+    test("expires from request start while timestamping the completed result", async () => {
         let clock = Now;
         const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => {
-            clock += 90_000;
+            clock += 20;
             return response();
         });
         const feed = createCalendarFeed({ loadSettings: settings, fetch, now: () => clock });
-        expect((await feed.read()).updatedAt).toBe(Now + 90_000);
-        expect((await feed.read()).updatedAt).toBe(Now + 90_000);
+        expect((await feed.read()).updatedAt).toBe(Now + 20);
+        clock = Now + 59_999;
+        expect((await feed.read()).updatedAt).toBe(Now + 20);
         expect(fetch).toHaveBeenCalledTimes(1);
+        clock = Now + 60_000;
+        expect((await feed.read()).updatedAt).toBe(Now + 60_020);
+        expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    test("a request in flight beyond expiry still shares one promise, then the next read refreshes", async () => {
+        let clock = Now;
+        let finish!: (text: string) => void;
+        const body = new Promise<string>((resolve) => { finish = resolve; });
+        const fetch = vi.fn<typeof globalThis.fetch>()
+            .mockResolvedValueOnce({ ok: true, text: () => body } as Response)
+            .mockImplementation(async () => response());
+        const feed = createCalendarFeed({ loadSettings: settings, fetch, now: () => clock });
+        const first = feed.read();
+        clock += 90_000;
+        expect(feed.read()).toBe(first);
+        expect(fetch).toHaveBeenCalledTimes(1);
+        finish(calendar(Meeting));
+        expect((await first).updatedAt).toBe(Now + 90_000);
+        await feed.read();
+        expect(fetch).toHaveBeenCalledTimes(2);
     });
 
     test("a valid empty calendar is a successful cached result", async () => {

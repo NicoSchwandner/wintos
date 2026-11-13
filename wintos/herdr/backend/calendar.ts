@@ -76,11 +76,12 @@ export function createCalendarFeed(options: CalendarOptions = {}): { read(): Pro
     return {
         read() {
             if (inFlight) return inFlight;
-            if (now() < nextReadAt) return Promise.resolve(view);
+            const startedAt = now();
+            if (startedAt < nextReadAt) return Promise.resolve(view);
+            nextReadAt = startedAt + CacheMs;
             inFlight = refresh()
                 .then((result) => {
                     view = result;
-                    nextReadAt = now() + CacheMs;
                     return view;
                 })
                 .finally(() => { inFlight = undefined; });

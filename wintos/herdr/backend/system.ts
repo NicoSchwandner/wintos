@@ -6,7 +6,12 @@ const Unavailable = "System usage unavailable";
 const CounterNames = ["user", "nice", "sys", "idle", "irq"] as const;
 
 export type SystemView = { cpu?: number; memory?: { used: number; total: number }; error?: string };
-type SystemOptions = { cpus?: () => CpuInfo[]; totalmem?: () => number; vmStat?: () => Promise<string>; now?: () => number };
+type SystemOptions = {
+    cpus?: () => CpuInfo[];
+    totalmem?: () => number;
+    vmStat?: () => Promise<string>;
+    now?: () => number;
+};
 type CpuSnapshot = { count: number; counters: number[] };
 
 function readVmStat(): Promise<string> {
@@ -20,11 +25,13 @@ function readVmStat(): Promise<string> {
 
 function cpuSnapshot(cores: CpuInfo[]): CpuSnapshot {
     if (cores.length === 0) throw Error(Unavailable);
-    const counters = cores.flatMap((core) => CounterNames.map((key) => {
-        const value = core.times[key];
-        if (!Number.isSafeInteger(value) || value < 0) throw Error(Unavailable);
-        return value;
-    }));
+    const counters = cores.flatMap((core) =>
+        CounterNames.map((key) => {
+            const value = core.times[key];
+            if (!Number.isSafeInteger(value) || value < 0) throw Error(Unavailable);
+            return value;
+        })
+    );
     return { count: cores.length, counters };
 }
 
@@ -35,8 +42,8 @@ function cpuPercent(current: CpuSnapshot, previous?: CpuSnapshot): number | unde
     const total = deltas.reduce((sum, value) => sum + value, 0);
     if (total <= 0) return;
     const idleIndex = CounterNames.indexOf("idle");
-    const idle = deltas.reduce((sum, value, i) => i % CounterNames.length === idleIndex ? sum + value : sum, 0);
-    return Math.max(0, Math.min(100, (total - idle) / total * 100));
+    const idle = deltas.reduce((sum, value, i) => (i % CounterNames.length === idleIndex ? sum + value : sum), 0);
+    return Math.max(0, Math.min(100, ((total - idle) / total) * 100));
 }
 
 function memoryUsage(text: string, total: number): { used: number; total: number } {
@@ -94,11 +101,13 @@ export function createSystemSampler(options: SystemOptions = {}): { read(): Prom
         read() {
             if (inFlight) return inFlight;
             if (cached && now() < expiresAt) return cached;
-            inFlight = Promise.resolve().then(sample).then((result) => {
-                expiresAt = now() + CacheMs;
-                inFlight = undefined;
-                return result;
-            });
+            expiresAt = now() + CacheMs;
+            inFlight = Promise.resolve()
+                .then(sample)
+                .then((result) => {
+                    inFlight = undefined;
+                    return result;
+                });
             cached = inFlight;
             return inFlight;
         },

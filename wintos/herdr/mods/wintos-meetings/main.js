@@ -1,7 +1,13 @@
-import { v_flex } from "gpui-base";
+import { h_flex, v_flex } from "gpui-base";
 import { View, div } from "gpui-kit";
 import { run, theme } from "herdr";
 import { meetingRows } from "./model.js";
+
+const RowHeight = 46;
+const ThenHeight = 16;
+const Gap = 4;
+const Padding = 4;
+const StatusHeight = 14;
 
 export default class Meetings extends View {
     init(_props, cx) {
@@ -41,45 +47,62 @@ export default class Meetings extends View {
 
     refresh(cx) {
         this.rows = this.cache ? meetingRows(this.cache, Date.now()) : [];
-        run("layout.resize", { id: "wintos-meetings", px: this.rows.length ? 40 + this.rows.length * 60 : 60 });
+        const count = this.rows.length;
+        const height = count
+            ? Padding * 2 + RowHeight + (count > 1 ? Gap + ThenHeight : 0) + (this.note ? StatusHeight + Gap : 0)
+            : 28;
+        run("layout.resize", { id: "wintos-meetings", px: height });
         cx.notify();
     }
 
     render() {
         const t = theme();
-        const card = v_flex().size_full().px(16).py(8).gap(2).bg(t.chrome).text_size(12).text_color(t.foreground);
-        card.child(
-            div()
-                .h(18)
-                .flex_none()
-                .text_size(11)
-                .text_color(t.muted)
-                .truncate()
-                .child(this.note || "Meetings")
-        );
-        for (const row of this.rows) {
+        const card = v_flex()
+            .size_full()
+            .px(16)
+            .py(Padding)
+            .gap(Gap)
+            .bg(t.chrome)
+            .text_size(12)
+            .text_color(t.foreground);
+        if (this.note)
+            card.child(div().h(StatusHeight).flex_none().text_size(11).text_color(t.muted).truncate().child(this.note));
+        for (const [index, row] of this.rows.entries()) {
+            if (index > 0) {
+                card.child(
+                    h_flex()
+                        .w_full()
+                        .min_w(0)
+                        .h(ThenHeight)
+                        .flex_none()
+                        .items_center()
+                        .gap(Gap)
+                        .child(
+                            div()
+                                .flex_none()
+                                .text_size(11)
+                                .text_color(t.muted)
+                                .child(`Then ${row.time.split(" – ")[0]} ·`)
+                        )
+                        .child(div().flex_1().min_w(0).truncate().child(row.title))
+                        .child(div().flex_none().child(`· ${row.room}`))
+                );
+                continue;
+            }
             card.child(
                 v_flex()
                     .w_full()
                     .min_w(0)
-                    .h(58)
+                    .h(RowHeight)
                     .flex_none()
-                    .gap(2)
-                    .child(
-                        div()
-                            .h(16)
-                            .flex_none()
-                            .text_size(11)
-                            .text_color(t.muted)
-                            .truncate()
-                            .child(`${row.time}${row.unaccepted ? " · not accepted" : ""}`)
-                    )
-                    .child(div().h(18).flex_none().font_semibold().truncate().child(row.title))
-                    .child(div().h(18).flex_none().truncate().child(row.room))
+                    .gap(0)
+                    .child(div().h(14).flex_none().text_size(11).text_color(t.muted).truncate().child(row.time))
+                    .child(div().h(16).flex_none().font_semibold().truncate().child(row.title))
+                    .child(div().h(16).flex_none().truncate().child(row.room))
             );
         }
         if (!this.rows.length && !this.note)
-            card.child(div().h(18).flex_none().text_color(t.muted).child("No upcoming meetings"));
+            card.child(div().h(16).flex_none().text_color(t.muted).child("No more meetings today"));
         return card;
     }
 }

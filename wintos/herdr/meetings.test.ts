@@ -2,8 +2,8 @@ import { transformSync } from "esbuild";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { meetingRows } from "./meetings";
 import { createCalendarFeed } from "./backend/calendar";
+import { meetingRows } from "./meetings";
 
 const now = new Date(2026, 10, 13, 10, 0).getTime();
 const iso = (hour: number, minute = 0, day = 13) => new Date(2026, 10, day, hour, minute).toISOString();
@@ -37,20 +37,20 @@ describe("meetingRows", () => {
             new Date(2026, 10, 14, 0, 15).getTime()
         );
         expect(rows).toEqual([
-            { title: "Overnight", time: "Fri 13 Nov · 23:30 – 01:00", room: "Room North" },
+            { title: "Overnight", time: "23:30 – 01:00", room: "Room North" },
             { title: "Morning", time: "09:00 – 10:00", room: "Room South" },
         ]);
     });
-    test("formats compact local 24-hour times and weekdays without native locale support", () => {
+    test("formats local 24-hour times without dates or native locale support", () => {
         vi.spyOn(Date.prototype, "toLocaleTimeString").mockImplementation(() => "09:00:00 AM");
         vi.spyOn(Date.prototype, "toLocaleDateString").mockImplementation(() => "11/16/2026");
         expect(
             meetingRows(
                 {
                     meetings: [
-                        meeting("Monday", 9, {
-                            start: iso(9, 0, 16),
-                            end: iso(10, 0, 16),
+                        meeting("Upcoming", 12, {
+                            start: iso(12),
+                            end: iso(13),
                             room: "Room North",
                         }),
                     ],
@@ -58,8 +58,8 @@ describe("meetingRows", () => {
                 now
             )[0]
         ).toEqual({
-            title: "Monday",
-            time: "Mon 16 Nov · 09:00 – 10:00",
+            title: "Upcoming",
+            time: "12:00 – 13:00",
             room: "Room North",
         });
     });
@@ -116,141 +116,64 @@ describe("meetingRows", () => {
             ).map((r) => r.title)
         ).toEqual(["First", "Second"]);
     });
-    test("labels tomorrow after the last meeting and keeps chronological order", () => {
-        const rows = meetingRows(
-            {
-                meetings: [
-                    meeting("Ended", 8),
-                    meeting("Tomorrow second", 12, { start: iso(12, 0, 14), end: iso(13, 0, 14) }),
-                    meeting("Tomorrow first", 9, { start: iso(9, 0, 14), end: iso(10, 0, 14) }),
-                    meeting("Later day", 9, { start: iso(9, 0, 15), end: iso(10, 0, 15) }),
-                ],
-            },
-            now
-        );
-        expect(rows).toEqual([
-            { title: "Tomorrow first", time: "Tomorrow · 09:00 – 10:00", room: "Room not listed" },
-            { title: "Tomorrow second", time: "Tomorrow · 12:00 – 13:00", room: "Room not listed" },
-        ]);
-    });
-    test("Friday after the last meeting shows Monday's next two meetings", () => {
+    test("shows no meetings when only tomorrow or later days remain", () => {
         expect(
             meetingRows(
                 {
                     meetings: [
-                        meeting("Ended Friday", 8),
-                        meeting("Monday second", 12, {
-                            start: iso(12, 0, 16),
-                            end: iso(13, 0, 16),
-                            room: "Room South",
-                        }),
-                        meeting("Monday first", 9, { start: iso(9, 0, 16), end: iso(10, 0, 16), room: "Room North" }),
-                    ],
-                },
-                now
-            )
-        ).toEqual([
-            { title: "Monday first", time: "Mon 16 Nov · 09:00 – 10:00", room: "Room North" },
-            { title: "Monday second", time: "Mon 16 Nov · 12:00 – 13:00", room: "Room South" },
-        ]);
-    });
-    test("fills the remaining slot after today's last meeting with Monday", () => {
-        expect(
-            meetingRows(
-                {
-                    meetings: [
-                        meeting("Today", 12),
+                        meeting("Ended today", 8),
+                        meeting("Tomorrow", 9, { start: iso(9, 0, 14), end: iso(10, 0, 14) }),
                         meeting("Monday", 9, { start: iso(9, 0, 16), end: iso(10, 0, 16) }),
                     ],
                 },
                 now
             )
-        ).toEqual([
-            { title: "Today", time: "12:00 – 13:00", room: "Room not listed" },
-            { title: "Monday", time: "Mon 16 Nov · 09:00 – 10:00", room: "Room not listed" },
-        ]);
+        ).toEqual([]);
     });
-    test("shows Monday then Tuesday when there is one meeting on each day", () => {
+    test("does not fill a remaining slot with tomorrow's meeting", () => {
         expect(
             meetingRows(
                 {
                     meetings: [
-                        meeting("Tuesday", 9, { start: iso(9, 0, 17), end: iso(10, 0, 17) }),
-                        meeting("Monday", 9, { start: iso(9, 0, 16), end: iso(10, 0, 16) }),
-                    ],
-                },
-                now
-            )
-        ).toEqual([
-            { title: "Monday", time: "Mon 16 Nov · 09:00 – 10:00", room: "Room not listed" },
-            { title: "Tuesday", time: "Tue 17 Nov · 09:00 – 10:00", room: "Room not listed" },
-        ]);
-    });
-    test("one representative per future start keeps accepted-first selection and skips duplicates", () => {
-        const accepted = meeting("Accepted Monday", 9, { start: iso(9, 0, 16), end: iso(10, 0, 16) });
-        expect(
-            meetingRows(
-                {
-                    meetings: [
-                        meeting("Pending Monday", 9, { start: iso(9, 0, 16), end: iso(10, 0, 16), reply: "pending" }),
-                        accepted,
-                        accepted,
-                        meeting("Tuesday", 9, { start: iso(9, 0, 17), end: iso(10, 0, 17) }),
-                    ],
-                },
-                now
-            ).map((row) => row.title)
-        ).toEqual(["Accepted Monday", "Tuesday"]);
-    });
-    test("stale payloads never resurrect expired Friday or Monday meetings", () => {
-        const data = {
-            error: "Calendar unavailable",
-            updatedAt: now,
-            meetings: [
-                meeting("Expired Friday", 8),
-                meeting("Expired Monday", 9, { start: iso(9, 0, 16), end: iso(10, 0, 16) }),
-                meeting("Tuesday", 9, { start: iso(9, 0, 17), end: iso(10, 0, 17) }),
-            ],
-        };
-        expect(meetingRows(data, new Date(2026, 10, 16, 12).getTime())).toEqual([
-            { title: "Tuesday", time: "Tomorrow · 09:00 – 10:00", room: "Room not listed" },
-        ]);
-        expect(meetingRows(data, new Date(2026, 10, 17, 10).getTime())).toEqual([]);
-        expect(meetingRows({ meetings: [] }, now)).toEqual([]);
-    });
-    test("current and imminent selection can each fill a second slot from future days", () => {
-        const monday = meeting("Monday", 9, { start: iso(9, 0, 16), end: iso(10, 0, 16) });
-        expect(
-            meetingRows({ meetings: [meeting("Current", 9, { end: iso(11) }), monday] }, now).map((row) => row.title)
-        ).toEqual(["Current", "Monday"]);
-        expect(
-            meetingRows(
-                {
-                    meetings: [
-                        meeting("Current", 9, { end: iso(11) }),
-                        meeting("Imminent", 10, { start: iso(10, 1) }),
-                        monday,
-                    ],
-                },
-                now
-            ).map((row) => row.title)
-        ).toEqual(["Imminent", "Monday"]);
-    });
-    test("fills a remaining slot with tomorrow and labels it independently of today", () => {
-        expect(
-            meetingRows(
-                {
-                    meetings: [
-                        meeting("Today", 12),
+                        meeting("Today", 12, { room: "Room North" }),
                         meeting("Tomorrow", 9, { start: iso(9, 0, 14), end: iso(10, 0, 14) }),
                     ],
                 },
                 now
             )
-        ).toEqual([
-            { title: "Today", time: "12:00 – 13:00", room: "Room not listed" },
-            { title: "Tomorrow", time: "Tomorrow · 09:00 – 10:00", room: "Room not listed" },
+        ).toEqual([{ title: "Today", time: "12:00 – 13:00", room: "Room North" }]);
+    });
+    test("today's simultaneous starts keep one accepted representative before the following meeting", () => {
+        const accepted = meeting("Accepted", 12);
+        expect(
+            meetingRows(
+                {
+                    meetings: [
+                        meeting("Pending", 12, { reply: "pending" }),
+                        accepted,
+                        accepted,
+                        meeting("Following", 14),
+                        meeting("Tomorrow", 9, { start: iso(9, 0, 14), end: iso(10, 0, 14) }),
+                    ],
+                },
+                now
+            ).map((row) => row.title)
+        ).toEqual(["Accepted", "Following"]);
+    });
+    test("stale cached data follows the local day across midnight without showing tomorrow early", () => {
+        const data = {
+            error: "Calendar unavailable",
+            meetings: [
+                meeting("Today", 23, { start: iso(23), end: iso(23, 30) }),
+                meeting("Next day", 9, { start: iso(9, 0, 14), end: iso(10, 0, 14) }),
+            ],
+        };
+        expect(meetingRows(data, new Date(2026, 10, 13, 23, 45).getTime())).toEqual([]);
+        expect(meetingRows(data, new Date(2026, 10, 14, 0, 15).getTime()).map((row) => row.title)).toEqual([
+            "Next day",
         ]);
+        expect(meetingRows(data, new Date(2026, 10, 14, 10).getTime())).toEqual([]);
+        expect(meetingRows({ meetings: [] }, now)).toEqual([]);
     });
 });
 
@@ -272,6 +195,8 @@ function element(kind: string): Element {
         "truncate",
         "flex_none",
         "min_w",
+        "flex_1",
+        "items_center",
     ]) {
         el[name] = (...args: unknown[]) => {
             el.styles[name] = args.length ? args[0] : true;
@@ -313,7 +238,7 @@ function host(fetch: (url: string) => Promise<unknown>) {
             require: (name: string) => {
                 if (name === "./model.js") return { meetingRows };
                 if (name === "gpui-kit") return { View: class {}, div: () => element("div") };
-                if (name === "gpui-base") return { v_flex: () => element("column") };
+                if (name === "gpui-base") return { v_flex: () => element("column"), h_flex: () => element("row") };
                 if (name === "herdr")
                     return {
                         theme: () => ({
@@ -344,9 +269,14 @@ describe("native meetings mod", () => {
     test("the actual minute timer refreshes the backend after a 20ms fetch instead of waiting two minutes", async () => {
         frozenClock();
         let requests = 0;
-        const calendarFetch = vi.fn<typeof globalThis.fetch>(() => new Promise<Response>((resolve) => {
-            const poll = ++requests;
-            setTimeout(() => resolve(new Response(`BEGIN:VCALENDAR
+        const calendarFetch = vi.fn<typeof globalThis.fetch>(
+            () =>
+                new Promise<Response>((resolve) => {
+                    const poll = ++requests;
+                    setTimeout(
+                        () =>
+                            resolve(
+                                new Response(`BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
 UID:synthetic-cadence
@@ -355,8 +285,12 @@ DTSTART:20261113T130000
 DTEND:20261113T140000
 LOCATION:Room North
 END:VEVENT
-END:VCALENDAR`)), 20);
-        }));
+END:VCALENDAR`)
+                            ),
+                        20
+                    );
+                })
+        );
         const feed = createCalendarFeed({
             loadSettings: () => ({ url: "https://calendar.example.test/synthetic.ics" }),
             fetch: calendarFetch,
@@ -395,16 +329,18 @@ END:VCALENDAR`)), 20);
         expect(h.timers.map((t) => t.ms)).toEqual([60_000]);
         const tree = h.mod.render();
         expect(tree.styles.bg).toBe("chrome");
-        expect((tree.children[0] as Element).styles.h).toBe(18);
-        for (const room of ["Room North", "Room South"]) {
+        expect(tree.styles.text_size).toBe(12);
+        expect(tree.styles.py).toBe(4);
+        expect(text(tree)).not.toContain("Meetings");
+        for (const room of ["Room North"]) {
             const line = nodes(tree).find((n) => n.children.includes(room))!;
             expect(line).toBeDefined();
             expect(line.styles.flex_none).toBe(true);
             const row = nodes(tree).find((n) => n.children.includes(line))!;
             expect(row.kind).toBe("column");
-            expect(row.styles.h).toBe(58);
-            expect(row.styles.gap).toBe(2);
-            expect(row.children.map((child: Element) => child.styles.h)).toEqual([16, 18, 18]);
+            expect(row.styles.h).toBe(46);
+            expect(row.styles.gap).toBe(0);
+            expect(row.children.map((child: Element) => child.styles.h)).toEqual([14, 16, 16]);
             expect(
                 row.children.some(
                     (n: any) =>
@@ -414,53 +350,55 @@ END:VCALENDAR`)), 20);
                 )
             ).toBe(true);
         }
-        expect(text(tree)).toContain("not accepted");
-        expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 160 }]);
+        const then = tree.children[1] as Element;
+        expect(then.kind).toBe("row");
+        expect(then.styles.h).toBe(16);
+        expect(text(then)).toContain("Then 12:00");
+        expect(text(then)).toContain("Review");
+        expect(text(then)).toContain("Room South");
+        expect(nodes(then).find((node) => node.children.includes("Review"))!.styles).toMatchObject({
+            flex_1: true,
+            truncate: true,
+        });
+        expect(nodes(then).find((node) => node.children.includes("· Room South"))!.styles.flex_none).toBe(true);
+        expect(text(tree)).not.toContain("not accepted");
+        expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 74 }]);
         h.timers[0].callback(h.cx);
         await h.settle();
         expect(fetch).toHaveBeenCalledTimes(2);
         expect(h.notify).toHaveBeenCalled();
     });
-    test("renders Monday and Tuesday labels from the real model and expires stale rows", async () => {
+    test("the native view hides future-day data and shows today's empty state after the last meeting", async () => {
         frozenClock();
-        const payload = {
-            meetings: [
-                meeting("Expired Friday", 8),
-                meeting("Monday", 9, { start: iso(9, 0, 16), end: iso(10, 0, 16), room: "Room North" }),
-                meeting("Tuesday", 9, { start: iso(9, 0, 17), end: iso(10, 0, 17), room: "Room South" }),
-            ],
-        };
-        let request = 0;
-        const h = host(async () => {
-            if (++request === 1) return ok(payload);
-            throw Error("Synthetic offline response");
-        });
+        const h = host(async () =>
+            ok({
+                meetings: [
+                    meeting("Today", 12, { room: "Room North" }),
+                    meeting("Tomorrow", 9, { start: iso(9, 0, 14), end: iso(10, 0, 14), room: "Room South" }),
+                ],
+            })
+        );
         await h.settle();
-        expect(text(h.mod.render())).toContain("Mon 16 Nov · 09:00 – 10:00");
-        expect(text(h.mod.render())).toContain("Tue 17 Nov · 09:00 – 10:00");
-        expect(text(h.mod.render())).not.toContain("Expired Friday");
-        vi.setSystemTime(new Date(2026, 10, 16, 12).getTime());
+        expect(text(h.mod.render())).toContain("Today");
+        expect(text(h.mod.render())).toContain("Room North");
+        expect(text(h.mod.render())).not.toMatch(/Tomorrow|Room South|Then/);
+        expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 54 }]);
+        vi.setSystemTime(now + 4 * 3_600_000);
         h.timers[0].callback(h.cx);
         await h.settle();
-        expect(text(h.mod.render())).not.toContain("Monday");
-        expect(text(h.mod.render())).toContain("Tomorrow · 09:00 – 10:00");
-        expect(text(h.mod.render())).toContain("Room South");
-        expect(text(h.mod.render())).toContain("stale");
-        vi.setSystemTime(new Date(2026, 10, 17, 10).getTime());
-        h.timers[0].callback(h.cx);
-        await h.settle();
-        expect(text(h.mod.render())).not.toMatch(/Monday|Tuesday|Room North|Room South/);
+        expect(text(h.mod.render())).toBe("No more meetings today");
+        expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 28 }]);
     });
     test("shrinks for one and empty, distinguishing empty from unavailable", async () => {
         frozenClock();
         const replies = [ok({ meetings: [pair.meetings[0]] }), ok({ meetings: [] })];
         const h = host(async () => replies.shift());
         await h.settle();
-        expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 100 }]);
+        expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 54 }]);
         h.timers[0].callback(h.cx);
         await h.settle();
-        expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 60 }]);
-        expect(text(h.mod.render())).toContain("No upcoming meetings");
+        expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 28 }]);
+        expect(text(h.mod.render())).toContain("No more meetings today");
         expect(text(h.mod.render())).not.toContain("unavailable");
     });
     test.each(["network", "http", "json", "shape", "null", "primitive", "missing", "backend"])(
@@ -494,7 +432,7 @@ END:VCALENDAR`)), 20);
             expect(stale).not.toContain("Room North");
             expect(stale).not.toContain("Room South");
             expect(stale).toContain("Room East");
-            expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 100 }]);
+            expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 72 }]);
             expect(stale).toContain("stale");
             expect(stale).not.toMatch(/secret|private/);
             vi.setSystemTime(now + 6 * 3_600_000);
@@ -502,7 +440,7 @@ END:VCALENDAR`)), 20);
             await h.settle();
             expect(text(h.mod.render())).not.toMatch(/Room North|Room South|Room East/);
             expect(text(h.mod.render())).toContain("stale");
-            expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 60 }]);
+            expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 28 }]);
             vi.setSystemTime(now);
             h.timers[0].callback(h.cx);
             await h.settle();
@@ -566,7 +504,7 @@ END:VCALENDAR`)), 20);
         vi.setSystemTime(now + 6 * 3_600_000);
         h.timers[0].callback(h.cx);
         expect(text(h.mod.render())).not.toContain("Room East");
-        expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 60 }]);
+        expect(h.effects.at(-1)).toEqual(["layout.resize", { id: "wintos-meetings", px: 28 }]);
         finish({ ok: false });
         await h.settle();
         expect(text(h.mod.render())).toContain("stale");
@@ -576,7 +514,7 @@ END:VCALENDAR`)), 20);
         const h = host(async () => ok({ meetings: [], error: "private config" }));
         await h.settle();
         expect(text(h.mod.render())).toContain("Calendar unavailable");
-        expect(text(h.mod.render())).not.toContain("No upcoming meetings");
+        expect(text(h.mod.render())).not.toContain("No more meetings today");
     });
     test("overlapping minute ticks share the in-flight request", async () => {
         frozenClock();

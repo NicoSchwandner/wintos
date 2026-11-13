@@ -1,11 +1,11 @@
-# Herdr Meetings Implementation Plan
+# Herdr Sidebar Glances Implementation Plan
 
 > **For agentic workers:** follow the subagent-driven-development method to implement this plan task-by-task. Steps use checkbox syntax for tracking.
 
-**Goal:** Show the current/upcoming meeting and the following meeting beneath Herdr's existing clock, with both rooms clearly visible.
+**Goal:** Show two meetings with their rooms beneath Herdr's clock, and whole-machine CPU/RAM usage at the bottom left.
 **Architecture:** The existing companion reads the same private calendar configuration and room mapping as WintOS. It reuses the existing ICS parser and exposes only meeting display data. A native sidebar mod follows Herdr's theme and leaves the clock intact.
 **Tech Stack:** Existing Node/TypeScript, esbuild, Vitest, ICS parser and gpui-kit; no new dependency.
-**Spec:** The user's request: next upcoming meeting and the one after, like WintOS, under the clock; meeting rooms are crucial; no join functionality.
+**Spec:** The user's requests: next upcoming meeting and the one after, like WintOS, under the clock; meeting rooms are crucial; no join functionality. Also show CPU and RAM usage, preferably bottom left.
 
 ## Global Constraints
 - Do not start, restart or write to the everyday WintOS instance.
@@ -14,6 +14,7 @@
 - Both rooms get their own visible line; long titles cannot crowd them out.
 - No join control or browser action. Preserve the existing clock and selected layout.
 - Automated tests use synthetic calendars and mocked network/configuration only.
+- Resource monitoring must be lightweight: CPU counter deltas and native VM counters, not repeated process listings or `top` runs.
 
 ## Review Focus
 - A calendar outage must be distinguishable from an empty calendar; retain the last successful display with a stale indicator.
@@ -30,6 +31,8 @@ type CalendarView = {meetings: CalendarMeeting[]; updatedAt?: number; error?: st
 createCalendarFeed(options?: {loadSettings?: () => {url?: string; rooms?: string[]}; fetch?: typeof fetch; now?: () => number}): {read(): Promise<CalendarView>};
 // meetings.ts: browser-neutral display model, bundled as the mod's model.js.
 meetingRows(data: CalendarView, now: number): {title: string; time: string; room: string; unaccepted?: boolean}[];
+type SystemView = {cpu?: number; memory?: {used: number; total: number}; error?: string};
+createSystemSampler(options?: {cpus?: () => import("node:os").CpuInfo[]; totalmem?: () => number; vmStat?: () => Promise<string>; now?: () => number}): {read(): Promise<SystemView>};
 ```
 
 ### Task 1: Calendar feed
@@ -51,3 +54,10 @@ Files: `wintos/herdr/companion.ts`, `companion.test.ts`, `install.mjs`, `install
 - [ ] Add the lazy calendar reader to the companion's protected GET routing. Copy the new mod and bundle `meetings.ts` to its `model.js`; insert its block beneath the clock.
 - [ ] Run scoped tests, full suite, typecheck and native checks. Install locally and inspect actual meeting rooms without printing or committing calendar content.
 - [ ] Fresh independent review, then deliver a stacked PR through create-pr. Base is the event-companion branch, incorporating its final race fixes before integration.
+
+### Task 4: Whole-machine resources
+Files: `wintos/herdr/backend/system.ts`, `wintos/herdr/system.test.ts`, `wintos/herdr/mods/wintos-system/{main.js,mod.json}`; main wires protected GET `/system` and installation above the sidebar footer.
+- [ ] Write failing synthetic tests for CPU delta percentages, the first sample, zero/regressing counters, shared five-second cache, native memory counters and command failure.
+- [ ] Implement CPU busy percentage from aggregate `os.cpus()` deltas. Read macOS `vm_stat` page counts and total RAM; used memory excludes reclaimable file cache and counts compressed physical pages once. Never run a process listing.
+- [ ] Render `CPU 42% · RAM 12.0/48 GiB` using native theme text, refreshing every five seconds. Unknown values remain unknown rather than becoming zero.
+- [ ] Test actual mod fetch/render wiring with mocked host/network; add installation tests for its bottom-left slot. Run scoped/full tests, typecheck and native screenshot verification with the meeting card.

@@ -17,6 +17,7 @@ import { parseEnv } from "node:util";
 import { homedir } from "os";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
+import { installWaitingAgents } from "./waiting-agents.mjs";
 
 const Mods = ["wintos-nav", "wintos-search", "wintos-meetings", "wintos-system"];
 
@@ -177,6 +178,7 @@ function installLayout(appHome) {
   commands.hidden = false;
   commands.size = { px: 1 };
   installGlances(layout);
+  installWaitingAgents(appHome, layout);
   write(file, layout);
   write(join(appHome, "shared.json"), { ...shared, layout: name });
 }
@@ -280,7 +282,8 @@ async function main() {
     codexExecutable = execFileSync("/usr/bin/which", ["codex"], { encoding: "utf8" }).trim();
   } catch {}
   await installFiles({ appHome, installRoot, claudeSettings, binDir: join(home, ".local/bin"), codexExecutable });
-  for (const name of Mods) execFileSync("herdr-app", ["check", join(appHome, "mods", name)], { stdio: "inherit" });
+  for (const name of [...Mods, ...(existsSync(join(appHome, "mods/wintos-agents/main.js")) ? ["wintos-agents"] : [])])
+    execFileSync("herdr-app", ["check", join(appHome, "mods", name)], { stdio: "inherit" });
   const label = "local.wintos.herdr-companion";
   const plist = join(home, "Library/LaunchAgents", `${label}.plist`);
   mkdirSync(dirname(plist), { recursive: true });

@@ -633,3 +633,49 @@ test("a sidebar without clock, brand or footer anchors keeps its existing native
         false
     );
 });
+
+test("actual installer selects a separate waiting-aware clone and preserves the native agents mod", async () => {
+    const f = glancesFixture();
+    const native = `import {agents,shared} from "herdr";
+const RANK = {blocked:4,done:3,working:2,idle:1};
+const SECTION = {4:"Needs you",3:"Done",2:"Working",1:"Idle"};
+const SECTION_STATUS = {4:"blocked",3:"done",2:"working"};
+export default class Agents {
+status(t,a){if (a.status === "working") return "spinner"; return "idle";}
+render(){let list = agents(); return list.map(a=>SECTION[RANK[a.status]]);}
+}`;
+    mkdirSync(join(f.appHome, "mods/agents"), { recursive: true });
+    writeFileSync(join(f.appHome, "mods/agents/main.js"), native);
+    await installFiles(f);
+    expect(layoutNodes(f.readClone()).find((n) => n.id === "agents").content.mod).toBe("wintos-agents");
+    expect(readFileSync(join(f.appHome, "mods/agents/main.js"), "utf8")).toBe(native);
+    const helper = { exports: {} as any };
+    runInNewContext(
+        transformSync(readFileSync(join(f.appHome, "mods/wintos-nav/waiting.js"), "utf8"), { format: "cjs" }).code,
+        { module: helper, exports: helper.exports }
+    );
+    const module = { exports: {} as any };
+    runInNewContext(
+        transformSync(readFileSync(join(f.appHome, "mods/wintos-agents/main.js"), "utf8"), { format: "cjs" }).code,
+        {
+            module,
+            exports: module.exports,
+            require: (name: string) =>
+                name.includes("waiting.js")
+                    ? helper.exports
+                    : {
+                          agents: () => [{ address: "t1", status: "done" }],
+                          shared: () => [
+                              {
+                                  terminal: "t1",
+                                  event: "run",
+                                  target: "https://github.com/acme/widgets/actions/runs/123",
+                              },
+                          ],
+                      },
+        }
+    );
+    expect(Array.from(new module.exports.default().render())).toEqual(["Waiting"]);
+    await installFiles(f);
+    expect(layoutNodes(f.readClone()).filter((n) => n.content?.mod === "wintos-agents")).toHaveLength(1);
+});

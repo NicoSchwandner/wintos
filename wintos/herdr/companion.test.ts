@@ -1515,3 +1515,109 @@ describe("final race regressions", () => {
         if (change === "replace") expect(sent[0][1][2]).toContain("Replacement prompt");
     });
 });
+
+describe("waiting sessions", () => {
+    test("exposes only pending waits for the current terminal binding, without prompts", async () => {
+        const f = await fixture();
+        await f.event();
+        await f.wake();
+        expect((await f.request("/waiting")).body).toEqual([{ terminal: "t1", event: "green", target: pr }]);
+        await f.service.poll();
+        expect((await f.request("/waiting")).body).toEqual([]);
+    });
+    test("does not transfer an old session's wait to a new session in the same terminal", async () => {
+        const f = await fixture();
+        await f.event();
+        await f.wake();
+        await f.event({ session_id: "session-b" });
+        expect((await f.request("/waiting")).body).toEqual([]);
+    });
+    test("expired waits leave the section without waiting for the next GitHub poll", async () => {
+        let now = Date.now();
+        const f = await fixture({ now: () => now });
+        await f.event();
+        const wake = (await f.wake()).body;
+        now = wake.expires + 1;
+        expect((await f.request("/waiting")).body).toEqual([]);
+    });
+});
+
+test("cancelling an Actions run wait removes it immediately", async () => {
+    const f = await fixture();
+    await f.event();
+    await f.wake("run", run);
+    expect((await f.request("/waiting")).body).toEqual([{ terminal: "t1", event: "run", target: run }]);
+    await f.request("/wake", { terminal: "t1", event: "cancel" });
+    expect((await f.request("/waiting")).body).toEqual([]);
+});
+
+test.each([
+    { pid: 202, argv: ["claude"] },
+    { pid: 101, argv: ["claude", "--resume=session-b"] },
+])("a missed hook does not label a replacement conversation Waiting (%j)", async (foreground) => {
+    const f = await fixture();
+    await f.event();
+    await f.wake();
+    f.observed.foreground = foreground;
+    expect((await f.request("/waiting")).body).toEqual([]);
+});
+test("an unreachable terminal cannot retain a Waiting label", async () => {
+    let fail = false;
+    const f = await fixture({
+        exec: async () => {
+            if (fail) throw Error("offline");
+            return {
+                code: 0,
+                stderr: "",
+                stdout: JSON.stringify({
+                    state: "live",
+                    foreground: { pid: 101, argv: ["claude"] },
+                    status: { app: "claude-code", state: "idle" },
+                }),
+            };
+        },
+    });
+    await f.event();
+    await f.wake();
+    fail = true;
+    expect((await f.request("/waiting")).body).toEqual([]);
+});
+
+test("replacing and cancelling a wake during identity lookup cannot retain Waiting", async () => {
+    let hold = false,
+        release: () => void,
+        entered: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    const f = await fixture({
+        exec: async () => {
+            if (hold) {
+                hold = false;
+                entered();
+                await gate;
+            }
+            return {
+                code: 0,
+                stderr: "",
+                stdout: JSON.stringify({
+                    state: "live",
+                    foreground: { pid: 101, argv: ["claude"] },
+                    status: { app: "claude-code", state: "idle" },
+                }),
+            };
+        },
+    });
+    await f.event();
+    await f.wake();
+    hold = true;
+    const pending = f.request("/waiting");
+    await started;
+    await f.wake();
+    await f.request("/wake", { terminal: "t1", event: "cancel" });
+    release();
+    expect((await pending).body).toEqual([]);
+});

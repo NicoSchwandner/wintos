@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { prNow as githubPrNow } from "../daemon/wakes/github";
 import { expiresAt, isWakeEvent, MAX_PROMPT, reached, unreachable, type WakeEvent } from "../daemon/wakes/wakes";
+import { createCalendarFeed, type CalendarView } from "./backend/calendar";
 import { codexHistory, resumedCodex } from "./backend/codex";
 import {
     matches,
@@ -16,6 +17,7 @@ import {
     waveHistory,
     type SessionHit,
 } from "./backend/history";
+import { createSystemSampler, type SystemView } from "./backend/system";
 export type { SessionHit } from "./backend/history";
 
 export type Exec = (command: string, args: string[]) => Promise<{ code: number; stdout: string; stderr: string }>;
@@ -27,6 +29,8 @@ export type CompanionOptions = {
     prNow?: typeof githubPrNow;
     now?: () => number;
     pollMs?: number;
+    calendar?: () => Promise<CalendarView>;
+    system?: () => Promise<SystemView>;
 };
 type Indexed = SessionHit & { transcriptPath?: string };
 type Wake = {
@@ -86,6 +90,8 @@ export async function createCompanion(options: CompanionOptions = {}) {
     const state = readJson<State>(file, { sessions: {}, terminals: {}, wakes: {}, opening: {} });
     const now = options.now ?? Date.now;
     const exec = options.exec ?? defaultExec;
+    const calendar = options.calendar ?? createCalendarFeed({ now }).read;
+    const system = options.system ?? createSystemSampler({ now }).read;
     const transcriptCache = new Map<string, number>();
     const codexRoot =
         options.codexHome === false
@@ -590,6 +596,8 @@ export async function createCompanion(options: CompanionOptions = {}) {
             if (req.headers.origin != null) failure(403, "Browser Origin is not allowed");
             const url = new URL(req.url ?? "/", "http://127.0.0.1");
             if (req.method === "GET") {
+                if (url.pathname === "/meetings") return json(200, await calendar());
+                if (url.pathname === "/system") return json(200, await system());
                 if (url.pathname === "/health")
                     return json(200, { ok: !lastError, ...(lastError ? { error: lastError } : {}) });
                 if (url.pathname === "/search")

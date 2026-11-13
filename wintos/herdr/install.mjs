@@ -18,6 +18,8 @@ import { homedir } from "os";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
+const Mods = ["wintos-nav", "wintos-search", "wintos-meetings", "wintos-system"];
+
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 const read = (file, fallback) => (existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : fallback);
 function write(file, value) {
@@ -59,8 +61,15 @@ export async function installFiles({
     logLevel: "warning",
   });
   copyFileSync(join(sourceRoot, "hook.sh"), join(installRoot, "hook.sh"));
-  for (const name of ["wintos-nav", "wintos-search"])
-    cpSync(join(sourceRoot, "mods", name), join(appHome, "mods", name), { recursive: true });
+  for (const name of Mods) cpSync(join(sourceRoot, "mods", name), join(appHome, "mods", name), { recursive: true });
+  await build({
+    entryPoints: [join(sourceRoot, "meetings.ts")],
+    bundle: true,
+    platform: "neutral",
+    format: "esm",
+    outfile: join(appHome, "mods", "wintos-meetings", "model.js"),
+    logLevel: "warning",
+  });
   installCli(binDir, installRoot, backup);
   if (codexExecutable) installCodex(appHome, installRoot, codexExecutable);
   installKeys(appHome);
@@ -167,8 +176,44 @@ function installLayout(appHome) {
   const commands = layout.children.find((n) => n.id === "wintos-companion-commands");
   commands.hidden = false;
   commands.size = { px: 1 };
+  installGlances(layout);
   write(file, layout);
   write(join(appHome, "shared.json"), { ...shared, layout: name });
+}
+
+function findLayoutSlot(node, matches) {
+  for (const [index, child] of (node.children ?? []).entries()) {
+    if (matches(child)) return { children: node.children, index };
+    const nested = findLayoutSlot(child, matches);
+    if (nested) return nested;
+  }
+}
+
+function insertGlance(sidebar, name, anchor, after, height) {
+  if (!anchor) return;
+  const previous = findLayoutSlot(sidebar, (node) => node.id === name);
+  const block = previous
+    ? previous.children.splice(previous.index, 1)[0]
+    : {
+        id: name,
+        type: "block",
+        size: { px: height },
+        min: 0,
+        content: { mod: name },
+      };
+  if (previous?.children === anchor.children && previous.index < anchor.index) anchor.index--;
+  anchor.children.splice(anchor.index + (after ? 1 : 0), 0, block);
+}
+
+function installGlances(layout) {
+  const slot = findLayoutSlot(layout, (node) => node.id === "sidebar");
+  const sidebar = slot?.children[slot.index];
+  if (!Array.isArray(sidebar?.children)) return;
+  const clock = findLayoutSlot(sidebar, (node) => node.content?.mod === "local-clock" || node.id === "local-clock");
+  const brand = clock ?? findLayoutSlot(sidebar, (node) => node.id === "brand" || node.id === "sidebar-brand");
+  insertGlance(sidebar, "wintos-meetings", brand, true, 160);
+  const footer = findLayoutSlot(sidebar, (node) => node.id === "sidebar-footer");
+  insertGlance(sidebar, "wintos-system", footer, false, 28);
 }
 
 function installHooks(claudeSettings, installRoot) {
@@ -235,8 +280,7 @@ async function main() {
     codexExecutable = execFileSync("/usr/bin/which", ["codex"], { encoding: "utf8" }).trim();
   } catch {}
   await installFiles({ appHome, installRoot, claudeSettings, binDir: join(home, ".local/bin"), codexExecutable });
-  for (const name of ["wintos-nav", "wintos-search"])
-    execFileSync("herdr-app", ["check", join(appHome, "mods", name)], { stdio: "inherit" });
+  for (const name of Mods) execFileSync("herdr-app", ["check", join(appHome, "mods", name)], { stdio: "inherit" });
   const label = "local.wintos.herdr-companion";
   const plist = join(home, "Library/LaunchAgents", `${label}.plist`);
   mkdirSync(dirname(plist), { recursive: true });

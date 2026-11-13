@@ -494,6 +494,27 @@ export async function createCompanion(options: CompanionOptions = {}) {
         return { me, ...(event === "rereview" && team ? { team } : {}) };
     }
 
+    async function waiting() {
+        const pending = (w: Wake) =>
+            state.wakes[w.id] === w &&
+            w.status === "pending" &&
+            w.expires > now() &&
+            w.due == null &&
+            state.terminals[w.terminal] === w.sessionId &&
+            !!state.sessions[w.sessionId];
+        const wakes = Object.values(state.wakes).filter(pending);
+        const wires = new Map(
+            await Promise.all(
+                [...new Set(wakes.map((w) => w.terminal))].map(
+                    async (address) => [address, await terminal(address).catch(() => undefined)] as const
+                )
+            )
+        );
+        return wakes
+            .filter((w) => pending(w) && sameAgent(state.sessions[w.sessionId], wires.get(w.terminal)))
+            .map(({ terminal, event, target }) => ({ terminal, event, target }));
+    }
+
     async function checkWake(wake: Wake) {
         if (wake.event !== "run" && wake.due != null) return;
         if (now() > wake.expires) {
@@ -603,6 +624,7 @@ export async function createCompanion(options: CompanionOptions = {}) {
                 if (url.pathname === "/search")
                     return json(200, await search((url.searchParams.get("q") ?? "").trim()));
                 if (url.pathname === "/wakes") return json(200, Object.values(state.wakes));
+                if (url.pathname === "/waiting") return json(200, await waiting());
             }
             if (req.method !== "POST") return json(404, { error: "Not found" });
             const body = await readBody(req);

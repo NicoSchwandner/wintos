@@ -1,14 +1,15 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { createCompanion, type CompanionOptions } from "./companion";
 
 const pr = "https://github.com/acme/widgets/pull/42";
 const run = "https://github.com/acme/widgets/actions/runs/123";
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
+    vi.unstubAllEnvs();
     for (const f of cleanups.splice(0).reverse()) await f();
 });
 async function fixture(options: CompanionOptions = {}) {
@@ -643,6 +644,11 @@ describe("independent review fixes", () => {
             { mode: 0o755 }
         );
         await writeFile(join(bin, "curl"), '#!/bin/sh\ncat > "$CAPTURE"\n', { mode: 0o755 });
+        await writeFile(
+            join(bin, "ps"),
+            '#!/bin/sh\ncase "$2" in command=) if [ "$4" = 101 ]; then echo /bin/claude; else echo /bin/sh; fi ;; ppid=) echo 101 ;; esac\n',
+            { mode: 0o755 }
+        );
         const payload = {
             session_id: "session-a",
             hook_event_name: "SessionStart",
@@ -923,4 +929,199 @@ describe("Codex wake without terminal environment", () => {
             expect(f.calls.some(([cmd]) => cmd === "ps")).toBe(false);
         }
     );
+});
+
+describe("Copilot round one regressions", () => {
+    test("launch directory and unset default account survive later cwd changes", async () => {
+        const f = await fixture();
+        const event = (payload: object, launchDir?: string) =>
+            f.request("/events", {
+                terminal: "t1",
+                terminalPid: 101,
+                configOverride: null,
+                launchDir,
+                payload: { session_id: "session-a", hook_event_name: "SessionStart", cwd: "/tmp/current", ...payload },
+            });
+        expect((await event({}, "/tmp/launch")).status).toBe(200);
+        await event({ hook_event_name: "PostToolUse", cwd: "/tmp/moved" });
+        await event({ hook_event_name: "SessionEnd", cwd: "/tmp/elsewhere" });
+        expect((await f.request("/search?q=session-a")).body[0].cwd).toBe("/tmp/launch");
+        expect((await f.request("/open", { id: "session-a" })).status).toBe(200);
+        expect(JSON.parse(f.calls.at(-1)![1].at(-1)!)).toMatchObject({
+            folder: "/tmp/launch",
+            argv: ["env", "-u", "CLAUDE_CONFIG_DIR", "claude", "--resume", "session-a"],
+        });
+    });
+    test("later cwd changes cannot replace the first launch cwd without CLAUDE_PROJECT_DIR", async () => {
+        const f = await fixture();
+        await f.event();
+        await f.event({ cwd: "/tmp/changed" });
+        expect((await f.request("/search?q=session-a")).body[0].cwd).toBe(f.dir);
+    });
+    test("an explicit default-root override stays explicit", async () => {
+        const f = await fixture();
+        const config = join(homedir(), ".claude");
+        await f.request("/events", {
+            terminal: "t1",
+            configDir: config,
+            configOverride: config,
+            launchDir: "/tmp/launch",
+            payload: { session_id: "session-a", hook_event_name: "SessionEnd", cwd: "/tmp/current" },
+        });
+        expect((await f.request("/open", { id: "session-a" })).status).toBe(200);
+        expect(JSON.parse(f.calls.at(-1)![1].at(-1)!).argv).toEqual([
+            "env",
+            `CLAUDE_CONFIG_DIR=${config}`,
+            "claude",
+            "--resume",
+            "session-a",
+        ]);
+    });
+    test.each([false, true])("WintOS resume script controls account override (%s)", async (explicit) => {
+        const f = await fixture();
+        const config = "/tmp/script-account";
+        await f.request("/events", {
+            terminal: "t1",
+            configDir: "/tmp/stale-account",
+            configOverride: "/tmp/stale-account",
+            payload: { session_id: "session-a", hook_event_name: "SessionEnd", cwd: "/tmp/stale" },
+        });
+        await writeFile(
+            join(f.wintosRoot, ".sessions.json"),
+            JSON.stringify([
+                {
+                    id: "session-a",
+                    state: "ended",
+                    lastAt: 1,
+                    resume: `cd '/tmp/script-root' && ${explicit ? `CLAUDE_CONFIG_DIR='${config}' ` : ""}claude --resume 'session-a'`,
+                },
+            ])
+        );
+        expect((await f.request("/open", { id: "session-a" })).status).toBe(200);
+        expect(JSON.parse(f.calls.at(-1)![1].at(-1)!)).toMatchObject({
+            folder: "/tmp/script-root",
+            argv: explicit
+                ? ["env", `CLAUDE_CONFIG_DIR=${config}`, "claude", "--resume", "session-a"]
+                : ["env", "-u", "CLAUDE_CONFIG_DIR", "claude", "--resume", "session-a"],
+        });
+    });
+    test("rereview resolves team display name and paginated members without a PR list", async () => {
+        vi.stubEnv("WINTOS_TEAM", "acme/team-widgets");
+        vi.stubEnv("WINT_GITHUB_USERNAME", "synthetic-reviewer");
+        const calls: string[][] = [];
+        const f = await fixture({
+            exec: async (cmd, args) => {
+                if (cmd === "gh") {
+                    calls.push(args);
+                    return {
+                        code: 0,
+                        stdout: args.includes("--paginate") ? "synthetic-member\nsecond-member\n" : "Team Widgets\n",
+                        stderr: "",
+                    };
+                }
+                return {
+                    code: 0,
+                    stdout: JSON.stringify({
+                        state: "live",
+                        foreground: { pid: 101, argv: ["claude"] },
+                        status: { app: "claude-code", state: "idle" },
+                    }),
+                    stderr: "",
+                };
+            },
+            prNow: async (_url, who) => ({
+                state: "OPEN",
+                checks: "pending",
+                released: false,
+                requestedAgain:
+                    who.me === "synthetic-reviewer" &&
+                    who.team?.includes("Team Widgets") &&
+                    who.team?.includes("synthetic-member"),
+            }),
+        });
+        await f.event();
+        await f.wake("rereview");
+        await f.service.poll();
+        expect((await f.request("/wakes")).body[0].status).toBe("delivered");
+        expect(calls).toEqual([
+            ["api", "orgs/acme/teams/team-widgets", "--jq", ".name"],
+            ["api", "--paginate", "orgs/acme/teams/team-widgets/members", "--jq", ".[].login"],
+        ]);
+    });
+});
+
+describe("rereview team identity", () => {
+    test.each([
+        { label: "successful lookup is cached", spec: "acme/team-x", event: "rereview", fail: "", lookups: 2 },
+        { label: "team-name failure is retried", spec: "acme/team-x", event: "rereview", fail: "name", lookups: 3 },
+        {
+            label: "member failure leaves no partial cache",
+            spec: "acme/team-x",
+            event: "rereview",
+            fail: "members",
+            lookups: 4,
+        },
+        { label: "green does not resolve teams", spec: "acme/team-x", event: "green", fail: "", lookups: 0 },
+        { label: "unset team is omitted", spec: "", event: "rereview", fail: "", lookups: 0 },
+        { label: "invalid team is omitted", spec: "not-a-team-spec", event: "rereview", fail: "", lookups: 0 },
+    ])("$label", async ({ spec, event, fail, lookups }) => {
+        vi.stubEnv("WINTOS_TEAM", spec);
+        vi.stubEnv("WINT_GITHUB_USERNAME", "synthetic-reviewer");
+        const calls: string[][] = [];
+        const identities: { me: string; team?: string[] }[] = [];
+        let failed = false;
+        const f = await fixture({
+            exec: async (command, args) => {
+                if (command === "gh") {
+                    calls.push(args);
+                    const part = args.includes("--paginate") ? "members" : "name";
+                    if (part === fail && !failed) {
+                        failed = true;
+                        return { code: 1, stdout: "", stderr: "Synthetic transient team failure" };
+                    }
+                    return {
+                        code: 0,
+                        stdout: part === "members" ? "fixture-one\nfixture-two\n" : "Fixture Team\n",
+                        stderr: "",
+                    };
+                }
+                return {
+                    code: 0,
+                    stdout: JSON.stringify({
+                        state: "live",
+                        foreground: { pid: 101, argv: ["claude"] },
+                        status: { app: "claude-code", state: "working" },
+                    }),
+                    stderr: "",
+                };
+            },
+            prNow: async (_url, who) => {
+                identities.push(who);
+                return { state: "OPEN", checks: "pending", released: false };
+            },
+        });
+        await f.event();
+        expect((await f.wake(event)).status).toBe(200);
+        for (let i = 0; i < 3; i++) {
+            await f.service.poll();
+            const wake = (await f.request("/wakes")).body[0];
+            expect(wake.status).toBe("pending");
+            expect(wake.error).toBeUndefined();
+        }
+        expect(identities).toHaveLength(3);
+        expect(calls).toHaveLength(lookups);
+        if (lookups) {
+            expect(identities.at(-1)).toEqual({
+                me: "synthetic-reviewer",
+                team: ["Fixture Team", "fixture-one", "fixture-two"],
+            });
+            expect(calls.slice(-2)).toEqual([
+                ["api", "orgs/acme/teams/team-x", "--jq", ".name"],
+                ["api", "--paginate", "orgs/acme/teams/team-x/members", "--jq", ".[].login"],
+            ]);
+            if (fail) expect(identities[0]).toEqual({ me: "synthetic-reviewer" });
+        } else {
+            expect(identities).toEqual(Array(3).fill({ me: "synthetic-reviewer" }));
+        }
+    });
 });

@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { open } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { open, opendir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, join, resolve } from "node:path";
 import type { Session } from "../../daemon/sessions/reduce";
 import { resumeScriptOf } from "../../daemon/sessions/reduce";
 import type { Shelf } from "../../daemon/shelf/shelf";
@@ -19,6 +20,7 @@ export type SessionHit = {
     terminal?: string;
     cwd?: string;
     configDir?: string;
+    configOverride?: string | null;
     resume?: string;
     live?: boolean;
     transcriptPath?: string;
@@ -100,6 +102,51 @@ export function prSearchPattern(query: string): string {
         : url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\/$/, "") + "\\b";
     return pattern;
 }
+
+export async function searchPrFilesWithoutRg(roots: string[], query: string, maxFileSize = Infinity): Promise<string> {
+    const pattern = new RegExp(prSearchPattern(query), "i");
+    const directories = [...roots];
+    const found: string[] = [];
+    const deadline = Date.now() + 5000;
+    let visited = 0;
+    while (directories.length && found.length < 100 && visited < 10_000 && Date.now() < deadline) {
+        const directory = await opendir(directories.pop()!);
+        for await (const entry of directory) {
+            if (++visited > 10_000 || found.length >= 100 || Date.now() >= deadline) break;
+            const path = join(directory.path, entry.name);
+            if (entry.isDirectory()) {
+                if (entry.name !== "subagents" && !entry.name.startsWith(".")) directories.push(path);
+                continue;
+            }
+            if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
+            const file = await open(path, "r");
+            try {
+                const { size } = await file.stat();
+                if (size > maxFileSize) continue;
+                const buffer = Buffer.alloc(64 * 1024);
+                let position = 0,
+                    overlap = "";
+                while (position < size && Date.now() < deadline) {
+                    const { bytesRead } = await file.read(buffer, 0, buffer.length, position);
+                    if (!bytesRead) break;
+                    position += bytesRead;
+                    const text = overlap + buffer.toString("utf8", 0, bytesRead);
+                    const match = pattern.exec(text);
+                    // A PR number ending at a chunk boundary may continue in the next chunk.
+                    if (match && (match.index + match[0].length < text.length || position === size)) {
+                        found.push(`${path}:${match[0]}`);
+                        break;
+                    }
+                    overlap = text.slice(-2048);
+                }
+            } finally {
+                await file.close();
+            }
+        }
+    }
+    return found.join("\n");
+}
+
 export async function transcriptHistory(configDirs: string[], query: string): Promise<SessionHit[]> {
     if (!exactPr(query)) return [];
     const projects = [...new Set(configDirs)].map((dir) => join(dir, "projects")).filter(existsSync);
@@ -110,6 +157,7 @@ export async function transcriptHistory(configDirs: string[], query: string): Pr
             "rg",
             [
                 "--only-matching",
+                "--ignore-case",
                 "--no-heading",
                 "--with-filename",
                 "--max-count",
@@ -118,17 +166,22 @@ export async function transcriptHistory(configDirs: string[], query: string): Pr
                 "16M",
                 "--glob",
                 "*.jsonl",
+                "--glob",
+                "!**/subagents/**",
                 "--",
                 pattern,
                 ...projects,
             ],
             { timeout: 5000, maxBuffer: 256 * 1024 },
             (err, stdout) => {
-                if (err && err.code !== 1) reject(new Error(`Transcript search: ${err.message}`));
+                if (err && err.code !== 1) reject(err);
                 else resolve(stdout);
             }
         )
-    );
+    ).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return searchPrFilesWithoutRg(projects, query, 16 * 1024 * 1024);
+        throw new Error(`Transcript search: ${error.message}`);
+    });
     const hits: SessionHit[] = [];
     for (const line of output.trim().split("\n").slice(0, 100)) {
         const at = line.indexOf(":https://");
@@ -150,7 +203,7 @@ export async function transcriptHistory(configDirs: string[], query: string): Pr
                 prs: [pr],
                 source: "transcript",
                 lastAt: stat.mtimeMs,
-                configDir,
+                configDir: resolve(configDir!) === join(homedir(), ".claude") ? undefined : configDir,
                 live: false,
                 transcriptPath: path,
             };
@@ -158,7 +211,7 @@ export async function transcriptHistory(configDirs: string[], query: string): Pr
             for (const rowText of (head.toString() + "\n" + tail.toString()).split("\n")) {
                 try {
                     const row = JSON.parse(rowText);
-                    if (row.cwd) hit.cwd = row.cwd;
+                    if (!hit.cwd && typeof row.cwd === "string" && row.cwd) hit.cwd = row.cwd;
                     if (row.customTitle) hit.name = row.customTitle;
                     timestamp = Math.max(timestamp, Date.parse(row.timestamp) || 0);
                 } catch {

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { open, readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { exactPr, matches, prSearchPattern, prUrls, type SessionHit } from "./history";
+import { exactPr, matches, prSearchPattern, prUrls, searchPrFilesWithoutRg, type SessionHit } from "./history";
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 type CodexHit = SessionHit & { provider: "codex"; codexHome: string };
@@ -67,6 +67,7 @@ export async function codexHistory(root: string, query: string): Promise<CodexHi
                 "rg",
                 [
                     "--only-matching",
+                    "--ignore-case",
                     "--with-filename",
                     "--no-heading",
                     "--max-count",
@@ -82,7 +83,15 @@ export async function codexHistory(root: string, query: string): Promise<CodexHi
                 { timeout: 10000, maxBuffer: 1024 * 1024 },
                 (err, out) => (err && err.code !== 1 ? reject(err) : resolve(out))
             )
-        );
+        ).catch((error: NodeJS.ErrnoException) => {
+            if (error.code !== "ENOENT") throw error;
+            return searchPrFilesWithoutRg(
+                ["sessions", "archived_sessions"]
+                    .map((dir) => join(root, dir))
+                    .filter((dir) => files.some((file) => file.startsWith(dir + "/"))),
+                query
+            );
+        });
         for (const line of output.split("\n")) {
             const i = line.indexOf(".jsonl:");
             if (i >= 0) {

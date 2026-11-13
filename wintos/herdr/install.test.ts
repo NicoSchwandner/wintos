@@ -1,8 +1,91 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "fs";
+import {
+    chmodSync,
+    existsSync,
+    lstatSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    readlinkSync,
+    statSync,
+    symlinkSync,
+    writeFileSync,
+} from "fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "os";
 import { join } from "path";
 import { expect, test } from "vitest";
 import { installFiles } from "./install.mjs";
+
+test.each([
+    {
+        label: "quoted configured team",
+        config: 'WINTOS_TEAM="acme/team-x"\n',
+        inherited: undefined,
+        expected: "acme/team-x",
+    },
+    {
+        label: "exported configured team",
+        config: "export WINTOS_TEAM='acme/team-x' # own team\n",
+        inherited: undefined,
+        expected: "acme/team-x",
+    },
+    {
+        label: "unquoted configured team",
+        config: "WINTOS_TEAM=acme/team-x\n",
+        inherited: undefined,
+        expected: "acme/team-x",
+    },
+    {
+        label: "inherited override",
+        config: "WINTOS_TEAM=acme/team-x\n",
+        inherited: "acme/other-team",
+        expected: "acme/other-team",
+    },
+    { label: "explicitly disabled team", config: "WINTOS_TEAM=acme/team-x\n", inherited: "", expected: "" },
+    { label: "no configured team", config: undefined, inherited: undefined, expected: undefined },
+    { label: "commented-out team", config: "# WINTOS_TEAM=acme/team-x\n", inherited: undefined, expected: undefined },
+])("main installs launchd environment with $label", ({ config, inherited, expected }) => {
+    const temp = mkdtempSync(join(tmpdir(), "herdr-team-install-"));
+    const appHome = join(temp, ".config/herdr-app");
+    mkdirSync(join(appHome, "layouts"), { recursive: true });
+    mkdirSync(join(temp, ".config/wintos"), { recursive: true });
+    writeFileSync(join(appHome, "layouts/main.json"), JSON.stringify({ type: "row", children: [] }));
+    const marker = join(temp, "must-not-execute");
+    if (config !== undefined)
+        writeFileSync(
+            join(temp, ".config/wintos/env"),
+            config + `UNRELATED_SECRET=synthetic-secret\nUNRELATED_COMMAND=$(touch '${marker}')\n`
+        );
+    const stub = join(temp, "commands.cjs");
+    writeFileSync(
+        stub,
+        `
+const cp = require('node:child_process');
+cp.execFileSync = (command) => {
+    if (command === '/usr/bin/which') return '/bin/echo\\n';
+    if (command === 'launchctl' || command === 'herdr-app') return '';
+    throw new Error('Unexpected external command: ' + command);
+};
+require('node:module').syncBuiltinESMExports();
+`
+    );
+    execFileSync(process.execPath, ["--require", stub, join(__dirname, "install.mjs")], {
+        env: {
+            HOME: temp,
+            PATH: process.env.PATH!,
+            WINTOS_ROOT: join(temp, "history"),
+            ...(inherited === undefined ? {} : { WINTOS_TEAM: inherited }),
+        },
+        timeout: 15000,
+    });
+    const plist = readFileSync(join(temp, "Library/LaunchAgents/local.wintos.herdr-companion.plist"), "utf8");
+    if (expected === undefined) expect(plist).not.toContain("<key>WINTOS_TEAM</key>");
+    else expect(plist).toContain(`<key>WINTOS_TEAM</key><string>${expected}</string>`);
+    expect(plist).not.toContain("UNRELATED_SECRET");
+    expect(plist).not.toContain("synthetic-secret");
+    expect(plist).not.toContain("UNRELATED_COMMAND");
+    expect(existsSync(marker)).toBe(false);
+});
 
 test("installs bracket-free shortcuts without changing the shipped layout, existing hooks or sidebar", async () => {
     const temp = mkdtempSync(join(tmpdir(), "herdr-install-"));
@@ -30,12 +113,14 @@ test("installs bracket-free shortcuts without changing the shipped layout, exist
         })
     );
     writeFileSync(
-        claudeSettings,
+        join(temp, "shared-claude.json"),
         JSON.stringify({
             hooks: { Stop: [{ hooks: [{ type: "command", command: "existing-hook" }] }] },
             permissions: { allow: ["keep"] },
         })
     );
+    chmodSync(join(temp, "shared-claude.json"), 0o600);
+    symlinkSync("shared-claude.json", claudeSettings);
     const sourceRoot = join(temp, "source");
     mkdirSync(join(sourceRoot, "mods/wintos-nav"), { recursive: true });
     mkdirSync(join(sourceRoot, "mods/wintos-search"), { recursive: true });
@@ -44,6 +129,9 @@ test("installs bracket-free shortcuts without changing the shipped layout, exist
     writeFileSync(join(sourceRoot, "hook.sh"), "test hook");
     writeFileSync(join(sourceRoot, "main.ts"), 'console.log(process.argv.slice(2).join("|"))');
     await installFiles({ appHome, installRoot, claudeSettings, sourceRoot, codexExecutable: "/bin/echo" });
+    expect(statSync(claudeSettings).mode & 0o777).toBe(0o600);
+    expect(lstatSync(claudeSettings).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(claudeSettings)).toBe("shared-claude.json");
     const keys = JSON.parse(readFileSync(join(appHome, "keys.json"), "utf8"));
     expect(keys.global).toMatchObject({
         "ctrl-tab": "wintos-nav.next",
@@ -67,9 +155,13 @@ test("installs bracket-free shortcuts without changing the shipped layout, exist
     expect(statSync(installRoot).mode & 0o777).toBe(0o700);
     await installFiles({ appHome, installRoot, claudeSettings, sourceRoot, codexExecutable: "/bin/echo" });
     const settings = JSON.parse(readFileSync(claudeSettings, "utf8"));
+    expect(statSync(claudeSettings).mode & 0o777).toBe(0o600);
+    expect(lstatSync(claudeSettings).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(claudeSettings)).toBe("shared-claude.json");
     expect(settings.hooks.Stop).toHaveLength(2);
     expect(settings.hooks.Stop[0].hooks[0].command).toBe("existing-hook");
     expect(settings.permissions.allow).toEqual(["keep"]);
+    expect(JSON.parse(readFileSync(join(temp, "shared-claude.json"), "utf8"))).toEqual(settings);
     const { execFileSync } = await import("child_process");
     const launch = JSON.parse(readFileSync(join(appHome, "programs.json"), "utf8")).codex.run[0];
     expect(

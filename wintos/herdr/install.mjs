@@ -13,6 +13,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "fs";
+import { parseEnv } from "node:util";
 import { homedir } from "os";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
@@ -20,8 +21,11 @@ import { fileURLToPath } from "url";
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 const read = (file, fallback) => (existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : fallback);
 function write(file, value) {
+  if (lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) file = realpathSync(file);
+  const mode = (lstatSync(file, { throwIfNoEntry: false })?.mode ?? 0o600) & 0o777;
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(`${file}.tmp`, JSON.stringify(value, null, 2) + "\n");
+  writeFileSync(`${file}.tmp`, JSON.stringify(value, null, 2) + "\n", { mode });
+  chmodSync(`${file}.tmp`, mode);
   renameSync(`${file}.tmp`, file);
 }
 
@@ -174,6 +178,23 @@ function xml(s) {
   return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
+function agentEnvironment(home, historyRoot) {
+  let team = process.env.WINTOS_TEAM;
+  const config = join(home, ".config/wintos/env");
+  if (team == null && existsSync(config)) {
+    const setting = readFileSync(config, "utf8")
+      .split(/\r?\n/)
+      .filter((line) => /^\s*(?:export\s+)?WINTOS_TEAM\s*=/.test(line))
+      .join("\n");
+    team = parseEnv(setting).WINTOS_TEAM;
+  }
+  return {
+    PATH: process.env.PATH ?? "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin",
+    ...(historyRoot ? { WINTOS_ROOT: historyRoot } : {}),
+    ...(team == null ? {} : { WINTOS_TEAM: team }),
+  };
+}
+
 export async function restartAgent(domain, label, plist, run = execFileSync) {
   try {
     run("launchctl", ["bootout", `${domain}/${label}`], { stdio: "ignore" });
@@ -213,10 +234,7 @@ async function main() {
       if (dir) historyRoot = dirname(dir);
     } catch {}
   }
-  const env = {
-    PATH: process.env.PATH ?? "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin",
-    ...(historyRoot ? { WINTOS_ROOT: historyRoot } : {}),
-  };
+  const env = agentEnvironment(home, historyRoot);
   writeFileSync(
     plist,
     `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(join(installRoot, "companion.cjs"))}</string><string>serve</string></array><key>EnvironmentVariables</key><dict>${Object.entries(

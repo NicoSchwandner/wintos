@@ -89,6 +89,7 @@ export async function createCompanion(options: CompanionOptions = {}) {
             ? undefined
             : (options.codexHome ?? process.env.CODEX_HOME ?? join(homedir(), ".codex"));
     const codexCache = new Map<string, number>();
+    let team: string[] | undefined;
     let unboundCodex: { terminal: string; pid?: number }[] = [];
     let closed = false,
         polling: Promise<void> | undefined,
@@ -218,7 +219,7 @@ export async function createCompanion(options: CompanionOptions = {}) {
         const p = body.payload;
         if (
             !text(body.terminal) ||
-            !text(body.configDir) ||
+            (!text(body.configDir) && body.configOverride !== null) ||
             !p ||
             typeof p !== "object" ||
             Array.isArray(p) ||
@@ -252,8 +253,10 @@ export async function createCompanion(options: CompanionOptions = {}) {
             terminalPid: Number.isSafeInteger(body.terminalPid) && body.terminalPid > 0 ? body.terminalPid : undefined,
             lastAt: now(),
             terminal: body.terminal,
-            configDir: body.configDir,
-            cwd: text(p.cwd) ? p.cwd : old?.cwd,
+            configDir: text(body.configDir) ? body.configDir : join(homedir(), ".claude"),
+            configOverride:
+                body.configOverride === null ? null : text(body.configOverride) ? body.configOverride : body.configDir,
+            cwd: text(body.launchDir) ? body.launchDir : (old?.cwd ?? (text(p.cwd) ? p.cwd : undefined)),
             transcriptPath: text(p.transcript_path) ? p.transcript_path : old?.transcriptPath,
             live: !ended,
         };
@@ -287,7 +290,13 @@ export async function createCompanion(options: CompanionOptions = {}) {
         const parts = resumeParts(hit.resume, hit.id);
         if (hit.resume && !parts) failure(409, "Unrecognized resume script; refusing to execute it");
         const cwd = parts?.cwd ?? hit.cwd;
-        const configDir = parts?.configDir ?? hit.configDir;
+        const configDir = parts
+            ? parts.configDir
+            : hit.configOverride !== undefined
+              ? (hit.configOverride ?? undefined)
+              : hit.provider !== "codex" && hit.configDir === join(homedir(), ".claude")
+                ? undefined
+                : hit.configDir;
         if (!cwd) failure(409, "Session has no known working directory");
         state.opening[id] = now();
         save();
@@ -303,7 +312,14 @@ export async function createCompanion(options: CompanionOptions = {}) {
             const argv =
                 hit.provider === "codex"
                     ? [...(configDir ? ["env", `CODEX_HOME=${configDir}`] : []), "codex", "resume", id]
-                    : [...(configDir ? ["env", `CLAUDE_CONFIG_DIR=${configDir}`] : []), "claude", "--resume", id];
+                    : [
+                          ...(configDir
+                              ? ["env", `CLAUDE_CONFIG_DIR=${configDir}`]
+                              : ["env", "-u", "CLAUDE_CONFIG_DIR"]),
+                          "claude",
+                          "--resume",
+                          id,
+                      ];
             await checked("herdr-app", ["do", "tab.new", JSON.stringify({ name: hit.name, folder: cwd, argv })]);
             return { id, opening: true };
         } catch (e) {
@@ -388,6 +404,34 @@ export async function createCompanion(options: CompanionOptions = {}) {
         return registerWake(body);
     }
 
+    async function reviewersFor(event: WakeEvent) {
+        let me = process.env.WINT_GITHUB_USERNAME ?? "";
+        if (!options.prNow && !me) me = (await checked("gh", ["api", "user", "--jq", ".login"])).trim();
+        if (event === "rereview" && team === undefined) {
+            const spec = /^([^/\s]+)\/([^/\s]+)$/.exec(process.env.WINTOS_TEAM ?? "");
+            if (spec) {
+                try {
+                    const [, org, slug] = spec;
+                    team = [
+                        (await checked("gh", ["api", `orgs/${org}/teams/${slug}`, "--jq", ".name"])).trim(),
+                        ...(
+                            await checked("gh", [
+                                "api",
+                                "--paginate",
+                                `orgs/${org}/teams/${slug}/members`,
+                                "--jq",
+                                ".[].login",
+                            ])
+                        )
+                            .split("\n")
+                            .filter(Boolean),
+                    ];
+                } catch {}
+            }
+        }
+        return { me, ...(event === "rereview" && team ? { team } : {}) };
+    }
+
     async function checkWake(wake: Wake) {
         if (wake.event !== "run" && wake.due != null) return;
         if (now() > wake.expires) {
@@ -405,9 +449,7 @@ export async function createCompanion(options: CompanionOptions = {}) {
             wake.due = now();
             return;
         }
-        let who = process.env.WINT_GITHUB_USERNAME ?? "";
-        if (!options.prNow && !who) who = (await checked("gh", ["api", "user", "--jq", ".login"])).trim();
-        const pr = await (options.prNow ?? githubPrNow)(wake.target, { me: who }, [wake.event]);
+        const pr = await (options.prNow ?? githubPrNow)(wake.target, await reviewersFor(wake.event), [wake.event]);
         if (!pr) throw new Error("GitHub PR lookup unavailable; will retry");
         if (reached(wake.event, pr, wake.at)) wake.due = now();
         else if (unreachable(wake.event, pr)) wake.status = "cancelled";

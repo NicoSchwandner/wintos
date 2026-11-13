@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
+import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, expect, test, vi } from "vitest";
@@ -8,6 +8,28 @@ afterEach(async () => {
     vi.unstubAllEnvs();
     for (const t of temps.splice(0)) await rm(t, { recursive: true, force: true });
 });
+
+test.each(["sessions", "archived_sessions"])(
+    "Codex %s hit retains the rollout path for freshness checks after caching",
+    async (folder) => {
+        const root = await mkdtemp(join(tmpdir(), "codex-cached-transcript-"));
+        temps.push(root);
+        const directory = join(root, folder);
+        await mkdir(directory);
+        const id = "77777777-7777-4777-8777-777777777777";
+        const path = join(directory, `rollout-${id}.jsonl`);
+        await writeFile(path, JSON.stringify({ type: "session_meta", payload: { id, cwd: "/tmp/work" } }) + "\n");
+        const old = new Date("2026-01-01T00:00:00Z");
+        await utimes(path, old, old);
+        const [cached] = await codexHistory(root, "");
+        expect(cached.transcriptPath).toBe(path);
+        expect(cached.lastAt).toBe(old.getTime());
+        const recent = new Date("2026-01-02T00:00:00Z");
+        await utimes(path, recent, recent);
+        expect((await stat(cached.transcriptPath!)).mtimeMs).toBe(recent.getTime());
+        expect(cached.lastAt).toBe(old.getTime());
+    }
+);
 
 test("no-rg search streams large Codex rollouts and preserves exact PR boundaries across chunks", async () => {
     const root = await mkdtemp(join(tmpdir(), "codex-large-no-rg-"));

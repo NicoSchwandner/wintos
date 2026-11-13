@@ -1,13 +1,16 @@
 import {
     chmodSync,
+    copyFileSync,
     existsSync,
     lstatSync,
     mkdirSync,
     mkdtempSync,
     readFileSync,
     readlinkSync,
+    realpathSync,
     statSync,
     symlinkSync,
+    unlinkSync,
     writeFileSync,
 } from "fs";
 import { execFileSync } from "node:child_process";
@@ -15,6 +18,143 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { expect, test } from "vitest";
 import { installFiles } from "./install.mjs";
+
+function runMainInstaller(temp: string, env: Record<string, string> = {}, state?: object) {
+    const appHome = join(temp, ".config/herdr-app");
+    mkdirSync(join(appHome, "layouts"), { recursive: true });
+    writeFileSync(join(appHome, "layouts/main.json"), JSON.stringify({ type: "row", children: [] }));
+    const stub = join(temp, "commands.cjs");
+    writeFileSync(
+        stub,
+        `
+const cp = require('node:child_process');
+cp.execFileSync = (command) => {
+    if (command === '/usr/bin/which') return '/bin/echo\\n';
+    if (command === 'launchctl' || command === 'herdr-app') return '';
+    throw new Error('Unexpected external command: ' + command);
+};
+globalThis.fetch = async () => {
+    require('node:fs').writeFileSync(${JSON.stringify(join(temp, "fetch-called"))}, 'called');
+    const state = ${JSON.stringify(state ?? null)};
+    if (state) return { json: async () => state };
+    throw new Error('Synthetic stopped WintOS');
+};
+require('node:module').syncBuiltinESMExports();
+`
+    );
+    execFileSync(process.execPath, ["--require", stub, join(__dirname, "install.mjs")], {
+        env: { HOME: temp, PATH: process.env.PATH!, ...env },
+        timeout: 15000,
+    });
+    return readFileSync(join(temp, "Library/LaunchAgents/local.wintos.herdr-companion.plist"), "utf8");
+}
+
+test.each(["$HOME/history", "${HOME}/history", "~/history"])(
+    "main reads configured root %s before contacting a stopped WintOS",
+    (configured) => {
+        const temp = mkdtempSync(join(tmpdir(), "herdr-root-install-"));
+        mkdirSync(join(temp, ".config/wintos"), { recursive: true });
+        writeFileSync(
+            join(temp, ".config/wintos/env"),
+            `WINTOS_ROOT='${configured}'\nUNRELATED_SECRET=synthetic-secret\n`
+        );
+        const plist = runMainInstaller(temp);
+        expect(plist).toContain(`<key>WINTOS_ROOT</key><string>${temp}/history</string>`);
+        expect(plist).not.toContain("synthetic-secret");
+        expect(existsSync(join(temp, "fetch-called"))).toBe(false);
+    }
+);
+
+test("main gives inherited root precedence and never expands shell commands", () => {
+    const temp = mkdtempSync(join(tmpdir(), "herdr-root-override-"));
+    mkdirSync(join(temp, ".config/wintos"), { recursive: true });
+    const marker = join(temp, "must-not-execute");
+    writeFileSync(join(temp, ".config/wintos/env"), `WINTOS_ROOT='$(touch ${marker})'\n`);
+    expect(runMainInstaller(temp, { WINTOS_ROOT: "${HOME}/override" })).toContain(
+        `<key>WINTOS_ROOT</key><string>${temp}/override</string>`
+    );
+    expect(existsSync(marker)).toBe(false);
+    expect(runMainInstaller(temp)).toContain(`<key>WINTOS_ROOT</key><string>$(touch ${marker})</string>`);
+    expect(existsSync(marker)).toBe(false);
+});
+
+test.each([undefined, { projects: [] }, { projects: [{ dir: "/tmp/synthetic-history/project" }] }])(
+    "main retains discovery and defaults without a configured root (%j)",
+    (state) => {
+        const temp = mkdtempSync(join(tmpdir(), "herdr-root-discovery-"));
+        const plist = runMainInstaller(temp, {}, state);
+        if (state?.projects.length)
+            expect(plist).toContain("<key>WINTOS_ROOT</key><string>/tmp/synthetic-history</string>");
+        else expect(plist).not.toContain("<key>WINTOS_ROOT</key>");
+        expect(existsSync(join(temp, "fetch-called"))).toBe(true);
+    }
+);
+
+test("actual WintOS setup refresh keeps Herdr routing and Wave hook installation", () => {
+    const temp = mkdtempSync(join(tmpdir(), "herdr-setup-routing-"));
+    const checkout = join(temp, "checkout"),
+        bin = join(temp, "tools");
+    for (const dir of ["wintos/cli", "wintos/hooks", "wintos/shell"])
+        mkdirSync(join(checkout, dir), { recursive: true });
+    mkdirSync(bin);
+    mkdirSync(join(temp, ".claude"));
+    for (const file of [
+        "setup.sh",
+        "cli/wintos",
+        "hooks/wintos-hook.sh",
+        "hooks/pr-guard.sh",
+        "shell/p10k.zsh",
+        "env.example",
+    ])
+        copyFileSync(join(__dirname, "..", file), join(checkout, "wintos", file));
+    const companion = join(temp, ".local/share/wintos-herdr-companion/companion.cjs");
+    mkdirSync(join(temp, ".local/share/wintos-herdr-companion"), { recursive: true });
+    writeFileSync(companion, 'console.log("herdr:" + process.argv.slice(2).join("|"))');
+    for (const command of ["npm", "task", "go", "gh", "claude", "osacompile"])
+        writeFileSync(join(bin, command), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    writeFileSync(join(bin, "uname"), '#!/bin/sh\nif [ "$1" = -s ]; then echo Darwin; else echo arm64; fi\n', {
+        mode: 0o755,
+    });
+    writeFileSync(
+        join(bin, "node"),
+        `#!/bin/sh\n[ "$1" != wintos/build.mjs ] || exit 0\nexec '${process.execPath}' "$@"\n`,
+        { mode: 0o755 }
+    );
+    writeFileSync(join(bin, "curl"), '#!/bin/sh\ncat > "$HOME/wave-body"\nprintf \'{"cancelled":true}\\n200\\n\'\n', {
+        mode: 0o755,
+    });
+    const env = { HOME: temp, PATH: `${bin}:${process.env.PATH}`, HC_TERMINAL_ID: "t7" };
+    execFileSync("/bin/bash", [join(checkout, "wintos/setup.sh")], { env, timeout: 15000 });
+    const cli = join(temp, ".local/bin/wintos");
+    expect(execFileSync(cli, ["wake", "cancel"], { env, encoding: "utf8" }).trim()).toBe("herdr:wake|cancel");
+    expect(
+        execFileSync(cli, ["wake", "cancel"], {
+            env: { ...env, HC_TERMINAL_ID: "", CODEX_THREAD_ID: "thread" },
+            encoding: "utf8",
+        }).trim()
+    ).toBe("herdr:wake|cancel");
+    expect(
+        execFileSync(cli, ["wake", "cancel"], {
+            env: { ...env, WAVETERM_TABID: "wave", WAVETERM_BLOCKID: "block" },
+            encoding: "utf8",
+        }).trim()
+    ).toBe('{"cancelled":true}');
+    expect(
+        execFileSync(cli, ["wake", "cancel"], {
+            env: { ...env, WAVETERM_BLOCKID: "block", CODEX_THREAD_ID: "inherited-thread" },
+            encoding: "utf8",
+        }).trim()
+    ).toBe('{"cancelled":true}');
+    const settings = JSON.parse(readFileSync(join(temp, ".claude/settings.json"), "utf8"));
+    expect(realpathSync(settings.hooks.SessionStart[0].hooks[0].command)).toBe(
+        realpathSync(join(checkout, "wintos/hooks/wintos-hook.sh"))
+    );
+    expect(readFileSync(join(temp, "wave-body"), "utf8").trim()).toBe("{}");
+    unlinkSync(companion);
+    expect(
+        execFileSync(cli, ["wake", "cancel"], { env: { ...env, WAVETERM_BLOCKID: "block" }, encoding: "utf8" }).trim()
+    ).toBe('{"cancelled":true}');
+});
 
 test.each([
     {
@@ -46,39 +186,17 @@ test.each([
     { label: "commented-out team", config: "# WINTOS_TEAM=acme/team-x\n", inherited: undefined, expected: undefined },
 ])("main installs launchd environment with $label", ({ config, inherited, expected }) => {
     const temp = mkdtempSync(join(tmpdir(), "herdr-team-install-"));
-    const appHome = join(temp, ".config/herdr-app");
-    mkdirSync(join(appHome, "layouts"), { recursive: true });
     mkdirSync(join(temp, ".config/wintos"), { recursive: true });
-    writeFileSync(join(appHome, "layouts/main.json"), JSON.stringify({ type: "row", children: [] }));
     const marker = join(temp, "must-not-execute");
     if (config !== undefined)
         writeFileSync(
             join(temp, ".config/wintos/env"),
             config + `UNRELATED_SECRET=synthetic-secret\nUNRELATED_COMMAND=$(touch '${marker}')\n`
         );
-    const stub = join(temp, "commands.cjs");
-    writeFileSync(
-        stub,
-        `
-const cp = require('node:child_process');
-cp.execFileSync = (command) => {
-    if (command === '/usr/bin/which') return '/bin/echo\\n';
-    if (command === 'launchctl' || command === 'herdr-app') return '';
-    throw new Error('Unexpected external command: ' + command);
-};
-require('node:module').syncBuiltinESMExports();
-`
-    );
-    execFileSync(process.execPath, ["--require", stub, join(__dirname, "install.mjs")], {
-        env: {
-            HOME: temp,
-            PATH: process.env.PATH!,
-            WINTOS_ROOT: join(temp, "history"),
-            ...(inherited === undefined ? {} : { WINTOS_TEAM: inherited }),
-        },
-        timeout: 15000,
+    const plist = runMainInstaller(temp, {
+        WINTOS_ROOT: join(temp, "history"),
+        ...(inherited === undefined ? {} : { WINTOS_TEAM: inherited }),
     });
-    const plist = readFileSync(join(temp, "Library/LaunchAgents/local.wintos.herdr-companion.plist"), "utf8");
     if (expected === undefined) expect(plist).not.toContain("<key>WINTOS_TEAM</key>");
     else expect(plist).toContain(`<key>WINTOS_TEAM</key><string>${expected}</string>`);
     expect(plist).not.toContain("UNRELATED_SECRET");
@@ -186,7 +304,13 @@ test("installed CLI routes only Herdr wakes and leaves Wave commands with the or
     }
     writeFileSync(join(sourceRoot, "hook.sh"), "fixture");
     writeFileSync(join(sourceRoot, "main.ts"), 'console.log(process.argv.slice(2).join("|"))');
-    writeFileSync(join(binDir, "wintos"), "#!/bin/sh\necho original:$*\n", { mode: 0o755 });
+    mkdirSync(join(temp, "hooks"));
+    writeFileSync(join(temp, "hooks/marker"), "synthetic helper");
+    writeFileSync(
+        join(binDir, "wintos"),
+        '#!/bin/sh\n[ -f "$(dirname "$0")/../hooks/marker" ] || exit 47\necho original:$*\n',
+        { mode: 0o755 }
+    );
     await installFiles({ appHome, installRoot, binDir, sourceRoot, claudeSettings: join(temp, "settings.json") });
     const cmd = join(binDir, "wintos");
     const env = { PATH: process.env.PATH!, HOME: temp, HC_TERMINAL_ID: "t7" };
@@ -204,6 +328,12 @@ test("installed CLI routes only Herdr wakes and leaves Wave commands with the or
             timeout: 5000,
         }).trim()
     ).toBe("original:wake green acme/api#1 continue");
+    expect(
+        execFileSync(cmd, ["wake", "cancel"], {
+            env: { ...env, WAVETERM_BLOCKID: "block", CODEX_THREAD_ID: "thread" },
+            encoding: "utf8",
+        }).trim()
+    ).toBe("original:wake cancel");
     expect(execFileSync(cmd, ["status", "hello"], { env, encoding: "utf8", timeout: 5000 }).trim()).toBe(
         "original:status hello"
     );
@@ -214,10 +344,19 @@ test("installed CLI routes only Herdr wakes and leaves Wave commands with the or
             timeout: 5000,
         }).trim()
     ).toBe("wake|cancel");
+    writeFileSync(join(installRoot, "original-cli.json"), JSON.stringify(join(installRoot, "backup/original-wintos")));
     await installFiles({ appHome, installRoot, binDir, sourceRoot, claudeSettings: join(temp, "settings.json") });
     expect(
         execFileSync(cmd, ["title", "test"], { env: { PATH: env.PATH }, encoding: "utf8", timeout: 5000 }).trim()
     ).toBe("original:title test");
+    const updated = join(binDir, "updated-cli");
+    writeFileSync(updated, "#!/bin/sh\necho updated:$*\n", { mode: 0o755 });
+    unlinkSync(cmd);
+    symlinkSync(updated, cmd);
+    await installFiles({ appHome, installRoot, binDir, sourceRoot, claudeSettings: join(temp, "settings.json") });
+    expect(execFileSync(cmd, ["title", "current"], { env: { PATH: env.PATH }, encoding: "utf8" }).trim()).toBe(
+        "updated:title current"
+    );
 });
 
 test("reinstall retries while launchd is still unloading the old service", async () => {

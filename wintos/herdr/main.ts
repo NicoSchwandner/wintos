@@ -38,6 +38,7 @@ export async function runCli(
             terminal: env.HC_TERMINAL_ID,
             sessionId: env.CLAUDE_CODE_SESSION_ID,
             codexId: env.CODEX_THREAD_ID,
+            callerPid: process.pid,
             codexHome: env.CODEX_HOME ?? join(homedir(), ".codex"),
             event,
             ...(event === "cancel" ? {} : { target, prompt: prompt.join(" ") }),

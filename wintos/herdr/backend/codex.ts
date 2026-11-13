@@ -132,6 +132,7 @@ export async function codexHistory(root: string, query: string): Promise<CodexHi
             cwd: meta.cwd,
             prs: [...new Set([...(matching.get(path) ?? []), ...prUrls(data.text)])],
             lastAt: Math.max(Date.parse(title?.updated_at ?? "") || 0, data.at),
+            transcriptPath: path,
             live: false,
         };
         if (matches(hit, query)) hits.push(hit);

@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -28,12 +29,14 @@ async function fixture(options: CompanionOptions = {}) {
         calls.push([cmd, args]);
         if (cmd === "hc")
             return { code: args[0] === "send" ? sendCode : 0, stdout: JSON.stringify(observed), stderr: "send failed" };
+        if (cmd === "ps" && args[0] === "-p")
+            return { code: 0, stdout: args[1] === "101" ? "1 /tmp/codex" : "101 /bin/node", stderr: "" };
         if (cmd === "gh") return { code: 0, stdout: JSON.stringify({ status, conclusion }), stderr: "" };
         return { code: 0, stdout: "{}", stderr: "" };
     };
     const root = options.root ?? join(dir, "own");
     const wintosRoot = options.wintosRoot ?? join(dir, "wave");
-    await mkdir(wintosRoot, { recursive: true });
+    await mkdir(wintosRoot.replace(/^~/, homedir()), { recursive: true });
     const service = await createCompanion({
         root,
         wintosRoot,
@@ -763,6 +766,8 @@ async function codexFixture() {
         now: () => Date.now() + 3600000,
         exec: async (cmd, args) => {
             calls.push([cmd, args]);
+            if (cmd === "ps" && args[0] === "-p")
+                return { code: 0, stdout: args[1] === "101" ? "1 /tmp/codex" : "101 /bin/node", stderr: "" };
             if (cmd === "hc" && args[0] === "ls")
                 return {
                     code: 0,
@@ -804,6 +809,7 @@ describe("Codex wake lifecycle safety", () => {
                 await f.request("/wake", {
                     terminal: "t1",
                     codexId: f.id,
+                    callerPid: 900,
                     event: "green",
                     target: pr,
                     prompt: "Resume work",
@@ -851,6 +857,7 @@ describe("Codex wake lifecycle safety", () => {
                 await f.request("/wake", {
                     terminal: "t1",
                     codexId: "22222222-2222-4222-8222-222222222222",
+                    callerPid: 900,
                     event: "green",
                     target: pr,
                     prompt: "Continue other work",
@@ -1123,5 +1130,117 @@ describe("rereview team identity", () => {
         } else {
             expect(identities).toEqual(Array(3).fill({ me: "synthetic-reviewer" }));
         }
+    });
+});
+
+describe("loopback request boundary", () => {
+    test.each(["/health", "/search?q=42", "/wakes"])(
+        "rejects browser origins and rebound hosts before GET %s",
+        async (route) => {
+            const f = await fixture();
+            const get = (headers: Record<string, string | undefined>) =>
+                new Promise<number>((resolve, reject) => {
+                    const request = httpRequest(
+                        { hostname: "127.0.0.1", port: f.port, path: route, headers, setHost: headers.Host !== "" },
+                        (response) => {
+                            response.resume();
+                            response.on("end", () => resolve(response.statusCode ?? 0));
+                        }
+                    );
+                    request.on("error", reject);
+                    request.end();
+                });
+            for (const headers of [
+                { Origin: "https://example.test" },
+                { Host: "rebound.example.test:7732" },
+                { Host: "127.0.0.1:1" },
+                { Host: "" },
+            ])
+                expect(await get(headers), JSON.stringify(headers)).toBe(403);
+            expect(await get({})).toBe(200);
+            expect(await get({ Host: `localhost:${f.port}` })).toBe(200);
+        }
+    );
+});
+
+describe("fresh Codex caller identity", () => {
+    test.each([
+        { label: "foreground ancestor", command: "1 /tmp/codex", wanted: 200 },
+        { label: "nested child Codex", command: "101 /tmp/codex", wanted: 409, ancestor: 202 },
+        { label: "shared Codex app server", command: "1 /tmp/codex", wanted: 409, ancestor: 202 },
+        { label: "missing caller evidence", command: "1 /tmp/codex", wanted: 409, caller: 0 },
+        { label: "missing process", command: "", wanted: 409 },
+        { label: "malformed process evidence", command: "invalid", wanted: 409 },
+        { label: "caller PID is not a number", command: "1 /tmp/codex", wanted: 409, caller: "900" },
+        { label: "non-Codex caller cycle", command: "900 /bin/sh", wanted: 409, ancestor: 900 },
+    ])("$label", async ({ command, wanted, ancestor = 101, caller = 900 }) => {
+        const f = await fixture({
+            exec: async (name, args) => {
+                if (name === "ps")
+                    return {
+                        code: command ? 0 : 1,
+                        stdout: args[1] === "900" ? `${ancestor} /bin/node` : command,
+                        stderr: "",
+                    };
+                return {
+                    code: 0,
+                    stdout: JSON.stringify({
+                        state: "live",
+                        foreground: { pid: 101, argv: ["codex"] },
+                        status: { app: "codex", state: "idle" },
+                    }),
+                    stderr: "",
+                };
+            },
+        });
+        expect(
+            (
+                await f.request("/wake", {
+                    terminal: "t1",
+                    codexId: "fresh-thread",
+                    callerPid: caller,
+                    event: "green",
+                    target: pr,
+                    prompt: "Continue",
+                })
+            ).status
+        ).toBe(wanted);
+        expect((await f.request("/wakes")).body).toHaveLength(wanted === 200 ? 1 : 0);
+    });
+});
+
+describe("history ownership and current file evidence", () => {
+    test("expands the home prefix before reading WintOS history", async () => {
+        const home = await mkdtemp(join(tmpdir(), "herdr-home-root-"));
+        cleanups.push(() => rm(home, { recursive: true, force: true }));
+        vi.stubEnv("HOME", home);
+        const f = await fixture({ wintosRoot: "~/wave" });
+        await writeFile(
+            join(home, "wave", ".sessions.json"),
+            JSON.stringify([{ id: "saved-tilde", state: "ended", lastAt: 1, prs: [pr] }])
+        );
+        expect((await f.request("/search?q=42")).body.map((hit: any) => hit.id)).toContain("saved-tilde");
+    });
+    test.each([{ paused: true }, { restored: true }, { paused: true, restored: true }])(
+        "retained WintOS ownership blocks resume: %j",
+        async (flags) => {
+            const f = await fixture();
+            await writeFile(
+                join(f.wintosRoot, ".sessions.json"),
+                JSON.stringify([{ id: "owned", state: "waiting", cwd: "/tmp/work", lastAt: 1, ...flags }])
+            );
+            expect((await f.request("/open", { id: "owned" })).status).toBe(409);
+            expect(f.calls.some(([, args]) => args.includes("tab.new"))).toBe(false);
+        }
+    );
+    test("an externally active Codex rollout cannot resume using cached old metadata", async () => {
+        const f = await codexFixture();
+        await f.request("/search?q=");
+        const current = new Date(Date.now() + 3600000);
+        await utimes(join(f.home, "sessions", `rollout-${f.id}.jsonl`), current, current);
+        const result = await f.request("/open", { id: f.id });
+        expect(result.status).toBe(409);
+        expect(result.body.error).toContain("Transcript is recent");
+        expect(f.calls.some(([, args]) => args.includes("tab.new"))).toBe(false);
     });
 });

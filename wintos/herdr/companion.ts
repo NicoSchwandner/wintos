@@ -74,7 +74,10 @@ const defaultExec: Exec = (command, args) =>
 export async function createCompanion(options: CompanionOptions = {}) {
     const root = resolve(options.root ?? join(homedir(), ".local/share/wintos-herdr-companion"));
     const wintosRoot = resolve(
-        options.wintosRoot ?? process.env.WINTOS_ROOT ?? join(homedir(), ".local/share/wintos/projects")
+        (options.wintosRoot ?? process.env.WINTOS_ROOT ?? join(homedir(), ".local/share/wintos/projects")).replace(
+            /^~/,
+            homedir()
+        )
     );
     if (root === wintosRoot || root.startsWith(wintosRoot + "/"))
         throw new Error("Companion state must be outside WintOS history");
@@ -370,6 +373,21 @@ export async function createCompanion(options: CompanionOptions = {}) {
         return wake;
     }
 
+    async function foregroundCodexCaller(callerPid: unknown, foregroundPid: number | undefined) {
+        if (!Number.isSafeInteger(callerPid) || Number(callerPid) <= 1 || !foregroundPid) return false;
+        let pid = Number(callerPid);
+        const seen = new Set<number>();
+        while (pid > 1 && !seen.has(pid)) {
+            seen.add(pid);
+            const result = await exec("ps", ["-p", String(pid), "-o", "ppid=", "-o", "comm="]);
+            const process = /^\s*(\d+)\s+(.+?)\s*$/.exec(result.stdout);
+            if (result.code || !process) return false;
+            if (/^codex(?:-[\w.-]+)?$/.test(basename(process[2]))) return pid === foregroundPid;
+            pid = Number(process[1]);
+        }
+        return false;
+    }
+
     async function nativeWake(body: Record<string, any>) {
         if (!text(body.terminal) && text(body.codexId)) {
             await refreshCodex("", false);
@@ -378,7 +396,7 @@ export async function createCompanion(options: CompanionOptions = {}) {
             if (!session || !sameAgent(session, wire) || resumedCodex(wire ?? {}) !== body.codexId)
                 failure(
                     409,
-                    "Cannot identify this Codex thread's terminal. Fresh threads require HC_TERMINAL_ID from the Herdr Codex launcher; only exact resumed-thread identity can be resolved without it."
+                    "Cannot identify this Codex thread's terminal. An exact resumed-thread identity is required without HC_TERMINAL_ID and foreground-process evidence."
                 );
             body.terminal = session.terminal;
         }
@@ -387,6 +405,11 @@ export async function createCompanion(options: CompanionOptions = {}) {
             if (wire?.state === "live" && wire.status?.app === "codex") {
                 const resumed = resumedCodex(wire);
                 if (resumed && resumed !== body.codexId) failure(409, "Codex thread does not match the terminal");
+                if (!resumed && !(await foregroundCodexCaller(body.callerPid, wire.foreground?.pid)))
+                    failure(
+                        409,
+                        "Fresh Codex thread ownership could not be verified. Exit and resume this conversation in the same Herdr terminal, then retry."
+                    );
                 register({
                     terminal: body.terminal,
                     terminalPid: wire.foreground?.pid,
@@ -523,6 +546,10 @@ export async function createCompanion(options: CompanionOptions = {}) {
             res.end(JSON.stringify(value));
         };
         void (async () => {
+            const port = req.socket.localPort;
+            if (!port || ![`127.0.0.1:${port}`, `localhost:${port}`].includes(req.headers.host ?? ""))
+                failure(403, "Loopback Host and listening port are required");
+            if (req.headers.origin != null) failure(403, "Browser Origin is not allowed");
             const url = new URL(req.url ?? "/", "http://127.0.0.1");
             if (req.method === "GET") {
                 if (url.pathname === "/health")
@@ -571,7 +598,6 @@ export async function createCompanion(options: CompanionOptions = {}) {
 }
 
 async function readBody(req: IncomingMessage): Promise<Record<string, any>> {
-    if (req.headers.origin != null) failure(403, "Browser Origin is not allowed");
     if (req.headers["content-type"]?.split(";")[0].trim().toLowerCase() !== "application/json")
         failure(415, "Content-Type must be application/json");
     const chunks: Buffer[] = [];

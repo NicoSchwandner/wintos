@@ -51,7 +51,7 @@ export function waveHistory(root: string): SessionHit[] {
             lastAt: s.lastAt,
             cwd: s.cwd,
             resume: resumeScriptOf(s),
-            live: s.state !== "ended" && !s.restored && !s.paused,
+            live: s.state !== "ended",
         });
     }
     for (const [folder, items] of Object.entries(readJson<Shelf>(join(root, ".shelf.json"), {}))) {

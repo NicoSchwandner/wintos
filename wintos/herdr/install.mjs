@@ -73,20 +73,31 @@ function installCli(binDir, installRoot, backup) {
     mkdirSync(binDir, { recursive: true });
     const originalFile = join(installRoot, "original-cli.json");
     let original = read(originalFile, null);
-    if (!original && existsSync(join(binDir, "wintos"))) {
-      const target = realpathSync(join(binDir, "wintos"));
-      if (!lstatSync(join(binDir, "wintos")).isSymbolicLink()) {
-        copyFileSync(target, join(backup, "original-wintos"));
-        original = join(backup, "original-wintos");
-      } else original = target;
-      write(originalFile, original);
+    const cli = join(binDir, "wintos");
+    const wrapper = join(installRoot, "wintos");
+    if (existsSync(cli)) {
+      const target = realpathSync(cli);
+      const managed = existsSync(wrapper) ? realpathSync(wrapper) : wrapper;
+      if (target !== managed) {
+        if (!lstatSync(cli).isSymbolicLink()) {
+          const saved = join(backup, "original-wintos");
+          if (!existsSync(saved)) copyFileSync(target, saved);
+          original = join(binDir, ".wintos-herdr-original");
+          copyFileSync(target, original);
+        } else original = target;
+      }
+    }
+    if (original === join(backup, "original-wintos")) {
+      const adjacent = join(binDir, ".wintos-herdr-original");
+      copyFileSync(original, adjacent);
+      original = adjacent;
     }
     if (original) {
-      const wrapper = join(installRoot, "wintos");
+      write(originalFile, original);
       writeFileSync(
         wrapper,
         `#!/bin/sh
-if [ -z "\${WAVETERM_TABID:-}" ] && [ "\${1:-}" = wake ] && { [ -n "\${HC_TERMINAL_ID:-}" ] || [ -n "\${CODEX_THREAD_ID:-}" ]; }; then
+if [ -z "\${WAVETERM_TABID:-}" ] && [ -z "\${WAVETERM_BLOCKID:-}" ] && [ "\${1:-}" = wake ] && { [ -n "\${HC_TERMINAL_ID:-}" ] || [ -n "\${CODEX_THREAD_ID:-}" ]; }; then
     exec ${quote(process.execPath)} ${quote(join(installRoot, "companion.cjs"))} "$@"
 fi
 exec ${quote(original)} "$@"
@@ -178,19 +189,21 @@ function xml(s) {
   return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
-function agentEnvironment(home, historyRoot) {
-  let team = process.env.WINTOS_TEAM;
+function agentEnvironment(home) {
   const config = join(home, ".config/wintos/env");
-  if (team == null && existsSync(config)) {
-    const setting = readFileSync(config, "utf8")
-      .split(/\r?\n/)
-      .filter((line) => /^\s*(?:export\s+)?WINTOS_TEAM\s*=/.test(line))
-      .join("\n");
-    team = parseEnv(setting).WINTOS_TEAM;
-  }
+  const settings = existsSync(config)
+    ? parseEnv(
+        readFileSync(config, "utf8")
+          .split(/\r?\n/)
+          .filter((line) => /^\s*(?:export\s+)?WINTOS_(TEAM|ROOT)\s*=/.test(line))
+          .join("\n")
+      )
+    : {};
+  const team = process.env.WINTOS_TEAM ?? settings.WINTOS_TEAM;
+  const historyRoot = process.env.WINTOS_ROOT ?? settings.WINTOS_ROOT;
   return {
     PATH: process.env.PATH ?? "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin",
-    ...(historyRoot ? { WINTOS_ROOT: historyRoot } : {}),
+    ...(historyRoot ? { WINTOS_ROOT: historyRoot.replace(/^(\$\{HOME\}|\$HOME|~)(?=\/|$)/, () => home) } : {}),
     ...(team == null ? {} : { WINTOS_TEAM: team }),
   };
 }
@@ -226,15 +239,14 @@ async function main() {
   const label = "local.wintos.herdr-companion";
   const plist = join(home, "Library/LaunchAgents", `${label}.plist`);
   mkdirSync(dirname(plist), { recursive: true });
-  let historyRoot = process.env.WINTOS_ROOT;
-  if (!historyRoot) {
+  const env = agentEnvironment(home);
+  if (!env.WINTOS_ROOT) {
     try {
       const state = await (await fetch("http://127.0.0.1:7730/state", { signal: AbortSignal.timeout(3000) })).json();
       const dir = state.projects?.find((p) => p.dir)?.dir;
-      if (dir) historyRoot = dirname(dir);
+      if (dir) env.WINTOS_ROOT = dirname(dir);
     } catch {}
   }
-  const env = agentEnvironment(home, historyRoot);
   writeFileSync(
     plist,
     `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(join(installRoot, "companion.cjs"))}</string><string>serve</string></array><key>EnvironmentVariables</key><dict>${Object.entries(

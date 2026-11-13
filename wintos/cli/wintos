@@ -40,6 +40,11 @@
 #                                      wire the hook into that Claude Code config (default ~/.claude);
 #                                      one account each, named explicitly
 set -eu
+if [ -z "${WAVETERM_TABID:-}" ] && [ -z "${WAVETERM_BLOCKID:-}" ] && [ "${1:-}" = wake ] &&
+    { [ -n "${HC_TERMINAL_ID:-}" ] || [ -n "${CODEX_THREAD_ID:-}" ]; } &&
+    [ -f "${HOME:-}/.local/share/wintos-herdr-companion/companion.cjs" ]; then
+    exec node "$HOME/.local/share/wintos-herdr-companion/companion.cjs" "$@"
+fi
 PORT="${WINTOS_PORT:-7730}"
 # In Claude's background service there is no pane: a session its epic's agent started is found
 # by its own id instead, so its wintos commands (status, wake, ask…) work there too.

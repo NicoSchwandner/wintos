@@ -456,7 +456,7 @@ test("resume refuses matching live processes and failed process inspection", asy
 });
 
 test("a reused terminal during an hc lookup cannot receive the old session's prompt", async () => {
-    let replace: () => Promise<unknown>;
+    let replace: () => Promise<unknown> = async () => {};
     let sends = 0;
     const f = await fixture({
         exec: async (_cmd, args) => {
@@ -473,9 +473,9 @@ test("a reused terminal during an hc lookup cannot receive the old session's pro
             };
         },
     });
-    replace = () => f.event({ session_id: "session-b" });
     await f.event();
-    await f.wake();
+    expect((await f.wake()).status).toBe(200);
+    replace = () => f.event({ session_id: "session-b" });
     await f.service.poll();
     expect(sends).toBe(0);
     expect((await f.request("/wakes")).body[0].status).toBe("pending");
@@ -617,7 +617,8 @@ describe("independent review fixes", () => {
             configDir: "/tmp/synthetic-claude",
             payload: { session_id: "session-a", hook_event_name: "SessionStart", cwd: "/tmp" },
         });
-        await f.wake();
+        f.observed.foreground.argv = ["claude", "--resume", "session-a"];
+        expect((await f.wake()).status).toBe(200);
         f.observed.foreground = { pid, argv };
         expect((await f.request("/open", { id: "session-a" })).status).toBe(409);
         await f.service.poll();
@@ -1242,5 +1243,275 @@ describe("history ownership and current file evidence", () => {
         expect(result.status).toBe(409);
         expect(result.body.error).toContain("Transcript is recent");
         expect(f.calls.some(([, args]) => args.includes("tab.new"))).toBe(false);
+    });
+});
+
+function heldLookup() {
+    let entered!: () => void, release!: () => void;
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    return {
+        started,
+        release: () => release(),
+        wait: async () => {
+            entered();
+            await held;
+        },
+    };
+}
+
+describe("wake replacement and terminal reuse", () => {
+    test.each(["green", "cancel"])("a reused terminal cannot %s the previous conversation", async (event) => {
+        const f = await fixture();
+        await f.event();
+        await f.wake();
+        f.observed.foreground.pid = 202;
+        expect((await f.wake(event)).status).toBe(409);
+        expect((await f.request("/wakes")).body[0].status).toBe("pending");
+    });
+    test.each(["green", "cancel"])("mapping changes during lookup reject %s", async (event) => {
+        const gate = heldLookup();
+        let armed = false;
+        const f = await fixture({
+            exec: async (cmd, args) => {
+                if (cmd === "hc" && args[0] === "get" && armed) {
+                    armed = false;
+                    await gate.wait();
+                }
+                return {
+                    code: 0,
+                    stdout: JSON.stringify({
+                        state: "live",
+                        foreground: { pid: 101, argv: ["claude"] },
+                        status: { app: "claude-code", state: "idle" },
+                    }),
+                    stderr: "",
+                };
+            },
+        });
+        await f.event();
+        await f.wake();
+        armed = true;
+        const request = f.wake(event);
+        try {
+            expect(await Promise.race([gate.started.then(() => "lookup"), request.then(() => "finished")])).toBe(
+                "lookup"
+            );
+            await f.event({ session_id: "session-b" });
+        } finally {
+            gate.release();
+        }
+        expect((await request).status).toBe(409);
+        expect((await f.request("/wakes")).body[0].status).toBe("pending");
+    });
+    test.each(["github", "terminal"])("a replacement suppresses an obsolete wake held at %s", async (stage) => {
+        const gate = heldLookup();
+        let armed = false;
+        const pause = async (at: string) => {
+            if (armed && stage === at) {
+                armed = false;
+                await gate.wait();
+            }
+        };
+        const calls: [string, string[]][] = [];
+        const f = await fixture({
+            exec: async (cmd, args) => {
+                calls.push([cmd, args]);
+                if (cmd === "hc" && args[0] === "get") await pause("terminal");
+                return {
+                    code: 0,
+                    stdout: JSON.stringify({
+                        state: "live",
+                        foreground: { pid: 101, argv: ["claude"] },
+                        status: { app: "claude-code", state: "idle" },
+                    }),
+                    stderr: "",
+                };
+            },
+            prNow: async () => {
+                await pause("github");
+                return { state: "OPEN", checks: "green", released: false };
+            },
+        });
+        await f.event();
+        await f.wake();
+        armed = true;
+        const polling = f.service.poll();
+        try {
+            await gate.started;
+            expect(
+                (await f.request("/wake", { terminal: "t1", event: "green", target: pr, prompt: "Replacement prompt" }))
+                    .status
+            ).toBe(200);
+        } finally {
+            gate.release();
+        }
+        await polling;
+        expect(calls.filter(([, args]) => args[0] === "send")).toEqual([]);
+        await f.service.poll();
+        const sent = calls.filter(([, args]) => args[0] === "send");
+        expect(sent).toHaveLength(1);
+        expect(sent[0][1][2]).toContain("Replacement prompt");
+    });
+    test.each([undefined, "Old title"])(
+        "a refreshed Codex title replaces %s without losing its live binding",
+        async (oldTitle) => {
+            const f = await codexFixture();
+            const path = join(f.home, "session_index.jsonl");
+            if (oldTitle)
+                await writeFile(
+                    path,
+                    JSON.stringify({ id: f.id, thread_name: oldTitle, updated_at: new Date().toISOString() })
+                );
+            f.wires.t1 = f.codex(101, ["codex", "resume", f.id]);
+            await f.request("/search?q=");
+            await writeFile(
+                path,
+                JSON.stringify({ id: f.id, thread_name: "Updated title", updated_at: new Date().toISOString() })
+            );
+            const result = await f.request("/search?q=Updated%20title");
+            expect(result.body).toHaveLength(1);
+            expect(result.body[0]).toMatchObject({ name: "Updated title", terminal: "t1", provider: "codex" });
+        }
+    );
+});
+
+describe("final race regressions", () => {
+    test.each(["ancestry", "initial lookup", "final lookup", "foreground only"])(
+        "a Codex wake rejected after %s preserves the newer binding",
+        async (stage) => {
+            const gate = heldLookup();
+            let armed = false, lookups = 0, pid = 101, clock = 100;
+            const f = await fixture({
+                now: () => clock,
+                exec: async (cmd, args) => {
+                    if (cmd === "ps") {
+                        if (armed && ["ancestry", "foreground only"].includes(stage)) {
+                            armed = false;
+                            await gate.wait();
+                        }
+                        return { code: 0, stdout: args[1] === "900" ? "101 /bin/node" : "1 /tmp/codex", stderr: "" };
+                    }
+                    const wire = {
+                        state: "live",
+                        foreground: { pid, argv: ["codex"] },
+                        status: { app: "codex", state: "idle" },
+                    };
+                    if (cmd === "hc" && args[0] === "get") {
+                        lookups++;
+                        if (armed && ((stage === "initial lookup" && lookups === 1) || (stage === "final lookup" && lookups === 2))) {
+                            armed = false;
+                            await gate.wait();
+                        }
+                    }
+                    return { code: 0, stdout: JSON.stringify(wire), stderr: "" };
+                },
+            });
+            const register = (id: string, terminalPid: number) => f.request("/events", {
+                terminal: "t1", terminalPid, provider: "codex", configDir: join(f.dir, "codex"),
+                payload: { session_id: id, hook_event_name: "SessionStart", cwd: f.dir },
+            });
+            await register("thread-a", 101);
+            const original = JSON.parse(await readFile(join(f.root, "state.json"), "utf8")).sessions["thread-a"];
+            armed = true;
+            const request = f.request("/wake", {
+                terminal: "t1", codexId: "thread-a", callerPid: 900, event: "green", target: pr, prompt: "Continue A",
+            });
+            try {
+                expect(await Promise.race([gate.started.then(() => "held"), request.then(() => "finished")])).toBe("held");
+                pid = 202;
+                clock = 200;
+                if (stage !== "foreground only") await register("thread-b", 202);
+            } finally {
+                gate.release();
+            }
+            expect((await request).status).toBe(409);
+            const persisted = JSON.parse(await readFile(join(f.root, "state.json"), "utf8"));
+            expect(persisted.terminals.t1).toBe(stage === "foreground only" ? "thread-a" : "thread-b");
+            expect(persisted.sessions["thread-a"]).toEqual(original);
+            expect((await f.request("/wakes")).body).toEqual([]);
+        }
+    );
+
+    test.each(["", "   ", undefined])("an unavailable indexed title %j keeps the known title and live binding", async (title) => {
+        const f = await codexFixture();
+        const path = join(f.home, "session_index.jsonl");
+        await writeFile(path, JSON.stringify({ id: f.id, thread_name: "Meaningful title" }) + "\n");
+        f.wires.t1 = f.codex(101, ["codex", "resume", f.id]);
+        expect((await f.request("/search?q=")).body[0].name).toBe("Meaningful title");
+        await writeFile(path, title == null ? "" : JSON.stringify({ id: f.id, thread_name: title }) + "\n");
+        const refreshed = await f.request(`/search?q=${f.id}`);
+        expect(refreshed.body[0]).toMatchObject({ name: "Meaningful title", terminal: "t1", terminalPid: 101, live: true });
+        expect((await f.request("/search?q=Meaningful%20title")).body[0].id).toBe(f.id);
+    });
+
+    test("a history fallback still names a previously unknown session", async () => {
+        const f = await codexFixture();
+        const result = await f.request("/search?q=");
+        expect(result.body[0]).toMatchObject({ name: "synthetic-widgets", id: f.id });
+    });
+
+    test("a history fallback replaces a registered ID placeholder without losing its binding", async () => {
+        const f = await codexFixture();
+        f.wires.t1 = f.codex(101, ["codex", "resume", f.id]);
+        expect((await f.request("/wake", {
+            terminal: "t1", codexId: f.id, event: "green", target: pr, prompt: "Continue",
+        })).status).toBe(200);
+        const result = await f.request("/search?q=");
+        expect(result.body[0]).toMatchObject({ name: "synthetic-widgets", id: f.id, terminal: "t1", live: true });
+    });
+
+    test.each([
+        ["ended", "cancel"], ["ended", "replace"], ["ended", "rebind"],
+        ["finished", "cancel"], ["finished", "replace"], ["finished", "rebind"],
+    ])("%s recovery held at process inspection stops after %s", async (recovery, change) => {
+        const gate = heldLookup();
+        const calls: [string, string[]][] = [];
+        let finished = false;
+        const f = await fixture({
+            exec: async (cmd, args) => {
+                calls.push([cmd, args]);
+                if (cmd === "ps") {
+                    await gate.wait();
+                    return { code: 0, stdout: "", stderr: "" };
+                }
+                return {
+                    code: 0,
+                    stdout: JSON.stringify({
+                        state: finished ? "finished" : "live",
+                        foreground: { pid: 101, argv: ["claude"] },
+                        status: { app: "claude-code", state: "idle" },
+                    }),
+                    stderr: "",
+                };
+            },
+        });
+        await f.event();
+        expect((await f.wake()).status).toBe(200);
+        if (recovery === "ended") await f.event({ hook_event_name: "SessionEnd" });
+        else finished = true;
+        const polling = f.service.poll();
+        try {
+            await gate.started;
+            finished = false;
+            await f.event();
+            if (change === "cancel") expect((await f.wake("cancel")).status).toBe(200);
+            if (change === "replace") expect((await f.request("/wake", {
+                terminal: "t1", event: "green", target: pr, prompt: "Replacement prompt",
+            })).status).toBe(200);
+        } finally {
+            gate.release();
+        }
+        await polling;
+        expect(calls.filter(([, args]) => args.includes("tab.new"))).toEqual([]);
+        expect(JSON.parse(await readFile(join(f.root, "state.json"), "utf8")).opening["session-a"]).toBeUndefined();
+        await f.service.poll();
+        const sent = calls.filter(([, args]) => args[0] === "send");
+        expect(sent).toHaveLength(change === "cancel" ? 0 : 1);
+        if (change === "replace") expect(sent[0][1][2]).toContain("Replacement prompt");
     });
 });

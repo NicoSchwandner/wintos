@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { exactPr, matches, prSearchPattern, prUrls, searchPrFilesWithoutRg, type SessionHit } from "./history";
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-type CodexHit = SessionHit & { provider: "codex"; codexHome: string };
+type CodexHit = SessionHit & { provider: "codex"; codexHome: string; indexedTitle?: string };
 
 export function resumedCodex(terminal: { foreground?: { argv?: string[] } }): string | undefined {
     const argv = terminal.foreground?.argv ?? [];
@@ -122,9 +122,11 @@ export async function codexHistory(root: string, query: string): Promise<CodexHi
         const meta = records.find((r) => r.type === "session_meta")?.payload;
         if (!meta?.id || !meta.cwd || typeof meta.source === "object") continue;
         const title = names.get(meta.id);
+        const indexedTitle = typeof title?.thread_name === "string" ? title.thread_name.trim() || undefined : undefined;
         const hit: CodexHit = {
             id: meta.id,
-            name: title?.thread_name ?? basename(meta.cwd),
+            name: indexedTitle ?? basename(meta.cwd),
+            indexedTitle,
             source: "transcript",
             provider: "codex",
             codexHome: root,

@@ -153,7 +153,8 @@ function installLayout(appHome) {
   const name = "wintos-companion";
   const source = shared.layout && shared.layout !== name ? shared.layout : "main";
   const file = join(appHome, "layouts", `${name}.json`);
-  const layout = read(file, read(join(appHome, "layouts", `${source}.json`), null));
+  const selected = read(join(appHome, "layouts", `${source}.json`), null);
+  const layout = shared.layout === name ? read(file, selected) : selected;
   if (!layout || !Array.isArray(layout.children)) throw Error("The active Herdr layout must have a row or column root");
   if (!layout.children.some((n) => n.id === "wintos-companion-commands"))
     layout.children.push({
